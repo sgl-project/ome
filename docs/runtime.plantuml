@@ -1,0 +1,78 @@
+@startuml
+package "Serving Runtime" {
+
+  object ClusterServingRuntime {
+    + ServingRuntimeSpec spec
+    + ServingRuntimeStatus status
+  }
+
+  object ServingRuntime {
+    + ServingRuntimeSpec spec
+    + ServingRuntimeStatus status
+  }
+
+  object ServingRuntimeSpec {
+    + SupportedModelFormat[] supportedModels
+    + bool disabled
+    + InferenceServiceProtocol[] protocolVersions
+    + ServingRuntimePodSpec servingRuntimePodSpec
+    + string httpDataEndpoint
+    + uint16 replicas
+    + BuiltInAgent BuildInAdapter
+  }
+
+  enum InferenceServiceProtocol{
+    + openAI
+    + cohere
+    + openInferenceProtocolV1
+    + openInferenceProtocolV2
+  }
+
+  object SupportedModels {
+    + string modelFormat
+    + string version
+    + string modelArchitecture
+    + string modelType
+    + bool autoSelect
+    + int32 priority
+  }
+  object ServingRuntimePodSpec {
+    + Container[] containers
+    + Volume[] volumes
+    + NodeSelector nodeSelector
+    + Affinity affinity
+    + Tolerations[] tolerations
+    + Labels labels
+    + Annotations annotations
+    + ImagePullSecrets[] imagePullSecrets
+  }
+  object BuildInAdapter {
+    + ServerType serverType
+    + int modelLoadingTimeoutMillis
+    + EnvVar[] env
+  }
+
+  enum ServerType {
+    + trinton
+    + vllm
+    + tgi
+    + cohere
+    + nim
+  }
+
+  object ServingRuntimeStatus {
+    + string status
+  }
+
+  ClusterServingRuntime -> ServingRuntimeSpec
+  ServingRuntime --> ServingRuntimeSpec
+  ClusterServingRuntime --> ServingRuntimeStatus
+  ServingRuntime --> ServingRuntimeStatus
+  ServingRuntimeSpec --> InferenceServiceProtocol
+  ServingRuntimeSpec --> SupportedModels
+  ServingRuntimeSpec --> ServingRuntimePodSpec
+  ServingRuntimeSpec --> BuildInAdapter
+  BuildInAdapter --> ServerType
+}
+
+@enduml

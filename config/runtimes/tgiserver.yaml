@@ -1,0 +1,28 @@
+apiVersion: ome.oracle.com/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: tgiserver
+spec:
+  annotations:
+    prometheus.ome.io/port: '8080'
+    prometheus.ome.io/path: "/metrics"
+  supportedModelFormats:
+    - name: huggingface
+      version: "1"
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - v2
+    - v1
+  containers:
+    - name: ome-container
+      image: tgi:replace
+      args:
+        - --model_name={{.Name}}
+      resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
+        limits:
+          cpu: "1"
+          memory: 2Gi

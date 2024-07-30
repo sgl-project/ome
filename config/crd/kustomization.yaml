@@ -1,0 +1,34 @@
+# Labels to add to all resources and selectors.
+#commonLabels:
+#  someName: someValue
+
+# Each entry in this list must resolve to an existing
+# resource definition in YAML.  These are the resource
+# files that kustomize reads, modifies and emits as a
+# YAML string, with resources separated by document
+# markers ("---").
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- full/ome.oracle.com_inferenceservices.yaml
+- full/ome.oracle.com_clusterservingruntimes.yaml
+- full/ome.oracle.com_servingruntimes.yaml
+- full/ome.oracle.com_clusterstoragecontainers.yaml
+
+patches:
+# Fix for https://github.com/kubernetes/kubernetes/issues/91395
+- path: patches/protocol.yaml
+  target:
+    group: apiextensions.k8s.io
+    version: v1beta1
+    kind: CustomResourceDefinition
+    name: inferenceservices.ome.oracle.com
+
+# Work around for https://github.com/kubernetes-sigs/kustomize/issues/5031. Can be removed once the issue is fixed.
+- patch: |-
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      creationTimestamp: null
+      name: inferenceservices.ome.oracle.com

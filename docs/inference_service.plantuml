@@ -1,0 +1,182 @@
+@startuml
+
+package "Inference Service" {
+  object InferenceService {
+    + PredictorSpec predictor
+    + InferenceServiceStatus status
+  }
+  object PredictorSpec {
+    + ModelSpec model
+    + PodSpec podSpec
+    + ComponentExtensionSpec componentExtension
+  }
+  object PodSpec {
+    + Container[] containers
+    + Volume[] volumes
+    + NodeSelector nodeSelector
+    + Affinity affinity
+    + Tolerations[] tolerations
+    + Labels labels
+    + Annotations annotations
+    + ImagePullSecrets[] imagePullSecrets
+  }
+  object ComponentExtensionSpec {
+    + int  minReplica
+    + int maxReplica
+    + int scalerTarget
+    + ScalerMetrics scalerMetrics
+    + int64 containerConcurrency
+    + int64 timeoutSeconds
+    + int64 canaryTrafficPercent
+    + LoggerSpec logger
+    + map[string]string labels
+    + map[string]string annotations
+    + DeploymentStrategy deploymentStrategy
+  }
+
+  object LoggerSpec {
+    + string URL
+    + LoggerType mode
+  }
+
+  enum LoggerType {
+    + all
+    + request
+    + response
+  }
+
+  object ModelSpec {
+    + string runtime
+    + predictorExtension predictorExtension
+    + string baseModel
+    + string[] fineTunedWeights
+  }
+
+  object predictorExtension {
+    + string storageUri
+    + string runtimeVersion
+    + InferenceServiceProtocol protocolVersion
+    + Container container
+  }
+
+  enum InferenceServiceProtocol{
+    + openAI
+    + cohere
+    + openInferenceProtocolV1
+    + openInferenceProtocolV2
+  }
+
+  object ScalerMetrics {
+    + string cpu
+    + string memory
+    + string rps
+    + string concurrency
+  }
+
+  InferenceService --> PredictorSpec
+  PredictorSpec --> ModelSpec
+  PredictorSpec --> PodSpec
+  PredictorSpec --> ComponentExtensionSpec
+  predictorExtension --> InferenceServiceProtocol
+  ComponentExtensionSpec --> ScalerMetrics
+  ComponentExtensionSpec --> LoggerSpec
+  LoggerSpec --> LoggerType
+  ModelSpec --> predictorExtension
+}
+
+package InferenceServiceStatus {
+  object InferenceServiceStatus {
+    + duckv1.Status status
+    + duckv1.Addressable address
+    + apis.URL url
+    + map[ComponentType]ComponentStatusSpec ComponentStatus
+    + ModelStatus ModelStatus
+  }
+
+  object ConditionType {
+    + apis.ConditionType PredictorRouteReady
+    + apis.ConditionType PredictorConfigurationReady
+    + apis.ConditionType PredictorReady
+    + apis.ConditionType IngressReady
+    + apis.ConditionType LatestDeploymentReady
+  }
+
+  object ComponentStatusSpec {
+    + string latestReadyRevision
+    + string latestCreatedRevision
+    + string previousRolledoutRevision
+    + string latestRolledoutRevision
+    + []knservingv1.TrafficTarget traffic
+    + apis.URL url
+    + apis.URL restUrl
+    + duckv1.Addressable address
+  }
+
+  object ModelStatus {
+    + TransitionStatus transitionStatus
+    + ModelRevisionStates states
+    + FailureInfo lastFailureInfo
+    + ModelCopies copies
+  }
+
+  enum TransitionStatus {
+    + UpToDate
+    + InProgress
+    + BlockedByFailedLoad
+    + InvalidSpec
+  }
+
+  object FailureInfo {
+    + string location
+    + FailureReason reason
+    + string message
+    + string ModelRevisionName
+    + Time time
+    + int32 exitCode
+  }
+
+  enum FailureReason {
+    + ModelLoadFailed
+    + RuntimeUnhealthy
+    + RuntimeDisabled
+    + NoSupportingRuntime
+    + RuntimeNotRecognized
+    + InvalidPredictorSpec
+    + BaseModelNotFound
+    + BaseModelDisabled
+    + FineTunedWeightNotFound
+    + BaseModelDeprecated
+    + FineTunedWeightDeprecated
+    + FineTuneWeightLoadFailed
+  }
+
+  object ModelRevisionStates {
+    + ModelState activeModelState
+    + ModelState targetModelState
+  }
+
+  enum ModelState {
+    + Pending
+    + Standby
+    + Loading
+    + Loaded
+    + FailedToLoad
+  }
+
+  object ModelCopies {
+    + int failedCopies
+    + int totalCopies
+  }
+
+  InferenceServiceStatus --> ComponentStatusSpec
+  InferenceServiceStatus --> ModelStatus
+  InferenceServiceStatus --> ConditionType
+  ModelStatus --> ModelRevisionStates
+  ModelStatus --> FailureInfo
+  ModelStatus --> TransitionStatus
+  ModelStatus --> ModelCopies
+  FailureInfo --> FailureReason 
+  ModelRevisionStates --> ModelState
+}
+@enduml
+

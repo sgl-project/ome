@@ -1,0 +1,112 @@
+@startuml
+package "Base Model" {
+  object ClusterBaseModel {
+    + BaseModelSpec baseModel
+    + ModelStatus status
+  }
+  object BaseModel {
+    + BaseModelSpec spec
+    + ModelStatus status
+  }
+
+  object BaseModelSpec {
+    + ModelFormat modelFormat
+    + string modelType
+    + string modelArchitecture
+    + string modelParameterSize
+    + modelCapabilities[] modelCapabilities
+    + json modelConfiguration
+    + json tensorRTLLMConfiguration
+    + Storage storage
+    + ModelExtension modelExtension
+    + ServingMode[] servingMode
+  }
+
+  enum ServingMode {
+    + On-Demand
+    + Dedicated
+  }
+
+  object ModelFormat {
+    + string name
+    + string version
+  }
+
+  enum modelCapabilities {
+    + TEXT_GENERATION
+    + TEXT_SUMMARIZATION
+    + TEXT_EMBEDDING
+    + TEXT_RERANK
+    + CHAT
+    + VISION
+    + UNKNOWN
+  }
+
+  enum LifeCycleState {
+    + Creating
+    + Importing
+    + In_Transit
+    + In_Training
+    + Ready
+    + Failed
+  }
+
+  enum LifeCycle {
+    + Deprecated
+    + Experimental
+    + Public
+    + Internal
+  }
+
+
+  object Storage {
+    + string path
+    + string schemaPath
+    + map<string, string> parameters
+    + string storageKey
+  }
+  object ModelExtension {
+    + string version
+    + bool disabled
+    + string vendor
+    + string compartmentID
+  }
+
+  object ModelStatus {
+    + LifeCycle lifecycle
+    + LifeCycleState state
+  }
+
+  ClusterBaseModel -> BaseModelSpec
+  BaseModel --> BaseModelSpec
+  BaseModelSpec --> ModelFormat
+  BaseModelSpec --> modelCapabilities
+  BaseModelSpec --> ServingMode
+  BaseModelSpec --> Storage
+  BaseModelSpec --> ModelExtension
+  ClusterBaseModel --> ModelStatus
+  BaseModel --> ModelStatus
+  ModelStatus --> LifeCycle
+  ModelStatus --> LifeCycleState
+}
+
+package "Fine-Tuned Weight" {
+  object FineTunedWeight {
+    + ObjectReference baseModelRef
+    + string modelType
+    + json hyperParameters
+    + ModelExtension modelExtension
+    + StorageSpec storage
+    + ModelStatus status
+  }
+  object ObjectReference {
+    + string name
+    + string namespace
+  }
+
+  FineTunedWeight --> ObjectReference
+  FineTunedWeight --> Storage
+  FineTunedWeight --> ModelExtension
+  FineTunedWeight --> ModelStatus
+}
+@enduml
