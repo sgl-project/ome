@@ -1,0 +1,96 @@
+/*
+Copyright 2019 The Knative Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package metrics
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"sync"
+
+	nethttp "knative.dev/networking/pkg/http"
+	netheader "knative.dev/networking/pkg/http/header"
+)
+
+var errUnsupportedMetricType = errors.New("unsupported metric type")
+
+type httpScrapeClient struct {
+	httpClient *http.Client
+}
+
+type scrapeError struct {
+	error
+	mightBeMesh bool
+}
+
+var pool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
+func newHTTPScrapeClient(httpClient *http.Client) *httpScrapeClient {
+	return &httpScrapeClient{
+		httpClient: httpClient,
+	}
+}
+
+func (c *httpScrapeClient) Do(req *http.Request) (Stat, error) {
+	req.Header.Add("Accept", netheader.ProtobufMIMEType)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return emptyStat, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return emptyStat, scrapeError{
+			error:       fmt.Errorf("GET request for URL %q returned HTTP status %v", req.URL.String(), resp.StatusCode),
+			mightBeMesh: nethttp.IsPotentialMeshErrorResponse(resp),
+		}
+	}
+	if resp.Header.Get("Content-Type") != netheader.ProtobufMIMEType {
+		return emptyStat, errUnsupportedMetricType
+	}
+	return statFromProto(resp.Body)
+}
+
+// isPotentialMeshError returns whether the error encountered during scraping
+// is compatible with having been caused by the mesh being enabled.
+func isPotentialMeshError(err error) bool {
+	var se scrapeError
+	return errors.As(err, &se) && se.mightBeMesh
+}
+
+func statFromProto(body io.Reader) (Stat, error) {
+	var stat Stat
+	b := pool.Get().(*bytes.Buffer)
+	b.Reset()
+	defer pool.Put(b)
+	// 6 8-byte fields (+2 bytes marshalling), one hostname, 20 bytes extra space
+	r := io.LimitedReader{R: body, N: 6*10 + 256 + 20}
+	_, err := b.ReadFrom(&r)
+	if err != nil {
+		return emptyStat, fmt.Errorf("reading body failed: %w", err)
+	}
+	err = stat.Unmarshal(b.Bytes())
+	if err != nil {
+		return emptyStat, fmt.Errorf("unmarshalling failed: %w", err)
+	}
+	return stat, nil
+}
