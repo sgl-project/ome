@@ -2,6 +2,8 @@ module bitbucket.oci.oraclecorp.com/gen/ome
 
 go 1.22
 
+toolchain go1.22.2
+
 require (
 	github.com/go-logr/logr v1.4.1
 	github.com/google/go-cmp v0.6.0
