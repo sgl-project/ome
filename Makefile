@@ -19,6 +19,8 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
+DOCKER_BUILD_CMD = $(shell if command -v nerdctl &> /dev/null; then echo nerdctl; else echo docker; fi)
+
 ## Tool Binaries
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
@@ -45,11 +47,11 @@ manager: generate fmt vet go-lint
 
 # Build manager container image
 manager-image: fmt vet
-	docker build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
 
 
 push-manager-image: manager-image
-	docker push $(MANAGER_IMG)
+	$(DOCKER_BUILD_CMD) push $(MANAGER_IMG)
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet go-lint
