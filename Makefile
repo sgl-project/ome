@@ -53,6 +53,11 @@ manager-image: fmt vet
 push-manager-image: manager-image
 	$(DOCKER_BUILD_CMD) push $(MANAGER_IMG)
 
+
+deploy-manager-dev: push-manager-image
+	echo "Deploying manager image to dev: $(MANAGER_IMG)"
+	./hack/image_patch_dev.sh $(MANAGER_IMG)
+
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet go-lint
 	go run ./cmd/manager/main.go
