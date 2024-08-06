@@ -134,15 +134,6 @@ replacements:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.oracle.com
 
-    # Protect the /metrics endpoint by putting it behind auth.
-    # Only one of manager_auth_proxy_patch.yaml and
-    # manager_prometheus_metrics_patch.yaml should be enabled.
-    # If you want your controller-manager to expose the /metrics
-    # endpoint w/o any authn/z, uncomment the following line and
-    # comment manager_auth_proxy_patch.yaml.
-    # Only one of manager_auth_proxy_patch.yaml and
-    # manager_prometheus_metrics_patch.yaml should be enabled.
-    #- manager_prometheus_metrics_patch.yaml
 patches:
 - path: manager_image_patch.yaml
 - path: manager_auth_proxy_patch.yaml
@@ -151,3 +142,5 @@ patches:
 - path: clusterservingruntime_validatingwebhook_cainjection_patch.yaml
 - path: servingruntime_validationwebhook_cainjection_patch.yaml
 - path: manager_resources_patch.yaml
+- path: isvc_conversion_webhook.yaml
+- path: cainjection_conversion_webhook.yaml

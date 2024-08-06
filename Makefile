@@ -1,7 +1,7 @@
 GIT_COMMIT     := $(shell git rev-parse HEAD)
 GIT_TREE_STATE := $(shell test -n "`git status --porcelain`" && echo "-dirty" || echo "")
 
-REGISTRY     ?= ord.ocir.io/ax0pqskufyud/aok
+REGISTRY     ?= ord.ocir.io/idqj093njucb/ome
 TAG          ?= sha-$(GIT_COMMIT)$(GIT_TREE_STATE)
 ARCH         ?= linux/amd64
 MANAGER_IMG  ?= $(REGISTRY)/manager:$(TAG)

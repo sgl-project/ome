@@ -8,5 +8,5 @@ spec:
     spec:
       containers:
       # Change the value of image field below to your controller image URL
-      - image: ome/ome-controller:latest
+      - image: ord.ocir.io/idqj093njucb/ome/manager:sha-7391f97f2eea71a3b59e855c60447aeb639b7880-dirty
         name: manager

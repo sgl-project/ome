@@ -21,10 +21,14 @@ spec:
     spec:
       serviceAccountName: ome-controller-manager
       securityContext:
-        runAsNonRoot: true
+        runAsNonRoot: false
       containers:
       - command:
         - /manager
+        args:
+          - "--metrics-addr=:8080"
+          - "--leader-elect"
+          - "--zap-encoder=console"
         image: ko://bitbucket.oci.oraclecorp.com/gen/ome/cmd/manager
         imagePullPolicy: Always
         name: manager
