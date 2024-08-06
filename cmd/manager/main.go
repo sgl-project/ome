@@ -40,7 +40,7 @@ const (
 	LeaderLockName = "ome-controller-manager-leader-lock"
 )
 
-// Options defines the program configurable options that may be passed on the command line.
+// Options defines the program-configurable options that may be passed on the command line.
 type Options struct {
 	metricsAddr          string
 	webhookPort          int
