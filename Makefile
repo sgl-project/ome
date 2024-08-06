@@ -1,5 +1,12 @@
-# Image URL to use all building/pushing image targets
-IMG ?= kserve-controller:latest
+GIT_COMMIT     := $(shell git rev-parse HEAD)
+GIT_TREE_STATE := $(shell test -n "`git status --porcelain`" && echo "-dirty" || echo "")
+
+REGISTRY     ?= ord.ocir.io/ax0pqskufyud/aok
+TAG          ?= sha-$(GIT_COMMIT)$(GIT_TREE_STATE)
+ARCH         ?= linux/amd64
+MANAGER_IMG  ?= $(REGISTRY)/manager:$(TAG)
+
+
 CRD_OPTIONS ?= "crd:maxDescLen=0"
 OME_ENABLE_SELF_SIGNED_CA ?= false
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -34,6 +41,15 @@ test: fmt vet manifests envtest
 # Build manager binary
 manager: generate fmt vet go-lint
 	go build -o bin/manager ./cmd/manager
+
+
+# Build manager container image
+manager-image: fmt vet
+	docker build --platform=$(ARCH) . -f docker/manager.Dockerfile -t $(MANAGER_IMG)
+
+
+push-manager-image: manager-image
+	docker push $(MANAGER_IMG)
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet go-lint
@@ -100,9 +116,6 @@ manifests: controller-gen
 fmt:
 	go fmt ./pkg/... ./cmd/...
 
-py-fmt:
-	black --config python/pyproject.toml .
-
 # Run go vet against code
 vet:
 	go vet ./pkg/... ./cmd/...
@@ -116,10 +129,6 @@ generate: controller-gen
 	hack/update-codegen.sh
 	hack/update-openapigen.sh
 
-
-bump-version:
-	# TBA
-	echo "bumping version numbers for this release"
 
 test-qpext:
 	cd qpext && go test -v ./... -cover

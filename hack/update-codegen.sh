@@ -6,11 +6,13 @@ set -o pipefail
 
 KUBE_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 CODEGEN_VERSION=$(cd "${KUBE_ROOT}" && grep 'k8s.io/code-generator' go.mod | awk '{print $2}')
-
+echo "KUBE_ROOT: ${KUBE_ROOT}"
 if [ -z "${GOPATH:-}" ]; then
     GOPATH=$(go env GOPATH)
     export GOPATH
 fi
+
+echo "Using code-generator version: ${CODEGEN_VERSION}"
 CODEGEN_PKG="$GOPATH/pkg/mod/k8s.io/code-generator@${CODEGEN_VERSION}"
 
 # To avoid permission denied error
