@@ -57,25 +57,25 @@ run: generate fmt vet go-lint
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	# Remove the certmanager certificate if KSERVE_ENABLE_SELF_SIGNED_CA is not false
+	# Remove the certmanager certificate if OME_ENABLE_SELF_SIGNED_CA is not false
 	cd config/default && if [ ${OME_ENABLE_SELF_SIGNED_CA} != false ]; then \
 	echo > ../certmanager/certificate.yaml; \
 	else git checkout HEAD -- ../certmanager/certificate.yaml; fi;
 	kubectl apply -k config/default
 	if [ ${OME_ENABLE_SELF_SIGNED_CA} != false ]; then ./hack/self-signed-ca.sh; fi;
-	kubectl wait --for=condition=ready pod -l control-plane=kserve-controller-manager -n kserve --timeout=300s
+	kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s
 	kubectl apply -k config/clusterresources
 	git checkout HEAD -- config/certmanager/certificate.yaml
 
 deploy-ci: manifests
 	kubectl apply -k config/overlays/test
 	# TODO: Add runtimes as part of default deployment
-	kubectl wait --for=condition=ready pod -l control-plane=kserve-controller-manager -n kserve --timeout=300s
+	kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s
 	kubectl apply -k config/overlays/test/clusterresources
 
 deploy-helm: manifests
-	helm install kserve-crd charts/kserve-crd/ --wait --timeout 180s
-	helm install kserve charts/kserve-resources/ --wait --timeout 180s
+	helm install ome-crd charts/ome-crd/ --wait --timeout 180s
+	helm install ome charts/ome-resources/ --wait --timeout 180s
 
 undeploy:
 	kubectl delete -k config/default
