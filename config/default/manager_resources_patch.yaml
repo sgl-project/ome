@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kserve-controller-manager
-  namespace: kserve
+  name: ome-controller-manager
+  namespace: ome
 spec:
   template:
     spec:

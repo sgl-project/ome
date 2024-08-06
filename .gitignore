@@ -48,18 +48,6 @@ config/overlays/development/configmap/inferenceservice_patch.yaml
 config/overlays/development/manager_auth_proxy_patch.yaml
 config/overlays/dev-image-config/inferenceservice_patch.yaml
 
-.ko.yaml
-
-# swagger-codegen tools and auto generated files but useless
-hack/current_violation_exceptions.list
-hack/python-sdk/openapi-generator-cli*.jar
-python/kserve/.swagger-codegen-ignore
-python/kserve/.swagger-codegen/
-python/kserve/.travis.yml
-python/kserve/git_push.sh
-python/kserve/test-requirements.txt
-python/kserve/tox.ini
-
 # Ignore files for MacOS
 **/.DS_Store
 

@@ -3,21 +3,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: inferenceservice.serving.kserve.io
+  name: inferenceservice.ome.oracle.com
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
-        path: /mutate-serving-kserve-io-v1beta1-inferenceservice
+        namespace: $(omeNamespace)
+        path: /mutate-serving-ome-io-v1beta1-inferenceservice
     failurePolicy: Fail
-    name: inferenceservice.kserve-webhook-server.defaulter
+    name: inferenceservice.ome-webhook-server.defaulter
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - serving.kserve.io
+          - ome.oracle.com
         apiVersions:
           - v1beta1
         operations:
@@ -29,10 +29,10 @@ webhooks:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
+        namespace: $(omeNamespace)
         path: /mutate-pods
     failurePolicy: Fail
-    name: inferenceservice.kserve-webhook-server.pod-mutator
+    name: inferenceservice.ome-webhook-server.pod-mutator
     sideEffects: None
     reinvocationPolicy: IfNeeded
     admissionReviewVersions: ["v1beta1"]
@@ -42,7 +42,7 @@ webhooks:
           operator: DoesNotExist
     objectSelector:
       matchExpressions:
-        - key: serving.kserve.io/inferenceservice
+        - key: ome.oracle.com/inferenceservice
           operator: Exists
     rules:
       - apiGroups:
@@ -59,21 +59,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: inferenceservice.serving.kserve.io
+  name: inferenceservice.ome.oracle.com
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
-        path: /validate-serving-kserve-io-v1beta1-inferenceservice
+        namespace: $(omeNamespace)
+        path: /validate-serving-ome-io-v1beta1-inferenceservice
     failurePolicy: Fail
-    name: inferenceservice.kserve-webhook-server.validator
+    name: inferenceservice.ome-webhook-server.validator
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - serving.kserve.io
+          - ome.oracle.com
         apiVersions:
           - v1beta1
         operations:
@@ -86,21 +86,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: trainedmodel.serving.kserve.io
+  name: trainedmodel.ome.oracle.com
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
-        path: /validate-serving-kserve-io-v1alpha1-trainedmodel
+        namespace: $(omeNamespace)
+        path: /validate-serving-ome-io-v1alpha1-trainedmodel
     failurePolicy: Fail
-    name: trainedmodel.kserve-webhook-server.validator
+    name: trainedmodel.ome-webhook-server.validator
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - serving.kserve.io
+          - ome.oracle.com
         apiVersions:
           - v1alpha1
         operations:
@@ -113,21 +113,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: inferencegraph.serving.kserve.io
+  name: inferencegraph.ome.oracle.com
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
-        path: /validate-serving-kserve-io-v1alpha1-inferencegraph
+        namespace: $(omeNamespace)
+        path: /validate-serving-ome-io-v1alpha1-inferencegraph
     failurePolicy: Fail
-    name: inferencegraph.kserve-webhook-server.validator
+    name: inferencegraph.ome-webhook-server.validator
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - serving.kserve.io
+          - ome.oracle.com
         apiVersions:
           - v1alpha1
         operations:
@@ -140,21 +140,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: clusterservingruntime.serving.kserve.io
+  name: clusterservingruntime.ome.oracle.com
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
-        path: /validate-serving-kserve-io-v1alpha1-clusterservingruntime
+        namespace: $(omeNamespace)
+        path: /validate-serving-ome-io-v1alpha1-clusterservingruntime
     failurePolicy: Fail
-    name: clusterservingruntime.kserve-webhook-server.validator
+    name: clusterservingruntime.ome-webhook-server.validator
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - serving.kserve.io
+          - ome.oracle.com
         apiVersions:
           - v1alpha1
         operations:
@@ -167,21 +167,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: servingruntime.serving.kserve.io
+  name: servingruntime.ome.oracle.com
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
-        namespace: $(kserveNamespace)
-        path: /validate-serving-kserve-io-v1alpha1-servingruntime
+        namespace: $(omeNamespace)
+        path: /validate-serving-ome-io-v1alpha1-servingruntime
     failurePolicy: Fail
-    name: servingruntime.kserve-webhook-server.validator
+    name: servingruntime.ome-webhook-server.validator
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - serving.kserve.io
+          - ome.oracle.com
         apiVersions:
           - v1alpha1
         operations:

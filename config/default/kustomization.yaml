@@ -2,11 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Adds namespace to all resources.
-namespace: kserve
+namespace: ome
 
 # Labels to add to all resources and selectors.
 #commonLabels:
-#  app.kubernetes.io/name: kserve
+#  app.kubernetes.io/name: ome
 resources:
 - ../crd
 - ../configmap
@@ -24,7 +24,7 @@ replacements:
 - source:
     fieldPath: metadata.name
     kind: Service
-    name: kserve-webhook-server-service
+    name: ome-webhook-server-service
     version: v1
   targets:
   - fieldPaths:
@@ -56,11 +56,11 @@ replacements:
     select:
       kind: Certificate
       name: serving-cert
-      namespace: kserve
+      namespace: ome
 - source:
     fieldPath: metadata.namespace
     kind: Deployment
-    name: kserve-controller-manager
+    name: ome-controller-manager
     version: v1
   targets:
   - fieldPaths:
@@ -92,7 +92,7 @@ replacements:
     select:
       kind: Certificate
       name: serving-cert
-      namespace: kserve
+      namespace: ome
   - fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:

@@ -37,7 +37,7 @@ var (
 )
 
 const (
-	LeaderLockName = "kserve-controller-manager-leader-lock"
+	LeaderLockName = "ome-controller-manager-leader-lock"
 )
 
 // Options defines the program configurable options that may be passed on the command line.
@@ -66,8 +66,8 @@ func GetOptions() Options {
 	flag.StringVar(&opts.metricsAddr, "metrics-addr", opts.metricsAddr, "The address the metric endpoint binds to.")
 	flag.IntVar(&opts.webhookPort, "webhook-port", opts.webhookPort, "The port that the webhook server binds to.")
 	flag.BoolVar(&opts.enableLeaderElection, "leader-elect", opts.enableLeaderElection,
-		"Enable leader election for kserve controller manager. "+
-			"Enabling this will ensure there is only one active kserve controller manager.")
+		"Enable leader election for ome controller manager. "+
+			"Enabling this will ensure there is only one active ome controller manager.")
 	flag.StringVar(&opts.probeAddr, "health-probe-addr", opts.probeAddr, "The address the probe endpoint binds to.")
 	opts.zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -194,12 +194,12 @@ func main() {
 	})
 
 	setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
-	hookServer.Register("/validate-serving-kserve-io-v1alpha1-clusterservingruntime", &webhook.Admission{
+	hookServer.Register("/validate-serving-ome-io-v1alpha1-clusterservingruntime", &webhook.Admission{
 		Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 	})
 
 	setupLog.Info("registering serving runtime validator webhook to the webhook server")
-	hookServer.Register("/validate-serving-kserve-io-v1alpha1-servingruntime", &webhook.Admission{
+	hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
 		Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 	})
 

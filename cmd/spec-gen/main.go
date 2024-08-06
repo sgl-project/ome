@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	kserve "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"k8s.io/klog"
 	"k8s.io/kube-openapi/pkg/common"
 	spec "k8s.io/kube-openapi/pkg/validation/spec"
@@ -21,7 +21,7 @@ func main() {
 	if !strings.HasPrefix(version, "v") {
 		version = "v" + version
 	}
-	oAPIDefs := kserve.GetOpenAPIDefinitions(func(name string) spec.Ref {
+	oAPIDefs := omev1beta1.GetOpenAPIDefinitions(func(name string) spec.Ref {
 		return spec.MustCreateRef("#/definitions/" + common.EscapeJsonPointer(swaggify(name)))
 	})
 	defs := spec.Definitions{}

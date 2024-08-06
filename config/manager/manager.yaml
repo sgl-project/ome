@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kserve-controller-manager
-  namespace: kserve
+  name: ome-controller-manager
+  namespace: ome
   labels:
-    control-plane: kserve-controller-manager
+    control-plane: ome-controller-manager
     controller-tools.k8s.io: "1.0"
 spec:
   selector:
     matchLabels:
-      control-plane: kserve-controller-manager
+      control-plane: ome-controller-manager
       controller-tools.k8s.io: "1.0"
   template:
     metadata:
       labels:
-        control-plane: kserve-controller-manager
+        control-plane: ome-controller-manager
         controller-tools.k8s.io: "1.0"
       annotations:
         kubectl.kubernetes.io/default-container: manager
     spec:
-      serviceAccountName: kserve-controller-manager
+      serviceAccountName: ome-controller-manager
       securityContext:
         runAsNonRoot: true
       containers:
@@ -36,7 +36,7 @@ spec:
               fieldRef:
                 fieldPath: metadata.namespace
           - name: SECRET_NAME
-            value: kserve-webhook-server-cert
+            value: ome-webhook-server-cert
         livenessProbe:
           failureThreshold: 5
           initialDelaySeconds: 10
@@ -72,10 +72,10 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: kserve-webhook-server-cert
+          secretName: ome-webhook-server-cert
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kserve-webhook-server-secret
-  namespace: kserve
+  name: ome-webhook-server-secret
+  namespace: ome

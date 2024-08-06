@@ -3,6 +3,6 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: inferenceservice.ome.oracle.com
   annotations:
-    cert-manager.io/inject-ca-from: $(kserveNamespace)/serving-cert
+    cert-manager.io/inject-ca-from: $(omeNamespace)/serving-cert
 webhooks:
-  - name: inferenceservice.kserve-webhook-server.validator
+  - name: inferenceservice.ome-webhook-server.validator
