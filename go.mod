@@ -19,7 +19,7 @@ require (
 	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
 	k8s.io/client-go v0.28.4
-	k8s.io/code-generator v0.29.0 // indirect
+	k8s.io/code-generator v0.29.0
 	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20231113174909-778a5567bc1e
 	knative.dev/pkg v0.0.0-20231115001034-97c7258e3a98
@@ -77,7 +77,6 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.5.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
