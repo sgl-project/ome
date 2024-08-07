@@ -117,11 +117,9 @@ func main() {
 
 	setupLog.Info("Registering Components.")
 
-	setupLog.Info("Setting up KServe v1alpha1 scheme")
-
-	setupLog.Info("Setting up KServe v1beta1 scheme")
+	setupLog.Info("Setting up OME v1beta1 scheme")
 	if err := v1beta1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "unable to add KServe v1beta1 to scheme")
+		setupLog.Error(err, "unable to add OME v1beta1 to scheme")
 		os.Exit(1)
 	}
 

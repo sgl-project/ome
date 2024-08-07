@@ -48,14 +48,14 @@ fi
 # Connect to the cluster
 set -e
 echo "* Connecting to cluster (local root password might be required)"
-telepresence connect
+telepresence connect --namespace ome
 set +e
 
 # Intercept the ome controller manager
 if ! telepresence status --output json | jq -e '.user_daemon.intercepts[]? | select(.name == "ome-controller-manager-ome")' > /dev/null; then
   echo "* Intercept ome-webhook-server-service"
   set -e
-  telepresence intercept ome-controller-manager --service=ome-webhook-server-service --port 9443 -n ome --mount=false
+  telepresence intercept ome-controller-manager --service=ome-webhook-server-service --port 9443 --mount=false
   set +e
 else
   echo "* Webhook service already intercepted"
