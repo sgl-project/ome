@@ -14,7 +14,6 @@ resources:
 - full/ome.oracle.com_inferenceservices.yaml
 - full/ome.oracle.com_clusterservingruntimes.yaml
 - full/ome.oracle.com_servingruntimes.yaml
-- full/ome.oracle.com_clusterstoragecontainers.yaml
 - full/ome.oracle.com_basemodels.yaml
 - full/ome.oracle.com_clusterbasemodels.yaml
 - full/ome.oracle.com_finetunedweights.yaml
