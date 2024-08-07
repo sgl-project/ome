@@ -1,0 +1,51 @@
+ome:
+  version: &defaultVersion v0.0.1
+  metricsaggregator:
+    enableMetricAggregation: "false"
+    enablePrometheusScraping: "false"
+  ociETC:
+    region: us-chicago-1
+    serviceTenancyId: ocid1.tenancy.oc1..aaaaaaaa6kumpbo73nsadhi7t4ssehtgn6wtnnkertn6sd74i4gzvia6misa
+    serviceCompartmentId: ocid1.compartment.oc1..aaaaaaaal2wsx6r54lwfqa7frqad33ujlgo4azwd2uv6ftyqmvbqm6k5dxaa
+    stage: dev
+    realm: oc1
+    applicationStage: prod
+    publicDomainName: oraclecloud.com
+    internalDomainName: oracleiaas.com
+    airportCode: ORD
+    adNumberName: ad2
+    namespace: ax0pqskufyud
+  controller:
+    replicaCount: 3
+    deploymentMode: "RawDeployment"
+    rbacProxyImage: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
+    ingressGateway:
+      domain: svc.cluster.local
+      domainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
+      urlScheme: http
+      disableIstioVirtualHost: false
+      localGateway:
+        gateway: knative-serving/knative-local-gateway
+        gatewayService: knative-local-gateway.istio-system.svc.cluster.local
+      ingressGateway:
+        gateway: knative-serving/knative-ingress-gateway
+        gatewayService: istio-ingressgateway.istio-system.svc.cluster.local
+        className: istio
+    nodeSelector: {}
+    tolerations: []
+    topologySpreadConstraints: []
+    affinity: {}
+    image: ord.ocir.io/idqj093njucb/ome/manager
+    tag: *defaultVersion
+    resources:
+      limits:
+        cpu: 500m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 2Gi
+  servingruntime:
+    vllmMedium:
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai
+      tag: e3c664b
+

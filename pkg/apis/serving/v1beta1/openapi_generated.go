@@ -46,6 +46,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSpec":                 schema_pkg_apis_serving_v1beta1_ModelSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatus":               schema_pkg_apis_serving_v1beta1_ModelStatus(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatusSpec":           schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig":                 schema_pkg_apis_serving_v1beta1_OCIConfig(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ObjectReference":           schema_pkg_apis_serving_v1beta1_ObjectReference(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PodSpec":                   schema_pkg_apis_serving_v1beta1_PodSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PredictorExtensionSpec":    schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref),
@@ -1662,19 +1663,19 @@ func schema_pkg_apis_serving_v1beta1_InferenceServicesConfig(ref common.Referenc
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
-					"explainers": {
+					"ociEtc": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Explainer configurations",
+							Description: "OCIConfig contains all OCI Configuration",
 							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainersConfig"),
+							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig"),
 						},
 					},
 				},
-				Required: []string{"explainers"},
+				Required: []string{"ociEtc"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainersConfig"},
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig"},
 	}
 }
 
@@ -2303,6 +2304,107 @@ func schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref common.ReferenceCallbac
 					},
 				},
 				Required: []string{"state"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_OCIConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"region": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Region for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceTenancyId": {
+						SchemaProps: spec.SchemaProps{
+							Description: "service tenancy OCID, this is defaulted to the tenancy OCID in agent service configMap",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceCompartmentId": {
+						SchemaProps: spec.SchemaProps{
+							Description: "compartment OCID, this is defaulted to the compartment OCID in agent service configMap",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"realm": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Realm for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"stage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Stage for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"applicationStage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ApplicationStage for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"internalDomainName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InternalDomainName for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"publicDomainName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PublicDomainName for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"airportCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AirportCode for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"adNumberName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AdNumberName for all applications",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace for service tenancy",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"region", "serviceTenancyId", "serviceCompartmentId", "realm", "stage", "applicationStage", "internalDomainName", "publicDomainName", "airportCode", "adNumberName", "namespace"},
 			},
 		},
 	}
@@ -4083,7 +4185,7 @@ func schema_pkg_apis_serving_v1beta1_StorageSpec(ref common.ReferenceCallback) c
 				Properties: map[string]spec.Schema{
 					"path": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model object in the storage. It cannot co-exist with the storageURI.",
+							Description: "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -4114,6 +4216,13 @@ func schema_pkg_apis_serving_v1beta1_StorageSpec(ref common.ReferenceCallback) c
 					"key": {
 						SchemaProps: spec.SchemaProps{
 							Description: "The Storage Key in the secret for this model.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"storageUri": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
 							Type:        []string{"string"},
 							Format:      "",
 						},

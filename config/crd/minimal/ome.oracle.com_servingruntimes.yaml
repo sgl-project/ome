@@ -18,10 +18,16 @@ spec:
       name: Disabled
       type: boolean
     - jsonPath: .spec.supportedModelFormats[*].name
+      name: ModelFormat
+      type: string
+    - jsonPath: .spec.supportedModelFormats[*].modelType
       name: ModelType
       type: string
-    - jsonPath: .spec.containers[*].name
-      name: Containers
+    - jsonPath: .spec.supportedModelFormats[*].modelArchitecture
+      name: ModelArchitecture
+      type: string
+    - jsonPath: .spec.containers[*].image
+      name: Images
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age

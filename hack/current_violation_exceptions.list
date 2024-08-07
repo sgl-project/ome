@@ -22,6 +22,7 @@ API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/se
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ComponentStatusSpec,RestURL
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ExplainerConfig,ContainerImage
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ExplainersConfig,ARTExplainer
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,InferenceServicesConfig,OCIConfig
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,IngressConfig,IngressServiceName
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,IngressConfig,LocalGatewayServiceName
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ModelStatus,ModelCopies

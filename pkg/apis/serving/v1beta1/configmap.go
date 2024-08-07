@@ -13,12 +13,8 @@ import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 )
 
-// ConfigMap Keys
 const (
-	ExplainerConfigKeyName = "explainers"
-)
-
-const (
+	OCIConfigName        = "ociEtc"
 	IngressConfigKeyName = "ingress"
 	DeployConfigName     = "deploy"
 
@@ -43,8 +39,8 @@ type ExplainersConfig struct {
 
 // +kubebuilder:object:generate=false
 type InferenceServicesConfig struct {
-	// Explainer configurations
-	Explainers ExplainersConfig `json:"explainers"`
+	// OCIConfig contains all OCI Configuration
+	OCIConfig OCIConfig `json:"ociEtc"`
 }
 
 // +kubebuilder:object:generate=false
@@ -64,6 +60,32 @@ type IngressConfig struct {
 }
 
 // +kubebuilder:object:generate=false
+type OCIConfig struct {
+	// Region for all applications
+	Region string `json:"region"`
+	// service tenancy OCID, this is defaulted to the tenancy OCID in agent service configMap
+	ServiceTenancyId string `json:"serviceTenancyId"`
+	// compartment OCID, this is defaulted to the compartment OCID in agent service configMap
+	ServiceCompartmentId string `json:"serviceCompartmentId"`
+	// Realm for all applications
+	Realm string `json:"realm"`
+	// Stage for all applications
+	Stage string `json:"stage"`
+	// ApplicationStage for all applications
+	ApplicationStage string `json:"applicationStage"`
+	// InternalDomainName for all applications
+	InternalDomainName string `json:"internalDomainName"`
+	// PublicDomainName for all applications
+	PublicDomainName string `json:"publicDomainName"`
+	// AirportCode for all applications
+	AirportCode string `json:"airportCode"`
+	// AdNumberName for all applications
+	AdNumberName string `json:"adNumberName"`
+	// Namespace for service tenancy
+	Namespace string `json:"namespace"`
+}
+
+// +kubebuilder:object:generate=false
 type DeployConfig struct {
 	DefaultDeploymentMode string `json:"defaultDeploymentMode,omitempty"`
 }
@@ -75,7 +97,7 @@ func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServi
 	}
 	icfg := &InferenceServicesConfig{}
 	for _, err := range []error{
-		getComponentConfig(ExplainerConfigKeyName, configMap, &icfg.Explainers),
+		getComponentConfig(OCIConfigName, configMap, &icfg.OCIConfig),
 	} {
 		if err != nil {
 			return nil, err
@@ -162,4 +184,20 @@ func NewDeployConfig(clientset kubernetes.Interface) (*DeployConfig, error) {
 		}
 	}
 	return deployConfig, nil
+}
+
+func NewOciConfig(clientset kubernetes.Interface) (*OCIConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	ociConfig := &OCIConfig{}
+	for _, err := range []error{
+		getComponentConfig(OCIConfigName, configMap, &ociConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ociConfig, nil
 }

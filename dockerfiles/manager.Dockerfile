@@ -13,7 +13,7 @@ COPY cmd/    cmd/
 COPY pkg/    pkg/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -a -o manager ./cmd/manager
+RUN go build -a -o manager ./cmd/manager
 
 # Copy the controller-manager into a thin image
 FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:8-slim

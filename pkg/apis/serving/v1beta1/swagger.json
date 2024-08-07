@@ -904,13 +904,13 @@
     "v1beta1.InferenceServicesConfig": {
       "type": "object",
       "required": [
-        "explainers"
+        "ociEtc"
       ],
       "properties": {
-        "explainers": {
-          "description": "Explainer configurations",
+        "ociEtc": {
+          "description": "OCIConfig contains all OCI Configuration",
           "default": {},
-          "$ref": "#/definitions/v1beta1.ExplainersConfig"
+          "$ref": "#/definitions/v1beta1.OCIConfig"
         }
       }
     },
@@ -1255,6 +1255,79 @@
         },
         "state": {
           "description": "Status of the model weight",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.OCIConfig": {
+      "type": "object",
+      "required": [
+        "region",
+        "serviceTenancyId",
+        "serviceCompartmentId",
+        "realm",
+        "stage",
+        "applicationStage",
+        "internalDomainName",
+        "publicDomainName",
+        "airportCode",
+        "adNumberName",
+        "namespace"
+      ],
+      "properties": {
+        "adNumberName": {
+          "description": "AdNumberName for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "airportCode": {
+          "description": "AirportCode for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "applicationStage": {
+          "description": "ApplicationStage for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "internalDomainName": {
+          "description": "InternalDomainName for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "namespace": {
+          "description": "Namespace for service tenancy",
+          "type": "string",
+          "default": ""
+        },
+        "publicDomainName": {
+          "description": "PublicDomainName for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "realm": {
+          "description": "Realm for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "region": {
+          "description": "Region for all applications",
+          "type": "string",
+          "default": ""
+        },
+        "serviceCompartmentId": {
+          "description": "compartment OCID, this is defaulted to the compartment OCID in agent service configMap",
+          "type": "string",
+          "default": ""
+        },
+        "serviceTenancyId": {
+          "description": "service tenancy OCID, this is defaulted to the tenancy OCID in agent service configMap",
+          "type": "string",
+          "default": ""
+        },
+        "stage": {
+          "description": "Stage for all applications",
           "type": "string",
           "default": ""
         }
@@ -2250,11 +2323,15 @@
           }
         },
         "path": {
-          "description": "The path to the model object in the storage. It cannot co-exist with the storageURI.",
+          "description": "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
           "type": "string"
         },
         "schemaPath": {
           "description": "The path to the model schema file in the storage.",
+          "type": "string"
+        },
+        "storageUri": {
+          "description": "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
           "type": "string"
         }
       }

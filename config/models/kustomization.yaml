@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - Llama-3.1-405B-Instruct-FP8.yaml
+  - Llama-3.1-70B-Instruct.yaml
+  - Phi-3-mini-128k-instruct.yaml

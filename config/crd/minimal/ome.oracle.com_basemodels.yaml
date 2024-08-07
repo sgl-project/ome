@@ -32,6 +32,15 @@ spec:
     - jsonPath: .spec.modelFormat.name
       name: ModelFormat
       type: string
+    - jsonPath: .status.state
+      name: Ready
+      type: string
+    - jsonPath: .spec.modelCapabilities[*]
+      name: Size
+      type: string
+    - jsonPath: .spec.modelParameterSize
+      name: Capabilities
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

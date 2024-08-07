@@ -76,6 +76,8 @@ spec:
                     type: string
                   schemaPath:
                     type: string
+                  storageUri:
+                    type: string
                 type: object
               trainingJobRef:
                 properties:

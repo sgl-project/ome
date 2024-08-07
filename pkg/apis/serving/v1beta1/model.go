@@ -17,9 +17,9 @@ type ModelFormat struct {
 }
 
 type StorageSpec struct {
-	// The path to the model object in the storage. It cannot co-exist
-	// with the storageURI.
-	// +optional
+	// The path to the model object in the object storage.
+	// Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)
+	// +required
 	Path *string `json:"path,omitempty"`
 	// The path to the model schema file in the storage.
 	// +optional
@@ -30,6 +30,10 @@ type StorageSpec struct {
 	// The Storage Key in the secret for this model.
 	// +optional
 	StorageKey *string `json:"key,omitempty"`
+	// The path to the model where it will be downloaded.
+	// Default is /mnt/models/vendor/model-name
+	// +optional
+	StorageUri *string `json:"storageUri,omitempty"`
 }
 
 // BaseModelSpec defines the desired state of BaseModel
@@ -206,6 +210,9 @@ type ModelStatusSpec struct {
 // +kubebuilder:printcolumn:name="CompartmentID",type="string",JSONPath=".spec.compartmentID"
 // +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.modelType"
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.modelFormat.name"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Size",type="string",JSONPath=".spec.modelCapabilities[*]"
+// +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelParameterSize"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type BaseModel struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -227,6 +234,9 @@ type BaseModel struct {
 // +kubebuilder:printcolumn:name="CompartmentID",type="string",JSONPath=".spec.compartmentID"
 // +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.modelType"
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.modelFormat.name"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelCapabilities[*]"
+// +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelParameterSize"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type ClusterBaseModel struct {
 	metav1.TypeMeta   `json:",inline"`

@@ -199,16 +199,15 @@ data:
 
   ingress: |-
     {
-        "ingressGateway" : "knative-serving/knative-ingress-gateway",
-        "ingressService" : "istio-ingressgateway.istio-system.svc.cluster.local",
-        "localGateway" : "knative-serving/knative-local-gateway",
-        "localGatewayService" : "knative-local-gateway.istio-system.svc.cluster.local",
-        "ingressDomain"  : "svc.cluster.local",
-        "ingressClassName" : "istio",
-        "domainTemplate": "{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}",
-        "urlScheme": "http",
-        "disableIstioVirtualHost": false,
-        "disableIngressCreation": false
+        "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",
+        "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
+        "localGateway" : "{{ .Values.ome.controller.ingressGateway.localGateway.gateway }}",
+        "localGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
+        "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
+        "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
+        "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
+        "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
+        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }}
     }
 
   logger: |-
@@ -232,27 +231,27 @@ data:
 
   ociEtc: |-
     {
-        "region" : "us-chicago-1",
-        "serviceCompartmentId": "ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq",
-        "serviceTenancyId": "ocid1.tenancy.oc1..aaaaaaaaygke5qlnho2slsj5kx645ve3z63k5ykxrticzaxebkuei2iqom6a",
-        "stage": "prod",
-        "realm": "oc1",
-        "applicationStage": "prod",
-        "publicDomainName": "oraclecloud.com",
-        "internalDomainName": "oracleiaas.com",
-        "airportCode": "ORD",
-        "adNumberName": "ad2",
-        "namespace": "idlsnvn0f2is"
+        "region" : "{{ .Values.ome.ociETC.region }}",
+        "serviceCompartmentId": "{{ .Values.ome.ociETC.serviceCompartmentId }}",
+        "serviceTenancyId": "{{ .Values.ome.ociETC.serviceTenancyId }}",
+        "stage": "{{ .Values.ome.ociETC.stage }}",
+        "realm": "{{ .Values.ome.ociETC.realm }}",
+        "applicationStage": "{{ .Values.ome.ociETC.applicationStage }}",
+        "publicDomainName": "{{ .Values.ome.ociETC.publicDomainName }}",
+        "internalDomainName": "{{ .Values.ome.ociETC.internalDomainName }}",
+        "airportCode": "{{ .Values.ome.ociETC.airportCode }}",
+        "adNumberName": "{{ .Values.ome.ociETC.adNumberName }}",
+        "namespace": "{{ .Values.ome.ociETC.namespace }}"
     }
 
 
   deploy: |-
     {
-      "defaultDeploymentMode": "RawDeployment"
+      "defaultDeploymentMode": "{{ .Values.aok.controller.deploymentMode }}"
     }
 
   metricsAggregator: |-
     {
-      "enableMetricAggregation": "false",
-      "enablePrometheusScraping" : "false"
+      "enableMetricAggregation": "{{ .Values.aok.metricsaggregator.enableMetricAggregation }}",
+      "enablePrometheusScraping" : "{{ .Values.aok.metricsaggregator.enablePrometheusScraping }}"
     }
