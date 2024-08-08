@@ -30,7 +30,7 @@ var (
 	IsvcRegexp = regexp.MustCompile("^" + IsvcNameFmt + "$")
 )
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-inferenceservices,mutating=false,failurePolicy=fail,groups=ome.oracle.com,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
+// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-oracle-com-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.oracle.com,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
 var _ webhook.Validator = &InferenceService{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type

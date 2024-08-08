@@ -12,7 +12,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ome-controller-manager
-  namespace: aok
+  namespace: ome
 spec:
   template:
     spec:

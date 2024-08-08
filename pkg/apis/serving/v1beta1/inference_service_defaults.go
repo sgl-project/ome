@@ -21,7 +21,7 @@ var (
 	mutatorLogger = logf.Log.WithName("inferenceservice-v1beta1-mutating-webhook")
 )
 
-// +kubebuilder:webhook:path=/mutate-inferenceservices,mutating=true,failurePolicy=fail,groups=ome.oracle.com,resources=inferenceservices,verbs=create;update,versions=v1beta1,name=inferenceservice.ome-webhook-server.defaulter
+// +kubebuilder:webhook:path=/mutate-ome-oracle-com-v1beta1-inferenceservice,mutating=true,failurePolicy=fail,groups=ome.oracle.com,resources=inferenceservices,verbs=create;update,versions=v1beta1,name=inferenceservice.ome-webhook-server.defaulter
 var _ webhook.Defaulter = &InferenceService{}
 
 func setResourceRequirementDefaults(requirements *v1.ResourceRequirements) {

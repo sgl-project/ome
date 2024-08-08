@@ -7,6 +7,5 @@ spec:
   template:
     spec:
       containers:
-      # Change the value of image field below to your controller image URL
-      - image: ord.ocir.io/idqj093njucb/ome/manager:sha-7391f97f2eea71a3b59e855c60447aeb639b7880-dirty
-        name: manager
+        - name: manager
+          image: ord.ocir.io/idqj093njucb/ome/manager:sha-c2792b1d99d64c4d415ffc7430292706746be198

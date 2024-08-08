@@ -9,7 +9,7 @@ webhooks:
       service:
         name: ome-webhook-server-service
         namespace: {{ .Release.Namespace }}
-        path: /validate-inferenceservices
+        path: /validate-ome-oracle-com-v1beta1-inferenceservice
     failurePolicy: Fail
     name: inferenceservice.ome-webhook-server.validator
     sideEffects: None

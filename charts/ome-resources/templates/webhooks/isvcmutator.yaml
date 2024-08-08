@@ -10,7 +10,7 @@ webhooks:
       service:
         name: ome-webhook-server-service
         namespace: {{ .Release.Namespace }}
-        path: /mutate-inferenceservices
+        path: /mutate-ome-oracle-com-v1beta1-inferenceservice
     failurePolicy: Fail
     name: inferenceservice.ome-webhook-server.defaulter
     sideEffects: None
