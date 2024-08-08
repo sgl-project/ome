@@ -2,6 +2,7 @@ package modelconfig
 
 import (
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
@@ -30,6 +31,22 @@ func NewConfigsDelta(updatedConfigs ModelConfigs, deletedConfigs []string) *Conf
 		updated: slice2Map(updatedConfigs),
 		deleted: deletedConfigs,
 	}
+}
+
+func CreateEmptyModelConfig(isvc *v1beta1.InferenceService) (*v1.ConfigMap, error) {
+	modelConfigName := constants.ModelConfigName(isvc.Name)
+	// Create a modelConfig without any models in it
+	modelConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      modelConfigName,
+			Namespace: isvc.Namespace,
+			Labels:    isvc.Labels,
+		},
+		Data: map[string]string{
+			constants.ModelConfigFileName: "[]",
+		},
+	}
+	return modelConfigMap, nil
 }
 
 // multi-model ConfigMap

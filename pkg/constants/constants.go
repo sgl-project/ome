@@ -385,6 +385,30 @@ func getEnvOrDefault(key string, fallback string) string {
 	return fallback
 }
 
+func ModelConfigName(isvcName string) string {
+	var maxLen = 20
+	if len(isvcName) > maxLen {
+		isvcName = isvcName[len(isvcName)-maxLen:]
+	}
+	return fmt.Sprintf("modelconfig-%s", isvcName)
+}
+
+func PVName(isvcName string) string {
+	var maxLen = 20
+	if len(isvcName) > maxLen {
+		isvcName = isvcName[len(isvcName)-maxLen:]
+	}
+	return fmt.Sprintf("pv-%s", isvcName)
+}
+
+func PVCName(isvcName string) string {
+	var maxLen = 20
+	if len(isvcName) > maxLen {
+		isvcName = isvcName[len(isvcName)-maxLen:]
+	}
+	return fmt.Sprintf("pvc-%s", isvcName)
+}
+
 // nolint: unused
 func isEnvVarMatched(envVar, matchtedValue string) bool {
 	return getEnvOrDefault(envVar, "") == matchtedValue
@@ -430,14 +454,6 @@ func PredictPath(name string, protocol InferenceServiceProtocol) string {
 		path = fmt.Sprintf("/v2/models/%s/infer", name)
 	}
 	return path
-}
-
-func PredictPrefix() string {
-	return "^/v1/models/[\\w-]+(:predict)?"
-}
-
-func ExplainPrefix() string {
-	return "^/v1/models/[\\w-]+:explain$"
 }
 
 func VirtualServiceHostname(name string, predictorHostName string) string {

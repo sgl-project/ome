@@ -128,10 +128,10 @@ func TestAppendVolumeIfNotExists(t *testing.T) {
 		"DuplicateVolume": {
 			volumes: []v1.Volume{
 				{
-					Name: "gcp",
+					Name: "oci",
 					VolumeSource: v1.VolumeSource{
 						Secret: &v1.SecretVolumeSource{
-							SecretName: "user-gcp-sa",
+							SecretName: "user-oci-sa",
 						},
 					},
 				},
@@ -145,10 +145,10 @@ func TestAppendVolumeIfNotExists(t *testing.T) {
 				},
 			},
 			volume: v1.Volume{
-				Name: "gcp",
+				Name: "oci",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: "user-gcp-sa",
+						SecretName: "user-oci-sa",
 					},
 				},
 			},
@@ -174,10 +174,10 @@ func TestAppendVolumeIfNotExists(t *testing.T) {
 		"NotDuplicateVolume": {
 			volumes: []v1.Volume{
 				{
-					Name: "aws",
+					Name: "azure",
 					VolumeSource: v1.VolumeSource{
 						Secret: &v1.SecretVolumeSource{
-							SecretName: "user-aws-sa",
+							SecretName: "user-azure-sa",
 						},
 					},
 				},

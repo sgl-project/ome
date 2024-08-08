@@ -1,6 +1,8 @@
 package components
 
 import (
+	predictorpv "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pv"
+	predictorpvc "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pvc"
 	"context"
 	"fmt"
 
@@ -65,6 +67,17 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	var sRuntime v1beta1.ServingRuntimeSpec
 	var err error
 	var baseModel v1beta1.BaseModelSpec
+
+	pvReconciler := predictorpv.NewPredictorPVReconciler(p.client, p.clientset, p.scheme)
+	pvcReconciler := predictorpvc.NewPredictorPVCReconciler(p.client, p.clientset, p.scheme)
+
+	if result, err := pvReconciler.Reconcile(isvc); err != nil {
+		return result, err
+	}
+
+	if result, err := pvcReconciler.Reconcile(isvc); err != nil {
+		return result, err
+	}
 
 	if isvc.Spec.Predictor.Model.BaseModel != nil {
 		bm, err := isvcutils.GetBaseModel(p.client, *isvc.Spec.Predictor.Model.BaseModel, isvc.Namespace)
@@ -136,15 +149,6 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		// set runtime defaults
 		isvc.SetRuntimeDefaults()
 	}
-	//// assign protocol version to inferenceservice based on runtime selected
-	//if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
-	//	protocolVersion := constants.GetProtocolVersionString(
-	//		constants.ProtocolVersion(
-	//			v1beta1.GetProtocolVersionPriority(sRuntime.ProtocolVersions),
-	//		),
-	//	)
-	//	isvc.Spec.Predictor.Model.ProtocolVersion = &protocolVersion
-	//}
 
 	if len(sRuntime.Containers) == 0 {
 		isvc.Status.UpdateModelTransitionStatus(v1beta1.InvalidSpec, &v1beta1.FailureInfo{
@@ -195,10 +199,21 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	// Update image tag if GPU is enabled or runtime version is provided
 	isvcutils.UpdateImageTag(container, isvc.Spec.Predictor.Model.RuntimeVersion, isvc.Spec.Predictor.Model.Runtime)
 
+	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
+	vm := v1.VolumeMount{Name: constants.PVCName(isvc.Name), MountPath: *baseModel.Storage.StorageUri, ReadOnly: true}
+	volume := v1.Volume{Name: constants.PVCName(isvc.Name), VolumeSource: v1.VolumeSource{PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: constants.PVCName(isvc.Name)}}}
+	//TODO this is specific to vLLM container, move this to a more generic place, such as isvc defaults
+	containerArg := []string{"--model", *baseModel.Storage.StorageUri}
+	isvcutils.UpdateVolumeMounts(container, &vm)
+	isvcutils.UpdateContainerArgs(container, &containerArg)
+
+	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "container", container)
+
 	podSpec = *mergedPodSpec
 	podSpec.Containers = []v1.Container{
 		*container,
 	}
+	podSpec.Volumes = append(podSpec.Volumes, volume)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[:omeContainerIdx]...)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[omeContainerIdx+1:]...)
 

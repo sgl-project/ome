@@ -186,6 +186,14 @@ func UpdateImageTag(container *v1.Container, runtimeVersion *string, servingRunt
 	}
 }
 
+func UpdateVolumeMounts(container *v1.Container, volumeMount *v1.VolumeMount) {
+	container.VolumeMounts = append(container.VolumeMounts, *volumeMount)
+}
+
+func UpdateContainerArgs(container *v1.Container, args *[]string) {
+	container.Args = append(container.Args, *args...)
+}
+
 // ListPodsByLabel Get a PodList by label.
 func ListPodsByLabel(cl client.Client, namespace string, labelKey string, labelVal string) (*v1.PodList, error) {
 	podList := &v1.PodList{}

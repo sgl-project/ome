@@ -17,7 +17,7 @@ spec:
     - "TEXT_GENERATION"
   storage:
     path: oci://n/namespace/b/bucket/o/mnt/models/meta/llama-3.1-70b-instruct
-    storageUri: /mnt/models/meta/llama-3.1-70b-instruct
+    storageUri: /models/Meta-Llama-3.1-70B-Instruct
   modelConfiguration:
     {
       "architectures": [

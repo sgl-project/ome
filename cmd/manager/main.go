@@ -1,18 +1,17 @@
 package main
 
 import (
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
 	"flag"
 	"net/http"
 	"os"
-
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	v1beta1controller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
 	istionetworking "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	v1 "k8s.io/api/core/v1"

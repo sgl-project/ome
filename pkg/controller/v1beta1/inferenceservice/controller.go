@@ -1,6 +1,7 @@
 package inferenceservice
 
 import (
+	multimodelconfig "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"context"
 	"fmt"
 	"reflect"
@@ -53,11 +54,13 @@ import (
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;create
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
 // InferenceServiceState describes the Readiness of the InferenceService
 type InferenceServiceState string
@@ -150,6 +153,12 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	isvcConfig, err := v1beta1api.NewInferenceServicesConfig(r.Clientset)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create InferenceServicesConfig")
+	}
+
+	modelConfigReconciler := multimodelconfig.NewModelConfigReconciler(r.Client, r.Clientset, r.Scheme)
+	result, err := modelConfigReconciler.Reconcile(isvc)
+	if err != nil {
+		return result, err
 	}
 
 	reconcilers := []components.Component{}
@@ -263,7 +272,11 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1api.InferenceService{}).
-		Owns(&appsv1.Deployment{})
+		Owns(&appsv1.Deployment{}).
+		Owns(&v1.Service{}).
+		Owns(&v1.ConfigMap{}).
+		Owns(&v1.PersistentVolume{}).
+		Owns(&v1.PersistentVolumeClaim{})
 
 	if ksvcFound {
 		ctrlBuilder = ctrlBuilder.Owns(&knservingv1.Service{})

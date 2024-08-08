@@ -38,7 +38,7 @@ all: test manager
 
 # Run tests
 test: fmt vet manifests envtest
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $$(go list ./pkg/...) ./cmd/... -coverprofile coverage.out -coverpkg ./pkg/... ./cmd...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/apis/serving/v1beta1/openapi_generated.go) ./cmd/... -coverprofile coverage.out -coverpkg ./pkg... ./cmd...
 
 # Build manager binary
 manager: generate fmt vet go-lint
