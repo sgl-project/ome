@@ -1,0 +1,13 @@
+apiVersion: ome.oracle.com/v1beta1
+kind: InferenceService
+metadata:
+  name: llama3-1-70b
+  namespace: default
+spec:
+  predictor:
+    model:
+      runtime: vllm-serving-runtime-medium
+      baseModel: llama-3-1-70b
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

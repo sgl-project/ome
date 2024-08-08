@@ -36,7 +36,10 @@ import (
 // +kubebuilder:rbac:groups=ome.oracle.com,resources=servingruntimes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterservingruntimes;clusterservingruntimes/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterservingruntimes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterstoragecontainers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.oracle.com,resources=basemodels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.oracle.com,resources=basemodels;basemodels/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterbasemodels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterbasemodels;basemodels/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.oracle.com,resources=inferenceservices/status,verbs=get;update;patch

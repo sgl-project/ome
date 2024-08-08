@@ -151,3 +151,6 @@ $(ENVTEST): $(LOCALBIN)
 
 telepresence:
 	hack/telepresence-setup.sh
+
+helm-docs:
+	hack/update-helm-docs.sh

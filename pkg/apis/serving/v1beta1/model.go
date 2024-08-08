@@ -211,8 +211,8 @@ type ModelStatusSpec struct {
 // +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.modelType"
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.modelFormat.name"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.state"
-// +kubebuilder:printcolumn:name="Size",type="string",JSONPath=".spec.modelCapabilities[*]"
-// +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelParameterSize"
+// +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelCapabilities[*]"
+// +kubebuilder:printcolumn:name="Size",type="string",JSONPath=".spec.modelParameterSize"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type BaseModel struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -236,7 +236,7 @@ type BaseModel struct {
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.modelFormat.name"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelCapabilities[*]"
-// +kubebuilder:printcolumn:name="Capabilities",type="string",JSONPath=".spec.modelParameterSize"
+// +kubebuilder:printcolumn:name="Size",type="string",JSONPath=".spec.modelParameterSize"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type ClusterBaseModel struct {
 	metav1.TypeMeta   `json:",inline"`

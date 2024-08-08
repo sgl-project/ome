@@ -37,10 +37,10 @@ spec:
       name: Ready
       type: string
     - jsonPath: .spec.modelCapabilities[*]
-      name: Size
+      name: Capabilities
       type: string
     - jsonPath: .spec.modelParameterSize
-      name: Capabilities
+      name: Size
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age

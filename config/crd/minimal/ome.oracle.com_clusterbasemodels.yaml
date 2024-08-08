@@ -39,7 +39,7 @@ spec:
       name: Capabilities
       type: string
     - jsonPath: .spec.modelParameterSize
-      name: Capabilities
+      name: Size
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age

@@ -151,6 +151,48 @@ rules:
 - apiGroups:
   - ome.oracle.com
   resources:
+  - basemodels
+  - basemodels/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ome.oracle.com
+  resources:
+  - basemodels/finalizers
+  - clusterbasemodels
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ome.oracle.com
+  resources:
+  - basemodels/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ome.oracle.com
+  resources:
+  - clusterbasemodels/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ome.oracle.com
+  resources:
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
   verbs:
@@ -169,18 +211,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - ome.oracle.com
-  resources:
-  - clusterstoragecontainers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ome.oracle.com
   resources:
