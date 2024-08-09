@@ -1,0 +1,4 @@
+local:
+  additional_vars:
+    - name: exacsClusterName
+      file_path: /etc/exacs-cluster-name

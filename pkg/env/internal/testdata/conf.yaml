@@ -1,0 +1,8 @@
+env:
+  resolve_vars_with:
+    - fallback
+
+  fallback:
+    realm: "oc2"
+    region: "us-langley-1"
+    ad: "pop3"

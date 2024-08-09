@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"regexp"
 	"strings"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
@@ -217,4 +218,14 @@ func SetAvailableResourcesForApi(groupVersion string, resources *metav1.APIResou
 	}
 
 	gvResourcesCache[groupVersion] = resources
+}
+
+// IsStringEmptyOrWithWhitespaces checks if the string is empty or with whitespaces
+var blankRegex = regexp.MustCompile("\\s")
+
+func IsStringEmptyOrWithWhitespaces(input string) bool {
+	if blankRegex.MatchString(input) || input == "" {
+		return true
+	}
+	return false
 }

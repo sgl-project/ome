@@ -1,0 +1,44 @@
+package principals
+
+import (
+	"errors"
+
+	"github.com/oracle/oci-go-sdk/v65/common"
+
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+)
+
+// Opts contains various dependencies used to construct principals.
+type Opts struct {
+	// Factory is the factory used to create principals.
+	//
+	// If not set, defaults to defaultFactory that uses oci-go-sdk common & auth packages.
+	Factory Factory
+
+	// Env represents the environment current process in.
+	Env env.Interface
+
+	// Log is the logger.
+	Log logging.Interface
+}
+
+// factory returns the specifies principal factory
+// or a defaultFactory if it's not set explicitly on opts.
+func (opts Opts) factory() Factory {
+	if opts.Factory != nil {
+		return opts.Factory
+	}
+
+	return defaultFactory
+}
+
+// commonRegion returns the canonical common.Region from opts environment.
+func (opts Opts) commonRegion() (common.Region, error) {
+	region, ok := opts.Env.Region()
+	if !ok {
+		return "", errors.New("failed to resolve env.Region")
+	}
+
+	return common.StringToRegion(region), nil
+}
