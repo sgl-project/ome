@@ -17,7 +17,7 @@ import (
 // ClusterServingRuntimesGetter has a method to return a ClusterServingRuntimeInterface.
 // A group's client should implement this interface.
 type ClusterServingRuntimesGetter interface {
-	ClusterServingRuntimes(namespace string) ClusterServingRuntimeInterface
+	ClusterServingRuntimes() ClusterServingRuntimeInterface
 }
 
 // ClusterServingRuntimeInterface has methods to work with ClusterServingRuntime resources.
@@ -37,14 +37,12 @@ type ClusterServingRuntimeInterface interface {
 // clusterServingRuntimes implements ClusterServingRuntimeInterface
 type clusterServingRuntimes struct {
 	client rest.Interface
-	ns     string
 }
 
 // newClusterServingRuntimes returns a ClusterServingRuntimes
-func newClusterServingRuntimes(c *OmeV1beta1Client, namespace string) *clusterServingRuntimes {
+func newClusterServingRuntimes(c *OmeV1beta1Client) *clusterServingRuntimes {
 	return &clusterServingRuntimes{
 		client: c.RESTClient(),
-		ns:     namespace,
 	}
 }
 
@@ -52,7 +50,6 @@ func newClusterServingRuntimes(c *OmeV1beta1Client, namespace string) *clusterSe
 func (c *clusterServingRuntimes) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ClusterServingRuntime, err error) {
 	result = &v1beta1.ClusterServingRuntime{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
@@ -69,7 +66,6 @@ func (c *clusterServingRuntimes) List(ctx context.Context, opts v1.ListOptions) 
 	}
 	result = &v1beta1.ClusterServingRuntimeList{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -86,7 +82,6 @@ func (c *clusterServingRuntimes) Watch(ctx context.Context, opts v1.ListOptions)
 	}
 	opts.Watch = true
 	return c.client.Get().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -97,7 +92,6 @@ func (c *clusterServingRuntimes) Watch(ctx context.Context, opts v1.ListOptions)
 func (c *clusterServingRuntimes) Create(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.CreateOptions) (result *v1beta1.ClusterServingRuntime, err error) {
 	result = &v1beta1.ClusterServingRuntime{}
 	err = c.client.Post().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(clusterServingRuntime).
@@ -110,7 +104,6 @@ func (c *clusterServingRuntimes) Create(ctx context.Context, clusterServingRunti
 func (c *clusterServingRuntimes) Update(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterServingRuntime, err error) {
 	result = &v1beta1.ClusterServingRuntime{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		Name(clusterServingRuntime.Name).
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -125,7 +118,6 @@ func (c *clusterServingRuntimes) Update(ctx context.Context, clusterServingRunti
 func (c *clusterServingRuntimes) UpdateStatus(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterServingRuntime, err error) {
 	result = &v1beta1.ClusterServingRuntime{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		Name(clusterServingRuntime.Name).
 		SubResource("status").
@@ -139,7 +131,6 @@ func (c *clusterServingRuntimes) UpdateStatus(ctx context.Context, clusterServin
 // Delete takes name of the clusterServingRuntime and deletes it. Returns an error if one occurs.
 func (c *clusterServingRuntimes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		Name(name).
 		Body(&opts).
@@ -154,7 +145,6 @@ func (c *clusterServingRuntimes) DeleteCollection(ctx context.Context, opts v1.D
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -167,7 +157,6 @@ func (c *clusterServingRuntimes) DeleteCollection(ctx context.Context, opts v1.D
 func (c *clusterServingRuntimes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterServingRuntime, err error) {
 	result = &v1beta1.ClusterServingRuntime{}
 	err = c.client.Patch(pt).
-		Namespace(c.ns).
 		Resource("clusterservingruntimes").
 		Name(name).
 		SubResource(subresources...).

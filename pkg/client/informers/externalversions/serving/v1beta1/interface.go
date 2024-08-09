@@ -40,12 +40,12 @@ func (v *version) BaseModels() BaseModelInformer {
 
 // ClusterBaseModels returns a ClusterBaseModelInformer.
 func (v *version) ClusterBaseModels() ClusterBaseModelInformer {
-	return &clusterBaseModelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &clusterBaseModelInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
 func (v *version) ClusterServingRuntimes() ClusterServingRuntimeInformer {
-	return &clusterServingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &clusterServingRuntimeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // FineTunedWeights returns a FineTunedWeightInformer.

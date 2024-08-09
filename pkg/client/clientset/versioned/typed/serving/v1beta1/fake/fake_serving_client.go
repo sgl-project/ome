@@ -16,12 +16,12 @@ func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface
 	return &FakeBaseModels{c, namespace}
 }
 
-func (c *FakeOmeV1beta1) ClusterBaseModels(namespace string) v1beta1.ClusterBaseModelInterface {
-	return &FakeClusterBaseModels{c, namespace}
+func (c *FakeOmeV1beta1) ClusterBaseModels() v1beta1.ClusterBaseModelInterface {
+	return &FakeClusterBaseModels{c}
 }
 
-func (c *FakeOmeV1beta1) ClusterServingRuntimes(namespace string) v1beta1.ClusterServingRuntimeInterface {
-	return &FakeClusterServingRuntimes{c, namespace}
+func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeInterface {
+	return &FakeClusterServingRuntimes{c}
 }
 
 func (c *FakeOmeV1beta1) FineTunedWeights(namespace string) v1beta1.FineTunedWeightInterface {

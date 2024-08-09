@@ -15,8 +15,9 @@ type ClusterServingRuntimeLister interface {
 	// List lists all ClusterServingRuntimes in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1beta1.ClusterServingRuntime, err error)
-	// ClusterServingRuntimes returns an object that can list and get ClusterServingRuntimes.
-	ClusterServingRuntimes(namespace string) ClusterServingRuntimeNamespaceLister
+	// Get retrieves the ClusterServingRuntime from the index for a given name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1beta1.ClusterServingRuntime, error)
 	ClusterServingRuntimeListerExpansion
 }
 
@@ -38,41 +39,9 @@ func (s *clusterServingRuntimeLister) List(selector labels.Selector) (ret []*v1b
 	return ret, err
 }
 
-// ClusterServingRuntimes returns an object that can list and get ClusterServingRuntimes.
-func (s *clusterServingRuntimeLister) ClusterServingRuntimes(namespace string) ClusterServingRuntimeNamespaceLister {
-	return clusterServingRuntimeNamespaceLister{indexer: s.indexer, namespace: namespace}
-}
-
-// ClusterServingRuntimeNamespaceLister helps list and get ClusterServingRuntimes.
-// All objects returned here must be treated as read-only.
-type ClusterServingRuntimeNamespaceLister interface {
-	// List lists all ClusterServingRuntimes in the indexer for a given namespace.
-	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ClusterServingRuntime, err error)
-	// Get retrieves the ClusterServingRuntime from the indexer for a given namespace and name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ClusterServingRuntime, error)
-	ClusterServingRuntimeNamespaceListerExpansion
-}
-
-// clusterServingRuntimeNamespaceLister implements the ClusterServingRuntimeNamespaceLister
-// interface.
-type clusterServingRuntimeNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all ClusterServingRuntimes in the indexer for a given namespace.
-func (s clusterServingRuntimeNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.ClusterServingRuntime, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.ClusterServingRuntime))
-	})
-	return ret, err
-}
-
-// Get retrieves the ClusterServingRuntime from the indexer for a given namespace and name.
-func (s clusterServingRuntimeNamespaceLister) Get(name string) (*v1beta1.ClusterServingRuntime, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+// Get retrieves the ClusterServingRuntime from the index for a given name.
+func (s *clusterServingRuntimeLister) Get(name string) (*v1beta1.ClusterServingRuntime, error) {
+	obj, exists, err := s.indexer.GetByKey(name)
 	if err != nil {
 		return nil, err
 	}

@@ -29,12 +29,12 @@ func (c *OmeV1beta1Client) BaseModels(namespace string) BaseModelInterface {
 	return newBaseModels(c, namespace)
 }
 
-func (c *OmeV1beta1Client) ClusterBaseModels(namespace string) ClusterBaseModelInterface {
-	return newClusterBaseModels(c, namespace)
+func (c *OmeV1beta1Client) ClusterBaseModels() ClusterBaseModelInterface {
+	return newClusterBaseModels(c)
 }
 
-func (c *OmeV1beta1Client) ClusterServingRuntimes(namespace string) ClusterServingRuntimeInterface {
-	return newClusterServingRuntimes(c, namespace)
+func (c *OmeV1beta1Client) ClusterServingRuntimes() ClusterServingRuntimeInterface {
+	return newClusterServingRuntimes(c)
 }
 
 func (c *OmeV1beta1Client) FineTunedWeights(namespace string) FineTunedWeightInterface {

@@ -14,17 +14,9 @@ type BaseModelNamespaceListerExpansion interface{}
 // ClusterBaseModelLister.
 type ClusterBaseModelListerExpansion interface{}
 
-// ClusterBaseModelNamespaceListerExpansion allows custom methods to be added to
-// ClusterBaseModelNamespaceLister.
-type ClusterBaseModelNamespaceListerExpansion interface{}
-
 // ClusterServingRuntimeListerExpansion allows custom methods to be added to
 // ClusterServingRuntimeLister.
 type ClusterServingRuntimeListerExpansion interface{}
-
-// ClusterServingRuntimeNamespaceListerExpansion allows custom methods to be added to
-// ClusterServingRuntimeNamespaceLister.
-type ClusterServingRuntimeNamespaceListerExpansion interface{}
 
 // FineTunedWeightListerExpansion allows custom methods to be added to
 // FineTunedWeightLister.

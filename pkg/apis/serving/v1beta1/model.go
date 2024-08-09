@@ -197,6 +197,10 @@ type ModelStatusSpec struct {
 
 	// Status of the model weight
 	State LifeCycleState `json:"state"`
+
+	NodesReady []string `json:"nodesReady,omitempty"`
+
+	NodesFailed []string `json:"nodesFailed,omitempty"`
 }
 
 // BaseModel is the Schema for the basemodels API
@@ -204,6 +208,7 @@ type ModelStatusSpec struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
 // +kubebuilder:printcolumn:name="Vendor",type="string",JSONPath=".spec.vendor"
@@ -226,7 +231,9 @@ type BaseModel struct {
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
+// +genclient:nonNamespaced
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
@@ -271,6 +278,7 @@ type ClusterBaseModelList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
 // +kubebuilder:printcolumn:name="Vendor",type="string",JSONPath=".spec.vendor"

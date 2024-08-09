@@ -11,6 +11,7 @@ import (
 	"knative.dev/pkg/network"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // OME Constants
@@ -364,6 +365,19 @@ const (
 	IstioVirtualServiceKind = "VirtualService"
 	KnativeServiceKind      = "Service"
 )
+
+// Model Agent & Model Controller
+var (
+	NodeInstanceShapeLabel = "node.kubernetes.io/instance-type"
+	ModelsLabelPrefix = "models.ome/"
+	TargetInstanceShapes = "models.ome.oracle.com/target-instance-shapes"
+	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
+	ObjectStorageUrlPrefix = "oci://"
+)
+
+func GetModelsLabelWithUid(uid types.UID) string {
+	return ModelsLabelPrefix + string(uid)
+}
 
 // GetRawServiceLabel generate native service label
 func GetRawServiceLabel(service string) string {

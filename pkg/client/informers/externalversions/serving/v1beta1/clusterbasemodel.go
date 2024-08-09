@@ -26,33 +26,32 @@ type ClusterBaseModelInformer interface {
 type clusterBaseModelInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
-	namespace        string
 }
 
 // NewClusterBaseModelInformer constructs a new informer for ClusterBaseModel type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewClusterBaseModelInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredClusterBaseModelInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewClusterBaseModelInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredClusterBaseModelInformer(client, resyncPeriod, indexers, nil)
 }
 
 // NewFilteredClusterBaseModelInformer constructs a new informer for ClusterBaseModel type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredClusterBaseModelInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredClusterBaseModelInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterBaseModels(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().ClusterBaseModels().List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterBaseModels(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().ClusterBaseModels().Watch(context.TODO(), options)
 			},
 		},
 		&servingv1beta1.ClusterBaseModel{},
@@ -62,7 +61,7 @@ func NewFilteredClusterBaseModelInformer(client versioned.Interface, namespace s
 }
 
 func (f *clusterBaseModelInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredClusterBaseModelInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewFilteredClusterBaseModelInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
 func (f *clusterBaseModelInformer) Informer() cache.SharedIndexInformer {

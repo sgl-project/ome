@@ -17,7 +17,7 @@ import (
 // ClusterBaseModelsGetter has a method to return a ClusterBaseModelInterface.
 // A group's client should implement this interface.
 type ClusterBaseModelsGetter interface {
-	ClusterBaseModels(namespace string) ClusterBaseModelInterface
+	ClusterBaseModels() ClusterBaseModelInterface
 }
 
 // ClusterBaseModelInterface has methods to work with ClusterBaseModel resources.
@@ -37,14 +37,12 @@ type ClusterBaseModelInterface interface {
 // clusterBaseModels implements ClusterBaseModelInterface
 type clusterBaseModels struct {
 	client rest.Interface
-	ns     string
 }
 
 // newClusterBaseModels returns a ClusterBaseModels
-func newClusterBaseModels(c *OmeV1beta1Client, namespace string) *clusterBaseModels {
+func newClusterBaseModels(c *OmeV1beta1Client) *clusterBaseModels {
 	return &clusterBaseModels{
 		client: c.RESTClient(),
-		ns:     namespace,
 	}
 }
 
@@ -52,7 +50,6 @@ func newClusterBaseModels(c *OmeV1beta1Client, namespace string) *clusterBaseMod
 func (c *clusterBaseModels) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ClusterBaseModel, err error) {
 	result = &v1beta1.ClusterBaseModel{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
@@ -69,7 +66,6 @@ func (c *clusterBaseModels) List(ctx context.Context, opts v1.ListOptions) (resu
 	}
 	result = &v1beta1.ClusterBaseModelList{}
 	err = c.client.Get().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -86,7 +82,6 @@ func (c *clusterBaseModels) Watch(ctx context.Context, opts v1.ListOptions) (wat
 	}
 	opts.Watch = true
 	return c.client.Get().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -97,7 +92,6 @@ func (c *clusterBaseModels) Watch(ctx context.Context, opts v1.ListOptions) (wat
 func (c *clusterBaseModels) Create(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.CreateOptions) (result *v1beta1.ClusterBaseModel, err error) {
 	result = &v1beta1.ClusterBaseModel{}
 	err = c.client.Post().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(clusterBaseModel).
@@ -110,7 +104,6 @@ func (c *clusterBaseModels) Create(ctx context.Context, clusterBaseModel *v1beta
 func (c *clusterBaseModels) Update(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (result *v1beta1.ClusterBaseModel, err error) {
 	result = &v1beta1.ClusterBaseModel{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		Name(clusterBaseModel.Name).
 		VersionedParams(&opts, scheme.ParameterCodec).
@@ -125,7 +118,6 @@ func (c *clusterBaseModels) Update(ctx context.Context, clusterBaseModel *v1beta
 func (c *clusterBaseModels) UpdateStatus(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (result *v1beta1.ClusterBaseModel, err error) {
 	result = &v1beta1.ClusterBaseModel{}
 	err = c.client.Put().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		Name(clusterBaseModel.Name).
 		SubResource("status").
@@ -139,7 +131,6 @@ func (c *clusterBaseModels) UpdateStatus(ctx context.Context, clusterBaseModel *
 // Delete takes name of the clusterBaseModel and deletes it. Returns an error if one occurs.
 func (c *clusterBaseModels) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		Name(name).
 		Body(&opts).
@@ -154,7 +145,6 @@ func (c *clusterBaseModels) DeleteCollection(ctx context.Context, opts v1.Delete
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
@@ -167,7 +157,6 @@ func (c *clusterBaseModels) DeleteCollection(ctx context.Context, opts v1.Delete
 func (c *clusterBaseModels) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterBaseModel, err error) {
 	result = &v1beta1.ClusterBaseModel{}
 	err = c.client.Patch(pt).
-		Namespace(c.ns).
 		Resource("clusterbasemodels").
 		Name(name).
 		SubResource(subresources...).

@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.ome.modelController.serviceAccountName }}
+  labels:
+    app.kubernetes.io/component: "ome-model-controller"
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "watch", "list", "get" ]
+  - apiGroups: [ "" ]
+    resources: [ "configmaps" ]
+    verbs: [ "get", "list", "watch", "patch", "update", "create", "delete" ]
+  - apiGroups: [ "ome.oracle.com" ]
+    resources: [ "basemodels" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "ome.oracle.com" ]
+    resources: [ "basemodels/status" ]
+    verbs: [ "get", "list", "watch", "patch", "update" ]
+  - apiGroups: [ "ome.oracle.com" ]
+    resources: [ "clusterbasemodels" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "ome.oracle.com" ]
+    resources: [ "clusterbasemodels/status" ]
+    verbs: [ "get", "list", "watch", "patch", "update" ]
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "create" ]
+  - apiGroups: [ "coordination.k8s.io" ]
+    resourceNames: [ "ome-model-controller" ]
+    resources: [ "leases" ]
+    verbs: [ "get", "update" ]

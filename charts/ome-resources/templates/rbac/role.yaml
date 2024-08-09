@@ -47,6 +47,7 @@ rules:
   - configmaps
   verbs:
   - create
+  - delete
   - get
   - list
   - watch
@@ -66,6 +67,14 @@ rules:
   - ""
   resources:
   - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
   verbs:
   - get
   - list

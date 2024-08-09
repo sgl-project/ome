@@ -26,33 +26,32 @@ type ClusterServingRuntimeInformer interface {
 type clusterServingRuntimeInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
-	namespace        string
 }
 
 // NewClusterServingRuntimeInformer constructs a new informer for ClusterServingRuntime type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewClusterServingRuntimeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredClusterServingRuntimeInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewClusterServingRuntimeInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredClusterServingRuntimeInformer(client, resyncPeriod, indexers, nil)
 }
 
 // NewFilteredClusterServingRuntimeInformer constructs a new informer for ClusterServingRuntime type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredClusterServingRuntimeInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredClusterServingRuntimeInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterServingRuntimes(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().ClusterServingRuntimes().List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterServingRuntimes(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().ClusterServingRuntimes().Watch(context.TODO(), options)
 			},
 		},
 		&servingv1beta1.ClusterServingRuntime{},
@@ -62,7 +61,7 @@ func NewFilteredClusterServingRuntimeInformer(client versioned.Interface, namesp
 }
 
 func (f *clusterServingRuntimeInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredClusterServingRuntimeInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewFilteredClusterServingRuntimeInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
 func (f *clusterServingRuntimeInformer) Informer() cache.SharedIndexInformer {

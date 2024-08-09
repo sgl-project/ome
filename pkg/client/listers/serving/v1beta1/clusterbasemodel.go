@@ -15,8 +15,9 @@ type ClusterBaseModelLister interface {
 	// List lists all ClusterBaseModels in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1beta1.ClusterBaseModel, err error)
-	// ClusterBaseModels returns an object that can list and get ClusterBaseModels.
-	ClusterBaseModels(namespace string) ClusterBaseModelNamespaceLister
+	// Get retrieves the ClusterBaseModel from the index for a given name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1beta1.ClusterBaseModel, error)
 	ClusterBaseModelListerExpansion
 }
 
@@ -38,41 +39,9 @@ func (s *clusterBaseModelLister) List(selector labels.Selector) (ret []*v1beta1.
 	return ret, err
 }
 
-// ClusterBaseModels returns an object that can list and get ClusterBaseModels.
-func (s *clusterBaseModelLister) ClusterBaseModels(namespace string) ClusterBaseModelNamespaceLister {
-	return clusterBaseModelNamespaceLister{indexer: s.indexer, namespace: namespace}
-}
-
-// ClusterBaseModelNamespaceLister helps list and get ClusterBaseModels.
-// All objects returned here must be treated as read-only.
-type ClusterBaseModelNamespaceLister interface {
-	// List lists all ClusterBaseModels in the indexer for a given namespace.
-	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ClusterBaseModel, err error)
-	// Get retrieves the ClusterBaseModel from the indexer for a given namespace and name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ClusterBaseModel, error)
-	ClusterBaseModelNamespaceListerExpansion
-}
-
-// clusterBaseModelNamespaceLister implements the ClusterBaseModelNamespaceLister
-// interface.
-type clusterBaseModelNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all ClusterBaseModels in the indexer for a given namespace.
-func (s clusterBaseModelNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.ClusterBaseModel, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.ClusterBaseModel))
-	})
-	return ret, err
-}
-
-// Get retrieves the ClusterBaseModel from the indexer for a given namespace and name.
-func (s clusterBaseModelNamespaceLister) Get(name string) (*v1beta1.ClusterBaseModel, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+// Get retrieves the ClusterBaseModel from the index for a given name.
+func (s *clusterBaseModelLister) Get(name string) (*v1beta1.ClusterBaseModel, error) {
+	obj, exists, err := s.indexer.GetByKey(name)
 	if err != nil {
 		return nil, err
 	}

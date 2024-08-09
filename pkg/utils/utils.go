@@ -3,6 +3,8 @@ package utils
 import (
 	"regexp"
 	"strings"
+	"time"
+	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
@@ -228,4 +230,21 @@ func IsStringEmptyOrWithWhitespaces(input string) bool {
 		return true
 	}
 	return false
+}
+
+func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
+	for i := 0; ; i++ {
+		err = f()
+		if err == nil {
+			return
+		}
+
+		if i >= (attempts - 1) {
+			break
+		}
+
+		time.Sleep(sleep)
+	}
+
+	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
