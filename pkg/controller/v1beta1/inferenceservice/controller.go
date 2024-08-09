@@ -4,6 +4,7 @@ import (
 	multimodelconfig "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"context"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -123,6 +124,11 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// The object is being deleted
 		if utils.Includes(isvc.ObjectMeta.Finalizers, finalizerName) {
 
+			pvName := constants.PVName(isvc.Name)
+			r.Log.Info("Force deleting PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
+			if err := r.ForceDeletePV(pvName); err != nil {
+				return ctrl.Result{}, err
+			}
 			// remove our finalizer from the list and update it.
 			isvc.ObjectMeta.Finalizers = utils.RemoveString(isvc.ObjectMeta.Finalizers, finalizerName)
 			if err := r.Update(context.Background(), isvc); err != nil {
@@ -243,6 +249,23 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1api.Inf
 			r.Recorder.Eventf(desiredService, v1.EventTypeNormal, string(InferenceServiceReadyState),
 				fmt.Sprintf("InferenceService [%v] is Ready", desiredService.GetName()))
 		}
+	}
+	return nil
+}
+
+// ForceDeletePV deletes the PersistentVolume with the given name
+func (r *InferenceServiceReconciler) ForceDeletePV(pvName string) error {
+	r.Log.Info("Force deleting PersistentVolume", "pv", pvName)
+	pv := &v1.PersistentVolume{}
+	if err := r.Get(context.TODO(), client.ObjectKey{Name: pvName}, pv); err != nil {
+		return err
+	}
+
+	deletePolicy := metav1.DeletePropagationForeground
+	if err := r.Delete(context.TODO(), pv, &client.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	}); err != nil {
+		return err
 	}
 	return nil
 }

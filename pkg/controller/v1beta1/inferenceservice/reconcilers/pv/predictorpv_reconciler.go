@@ -1,10 +1,9 @@
 package predictorpv
 
 import (
-	"context"
-
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"context"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -32,17 +31,9 @@ func NewPredictorPVReconciler(client client.Client, clientset kubernetes.Interfa
 	}
 }
 
-func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *v1beta1.BaseModelSpec) (ctrl.Result, error) {
 	log.Info("Reconciling PersistentVolume", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	pvName := constants.PVName(isvc.Name)
-
-	// Check if the PersistentVolume needs to be deleted
-	if shouldDeletePV(isvc) {
-		if err := c.ForceDeletePV(pvName); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
 
 	_, err := c.clientset.CoreV1().PersistentVolumes().Get(context.TODO(), pvName, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
@@ -66,7 +57,7 @@ func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, e
 				PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 				PersistentVolumeSource: corev1.PersistentVolumeSource{
 					Local: &corev1.LocalVolumeSource{
-						Path: "/raid/models",
+						Path: *baseModelSpec.Storage.StorageUri,
 					},
 				},
 				NodeAffinity: &corev1.VolumeNodeAffinity{
@@ -101,23 +92,4 @@ func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, e
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
-}
-
-func shouldDeletePV(isvc *v1beta1.InferenceService) bool {
-	return !isvc.DeletionTimestamp.IsZero()
-}
-
-func (c *PVReconciler) ForceDeletePV(pvName string) error {
-	log.Info("Force deleting PersistentVolume", "pv", pvName)
-	pv := &corev1.PersistentVolume{}
-	if err := c.client.Get(context.TODO(), client.ObjectKey{Name: pvName}, pv); err != nil {
-		return err
-	}
-	deletePolicy := metav1.DeletePropagationForeground
-	if err := c.client.Delete(context.TODO(), pv, &client.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		return err
-	}
-	return nil
 }

@@ -71,14 +71,6 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	pvReconciler := predictorpv.NewPredictorPVReconciler(p.client, p.clientset, p.scheme)
 	pvcReconciler := predictorpvc.NewPredictorPVCReconciler(p.client, p.clientset, p.scheme)
 
-	if result, err := pvReconciler.Reconcile(isvc); err != nil {
-		return result, err
-	}
-
-	if result, err := pvcReconciler.Reconcile(isvc); err != nil {
-		return result, err
-	}
-
 	if isvc.Spec.Predictor.Model.BaseModel != nil {
 		bm, err := isvcutils.GetBaseModel(p.client, *isvc.Spec.Predictor.Model.BaseModel, isvc.Namespace)
 		if err != nil {
@@ -89,6 +81,14 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 			return ctrl.Result{}, err
 		}
 		baseModel = *bm
+	}
+
+	if result, err := pvReconciler.Reconcile(isvc, &baseModel); err != nil {
+		return result, err
+	}
+
+	if result, err := pvcReconciler.Reconcile(isvc); err != nil {
+		return result, err
 	}
 
 	if isvc.Spec.Predictor.Model.Runtime != nil {
@@ -200,10 +200,11 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	isvcutils.UpdateImageTag(container, isvc.Spec.Predictor.Model.RuntimeVersion, isvc.Spec.Predictor.Model.Runtime)
 
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
-	vm := v1.VolumeMount{Name: constants.PVCName(isvc.Name), MountPath: *baseModel.Storage.StorageUri, ReadOnly: true}
+	modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
+	vm := v1.VolumeMount{Name: constants.PVCName(isvc.Name), MountPath: modelMountPath, ReadOnly: true}
 	volume := v1.Volume{Name: constants.PVCName(isvc.Name), VolumeSource: v1.VolumeSource{PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: constants.PVCName(isvc.Name)}}}
 	//TODO this is specific to vLLM container, move this to a more generic place, such as isvc defaults
-	containerArg := []string{"--model", *baseModel.Storage.StorageUri}
+	containerArg := []string{fmt.Sprintf("--model=%s", modelMountPath)}
 	isvcutils.UpdateVolumeMounts(container, &vm)
 	isvcutils.UpdateContainerArgs(container, &containerArg)
 
