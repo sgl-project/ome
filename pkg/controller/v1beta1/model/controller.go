@@ -8,6 +8,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	omev1beta1client "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	modelagent "bitbucket.oci.oraclecorp.com/gen/ome/pkg/model-agent"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 	"go.uber.org/zap"
@@ -19,41 +20,40 @@ import (
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 )
 
 type ModelController struct {
-	agentNamespace      string
-	kubeClient          kubernetes.Interface
-	omeClient           omev1beta1client.Interface
-	configMapLister     corelisters.ConfigMapLister
-	configMapSynced     cache.InformerSynced
-	nodeLister          corelisters.NodeLister
-	nodeSynced          cache.InformerSynced
-	logger              *zap.SugaredLogger
+	agentNamespace  string
+	kubeClient      kubernetes.Interface
+	omeClient       omev1beta1client.Interface
+	configMapLister corelisters.ConfigMapLister
+	configMapSynced cache.InformerSynced
+	nodeLister      corelisters.NodeLister
+	nodeSynced      cache.InformerSynced
+	logger          *zap.SugaredLogger
 }
 
 func NewModelController(
 	agentNamespace string,
 	kubeClient kubernetes.Interface,
-	omeClient  omev1beta1client.Interface,
+	omeClient omev1beta1client.Interface,
 	nodeInformer coreinformers.NodeInformer,
 	configMapInformer coreinformers.ConfigMapInformer,
 	logger *zap.SugaredLogger) (*ModelController, error) {
 	controller := &ModelController{
-		agentNamespace:      agentNamespace,
-		kubeClient:          kubeClient,
-		omeClient:           omeClient,
-		configMapLister:     configMapInformer.Lister(),
-		configMapSynced:     configMapInformer.Informer().HasSynced,
-		nodeLister:          nodeInformer.Lister(),
-		nodeSynced:          nodeInformer.Informer().HasSynced,
-		logger:              logger,
+		agentNamespace:  agentNamespace,
+		kubeClient:      kubeClient,
+		omeClient:       omeClient,
+		configMapLister: configMapInformer.Lister(),
+		configMapSynced: configMapInformer.Informer().HasSynced,
+		nodeLister:      nodeInformer.Lister(),
+		nodeSynced:      nodeInformer.Informer().HasSynced,
+		logger:          logger,
 	}
 
 	informers := map[string]cache.SharedInformer{
 		"configMapInformer": configMapInformer.Informer(),
-		"nodeInformer":  nodeInformer.Informer(),
+		"nodeInformer":      nodeInformer.Informer(),
 	}
 
 	for name, informer := range informers {
@@ -107,9 +107,9 @@ func (c *ModelController) Run(stopCh <-chan struct{}) error {
 	c.logger.Info("Shutting down ome-model-controller")
 
 	return nil
-} 
+}
 
-func(c *ModelController) handleModelStatus(obj interface{}) {
+func (c *ModelController) handleModelStatus(obj interface{}) {
 	configMap, ok := obj.(*corev1.ConfigMap)
 	if !ok {
 		c.logger.Errorf("Failed to convert %v to ConfigMap", obj)
@@ -138,14 +138,14 @@ func(c *ModelController) handleModelStatus(obj interface{}) {
 		}
 
 		if isClusterBaseModel {
-			err := utils.Retry(3, 100 * time.Millisecond, func() error {
+			err := utils.Retry(3, 100*time.Millisecond, func() error {
 				return c.updateClusterBaseModelState(modelName, nodeName, state)
 			})
 			if err != nil {
 				c.logger.Errorf("Failed to update the state of the clusterBaseModel: %s, error: %s", modelName, err.Error())
 			}
 		} else {
-			err := utils.Retry(3, 100 * time.Millisecond, func() error {
+			err := utils.Retry(3, 100*time.Millisecond, func() error {
 				return c.updateBaseModelState(modelName, nsName, nodeName, state)
 			})
 			if err != nil {
@@ -155,11 +155,11 @@ func(c *ModelController) handleModelStatus(obj interface{}) {
 	}
 }
 
-func(c *ModelController) handleModelStatusUpdate(old, new interface{}) {
+func (c *ModelController) handleModelStatusUpdate(old, new interface{}) {
 	c.handleModelStatus(new)
 }
 
-func(c *ModelController) handleModelStatusDelete(obj interface{}) {
+func (c *ModelController) handleModelStatusDelete(obj interface{}) {
 	configMap, ok := obj.(*corev1.ConfigMap)
 	if !ok {
 		c.logger.Errorf("Failed to convert %v to ConfigMap", obj)
@@ -184,14 +184,14 @@ func(c *ModelController) handleModelStatusDelete(obj interface{}) {
 		}
 
 		if isClusterBaseModel {
-			err := utils.Retry(3, 100 * time.Millisecond, func() error {
+			err := utils.Retry(3, 100*time.Millisecond, func() error {
 				return c.updateClusterBaseModelState(modelName, nodeName, string(modelagent.Deleted))
 			})
 			if err != nil {
 				c.logger.Errorf("Failed to update the state of the clusterBaseModel: %s, error: %s", modelName, err.Error())
 			}
 		} else {
-			err := utils.Retry(3, 100 * time.Millisecond, func() error {
+			err := utils.Retry(3, 100*time.Millisecond, func() error {
 				return c.updateBaseModelState(modelName, nsName, nodeName, string(modelagent.Deleted))
 			})
 			if err != nil {
@@ -201,14 +201,14 @@ func(c *ModelController) handleModelStatusDelete(obj interface{}) {
 	}
 }
 
-func(c *ModelController) handleNodeDelete(obj interface{}) {
+func (c *ModelController) handleNodeDelete(obj interface{}) {
 	node, ok := obj.(*corev1.Node)
 	if !ok {
 		c.logger.Errorf("Failed to convert %v to node", obj)
 		return
 	}
 
-	err := utils.Retry(3, 100 * time.Millisecond, func() error {
+	err := utils.Retry(3, 100*time.Millisecond, func() error {
 		configMap, err := c.kubeClient.CoreV1().ConfigMaps(c.agentNamespace).Get(context.TODO(), node.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
@@ -225,7 +225,7 @@ func(c *ModelController) handleNodeDelete(obj interface{}) {
 	}
 }
 
-func(c *ModelController) updateClusterBaseModelState(name, nodeName, state string) error {
+func (c *ModelController) updateClusterBaseModelState(name, nodeName, state string) error {
 	model, err := c.omeClient.OmeV1beta1().ClusterBaseModels().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -273,7 +273,7 @@ func(c *ModelController) updateClusterBaseModelState(name, nodeName, state strin
 	return nil
 }
 
-func(c *ModelController) updateBaseModelState(name, namespace, nodeName, state string) error {
+func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state string) error {
 	model, err := c.omeClient.OmeV1beta1().BaseModels(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {

@@ -1,15 +1,11 @@
 apiVersion: ome.oracle.com/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-serving-runtime-medium
+  name: vllm-serving-runtime-large
 spec:
   annotations:
     prometheus.ome.io/port: '8080'
     prometheus.ome.io/path: "/metrics"
-  volumes:
-    - name: dshm
-      emptyDir:
-        medium: Memory
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -29,31 +25,37 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:e3c664b
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:bd70013
       args:
         - --served-model-name=vllm-model
         - --disable-log-stats
         - --enable-chunked-prefill
         - --gpu-memory-utilization=0.9
         - --port=8080
-        - --tensor-parallel-size=4
+        - --tensor-parallel-size=8
         - --disable-log-requests
+        - --max-model-len=32768
+        - --quantization=fbgemm_fp8
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 70
+          cpu: 128
           memory: 216Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: 8
         limits:
-          cpu: 70
+          cpu: 128
           memory: 216Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: 8
 
       readinessProbe:
         httpGet:

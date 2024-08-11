@@ -1,0 +1,13 @@
+apiVersion: ome.oracle.com/v1beta1
+kind: InferenceService
+metadata:
+  name: llama3-1-405b-instruct-fp8
+  namespace: default
+spec:
+  predictor:
+    model:
+      runtime: vllm-serving-runtime-large
+      baseModel: llama-3-1-405b-instruct-fp8
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

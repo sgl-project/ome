@@ -364,15 +364,16 @@ const (
 const (
 	IstioVirtualServiceKind = "VirtualService"
 	KnativeServiceKind      = "Service"
+	RayClusterKind          = "RayCluster"
 )
 
 // Model Agent & Model Controller
 var (
-	NodeInstanceShapeLabel = "node.kubernetes.io/instance-type"
-	ModelsLabelPrefix = "models.ome/"
-	TargetInstanceShapes = "models.ome.oracle.com/target-instance-shapes"
+	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"
+	ModelsLabelPrefix         = "models.ome/"
+	TargetInstanceShapes      = "models.ome.oracle.com/target-instance-shapes"
 	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
-	ObjectStorageUrlPrefix = "oci://"
+	ObjectStorageUrlPrefix    = "oci://"
 )
 
 func GetModelsLabelWithUid(uid types.UID) string {

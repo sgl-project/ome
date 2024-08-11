@@ -17,7 +17,7 @@ spec:
     - "TEXT_GENERATION"
   storage:
     path: oci://n/namespace/b/bucket/o/mnt/models/meta/llama-3-405b-instruct-fp8
-    storageUri: /model/Meta-Llama-3.1-405B-Instruct-FP8-fix
+    storageUri: /raid/models/Meta-Llama-3.1-405B-Instruct-FP8-fix
   modelConfiguration:
     {
       "_name_or_path": "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8",

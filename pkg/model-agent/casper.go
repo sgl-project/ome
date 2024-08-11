@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/casperagent"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/principalsagent"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/principalsagent"
 )
 
 func NewCasperDataStore(authType string) (casper.CasperDataStore, error) {
@@ -28,7 +28,7 @@ func NewCasperDataStore(authType string) (casper.CasperDataStore, error) {
 		return casper.CasperDataStore{}, fmt.Errorf("failed to create ObjectStorageClient for source tenancy: %+v", err)
 	}
 
-	return casper.CasperDataStore{ 
+	return casper.CasperDataStore{
 		CasperClient: casperClient,
 	}, nil
 }
@@ -52,7 +52,7 @@ func NewObjectStorageUri(storageUrl string) (*casper.ObjectURI, error) {
 	osInfo := &casper.ObjectURI{
 		Namespace:  values[1],
 		BucketName: values[3],
-		Prefix: objectPath,
+		Prefix:     objectPath,
 	}
 
 	return osInfo, nil

@@ -11,10 +11,10 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/casperagent"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 )
 
 var (
@@ -29,9 +29,9 @@ var (
 type SyncerTaskType string
 
 const (
-	Download           SyncerTaskType = "Download"
-	DownloadOverride   SyncerTaskType = "DownloadOverride"
-	Delete             SyncerTaskType = "Delete"
+	Download         SyncerTaskType = "Download"
+	DownloadOverride SyncerTaskType = "DownloadOverride"
+	Delete           SyncerTaskType = "Delete"
 )
 
 type SyncerTask struct {
@@ -51,12 +51,12 @@ type Syncer struct {
 }
 
 func NewSyncer(authType string,
-			   downloadRetry int,
-			   modelRootDir string,
-			   modelRootDirOnHost string,
-			   syncerChan <-chan *SyncerTask,
-			   nodeLabeler *NodeLabeler,
-			   logger *zap.SugaredLogger) (*Syncer, error) {
+	downloadRetry int,
+	modelRootDir string,
+	modelRootDirOnHost string,
+	syncerChan <-chan *SyncerTask,
+	nodeLabeler *NodeLabeler,
+	logger *zap.SugaredLogger) (*Syncer, error) {
 	casperDataStore, err := NewCasperDataStore(authType)
 	if err != nil {
 		logger.Errorf("Not able to initalize the casper data store: %s", err.Error())
@@ -64,13 +64,13 @@ func NewSyncer(authType string,
 	}
 
 	return &Syncer{
-		downloadRetry: downloadRetry,
-		modelRootDir: modelRootDir,
+		downloadRetry:      downloadRetry,
+		modelRootDir:       modelRootDir,
 		modelRootDirOnHost: modelRootDirOnHost,
-		casperDataStore: casperDataStore,
-		syncerChan: syncerChan,
-		nodeLabeler: nodeLabeler,
-		logger: logger,
+		casperDataStore:    casperDataStore,
+		syncerChan:         syncerChan,
+		nodeLabeler:        nodeLabeler,
+		logger:             logger,
 	}, nil
 }
 
@@ -122,7 +122,7 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		// use a single download function for now
 		fallthrough
 	case DownloadOverride:
-		err := utils.Retry(s.downloadRetry, 100 * time.Millisecond, func() error {
+		err := utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
 			return s.downloadModel(casperUri, destPath)
 		})
 		if err != nil {
@@ -139,9 +139,9 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		// mark model as Ready
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Ready,
-			BaseModel: task.BaseModel,
+			BaseModel:        task.BaseModel,
 			ClusterBaseModel: task.ClusterBaseModel,
-		} 
+		}
 
 		err = s.nodeLabeler.processOp(nodeLabelOp)
 		if err != nil {
@@ -165,9 +165,9 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 func (s *Syncer) markModelOnNodeFailed(task *SyncerTask) {
 	nodeLabelOp := &NodeLabelOp{
 		ModelStateOnNode: Failed,
-		BaseModel: task.BaseModel,
+		BaseModel:        task.BaseModel,
 		ClusterBaseModel: task.ClusterBaseModel,
-	} 
+	}
 
 	err := s.nodeLabeler.processOp(nodeLabelOp)
 	if err != nil {
@@ -176,7 +176,7 @@ func (s *Syncer) markModelOnNodeFailed(task *SyncerTask) {
 }
 
 func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, modelRootDir string, modelRootDirOnHost string) (*casper.ObjectURI, string, error) {
-	var destPath string 
+	var destPath string
 	var storagePath string
 	if baseModel != nil {
 		if baseModel.Spec.Storage.Path == nil {
@@ -196,7 +196,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 		}
 	}
 
-	osUri, err := NewObjectStorageUri(storagePath) 
+	osUri, err := NewObjectStorageUri(storagePath)
 	if err != nil {
 		return nil, "", err
 	}

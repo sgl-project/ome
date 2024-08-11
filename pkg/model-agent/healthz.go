@@ -2,9 +2,9 @@ package model_agent
 
 import (
 	"fmt"
+	"golang.org/x/sys/unix"
 	"net/http"
 	"os"
-	"golang.org/x/sys/unix"
 )
 
 type ModelAgentHealthCheck struct {

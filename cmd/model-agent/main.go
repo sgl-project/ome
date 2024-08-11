@@ -8,15 +8,15 @@ import (
 
 	omev1beta1client "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	modelagent "bitbucket.oci.oraclecorp.com/gen/ome/pkg/model-agent"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"go.uber.org/zap"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 )
 
 var rootCmd = &cobra.Command{
@@ -27,15 +27,15 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	healthCheckPort	int
-	modelsRootDir string
+	healthCheckPort     int
+	modelsRootDir       string
 	modelsRootDirOnHost string
-	nodeName string
-	nodelabelRetry int
-	downloadRetry int
-	downloadAuthType string
-	numDownloadWorker int
-	namespace string
+	nodeName            string
+	nodelabelRetry      int
+	downloadRetry       int
+	downloadAuthType    string
+	numDownloadWorker   int
+	namespace           string
 )
 
 type Logger = zap.SugaredLogger
@@ -105,13 +105,13 @@ func rumCommand(cmd *cobra.Command, args []string) {
 	watcher, err := modelagent.NewWatcher(
 		nodeShape,
 		nodeName,
-		baseModelsInformer, 
-		clusterBaseModelsInformer, 
+		baseModelsInformer,
+		clusterBaseModelsInformer,
 		omev1beta1informerFactory,
 		syncerTaskChan,
 		kubeClient,
 		nodeLabler,
-	    logger)
+		logger)
 	if err != nil {
 		panic(fmt.Errorf("error creating watcher: %s", err.Error()))
 	}
@@ -174,7 +174,7 @@ func getKubeConfig() *rest.Config {
 }
 
 func getNodeShape(client *kubernetes.Clientset, nodeName string) string {
-	opts := metav1.GetOptions {}
+	opts := metav1.GetOptions{}
 	node, err := client.CoreV1().Nodes().Get(context.TODO(), nodeName, opts)
 	if err != nil {
 		panic(err.Error())

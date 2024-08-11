@@ -1,17 +1,14 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
-	"flag"
-	"net/http"
-	"os"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	v1beta1controller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
+	"flag"
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	istionetworking "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	v1 "k8s.io/api/core/v1"
@@ -21,6 +18,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/record"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
+	"net/http"
+	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -28,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -131,6 +131,19 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to get ingress config.")
 		os.Exit(1)
+	}
+
+	rayFound, rayCheckErr := utils.IsCrdAvailable(cfg, ray.SchemeGroupVersion.String(), constants.RayClusterKind)
+	if rayCheckErr != nil {
+		setupLog.Error(rayCheckErr, "error when checking if Ray Cluster kind is available")
+		os.Exit(1)
+	}
+	if rayFound {
+		setupLog.Info("Setting up Ray scheme")
+		if err := ray.AddToScheme(mgr.GetScheme()); err != nil {
+			setupLog.Error(err, "unable to add Ray APIs to scheme")
+			os.Exit(1)
+		}
 	}
 
 	ksvcFound, ksvcCheckErr := utils.IsCrdAvailable(cfg, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)

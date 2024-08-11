@@ -120,6 +120,15 @@ type ServingRuntimeSpec struct {
 	// Provide the details about built-in runtime adapter
 	// +optional
 	BuiltInAdapter *BuiltInAdapter `json:"builtInAdapter,omitempty"`
+
+	// Enable pipeline parallelism for the runtime
+	// When pipeline parallelism is enabled, the runtime informs the model server to use pipeline parallelism
+	// for model inference with multiple compute nodes via Ray Cluster and vLLM only.
+	// The number of compute nodes is determined by the number of replicas in the Inference Service.
+	// The worker node will be minimum replica minus one, which is reserved for head node.
+	// This is an experimental feature and may not be supported by all runtimes.
+	// +optional
+	PipelineParallelism *bool `json:"pipelineParallelism,omitempty"`
 }
 
 // ServingRuntimeStatus defines the observed state of ServingRuntime

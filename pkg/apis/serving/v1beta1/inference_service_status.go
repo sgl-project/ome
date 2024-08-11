@@ -1,9 +1,11 @@
 package v1beta1
 
 import (
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"reflect"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -289,6 +291,42 @@ func (ss *InferenceServiceStatus) PropagateRawStatus(
 	ss.SetCondition(readyCondition, condition)
 	ss.Components[component] = statusSpec
 	ss.ObservedGeneration = deployment.Status.ObservedGeneration
+}
+
+func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(
+	component ComponentType,
+	rayCluster *ray.RayCluster,
+	url *apis.URL) {
+	if len(ss.Components) == 0 {
+		ss.Components = make(map[ComponentType]ComponentStatusSpec)
+	}
+	statusSpec, ok := ss.Components[component]
+	if !ok {
+		ss.Components[component] = ComponentStatusSpec{}
+	}
+
+	statusSpec.LatestCreatedRevision = "1"
+	condition := getRayClusterCondition(rayCluster, rayv1.Ready)
+	if condition != nil && condition.Status == v1.ConditionTrue {
+		statusSpec.URL = url
+	}
+	readyCondition := readyConditionsMap[component]
+	ss.SetCondition(readyCondition, condition)
+	ss.Components[component] = statusSpec
+	ss.ObservedGeneration = rayCluster.Status.ObservedGeneration
+}
+
+func getRayClusterCondition(rayCluster *ray.RayCluster, conditionType rayv1.ClusterState) *apis.Condition {
+	condition := apis.Condition{}
+	if rayCluster.Status.State == conditionType {
+		condition.Type = apis.ConditionType(conditionType)
+		condition.Status = v1.ConditionTrue
+		condition.LastTransitionTime = apis.VolatileTime{
+			Inner: *rayCluster.Status.LastUpdateTime,
+		}
+		condition.Reason = rayCluster.Status.Reason
+	}
+	return &condition
 }
 
 func getDeploymentCondition(deployment *appsv1.Deployment, conditionType appsv1.DeploymentConditionType) *apis.Condition {

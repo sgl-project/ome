@@ -4,6 +4,7 @@ import (
 	multimodelconfig "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"context"
 	"fmt"
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
 
@@ -63,6 +64,9 @@ import (
 // +kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ray.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ray.io,resources=clusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ray.io,resources=clusters/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 // InferenceServiceState describes the Readiness of the InferenceService
 type InferenceServiceState string
@@ -300,7 +304,8 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
-		Owns(&v1.PersistentVolumeClaim{})
+		Owns(&v1.PersistentVolumeClaim{}).
+		Owns(&ray.RayCluster{})
 
 	if ksvcFound {
 		ctrlBuilder = ctrlBuilder.Owns(&knservingv1.Service{})

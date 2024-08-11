@@ -1,10 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
-	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"

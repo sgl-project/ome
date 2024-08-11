@@ -9,22 +9,22 @@ import (
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 )
 
 type ModelStateOnNode string
 
 const (
-	Ready     ModelStateOnNode = "Ready"
-	Updating  ModelStateOnNode = "Updating"
-	Failed    ModelStateOnNode = "Failed"
-	Deleted   ModelStateOnNode = "Deleted"
+	Ready    ModelStateOnNode = "Ready"
+	Updating ModelStateOnNode = "Updating"
+	Failed   ModelStateOnNode = "Failed"
+	Deleted  ModelStateOnNode = "Deleted"
 )
 
 type NodeLabelOp struct {
@@ -34,11 +34,11 @@ type NodeLabelOp struct {
 }
 
 type NodeLabeler struct {
-	mu       		         sync.Mutex
-	opRetry                  int
-	kubeClient               *kubernetes.Clientset
-	nodeName                 string
-	namespace                string
+	mu         sync.Mutex
+	opRetry    int
+	kubeClient *kubernetes.Clientset
+	nodeName   string
+	namespace  string
 }
 
 type patchStringValue struct {
@@ -49,18 +49,18 @@ type patchStringValue struct {
 
 func NewNodeLabler(nodeName string, namespace string, kubeClient *kubernetes.Clientset, opRetry int) *NodeLabeler {
 	return &NodeLabeler{
-		opRetry: opRetry,
-		nodeName: nodeName,
+		opRetry:    opRetry,
+		nodeName:   nodeName,
 		kubeClient: kubeClient,
-		namespace: namespace,
+		namespace:  namespace,
 	}
 }
 
 func (n *NodeLabeler) LabelNode(op *NodeLabelOp) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return utils.Retry(n.opRetry, 100 * time.Millisecond, func() error {
-		return n.processOp(op)	
+	return utils.Retry(n.opRetry, 100*time.Millisecond, func() error {
+		return n.processOp(op)
 	})
 }
 
@@ -88,7 +88,7 @@ func (n *NodeLabeler) processOp(op *NodeLabelOp) error {
 	return nil
 }
 
-func(n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
+func (n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
 	var notFound bool = false
 	existedConfigMap, err := n.kubeClient.CoreV1().ConfigMaps(n.namespace).Get(context.TODO(), n.nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -105,9 +105,9 @@ func(n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
 		labels[constants.ModelStatusConfigMapLabel] = "true"
 		return &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: n.nodeName,
+				Name:      n.nodeName,
 				Namespace: n.namespace,
-				Labels: labels,
+				Labels:    labels,
 			},
 			Data: data,
 		}, true, nil
@@ -161,8 +161,8 @@ func getPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
 		}}
 	case Deleted:
 		payload = []patchStringValue{{
-			Op:    "remove",
-			Path:  fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1")),
+			Op:   "remove",
+			Path: fmt.Sprintf("/metadata/labels/%s", strings.ReplaceAll(labelKey, "/", "~1")),
 		}}
 	default:
 		break
@@ -175,8 +175,8 @@ func getPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
 	return payloadBytes, nil
 }
 
-func(n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *NodeLabelOp, needCreate bool) error {
-	var key string 
+func (n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *NodeLabelOp, needCreate bool) error {
+	var key string
 	if op.BaseModel != nil {
 		// '_' is not allowed in object namespace and name, so we can use it as a seperater
 		key = fmt.Sprintf("%s_%s", op.BaseModel.Namespace, op.BaseModel.Name)
@@ -196,7 +196,7 @@ func(n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *No
 	}
 
 	if needCreate {
- 		_, err := n.kubeClient.CoreV1().ConfigMaps(n.namespace).Create(context.TODO(), configMap, metav1.CreateOptions{})
+		_, err := n.kubeClient.CoreV1().ConfigMaps(n.namespace).Create(context.TODO(), configMap, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}

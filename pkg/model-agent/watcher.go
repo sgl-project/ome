@@ -9,57 +9,57 @@ import (
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions"
 	omev1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions/serving/v1beta1"
 	omev1beta1lister "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/listers/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	"go.uber.org/zap"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 )
 
 type Watcher struct {
-	baseModelLister   omev1beta1lister.BaseModelLister
-	baseModelSynced   cache.InformerSynced
+	baseModelLister        omev1beta1lister.BaseModelLister
+	baseModelSynced        cache.InformerSynced
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
 	clusterBaseModelSynced cache.InformerSynced
-	informerFactory   omev1beta1informers.SharedInformerFactory
-	syncerChan        chan<- *SyncerTask
-	nodeName          string
-	nodeShape         string
-	kubeClient        *kubernetes.Clientset
-	nodeLabeler       *NodeLabeler
-	logger            *zap.SugaredLogger
+	informerFactory        omev1beta1informers.SharedInformerFactory
+	syncerChan             chan<- *SyncerTask
+	nodeName               string
+	nodeShape              string
+	kubeClient             *kubernetes.Clientset
+	nodeLabeler            *NodeLabeler
+	logger                 *zap.SugaredLogger
 }
 
 func NewWatcher(nodeShape string,
-				nodeName string,
-				baseModelInformer omev1beta1.BaseModelInformer, 
-				clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
-				informerFactory omev1beta1informers.SharedInformerFactory,
-				syncerChan chan<- *SyncerTask,
-				kubeClient  *kubernetes.Clientset,
-				nodeLabeler *NodeLabeler,
-				logger *zap.SugaredLogger) (*Watcher, error) {
+	nodeName string,
+	baseModelInformer omev1beta1.BaseModelInformer,
+	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
+	informerFactory omev1beta1informers.SharedInformerFactory,
+	syncerChan chan<- *SyncerTask,
+	kubeClient *kubernetes.Clientset,
+	nodeLabeler *NodeLabeler,
+	logger *zap.SugaredLogger) (*Watcher, error) {
 	watcher := &Watcher{
-		nodeShape: nodeShape,
-		baseModelLister: baseModelInformer.Lister(),
-		baseModelSynced: baseModelInformer.Informer().HasSynced,
+		nodeShape:              nodeShape,
+		baseModelLister:        baseModelInformer.Lister(),
+		baseModelSynced:        baseModelInformer.Informer().HasSynced,
 		clusterBaseModelLister: clusterBaseModelInformer.Lister(),
 		clusterBaseModelSynced: clusterBaseModelInformer.Informer().HasSynced,
-		informerFactory: informerFactory,
-		syncerChan: syncerChan,
-		nodeName: nodeName,
-		kubeClient: kubeClient, 
-		nodeLabeler: nodeLabeler,
-		logger: logger,
+		informerFactory:        informerFactory,
+		syncerChan:             syncerChan,
+		nodeName:               nodeName,
+		kubeClient:             kubeClient,
+		nodeLabeler:            nodeLabeler,
+		logger:                 logger,
 	}
 
 	logger.Info("Setting up informer error handlers")
 	informers := map[string]cache.SharedInformer{
-		"baseModelInformer":               baseModelInformer.Informer(),
-		"clusterBaseModelInformer":        clusterBaseModelInformer.Informer(),
+		"baseModelInformer":        baseModelInformer.Informer(),
+		"clusterBaseModelInformer": clusterBaseModelInformer.Informer(),
 	}
 
 	for name, informer := range informers {
@@ -149,7 +149,7 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 
 		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 		syncerTask := &SyncerTask{
-			TaskType: Download,
+			TaskType:  Download,
 			BaseModel: baseModel,
 		}
 
@@ -165,11 +165,11 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 	}
 
 	w.logger.Infof("Processing ClusterBaseModel: %s", clusterBaseModel.Name)
-	if !clusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero(){
+	if !clusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
 		w.logger.Infof("ignoring because of deleting ClusterBaseModel '%s'", clusterBaseModel.Name)
 		return
 	}
- 
+
 	if w.matchTargetShape(clusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
 		nodeInfo, err := w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
 		if err != nil {
@@ -185,7 +185,7 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
 
 		syncerTask := &SyncerTask{
-			TaskType: Download,
+			TaskType:         Download,
 			ClusterBaseModel: clusterBaseModel,
 		}
 
@@ -213,9 +213,9 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		w.logger.Infof("Target shapes excluded BaseModel update: %s in namespace %s, deleting", newBaseModel.GetName(), newBaseModel.GetNamespace())
 		w.deleteBaseModel(new)
 		return
- 	}
+	}
 
-	if !newBaseModel.ObjectMeta.DeletionTimestamp.IsZero(){
+	if !newBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
 		w.logger.Infof("ignoring because of deleting BaseModel '%s'", newBaseModel.Name)
 		return
 	}
@@ -234,7 +234,7 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Updating,
-			BaseModel: newBaseModel,
+			BaseModel:        newBaseModel,
 		}
 		err := w.nodeLabeler.LabelNode(nodeLabelOp)
 		if err != nil {
@@ -243,7 +243,7 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		}
 
 		syncerTask := &SyncerTask{
-			TaskType: DownloadOverride,
+			TaskType:  DownloadOverride,
 			BaseModel: newBaseModel,
 		}
 
@@ -273,8 +273,8 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		w.deleteClusterBaseModel(new)
 		return
 	}
- 
-	if !newClusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero(){
+
+	if !newClusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
 		w.logger.Infof("ignoring because of deleting ClusterBaseModel '%s'", newClusterBaseModel.Name)
 		return
 	}
@@ -302,7 +302,7 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		}
 
 		syncerTask := &SyncerTask{
-			TaskType: DownloadOverride,
+			TaskType:         DownloadOverride,
 			ClusterBaseModel: newClusterBaseModel,
 		}
 
@@ -321,7 +321,7 @@ func (w *Watcher) deleteBaseModel(obj interface{}) {
 
 	nodeLabelOp := &NodeLabelOp{
 		ModelStateOnNode: Deleted,
-		BaseModel: baseModel,
+		BaseModel:        baseModel,
 	}
 	err := w.nodeLabeler.LabelNode(nodeLabelOp)
 	if err != nil {
@@ -330,7 +330,7 @@ func (w *Watcher) deleteBaseModel(obj interface{}) {
 	}
 
 	syncerTask := &SyncerTask{
-		TaskType: Delete,
+		TaskType:  Delete,
 		BaseModel: baseModel,
 	}
 
@@ -356,7 +356,7 @@ func (w *Watcher) deleteClusterBaseModel(obj interface{}) {
 	}
 
 	syncerTask := &SyncerTask{
-		TaskType: Delete,
+		TaskType:         Delete,
 		ClusterBaseModel: clusterBaseModel,
 	}
 

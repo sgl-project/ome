@@ -1,27 +1,27 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"context"
-	"time"
+	"fmt"
 	"net/http"
+	"os"
+	"time"
 
+	omev1beta1client "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned"
+	modelcontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/model"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	omev1beta1client "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned"
-	kubeinformers "k8s.io/client-go/informers"
-	kubeapiserver "k8s.io/apiserver/pkg/server"
-	election "k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	corev1 "k8s.io/api/core/v1"
+	kubeapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
-	modelcontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/model"
+	kubeinformers "k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	election "k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 var (
@@ -52,7 +52,7 @@ func initializeLogger() *Logger {
 }
 
 var (
-	namespace string
+	namespace      string
 	controllerName string
 	agentNamespace string
 )
@@ -80,7 +80,7 @@ func rumCommand(cmd *cobra.Command, args []string) {
 		logger.Info("CRD doesn't exist. Exiting")
 		os.Exit(1)
 	}
-	
+
 	stopCh := kubeapiserver.SetupSignalHandler()
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -151,7 +151,7 @@ func rumCommand(cmd *cobra.Command, args []string) {
 		},
 		Client: kubeClient.CoordinationV1(),
 		LockConfig: resourcelock.ResourceLockConfig{
-			Identity:      id,
+			Identity: id,
 		},
 	}
 

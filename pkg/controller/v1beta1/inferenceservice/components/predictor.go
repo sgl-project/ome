@@ -1,8 +1,10 @@
 package components
 
 import (
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
 	predictorpv "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pv"
 	predictorpvc "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pvc"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	"context"
 	"fmt"
 
@@ -21,7 +23,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	isvcutils "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 )
@@ -207,6 +208,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	containerArg := []string{fmt.Sprintf("--model=%s", modelMountPath)}
 	isvcutils.UpdateVolumeMounts(container, &vm)
 	isvcutils.UpdateContainerArgs(container, &containerArg)
+	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{{Name: "MODEL_PATH", Value: modelMountPath}})
 
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "container", container)
 
@@ -289,29 +291,48 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	if p.deploymentMode == constants.RawDeployment {
 		rawDeployment = true
 		podLabelKey = constants.RawDeploymentAppLabel
-		r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec,
-			&podSpec)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to create NewRawKubeReconciler for predictor")
-		}
-		// set Deployment Controller
-		if err := controllerutil.SetControllerReference(isvc, r.Deployment.Deployment, p.scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to set deployment owner reference for predictor")
-		}
-		// set Service Controller
-		if err := controllerutil.SetControllerReference(isvc, r.Service.Service, p.scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to set service owner reference for predictor")
-		}
-		// set autoscaler Controller
-		if err := r.Scaler.Autoscaler.SetControllerReferences(isvc, p.scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to set autoscaler owner references for predictor")
+		// If PipelineParallelism is enabled, we will not create raw deployment
+		if sRuntime.PipelineParallelism == nil || *sRuntime.PipelineParallelism == false {
+			r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec,
+				&podSpec)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewRawKubeReconciler for predictor")
+			}
+			// set Deployment Controller
+			if err := controllerutil.SetControllerReference(isvc, r.Deployment.Deployment, p.scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to set deployment owner reference for predictor")
+			}
+			// set Service Controller
+			if err := controllerutil.SetControllerReference(isvc, r.Service.Service, p.scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to set service owner reference for predictor")
+			}
+			// set autoscaler Controller
+			if err := r.Scaler.Autoscaler.SetControllerReferences(isvc, p.scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to set autoscaler owner references for predictor")
+			}
+
+			deployment, err := r.Reconcile()
+			if err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
+			}
+			isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, deployment, r.URL)
+		} else {
+			p.Log.Info("PipelineParallelism is enabled, will not create raw deployment", "inference service", isvc.Name)
+			r, err := multinodevllm.NewMultiNodeVllmReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, &podSpec)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewMultiNodeVllmReconciler for predictor")
+			}
+			// set Ray controller
+			if err := controllerutil.SetControllerReference(isvc, r.Ray.RayCluster, p.scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
+			}
+			rayCluster, err := r.Reconcile()
+			if err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
+			}
+			isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, rayCluster, r.URL)
 		}
 
-		deployment, err := r.Reconcile()
-		if err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
-		}
-		isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, deployment, r.URL)
 	} else {
 		podLabelKey = constants.RevisionLabel
 		r := knative.NewKsvcReconciler(p.client, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec,

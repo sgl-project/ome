@@ -9,7 +9,6 @@ import (
 	transfer "github.com/oracle/oci-go-sdk/v65/objectstorage/transfer"
 )
 
-
 func (cds *CasperDataStore) prepareMultipartUploadRequest(target ObjectURI, chunkSizeInMB int, uploadThreads int) (*transfer.UploadRequest, error) {
 	if target.Namespace == "" {
 		namespace, err := cds.GetNamespace()

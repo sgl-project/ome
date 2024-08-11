@@ -194,6 +194,10 @@ func UpdateContainerArgs(container *v1.Container, args *[]string) {
 	container.Args = append(container.Args, *args...)
 }
 
+func AppendEnvVars(container *v1.Container, envVars *[]v1.EnvVar) {
+	container.Env = append(container.Env, *envVars...)
+}
+
 // ListPodsByLabel Get a PodList by label.
 func ListPodsByLabel(cl client.Client, namespace string, labelKey string, labelVal string) (*v1.PodList, error) {
 	podList := &v1.PodList{}
