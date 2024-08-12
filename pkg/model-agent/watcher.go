@@ -205,7 +205,9 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	w.logger.Infof("Processing BaseModel update: %s in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
+	if oldBaseModel.GetResourceVersion() == newBaseModel.GetResourceVersion() {
+		return
+	}
 
 	if w.matchTargetShape(oldBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) &&
 		!w.matchTargetShape(newBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
@@ -264,7 +266,9 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	w.logger.Infof("Processing ClusterBaseModel update: %s", newClusterBaseModel.GetName())
+	if oldClusterBaseModel.GetResourceVersion() == newClusterBaseModel.GetResourceVersion() {
+		return
+	}
 
 	if w.matchTargetShape(oldClusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) &&
 		!w.matchTargetShape(newClusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {

@@ -17,9 +17,16 @@ spec:
     spec:
       priorityClassName: {{ .Values.modelAgent.priorityClassName }}
       serviceAccountName: {{ .Values.modelAgent.serviceAccountName }}
-      {{- if .Values.modelAgent.affinity }}
+      {{- if .Values.modelAgent.moiraiCluster }}
+      affinity:
+        {{- toYaml .Values.modelAgent.moiraiClusterAffinity | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.modelAgent.moiraiClusterNodeSelector | nindent 8 }}
+      {{ else }}
       affinity:
         {{- toYaml .Values.modelAgent.affinity | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.modelAgent.nodeSelector | nindent 8 }}
       {{- end }}
       volumes:
       - name: host-models

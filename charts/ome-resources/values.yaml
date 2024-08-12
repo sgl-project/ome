@@ -69,16 +69,23 @@ modelAgent:
     pullPolicy: Always
     tag: v0.1
   
-  # # this affinity is not applicable in moirai cluster yet
-  # affinity:
-  #   nodeAffinity:
-  #     requiredDuringSchedulingIgnoredDuringExecution:
-  #       nodeSelectorTerms:
-  #       - matchExpressions:
-  #         - key: nvidia.com/gpu.present
-  #           operator: In
-  #           values:
-  #           - "true"
+  # this affinity is not applicable in moirai cluster yet
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: nvidia.com/gpu.present
+            operator: In
+            values:
+            - "true"
+
+  nodeSelector: {}
+  
+  moiraiCluster: false
+  moiraiClusterAffinity: {}
+  moiraiClusterNodeSelector:
+    node.kubernetes.io/instance-type: BM.GPU.H100.8
   
   health:
     port: 8080

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -226,7 +227,7 @@ func (c *ModelController) handleNodeDelete(obj interface{}) {
 }
 
 func (c *ModelController) updateClusterBaseModelState(name, nodeName, state string) error {
-	model, err := c.omeClient.OmeV1beta1().ClusterBaseModels().Get(context.TODO(), name, metav1.GetOptions{})
+	queriedModel, err := c.omeClient.OmeV1beta1().ClusterBaseModels().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -234,6 +235,7 @@ func (c *ModelController) updateClusterBaseModelState(name, nodeName, state stri
 		return err
 	}
 
+	model := queriedModel.DeepCopy()
 	if !model.ObjectMeta.DeletionTimestamp.IsZero() {
 		return nil
 	}
@@ -250,11 +252,15 @@ func (c *ModelController) updateClusterBaseModelState(name, nodeName, state stri
 	model.Status.NodesFailed = removeFromSlice(model.Status.NodesFailed, nodeName)
 
 	if state == string(modelagent.Ready) {
-		model.Status.NodesReady = addToSlice(model.Status.NodesReady, nodeName)
+		nodesReady := addToSlice(model.Status.NodesReady, nodeName)
+		slices.Sort(nodesReady)
+		model.Status.NodesReady = nodesReady
 	}
 
 	if state == string(modelagent.Failed) {
-		model.Status.NodesFailed = addToSlice(model.Status.NodesFailed, nodeName)
+		nodesFailed := addToSlice(model.Status.NodesFailed, nodeName)
+		slices.Sort(nodesFailed)
+		model.Status.NodesFailed = nodesFailed
 	}
 
 	if len(model.Status.NodesReady) > 0 {
@@ -274,7 +280,7 @@ func (c *ModelController) updateClusterBaseModelState(name, nodeName, state stri
 }
 
 func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state string) error {
-	model, err := c.omeClient.OmeV1beta1().BaseModels(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	queriedModel, err := c.omeClient.OmeV1beta1().BaseModels(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -282,6 +288,7 @@ func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state 
 		return err
 	}
 
+	model := queriedModel.DeepCopy()
 	if !model.ObjectMeta.DeletionTimestamp.IsZero() {
 		return nil
 	}
@@ -298,11 +305,15 @@ func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state 
 	model.Status.NodesFailed = removeFromSlice(model.Status.NodesFailed, nodeName)
 
 	if state == string(modelagent.Ready) {
-		model.Status.NodesReady = addToSlice(model.Status.NodesReady, nodeName)
+		nodesReady := addToSlice(model.Status.NodesReady, nodeName)
+		slices.Sort(nodesReady)
+		model.Status.NodesReady = nodesReady
 	}
 
 	if state == string(modelagent.Failed) {
-		model.Status.NodesFailed = addToSlice(model.Status.NodesFailed, nodeName)
+		nodesFailed := addToSlice(model.Status.NodesFailed, nodeName)
+		slices.Sort(nodesFailed)
+		model.Status.NodesFailed = nodesFailed
 	}
 
 	if len(model.Status.NodesReady) > 0 {
