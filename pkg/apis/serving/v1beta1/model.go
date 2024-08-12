@@ -74,9 +74,17 @@ type BaseModelSpec struct {
 
 	// +optional Serving mode of the model, e.g., ["On-demand", "Dedicated"]
 	ServingMode []string `json:"servingMode,omitempty"`
+
+	// +optional
+	// MaxTokens is the maximum number of tokens that can be processed by the model
+	MaxTokens *int32 `json:"maxTokens,omitempty"`
 }
 
 type ModelExtensionSpec struct {
+	// DisplayName is the user-friendly name of the model
+	// +optional
+	DisplayName *string `json:"displayName,omitempty"`
+
 	// +optional
 	Version *string `json:"version,omitempty"`
 

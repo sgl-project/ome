@@ -61,6 +61,11 @@ spec:
                 type: string
               disabled:
                 type: boolean
+              displayName:
+                type: string
+              maxTokens:
+                format: int32
+                type: integer
               modelArchitecture:
                 type: string
               modelCapabilities:

@@ -225,6 +225,13 @@ func schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref common.ReferenceCallback)
 							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.StorageSpec"),
 						},
 					},
+					"displayName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisplayName is the user-friendly name of the model",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"version": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
@@ -264,6 +271,13 @@ func schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref common.ReferenceCallback)
 									},
 								},
 							},
+						},
+					},
+					"maxTokens": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxTokens is the maximum number of tokens that can be processed by the model",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 				},
@@ -1387,6 +1401,13 @@ func schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref common.ReferenceCal
 							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
+					"displayName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisplayName is the user-friendly name of the model",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"version": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
@@ -1832,6 +1853,13 @@ func schema_pkg_apis_serving_v1beta1_ModelExtensionSpec(ref common.ReferenceCall
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
+					"displayName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisplayName is the user-friendly name of the model",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"version": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
@@ -1887,6 +1915,7 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -2230,6 +2259,7 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -3197,6 +3227,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4315,6 +4346,7 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
+				
 			},
 		},
 	}

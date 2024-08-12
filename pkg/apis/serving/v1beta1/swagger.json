@@ -76,6 +76,15 @@
           "description": "Whether the model is enabled or not",
           "type": "boolean"
         },
+        "displayName": {
+          "description": "DisplayName is the user-friendly name of the model",
+          "type": "string"
+        },
+        "maxTokens": {
+          "description": "MaxTokens is the maximum number of tokens that can be processed by the model",
+          "type": "integer",
+          "format": "int32"
+        },
         "modelArchitecture": {
           "description": "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
           "type": "string"
@@ -756,6 +765,10 @@
           "description": "Whether the model is enabled or not",
           "type": "boolean"
         },
+        "displayName": {
+          "description": "DisplayName is the user-friendly name of the model",
+          "type": "string"
+        },
         "hyperParameters": {
           "description": "HyperParameters used for fine-tuning, stored as generic JSON for flexibility",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
@@ -1002,6 +1015,10 @@
         "disabled": {
           "description": "Whether the model is enabled or not",
           "type": "boolean"
+        },
+        "displayName": {
+          "description": "DisplayName is the user-friendly name of the model",
+          "type": "string"
         },
         "vendor": {
           "description": "Vendor of the model, e.g., \"NVIDIA\", \"Meta\", \"HuggingFace\"",
