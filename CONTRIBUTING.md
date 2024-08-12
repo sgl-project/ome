@@ -1,0 +1,213 @@
+# Contribution Guidelines
+
+Thank you for your interest in contributing to OME!
+This repository is open to everyone and welcomes all kinds of contributions, no matter how small or large.
+There are several ways you can contribute to the project:
+- Identify and report any issues or bugs.
+- Suggest or implement new features.
+
+
+This doc explains how to set up a development environment, so you can get started
+contributing.
+
+## Contributing Guidelines
+
+### Coding Style Guide
+
+In general, we adhere to [Golang Style Guide](https://google.github.io/styleguide/go/)
+
+We include a formatting command `make fmt` to format the code.
+
+### Pull Requests
+
+When submitting a pull request:
+
+1. Make sure your code has been rebased on top of the latest commit on the main branch.
+2. Ensure code is properly formatted by running `make fmt`. 
+3. Add new test cases. In the case of a bug fix, the tests should fail without your code changes. For new features, try to cover as many variants as reasonably possible. 
+4. Modify the documentation as necessary. 
+5. Include a detailed description of the changes in the pull request.
+   Explain why you made the changes you did.
+
+### Code Reviews
+
+All submissions, including submissions by project members, require a code review.
+To make the review process as smooth as possible, please:
+
+1. Keep your changes as concise as possible.
+   If your pull request involves multiple unrelated changes, consider splitting it into separate pull requests.
+2. Respond to all comments within a reasonable time frame.
+   If a comment isn't clear,
+   or you disagree with a suggestion, feel free to ask for clarification or discuss the suggestion.
+
+
+## Prerequisites
+
+Follow the instructions below to set up your development environment. Once you
+meet these requirements, you can make changes and
+[deploy your own version of ome](#deploy-ome)!
+
+### Install requirements
+
+You must install these tools:
+
+1. [`go`](https://golang.org/doc/install): OME controller is written in Go and requires Go 1.22.0+.
+1. [`git`](https://help.github.com/articles/set-up-git/): For source control.
+1. [`Go Module`](https://blog.golang.org/using-go-modules): Go's new dependency management system.
+1. [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/): For
+   managing development environments.
+1. [`kustomize`](https://github.com/kubernetes-sigs/kustomize/) To customize YAMLs for different environments, requires v5.0.0+.
+1. [`yq`](https://github.com/mikefarah/yq) yq is used in the project makefiles to parse and display YAML output, requires yq `4.*`.
+
+### Install Optional Knative on a Kubernetes cluster
+
+OME currently have optional layer of `Knative Serving` for auto-scaling, canary rollout, `Istio` for traffic routing and ingress.
+
+* To install Knative components on your Kubernetes cluster, follow the [installation guide](https://knative.dev/docs/admin/install/) or alternatively, 
+use the [Knative Operators](https://knative.dev/docs/install/operator/knative-with-operators/) to manage your installation. Observability, tracing and logging are optional but are often precious tools for troubleshooting challenging issues;
+they can be installed via the [directions here](https://github.com/knative/docs/blob/release-0.15/docs/serving/installing-logging-metrics-traces.md).
+
+* If you start from scratch, OME requires Kubernetes 1.27+, Knative 1.13+, Istio v1.19+.
+
+* If you already have `Istio` or `Knative` then you don't need to install them explicitly, as long as version dependencies are satisfied.
+
+**_NOTE:_** 
+    On a local environment, when using `minikube` or `kind` as Kubernetes cluster, there has been a reported issue that [knative quickstart](https://knative.dev/docs/install/quickstart-install/) bootstrap does not work as expected. It is recommended to follow the installation manual from knative using [yaml](https://knative.dev/docs/install/yaml-install/) or using [knative operator](https://knative.dev/docs/install/operator/knative-with-operators/) for a better result.
+
+### Setup your environment
+
+To start your environment, you'll need to set these environment variables (we
+recommend adding them to your `.bashrc`):
+
+1. `GOPATH`: If you don't have one, simply pick a directory and add
+   `export GOPATH=...`
+1. `$GOPATH/bin` on `PATH`: This is so that tooling installed via `go get` will
+   work properly.
+1. `GONOPROXY`: Set go proxy to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
+1. `GOPRIVATE`: Set go private to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
+1. `ARCH`: If you are using M1 or M2 MacBook the value is `linux/arm64`.
+1. `REGISTRY`: The docker repository to which developer images should be
+   pushed (e.g. `ord.ocir.io/<namespace>`).
+
+
+**_NOTE:_**
+    Set up a container image repository for pushing images. You can use any container image registry by adjusting the authentication methods and repository paths mentioned in the sections below.
+
+1. Login to [BOAT tenancy](https://console.us-ashburn-1.oraclecloud.com/?tenant=bmc_operator_access&provider=ocna-saml)
+2. On the top right, click on the profile icon and then click on your username 
+3. Under Auth Token, generate a token and keep a note of that 
+4. Run the following command to login to the docker repository
+      ```bash
+      docker login us-ashburn-1.ocir.io -u bmc_operator_access/${USER}
+      ```
+
+### Clone OME repository
+
+The Go tools require that you clone the repository to the
+`src/bitbucket.oci.oraclecorp.com/gen/ome` directory in your
+[`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
+
+To check out this repository:
+
+1. Create your own
+   [clone this repo](https://support.atlassian.com/bitbucket-cloud/docs/clone-a-git-repository/)
+1. Clone it to your machine:
+
+```shell
+mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gen
+cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gen
+git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/gen/ome.git
+cd ome
+```
+
+Once you reach this point, you are ready to do a full build and deploy as
+described below.
+
+## Deploy OME
+
+### Check Knative Serving installation
+Once you've [set up your development environment](#prerequisites), you can verify the installation with the following:
+
+
+```bash
+$ kubectl -n knative-serving get pods
+NAME                                          READY   STATUS    RESTARTS         AGE
+activator-5bdfcc644b-xjz8t                    1/1     Running   61 (5d21h ago)   6d1h
+autoscaler-d4b84f565-sp8zf                    1/1     Running   0                5d21h
+controller-7985f684c-4tn58                    1/1     Running   53 (5d21h ago)   6d1h
+net-certmanager-controller-79ff896db5-4f8sw   1/1     Running   0                6d
+net-certmanager-webhook-7c658f4bb7-brchb      1/1     Running   0                6d
+webhook-6499644c89-v9wmf                      1/1     Running   0                5d21h
+
+$ kubectl get svc -n istio-system
+NAME                   TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)                                      AGE
+istio-ingressgateway   LoadBalancer   10.96.41.243    131.186.10.237   15021:31714/TCP,80:31781/TCP,443:32190/TCP   6d
+istiod                 ClusterIP      10.96.214.221   <none>           15010/TCP,15012/TCP,443/TCP,15014/TCP        6d
+```
+
+### Deploy ome from the main branch
+We suggest using [cert manager](https://github.com/cert-manager/cert-manager) for
+provisioning the certificates for the webhook server. Other solutions should
+also work as long as they put the certificates in the desired location.
+
+**Note**: If you are using an OCI OKE cluster, It's recommended to use [OCI OKE Add-on](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengintroducingclusteraddons.htm) which manages cert manager.
+
+You can follow
+[the cert manager documentation](https://cert-manager.io/docs/installation/)
+to install it.
+
+If you don't want to install cert manager, you can set the `ENABLE_SELF_SIGNED_CA` environment variable to true.
+`ENABLE_SELF_SIGNED_CA` will execute a script to create a self-signed CA and patch it to the webhook config.
+```bash
+export ENABLE_SELF_SIGNED_CA=true
+```
+
+After that you can run following command to deploy `OME`, you can skip above step if cert manager is already installed.
+```bash
+make deploy
+```
+
+
+Success "Expected Output"
+```bash
+$ kubectl get pods -n ome -l control-plane=ome-controller-manager
+NAME                          READY   STATUS    RESTARTS   AGE
+ome-controller-manager-0      2/2     Running   0          13m
+```
+**_NOTE:_**
+    By default it installs to `ome` namespace with the published controller manager image from the main branch.
+
+### Deploy OME with your own version
+Run the following command to deploy `OME` controller  with your local change.
+```bash
+make deploy-dev
+```
+**_NOTE:_**
+    `deploy-dev` builds the image from your local code, publishes to `REGISTRY` and deploys the `ome-controller-manager` the image digest to your cluster for testing. 
+    Please also ensure you are logged in to `REGISTRY` from your client machine.
+
+
+## Iterating
+
+As you make changes to the code-base, there are two special cases to be aware
+of:
+
+- **If you change an input to generated code**, then you must run
+  `make manifests`. Inputs include:
+
+  - API type definitions in
+    [apis/serving](https://bitbucket.oci.oraclecorp.com/projects/GEN/repos/ome/browse/pkg/apis/serving)
+  - Manifests or kustomize patches stored in [config](https://bitbucket.oci.oraclecorp.com/projects/GENAI/repos/ome/browse/config).
+
+  To generate the OME go clients, you should run `make generate`.
+
+- **If you want to add new dependencies**, then you add the imports and the specific version of the dependency
+module in `go.mod`. When it encounters an import of a package not provided by any module in `go.mod`, the go
+command automatically looks up the module containing the package and adds it to `go.mod` using the latest version.
+
+- **If you want to upgrade the dependency**, then you run go get command e.g `go get golang.org/x/text` to upgrade
+to the latest version, `go get golang.org/x/text@v0.3.0` to upgrade to a specific version.
+
+```shell
+make deploy-dev
+```
