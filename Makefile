@@ -46,7 +46,7 @@ manager: generate fmt vet go-lint
 
 
 # Build manager container image
-manager-image: fmt
+manager-image: fmt vet
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
 
 
