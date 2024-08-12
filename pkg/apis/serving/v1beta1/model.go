@@ -78,6 +78,18 @@ type BaseModelSpec struct {
 	// +optional
 	// MaxTokens is the maximum number of tokens that can be processed by the model
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
+
+	// DeprecationTime is the time the model was deprecated
+	// +optional
+	DeprecationTime *metav1.Time `json:"deprecationTime,omitempty"`
+
+	// LongTermSupported indicates if the model is long term supported
+	// +optional
+	IsLongTermSupported *bool `json:"isLongTermSupported,omitempty"`
+
+	// Additional metadata for the model
+	// +optional
+	AdditionalMetadata map[string]string `json:"additionalMetadata,omitempty"`
 }
 
 type ModelExtensionSpec struct {

@@ -280,12 +280,41 @@ func schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref common.ReferenceCallback)
 							Format:      "int32",
 						},
 					},
+					"deprecationTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DeprecationTime is the time the model was deprecated",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"isLongTermSupported": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LongTermSupported indicates if the model is long term supported",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"additionalMetadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Additional metadata for the model",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"modelFormat"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 

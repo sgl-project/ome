@@ -68,9 +68,21 @@
         "modelFormat"
       ],
       "properties": {
+        "additionalMetadata": {
+          "description": "Additional metadata for the model",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
         "compartmentID": {
           "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
+        },
+        "deprecationTime": {
+          "description": "DeprecationTime is the time the model was deprecated",
+          "$ref": "#/definitions/v1.Time"
         },
         "disabled": {
           "description": "Whether the model is enabled or not",
@@ -79,6 +91,10 @@
         "displayName": {
           "description": "DisplayName is the user-friendly name of the model",
           "type": "string"
+        },
+        "isLongTermSupported": {
+          "description": "LongTermSupported indicates if the model is long term supported",
+          "type": "boolean"
         },
         "maxTokens": {
           "description": "MaxTokens is the maximum number of tokens that can be processed by the model",

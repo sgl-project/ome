@@ -57,12 +57,21 @@ spec:
             type: object
           spec:
             properties:
+              additionalMetadata:
+                additionalProperties:
+                  type: string
+                type: object
               compartmentID:
+                type: string
+              deprecationTime:
+                format: date-time
                 type: string
               disabled:
                 type: boolean
               displayName:
                 type: string
+              isLongTermSupported:
+                type: boolean
               maxTokens:
                 format: int32
                 type: integer
