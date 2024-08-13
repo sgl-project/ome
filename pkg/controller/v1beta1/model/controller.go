@@ -121,6 +121,18 @@ func (c *ModelController) handleModelStatus(obj interface{}) {
 		return
 	}
 
+	// In case configMap get updated during the node deletion
+	_, err := c.kubeClient.CoreV1().Nodes().Get(context.TODO(), configMap.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.logger.Warnf("Node %s has been deleted, but got an associated configMap update.", configMap.Name)
+			c.handleModelStatusDelete(obj)
+		} else {
+			c.logger.Warnf("Error getting node %s: %s", configMap.Name, err.Error())
+		}
+		return
+	}
+
 	nodeName := configMap.Name
 	for modelNsName, state := range configMap.Data {
 		var isClusterBaseModel bool = true
