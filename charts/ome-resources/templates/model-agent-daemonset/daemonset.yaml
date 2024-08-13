@@ -41,6 +41,8 @@ spec:
         - {{ .Values.modelDownload.hostPath }}
         - --models-root-dir
         - {{ .Values.modelDownload.hostPath }}
+        - --num-download-worker
+        - '2'
         env:
         - name: NODE_NAME
           valueFrom:

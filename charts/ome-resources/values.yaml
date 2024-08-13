@@ -93,7 +93,7 @@ modelAgent:
   resources:
     limits:
       cpu: '4'
-      memory: 20Gi
+      memory: 100Gi
     requests:
       cpu: '2'
-      memory: 10Gi
+      memory: 50Gi
