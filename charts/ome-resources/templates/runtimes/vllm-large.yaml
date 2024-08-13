@@ -33,7 +33,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:bd70013
+      image: {{ .Values.ome.servingruntime.vllmMedium.image }}:{{ .Values.ome.servingruntime.vllmMedium.tag }}
       args:
         - --served-model-name=vllm-model
         - --disable-log-stats

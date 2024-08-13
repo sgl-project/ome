@@ -5,8 +5,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	v1beta1controller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
 	"flag"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	istionetworking "istio.io/api/networking/v1beta1"
@@ -27,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -195,30 +192,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("setting up webhook server")
-	hookServer := mgr.GetWebhookServer()
-
-	setupLog.Info("registering webhooks to the webhook server")
-	hookServer.Register("/mutate-pods", &webhook.Admission{
-		Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
-	})
-
-	setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
-	hookServer.Register("/validate-serving-ome-io-v1alpha1-clusterservingruntime", &webhook.Admission{
-		Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-	})
-
-	setupLog.Info("registering serving runtime validator webhook to the webhook server")
-	hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
-		Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-	})
-
-	if err = ctrl.NewWebhookManagedBy(mgr).
-		For(&v1beta1.InferenceService{}).
-		Complete(); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "v1beta1")
-		os.Exit(1)
-	}
+	//setupLog.Info("setting up webhook server")
+	//hookServer := mgr.GetWebhookServer()
+	//
+	//setupLog.Info("registering webhooks to the webhook server")
+	//hookServer.Register("/mutate-pods", &webhook.Admission{
+	//	Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
+	//})
+	//
+	//setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
+	//hookServer.Register("/validate-serving-ome-io-v1alpha1-clusterservingruntime", &webhook.Admission{
+	//	Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+	//})
+	//
+	//setupLog.Info("registering serving runtime validator webhook to the webhook server")
+	//hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
+	//	Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+	//})
+	//
+	//if err = ctrl.NewWebhookManagedBy(mgr).
+	//	For(&v1beta1.InferenceService{}).
+	//	Complete(); err != nil {
+	//	setupLog.Error(err, "unable to create webhook", "webhook", "v1beta1")
+	//	os.Exit(1)
+	//}
 
 	if err := mgr.AddHealthzCheck("healthz", func(req *http.Request) error {
 		return mgr.GetWebhookServer().StartedChecker()(req)

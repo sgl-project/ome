@@ -442,7 +442,7 @@ func DefaultPredictorServiceName(name string) string {
 }
 
 func PredictorServiceName(name string) string {
-	return name + "-" + string(Predictor)
+	return name
 }
 
 func CanaryPredictorServiceName(name string) string {

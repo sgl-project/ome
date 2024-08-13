@@ -2,7 +2,7 @@ apiVersion: ome.oracle.com/v1beta1
 kind: InferenceService
 metadata:
   name: llama3-1-70b
-  namespace: default
+  namespace: simolin
 spec:
   predictor:
     model:

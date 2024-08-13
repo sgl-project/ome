@@ -6,6 +6,10 @@ spec:
   annotations:
     prometheus.ome.io/port: '8080'
     prometheus.ome.io/path: "/metrics"
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -38,6 +42,10 @@ spec:
         - --port=8080
         - --tensor-parallel-size=4
         - --disable-log-requests
+        - --model="$MODEL_PATH"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
       resources:
         requests:
           cpu: 70

@@ -204,10 +204,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
 	vm := v1.VolumeMount{Name: constants.PVCName(isvc.Name), MountPath: modelMountPath, ReadOnly: true}
 	volume := v1.Volume{Name: constants.PVCName(isvc.Name), VolumeSource: v1.VolumeSource{PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: constants.PVCName(isvc.Name)}}}
-	//TODO this is specific to vLLM container, move this to a more generic place, such as isvc defaults
-	containerArg := []string{fmt.Sprintf("--model=%s", modelMountPath)}
 	isvcutils.UpdateVolumeMounts(container, &vm)
-	isvcutils.UpdateContainerArgs(container, &containerArg)
 	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{{Name: "MODEL_PATH", Value: modelMountPath}})
 
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "container", container)

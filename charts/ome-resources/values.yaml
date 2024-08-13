@@ -39,11 +39,11 @@ ome:
     tag: *defaultVersion
     resources:
       limits:
-        cpu: 500m
-        memory: 2Gi
+        cpu: 2
+        memory: 4Gi
       requests:
-        cpu: 500m
-        memory: 2Gi
+        cpu: 2
+        memory: 4Gi
   servingruntime:
     vllmMedium:
       image: fra.ocir.io/idqj093njucb/official-vllm-openai

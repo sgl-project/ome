@@ -21,6 +21,7 @@ type DomainTemplateValues struct {
 
 // GenerateDomainName generate domain name using template configured in IngressConfig
 func GenerateDomainName(name string, obj metav1.ObjectMeta, ingressConfig *v1beta1.IngressConfig) (string, error) {
+
 	values := DomainTemplateValues{
 		Name:          name,
 		Namespace:     obj.Namespace,
