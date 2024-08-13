@@ -10,8 +10,8 @@ spec:
   - ReadWriteOnce
   persistentVolumeReclaimPolicy: Delete
   hostPath:
-    path: {{ .Values.modelDownload.hostPath }}
-    type: {{ .Values.modelDownload.hostPathType }}
+    path: {{ .Values.modelAgent.hostPath }}
+    type: {{ .Values.modelAgent.hostPathType }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

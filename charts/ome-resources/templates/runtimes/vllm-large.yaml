@@ -44,7 +44,6 @@ spec:
         - --disable-log-requests
         - --max-model-len=32768
         - --quantization=fbgemm_fp8
-        - --model="$MODEL_PATH"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

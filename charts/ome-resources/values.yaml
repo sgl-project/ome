@@ -59,7 +59,9 @@ ome:
     tag: *defaultVersion
 
 modelAgent:
-  hostPath: /raid/models
+  # each host has different nvme mount configured, so we need to mount the hostPath to the correct path
+  # all mairon cluster nodes have the nvme path as /raid and all service cluster nodes have the nvme path as /mnt/data
+  hostPath: /mnt/data/models
   hostPathType: DirectoryOrCreate
   priorityClassName: system-node-critical
   serviceAccountName: ome-model-agent

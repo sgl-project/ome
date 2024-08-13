@@ -42,7 +42,6 @@ spec:
         - --port=8080
         - --tensor-parallel-size=4
         - --disable-log-requests
-        - --model="$MODEL_PATH"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

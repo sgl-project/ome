@@ -38,9 +38,9 @@ spec:
         imagePullPolicy: {{ .Values.modelAgent.image.pullPolicy }}
         args: 
         - --models-root-dir-on-host
-        - {{ .Values.modelDownload.hostPath }}
+        - {{ .Values.modelAgent.hostPath }}
         - --models-root-dir
-        - {{ .Values.modelDownload.hostPath }}
+        - {{ .Values.modelAgent.hostPath }}
         - --num-download-worker
         - '2'
         env:
@@ -51,7 +51,7 @@ spec:
         volumeMounts:
         - name: host-models
           readOnly: false
-          mountPath: {{ .Values.modelDownload.hostPath }}
+          mountPath: {{ .Values.modelAgent.hostPath }}
         livenessProbe:
           httpGet:
             path: /livez
@@ -63,9 +63,9 @@ spec:
             path: /healthz
             port: {{ .Values.modelAgent.health.port }}
           initialDelaySeconds: 5
-        {{- if .Values.resources }}
+        {{- if .Values.modelAgent.resources }}
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
+          {{- toYaml .Values.modelAgent.resources | nindent 10 }}
         {{- end }}   
       tolerations:
         - key: nvidia.com/gpu
