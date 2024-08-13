@@ -223,8 +223,8 @@ func TestMutator_Handle(t *testing.T) {
 						Operation: "add",
 						Path:      "/metadata/annotations",
 						Value: map[string]interface{}{
-							"ome.oracle.com/enable-metric-aggregation":  "",
-							"ome.oracle.com/enable-prometheus-scraping": "",
+							"ome.io/enable-metric-aggregation":  "",
+							"ome.io/enable-prometheus-scraping": "",
 						},
 					},
 					{

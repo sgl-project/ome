@@ -23,11 +23,11 @@ import (
 
 /*
 GetDeploymentMode returns the current deployment mode, supports Serverless and RawDeployment
-case 1: no ome.oracle.com/deploymentMode annotation
+case 1: no ome.io/deploymentMode annotation
 
 	return config.deploy.defaultDeploymentMode
 
-case 2: ome.oracle.com/deploymentMode is set
+case 2: ome.io/deploymentMode is set
 
 	        if the mode is "RawDeployment", "Serverless" or "ModelMesh", return it.
 			else return config.deploy.defaultDeploymentMode

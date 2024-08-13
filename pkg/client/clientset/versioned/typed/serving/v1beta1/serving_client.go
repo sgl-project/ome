@@ -20,7 +20,7 @@ type OmeV1beta1Interface interface {
 	ServingRuntimesGetter
 }
 
-// OmeV1beta1Client is used to interact with features provided by the ome.oracle.com group.
+// OmeV1beta1Client is used to interact with features provided by the ome.io group.
 type OmeV1beta1Client struct {
 	restClient rest.Interface
 }

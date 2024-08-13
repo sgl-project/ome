@@ -172,7 +172,7 @@ data:
        {
          # defaultDeploymentMode specifies the default deployment mode of the OME. The supported values are
          # Serverless and RawDeployment. Users can override the deployment mode at service level
-         # by adding the annotation ome.oracle.com/deploymentMode.
+         # by adding the annotation ome.io/deploymentMode.
          "defaultDeploymentMode": "Serverless"
        }
      
@@ -186,13 +186,13 @@ data:
      # For more info see https://bitbucket.oci.oraclecorp.com/gen/ome/blob/master/qpext/README.md
      metricsAggregator: |-
        {
-         # enableMetricAggregation configures metric aggregation annotation. This adds the annotation ome.oracle.com/enable-metric-aggregation to every
+         # enableMetricAggregation configures metric aggregation annotation. This adds the annotation ome.io/enable-metric-aggregation to every
          # service with the specified boolean value. If true enables metric aggregation in queue-proxy by setting env vars in the queue proxy container
          # to configure scraping ports.
          "enableMetricAggregation": "false",
          
-         # enablePrometheusScraping configures metric aggregation annotation. This adds the annotation ome.oracle.com/enable-metric-aggregation to every
-         # service with the specified boolean value. If true, prometheus annotations are added to the pod. If ome.oracle.com/enable-metric-aggregation is false,
+         # enablePrometheusScraping configures metric aggregation annotation. This adds the annotation ome.io/enable-metric-aggregation to every
+         # service with the specified boolean value. If true, prometheus annotations are added to the pod. If ome.io/enable-metric-aggregation is false,
          # the prometheus port is set with the default prometheus scraping port 9090, otherwise the prometheus port annotation is set with the metric aggregation port.
          "enablePrometheusScraping" : "false"
        }

@@ -31,8 +31,8 @@ func TestCreateHPA(t *testing.T) {
 					"annotation": "annotation-value",
 				},
 				Labels: map[string]string{
-					"label":                         "label-value",
-					"ome.oracle.com/inferencegraph": "basic-ig",
+					"label":                 "label-value",
+					"ome.io/inferencegraph": "basic-ig",
 				},
 			},
 			componentExt: &v1beta1.ComponentExtensionSpec{},
@@ -45,8 +45,8 @@ func TestCreateHPA(t *testing.T) {
 					"annotation": "annotation-value",
 				},
 				Labels: map[string]string{
-					"label":                         "label-value",
-					"ome.oracle.com/inferencegraph": "basic-ig",
+					"label":                 "label-value",
+					"ome.io/inferencegraph": "basic-ig",
 				},
 			},
 			componentExt: &v1beta1.ComponentExtensionSpec{

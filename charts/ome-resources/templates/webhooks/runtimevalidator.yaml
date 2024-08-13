@@ -2,7 +2,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: clusterservingruntime.ome.oracle.com
+  name: clusterservingruntime.ome.io
 webhooks:
   - clientConfig:
       caBundle: Cg==
@@ -16,7 +16,7 @@ webhooks:
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - ome.oracle.com
+          - ome.io
         apiVersions:
           - v1alpha1
         operations:
@@ -29,7 +29,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: servingruntime.ome.oracle.com
+  name: servingruntime.ome.io
 webhooks:
   - clientConfig:
       caBundle: Cg==
@@ -43,7 +43,7 @@ webhooks:
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - ome.oracle.com
+          - ome.io
         apiVersions:
           - v1alpha1
         operations:

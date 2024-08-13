@@ -75,7 +75,7 @@
                                 <resource>
                                     <directory>${basedir}/../config/crd/full</directory>
                                     <includes>
-                                        <include>ome.oracle.com_*.yaml</include>
+                                        <include>ome.io_*.yaml</include>
                                     </includes>
                                 </resource>
                             </resources>

@@ -31,7 +31,7 @@ func TestGetAutoscalerClass(t *testing.T) {
 			isvcMetaData: &metav1.ObjectMeta{
 				Name:        serviceName,
 				Namespace:   namespace,
-				Annotations: map[string]string{"ome.oracle.com/autoscalerClass": "hpa"},
+				Annotations: map[string]string{"ome.io/autoscalerClass": "hpa"},
 			},
 
 			expectedAutoScalerType: constants.AutoscalerClassHPA,
@@ -41,7 +41,7 @@ func TestGetAutoscalerClass(t *testing.T) {
 			isvcMetaData: &metav1.ObjectMeta{
 				Name:        serviceName,
 				Namespace:   namespace,
-				Annotations: map[string]string{"ome.oracle.com/autoscalerClass": "external"},
+				Annotations: map[string]string{"ome.io/autoscalerClass": "external"},
 			},
 			expectedAutoScalerType: constants.AutoscalerClassExternal,
 		},

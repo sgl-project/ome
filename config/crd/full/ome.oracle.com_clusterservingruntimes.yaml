@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.15.0
-  name: clusterservingruntimes.ome.oracle.com
+  name: clusterservingruntimes.ome.io
 spec:
-  group: ome.oracle.com
+  group: ome.io
   names:
     kind: ClusterServingRuntime
     listKind: ClusterServingRuntimeList

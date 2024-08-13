@@ -3,21 +3,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: inferenceservice.ome.oracle.com
+  name: inferenceservice.ome.io
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
         namespace: $(omeNamespace)
-        path: /mutate-ome-oracle-com-v1beta1-inferenceservice
+        path: /mutate-ome-io-v1beta1-inferenceservice
     failurePolicy: Fail
     name: inferenceservice.ome-webhook-server.defaulter
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - ome.oracle.com
+          - ome.io
         apiVersions:
           - v1beta1
         operations:
@@ -42,7 +42,7 @@ webhooks:
           operator: DoesNotExist
     objectSelector:
       matchExpressions:
-        - key: ome.oracle.com/inferenceservice
+        - key: ome.io/inferenceservice
           operator: Exists
     rules:
       - apiGroups:
@@ -59,21 +59,21 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: inferenceservice.ome.oracle.com
+  name: inferenceservice.ome.io
 webhooks:
   - clientConfig:
       caBundle: Cg==
       service:
         name: $(webhookServiceName)
         namespace: $(omeNamespace)
-        path: /validate-ome-oracle-com-v1beta1-inferenceservice
+        path: /validate-ome-io-v1beta1-inferenceservice
     failurePolicy: Fail
     name: inferenceservice.ome-webhook-server.validator
     sideEffects: None
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - ome.oracle.com
+          - ome.io
         apiVersions:
           - v1beta1
         operations:
@@ -86,7 +86,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: clusterservingruntime.ome.oracle.com
+  name: clusterservingruntime.ome.io
 webhooks:
   - clientConfig:
       caBundle: Cg==
@@ -100,7 +100,7 @@ webhooks:
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - ome.oracle.com
+          - ome.io
         apiVersions:
           - v1alpha1
         operations:
@@ -113,7 +113,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: servingruntime.ome.oracle.com
+  name: servingruntime.ome.io
 webhooks:
   - clientConfig:
       caBundle: Cg==
@@ -127,7 +127,7 @@ webhooks:
     admissionReviewVersions: ["v1beta1"]
     rules:
       - apiGroups:
-          - ome.oracle.com
+          - ome.io
         apiVersions:
           - v1alpha1
         operations:

@@ -5,4 +5,4 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: $(omeNamespace)/serving-cert
-  name: inferenceservices.ome.oracle.com
+  name: inferenceservices.ome.io

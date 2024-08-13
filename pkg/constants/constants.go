@@ -17,7 +17,7 @@ import (
 // OME Constants
 var (
 	OMEName                          = "ome"
-	OMEAPIGroupName                  = "ome.oracle.com"
+	OMEAPIGroupName                  = "ome.io"
 	KnativeAutoscalingAPIGroupName   = "autoscaling.knative.dev"
 	KnativeServingAPIGroupNamePrefix = "serving.knative"
 	KnativeServingAPIGroupName       = KnativeServingAPIGroupNamePrefix + ".dev"
@@ -246,7 +246,7 @@ const (
 // Labels for TrainedModel
 const (
 	ParentInferenceServiceLabel = "inferenceservice"
-	InferenceServiceLabel       = "ome.oracle.com/inferenceservice"
+	InferenceServiceLabel       = "ome.io/inferenceservice"
 )
 
 // InferenceService default/canary constants
@@ -371,7 +371,7 @@ const (
 var (
 	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"
 	ModelsLabelPrefix         = "models.ome/"
-	TargetInstanceShapes      = "models.ome.oracle.com/target-instance-shapes"
+	TargetInstanceShapes      = "models.ome.io/target-instance-shapes"
 	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
 	ObjectStorageUrlPrefix    = "oci://"
 )

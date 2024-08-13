@@ -31,22 +31,22 @@ replacements:
     - webhooks.*.clientConfig.service.name
     select:
       kind: MutatingWebhookConfiguration
-      name: inferenceservice.ome.oracle.com
+      name: inferenceservice.ome.io
   - fieldPaths:
     - webhooks.*.clientConfig.service.name
     select:
       kind: ValidatingWebhookConfiguration
-      name: inferenceservice.ome.oracle.com
+      name: inferenceservice.ome.io
   - fieldPaths:
     - webhooks.*.clientConfig.service.name
     select:
       kind: ValidatingWebhookConfiguration
-      name: clusterservingruntime.ome.oracle.com
+      name: clusterservingruntime.ome.io
   - fieldPaths:
     - webhooks.*.clientConfig.service.name
     select:
       kind: ValidatingWebhookConfiguration
-      name: servingruntime.ome.oracle.com
+      name: servingruntime.ome.io
   - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
@@ -67,22 +67,22 @@ replacements:
     - webhooks.*.clientConfig.service.namespace
     select:
       kind: MutatingWebhookConfiguration
-      name: inferenceservice.ome.oracle.com
+      name: inferenceservice.ome.io
   - fieldPaths:
     - webhooks.*.clientConfig.service.namespace
     select:
       kind: ValidatingWebhookConfiguration
-      name: inferenceservice.ome.oracle.com
+      name: inferenceservice.ome.io
   - fieldPaths:
     - webhooks.*.clientConfig.service.namespace
     select:
       kind: ValidatingWebhookConfiguration
-      name: clusterservingruntime.ome.oracle.com
+      name: clusterservingruntime.ome.io
   - fieldPaths:
     - webhooks.*.clientConfig.service.namespace
     select:
       kind: ValidatingWebhookConfiguration
-      name: servingruntime.ome.oracle.com
+      name: servingruntime.ome.io
   - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
@@ -100,7 +100,7 @@ replacements:
       index: 0
     select:
       kind: CustomResourceDefinition
-      name: inferenceservices.ome.oracle.com
+      name: inferenceservices.ome.io
   - fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:
@@ -108,7 +108,7 @@ replacements:
       index: 0
     select:
       kind: MutatingWebhookConfiguration
-      name: inferenceservice.ome.oracle.com
+      name: inferenceservice.ome.io
   - fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:
@@ -116,7 +116,7 @@ replacements:
       index: 0
     select:
       kind: ValidatingWebhookConfiguration
-      name: inferenceservice.ome.oracle.com
+      name: inferenceservice.ome.io
   - fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:
@@ -124,7 +124,7 @@ replacements:
       index: 0
     select:
       kind: ValidatingWebhookConfiguration
-      name: clusterservingruntime.ome.oracle.com
+      name: clusterservingruntime.ome.io
   - fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:
@@ -132,7 +132,7 @@ replacements:
       index: 0
     select:
       kind: ValidatingWebhookConfiguration
-      name: servingruntime.ome.oracle.com
+      name: servingruntime.ome.io
 
 patches:
 - path: manager_image_patch.yaml

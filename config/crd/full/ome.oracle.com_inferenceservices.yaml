@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.15.0
-  name: inferenceservices.ome.oracle.com
+  name: inferenceservices.ome.io
 spec:
-  group: ome.oracle.com
+  group: ome.io
   names:
     kind: InferenceService
     listKind: InferenceServiceList

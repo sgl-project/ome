@@ -30,7 +30,7 @@ var (
 	IsvcRegexp = regexp.MustCompile("^" + IsvcNameFmt + "$")
 )
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-oracle-com-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.oracle.com,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
+// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
 var _ webhook.Validator = &InferenceService{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
@@ -76,7 +76,7 @@ func (isvc *InferenceService) ValidateCreate() (admission.Warnings, error) {
 
 // Validate scaling options component extensions
 func validateAutoScalingCompExtension(annotations map[string]string, compExtSpec *ComponentExtensionSpec) error {
-	deploymentMode := annotations["ome.oracle.com/deploymentMode"]
+	deploymentMode := annotations["ome.io/deploymentMode"]
 	annotationClass := annotations[autoscaling.ClassAnnotationKey]
 	if deploymentMode == string(constants.RawDeployment) || annotationClass == string(autoscaling.HPA) {
 		return validateScalingHPACompExtension(compExtSpec)

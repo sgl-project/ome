@@ -34,18 +34,18 @@ import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 )
 
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=inferenceservices;inferenceservices/finalizers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=servingruntimes;servingruntimes/finalizers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=servingruntimes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterservingruntimes;clusterservingruntimes/finalizers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterservingruntimes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=basemodels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=basemodels;basemodels/finalizers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterbasemodels/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=clusterbasemodels;basemodels/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=inferenceservices;inferenceservices/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=servingruntimes;servingruntimes/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=servingruntimes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=clusterservingruntimes;clusterservingruntimes/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=clusterservingruntimes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=basemodels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=basemodels;basemodels/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels;basemodels/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.oracle.com,resources=inferenceservices/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=inferenceservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=serving.knative.dev,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.knative.dev,resources=services/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.knative.dev,resources=services/status,verbs=get;update;patch

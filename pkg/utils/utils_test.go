@@ -46,19 +46,19 @@ func TestUnionUtil(t *testing.T) {
 		expected map[string]string
 	}{
 		"UnionTwoMaps": {
-			input1: map[string]string{"ome.oracle.com/service": "mnist",
+			input1: map[string]string{"ome.io/service": "mnist",
 				"label1": "value1"},
 			input2: map[string]string{"service.knative.dev/service": "mnist",
 				"label2": "value2"},
-			expected: map[string]string{"ome.oracle.com/service": "mnist",
+			expected: map[string]string{"ome.io/service": "mnist",
 				"label1": "value1", "service.knative.dev/service": "mnist", "label2": "value2"},
 		},
 		"UnionTwoMapsOverwritten": {
-			input1: map[string]string{"ome.oracle.com/service": "mnist",
+			input1: map[string]string{"ome.io/service": "mnist",
 				"label1": "value1", "label3": "value1"},
 			input2: map[string]string{"service.knative.dev/service": "mnist",
 				"label2": "value2", "label3": "value3"},
-			expected: map[string]string{"ome.oracle.com/service": "mnist",
+			expected: map[string]string{"ome.io/service": "mnist",
 				"label1": "value1", "service.knative.dev/service": "mnist", "label2": "value2", "label3": "value3"},
 		},
 		"UnionWithEmptyMap": {

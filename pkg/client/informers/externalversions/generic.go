@@ -36,7 +36,7 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=ome.oracle.com, Version=v1beta1
+	// Group=ome.io, Version=v1beta1
 	case v1beta1.SchemeGroupVersion.WithResource("basemodels"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().BaseModels().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("clusterbasemodels"):

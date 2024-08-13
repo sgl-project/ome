@@ -1,4 +1,4 @@
-apiVersion: ome.oracle.com/v1beta1
+apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
   name: vllm-serving-runtime-large
@@ -44,7 +44,6 @@ spec:
         - --disable-log-requests
         - --max-model-len=32768
         - --quantization=fbgemm_fp8
-        - --model="$MODEL_PATH"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

@@ -19,7 +19,7 @@ The following flags are optional.
        --service                Service name of webhook. Default: ome-webhook-server-service
        --namespace              Namespace where webhook service and secret reside. Default: ome
        --secret                 Secret name for CA certificate and server certificate/key pair. Default: ome-webhook-server-cert
-       --mutatingWebhookName    Name for the mutating webhook config. This can be specified multiple times. Default: inferenceservice.ome.oracle.com
+       --mutatingWebhookName    Name for the mutating webhook config. This can be specified multiple times. Default: inferenceservice.ome.io
        --validatingWebhookName  Name for the validating webhook config. This can be specified multiple times. Default: All validating webhooks
        --webhookDeployment      Deployment name of the webhook controller. Default: ome-controller-manager
 EOF
@@ -63,8 +63,8 @@ done
 [ -z "${secret}" ] && secret=ome-webhook-server-cert
 [ -z "${namespace}" ] && namespace=ome
 [ -z "${webhookDeployment}" ] && webhookDeployment=ome-controller-manager
-[ "${#validatingWebhookNames[@]}" -eq 0 ] && validatingWebhookNames=("inferenceservice.ome.oracle.com" "inferencegraph.ome.oracle.com" "servingruntime.ome.oracle.com" "clusterservingruntime.ome.oracle.com")
-[ "${#mutatingWebhookNames[@]}" -eq 0 ] && mutatingWebhookNames=("inferenceservice.ome.oracle.com")
+[ "${#validatingWebhookNames[@]}" -eq 0 ] && validatingWebhookNames=("inferenceservice.ome.io" "inferencegraph.ome.io" "servingruntime.ome.io" "clusterservingruntime.ome.io")
+[ "${#mutatingWebhookNames[@]}" -eq 0 ] && mutatingWebhookNames=("inferenceservice.ome.io")
 [ -z "${service}" ] && service=ome-webhook-server-service
 webhookDeploymentName=${webhookDeployment}
 mutatingWebhookConfigNames=("${mutatingWebhookNames[@]}")
@@ -177,5 +177,5 @@ echo "patching ca bundler for conversion webhook configuration.."
 conversionPatchString='[{"op": "replace", "path": "/spec/conversion/webhook/clientConfig/caBundle", "value":"{{CA_BUNDLE}}"}]'
 # shellcheck disable=SC2001
 conversionPatchString=$(echo "${conversionPatchString}" | sed "s|{{CA_BUNDLE}}|${caBundle}|g")
-kubectl patch CustomResourceDefinition inferenceservices.ome.oracle.com \
+kubectl patch CustomResourceDefinition inferenceservices.ome.io \
   --type='json' -p="${conversionPatchString}"

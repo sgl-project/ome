@@ -5,7 +5,7 @@
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=ome/pkg/apis/serving
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=ome.oracle.com
+// +groupName=ome.io
 package v1beta1
 
 import (

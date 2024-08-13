@@ -26,14 +26,14 @@ const (
 	ProrityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
 )
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-oracle-com-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.oracle.com,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
+// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
 
 type ClusterServingRuntimeValidator struct {
 	Client  client.Client
 	Decoder *admission.Decoder
 }
 
-// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-oracle-com-v1beta1-servingruntime,mutating=false,failurePolicy=fail,groups=ome.oracle.com,resources=servingruntimes,versions=v1beta1,name=servingruntime.ome-webhook-server.validator
+// +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-servingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=servingruntimes,versions=v1beta1,name=servingruntime.ome-webhook-server.validator
 
 type ServingRuntimeValidator struct {
 	Client  client.Client

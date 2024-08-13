@@ -184,7 +184,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - basemodels
   - basemodels/finalizers
@@ -197,7 +197,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - basemodels/finalizers
   - clusterbasemodels
@@ -210,7 +210,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - basemodels/status
   verbs:
@@ -218,7 +218,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - clusterbasemodels/status
   verbs:
@@ -226,7 +226,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
@@ -239,7 +239,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - clusterservingruntimes/status
   verbs:
@@ -247,7 +247,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - inferenceservices
   - inferenceservices/finalizers
@@ -260,7 +260,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - inferenceservices/status
   verbs:
@@ -268,7 +268,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - servingruntimes
   - servingruntimes/finalizers
@@ -281,7 +281,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ome.oracle.com
+  - ome.io
   resources:
   - servingruntimes/status
   verbs:
