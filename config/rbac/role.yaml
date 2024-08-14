@@ -291,7 +291,7 @@ rules:
 - apiGroups:
   - ray.io
   resources:
-  - clusters
+  - rayclusters
   verbs:
   - create
   - delete
@@ -303,7 +303,7 @@ rules:
 - apiGroups:
   - ray.io
   resources:
-  - clusters/finalizers
+  - rayclusters/finalizers
   verbs:
   - create
   - delete
@@ -315,7 +315,7 @@ rules:
 - apiGroups:
   - ray.io
   resources:
-  - clusters/status
+  - rayclusters/status
   verbs:
   - get
   - patch
