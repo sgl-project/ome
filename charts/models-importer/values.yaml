@@ -1,0 +1,11 @@
+compartmentID: ocid1.compartment.oc1..aaaaaaaazq
+osnamespace: mynamespace
+
+llama-3-1-405b-instruct-fp8:
+  enabled: true
+
+llama-3-1-70b-instruct:
+  enabled: true
+
+phi-3-mini-128k-instruct:
+  enabled: false
