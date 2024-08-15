@@ -184,6 +184,10 @@ func (n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *N
 		key = op.ClusterBaseModel.Name
 	}
 
+	if configMap.Data == nil {
+		configMap.Data = make(map[string]string)
+	}
+
 	switch op.ModelStateOnNode {
 	case Ready:
 		configMap.Data[key] = string(Ready)
