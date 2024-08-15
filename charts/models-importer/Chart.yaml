@@ -1,6 +1,6 @@
 apiVersion: v2
-name: model-importer
-description: A Helm chart for importing a ome base model
+name: models-importer
+description: A Helm chart for importing ome base models
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
