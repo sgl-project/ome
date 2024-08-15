@@ -8,8 +8,8 @@ metadata:
   annotations:
     models.ome.io/runtime: "vllm-serving-runtime-large"
     models.ome.io/category: "LARGE"
-    models.ome.io/experimental: {{ index .Values "llama-3-1-405b-instruct-fp8" "isExperimental" }}
-    models.ome.io/internal: {{ index .Values "llama-3-1-405b-instruct-fp8" "isInternal" }}
+    models.ome.io/experimental: "{{ index .Values "llama-3-1-405b-instruct-fp8" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "llama-3-1-405b-instruct-fp8" "isInternal" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
