@@ -111,7 +111,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "modelConfiguration": {
           "description": "Configuration of the model, stored as generic JSON for flexibility.",
@@ -134,7 +135,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "storage": {
           "description": "Storage configuration for the model",
@@ -340,7 +342,7 @@
           "type": "integer",
           "format": "int32"
         },
-        "timeout": {
+        "timeoutSeconds": {
           "description": "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
           "type": "integer",
           "format": "int64"
@@ -371,7 +373,7 @@
           "description": "Previous revision name that is rolled out with 100 percent traffic",
           "type": "string"
         },
-        "restUrl": {
+        "restURL": {
           "description": "REST endpoint of the component if available.",
           "$ref": "#/definitions/knative.URL"
         },
@@ -694,6 +696,114 @@
         }
       }
     },
+    "v1beta1.DedicatedAIClusterProfile": {
+      "description": "DedicatedAIClusterProfile is the Schema for the dedicatedaiclusterprofiles API",
+      "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterProfileSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterProfileStatus"
+        }
+      }
+    },
+    "v1beta1.DedicatedAIClusterProfileList": {
+      "description": "DedicatedAIClusterProfileList contains a list of DedicatedAIClusterProfile",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.DedicatedAIClusterProfile"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.DedicatedAIClusterProfileSpec": {
+      "description": "DedicatedAIClusterProfileSpec defines the desired state of DedicatedAIClusterProfile",
+      "type": "object",
+      "properties": {
+        "affinity": {
+          "description": "The GPU shape affinity of DAC, get from spec.type + spec.shape",
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "count": {
+          "description": "Count is the number of units in the DAC",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "disabled": {
+          "description": "Set to true to disable use of this profile.",
+          "type": "boolean"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector specifies node selectors for scheduling the resources on specific nodes.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "priorityClassName": {
+          "description": "PriorityClassName is the priority class assigned to workloads in this Dedicated AI Cluster.",
+          "type": "string"
+        },
+        "resources": {
+          "description": "The resource requirements of the DAC, get from spec.type + spec.shape",
+          "default": {},
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "tolerations": {
+          "description": "Tolerations specifies the tolerations for scheduling the resources on tainted nodes.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Toleration"
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.DedicatedAIClusterProfileStatus": {
+      "description": "DedicatedAIClusterProfileStatus defines the observed state of DedicatedAIClusterProfile",
+      "type": "object"
+    },
     "v1beta1.DedicatedAIClusterSpec": {
       "description": "DedicatedAIClusterSpec defines the desired state of DedicatedAICluster",
       "type": "object",
@@ -720,9 +830,12 @@
           "description": "PriorityClassName is the priority class assigned to workloads in this Dedicated AI Cluster.",
           "type": "string"
         },
+        "profile": {
+          "description": "DedicatedAIClusterProfileName is the name of the DedicatedAIClusterProfile to use for this DedicatedAICluster.",
+          "type": "string"
+        },
         "resources": {
           "description": "The resource requirements of the DAC, get from spec.type + spec.shape",
-          "default": {},
           "$ref": "#/definitions/v1.ResourceRequirements"
         },
         "tolerations": {
@@ -731,7 +844,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Toleration"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -755,7 +869,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Condition"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "dacLifecycleState": {
           "description": "DacLifecycleState indicates the current phase of the Dedicated AI Cluster (e.g., \"active\", \"creating\", \"Failed\" etc.).",
@@ -772,34 +887,6 @@
       "properties": {
         "defaultDeploymentMode": {
           "type": "string"
-        }
-      }
-    },
-    "v1beta1.ExplainerConfig": {
-      "type": "object",
-      "required": [
-        "image",
-        "defaultImageVersion"
-      ],
-      "properties": {
-        "defaultImageVersion": {
-          "description": "default explainer docker image version",
-          "type": "string",
-          "default": ""
-        },
-        "image": {
-          "description": "explainer docker image name",
-          "type": "string",
-          "default": ""
-        }
-      }
-    },
-    "v1beta1.ExplainersConfig": {
-      "type": "object",
-      "properties": {
-        "art": {
-          "default": {},
-          "$ref": "#/definitions/v1beta1.ExplainerConfig"
         }
       }
     },
@@ -1383,15 +1470,15 @@
         "transitionStatus"
       ],
       "properties": {
-        "copies": {
-          "description": "Model copy information of the predictor's model.",
-          "$ref": "#/definitions/v1beta1.ModelCopies"
-        },
         "lastFailureInfo": {
           "description": "Details of last failure, when load of target model is failed or blocked.",
           "$ref": "#/definitions/v1beta1.FailureInfo"
         },
-        "states": {
+        "modelCopies": {
+          "description": "Model copy information of the predictor's model.",
+          "$ref": "#/definitions/v1beta1.ModelCopies"
+        },
+        "modelRevisionStates": {
           "description": "State information of the predictor's model.",
           "$ref": "#/definitions/v1beta1.ModelRevisionStates"
         },
@@ -2201,7 +2288,7 @@
           "type": "integer",
           "format": "int64"
         },
-        "timeout": {
+        "timeoutSeconds": {
           "description": "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
           "type": "integer",
           "format": "int64"
@@ -2459,7 +2546,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1beta1.SupportedModelFormat"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "tolerations": {
           "description": "If specified, the pod's tolerations.",

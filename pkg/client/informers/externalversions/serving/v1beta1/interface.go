@@ -14,6 +14,10 @@ type Interface interface {
 	ClusterBaseModels() ClusterBaseModelInformer
 	// ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
 	ClusterServingRuntimes() ClusterServingRuntimeInformer
+	// DedicatedAIClusters returns a DedicatedAIClusterInformer.
+	DedicatedAIClusters() DedicatedAIClusterInformer
+	// DedicatedAIClusterProfiles returns a DedicatedAIClusterProfileInformer.
+	DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer
 	// FineTunedWeights returns a FineTunedWeightInformer.
 	FineTunedWeights() FineTunedWeightInformer
 	// InferenceServices returns a InferenceServiceInformer.
@@ -46,6 +50,16 @@ func (v *version) ClusterBaseModels() ClusterBaseModelInformer {
 // ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
 func (v *version) ClusterServingRuntimes() ClusterServingRuntimeInformer {
 	return &clusterServingRuntimeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// DedicatedAIClusters returns a DedicatedAIClusterInformer.
+func (v *version) DedicatedAIClusters() DedicatedAIClusterInformer {
+	return &dedicatedAIClusterInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// DedicatedAIClusterProfiles returns a DedicatedAIClusterProfileInformer.
+func (v *version) DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer {
+	return &dedicatedAIClusterProfileInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // FineTunedWeights returns a FineTunedWeightInformer.

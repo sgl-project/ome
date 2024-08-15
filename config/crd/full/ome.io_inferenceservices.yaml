@@ -2627,7 +2627,7 @@ spec:
                     terminationGracePeriodSeconds:
                       format: int64
                       type: integer
-                    timeout:
+                    timeoutSeconds:
                       format: int64
                       type: integer
                     tolerations:
@@ -3483,7 +3483,7 @@ spec:
                         type: string
                       previousRolledoutRevision:
                         type: string
-                      restUrl:
+                      restURL:
                         type: string
                       traffic:
                         items:
@@ -3529,16 +3529,6 @@ spec:
                   type: array
                 modelStatus:
                   properties:
-                    copies:
-                      properties:
-                        failedCopies:
-                          default: 0
-                          type: integer
-                        totalCopies:
-                          type: integer
-                      required:
-                        - failedCopies
-                      type: object
                     lastFailureInfo:
                       properties:
                         exitCode:
@@ -3563,7 +3553,17 @@ spec:
                           format: date-time
                           type: string
                       type: object
-                    states:
+                    modelCopies:
+                      properties:
+                        failedCopies:
+                          default: 0
+                          type: integer
+                        totalCopies:
+                          type: integer
+                      required:
+                        - failedCopies
+                      type: object
+                    modelRevisionStates:
                       properties:
                         activeModelState:
                           default: Pending

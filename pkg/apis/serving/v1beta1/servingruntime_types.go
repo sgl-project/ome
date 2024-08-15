@@ -96,6 +96,7 @@ type ServingRuntimePodSpec struct {
 // +k8s:openapi-gen=true
 type ServingRuntimeSpec struct {
 	// Model formats and version supported by this runtime
+	// +listType=atomic
 	SupportedModelFormats []SupportedModelFormat `json:"supportedModelFormats,omitempty"`
 
 	// Set to true to disable use of this runtime

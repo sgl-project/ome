@@ -15,6 +15,8 @@ type OmeV1beta1Interface interface {
 	BaseModelsGetter
 	ClusterBaseModelsGetter
 	ClusterServingRuntimesGetter
+	DedicatedAIClustersGetter
+	DedicatedAIClusterProfilesGetter
 	FineTunedWeightsGetter
 	InferenceServicesGetter
 	ServingRuntimesGetter
@@ -35,6 +37,14 @@ func (c *OmeV1beta1Client) ClusterBaseModels() ClusterBaseModelInterface {
 
 func (c *OmeV1beta1Client) ClusterServingRuntimes() ClusterServingRuntimeInterface {
 	return newClusterServingRuntimes(c)
+}
+
+func (c *OmeV1beta1Client) DedicatedAIClusters() DedicatedAIClusterInterface {
+	return newDedicatedAIClusters(c)
+}
+
+func (c *OmeV1beta1Client) DedicatedAIClusterProfiles() DedicatedAIClusterProfileInterface {
+	return newDedicatedAIClusterProfiles(c)
 }
 
 func (c *OmeV1beta1Client) FineTunedWeights(namespace string) FineTunedWeightInterface {

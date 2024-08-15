@@ -72,7 +72,7 @@ type ComponentExtensionSpec struct {
 	ContainerConcurrency *int64 `json:"containerConcurrency,omitempty"`
 	// TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.
 	// +optional
-	TimeoutSeconds *int64 `json:"timeout,omitempty"`
+	TimeoutSeconds *int64 `json:"timeoutSeconds,omitempty"`
 	// CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision
 	// +optional
 	CanaryTrafficPercent *int64 `json:"canaryTrafficPercent,omitempty"`

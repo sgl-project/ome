@@ -1210,6 +1210,7 @@ spec:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
                 tolerations:
                   items:
                     properties:

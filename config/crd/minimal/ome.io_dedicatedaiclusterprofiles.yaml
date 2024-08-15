@@ -3,14 +3,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.15.0
-  name: dedicatedaiclusters.ome.io
+  name: dedicatedaiclusterprofiles.ome.io
 spec:
   group: ome.io
   names:
-    kind: DedicatedAICluster
-    listKind: DedicatedAIClusterList
-    plural: dedicatedaiclusters
-    singular: dedicatedaicluster
+    kind: DedicatedAIClusterProfile
+    listKind: DedicatedAIClusterProfileList
+    plural: dedicatedaiclusterprofiles
+    singular: dedicatedaiclusterprofile
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -41,8 +41,10 @@ spec:
             type: object
             x-kubernetes-map-type: atomic
             x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+        - status
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
+    subresources: {}

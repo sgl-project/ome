@@ -14,55 +14,57 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BaseModel":                 schema_pkg_apis_serving_v1beta1_BaseModel(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BaseModelList":             schema_pkg_apis_serving_v1beta1_BaseModelList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BaseModelSpec":             schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BuiltInAdapter":            schema_pkg_apis_serving_v1beta1_BuiltInAdapter(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterBaseModel":          schema_pkg_apis_serving_v1beta1_ClusterBaseModel(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterBaseModelList":      schema_pkg_apis_serving_v1beta1_ClusterBaseModelList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterServingRuntime":     schema_pkg_apis_serving_v1beta1_ClusterServingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterServingRuntimeList": schema_pkg_apis_serving_v1beta1_ClusterServingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentExtensionSpec":    schema_pkg_apis_serving_v1beta1_ComponentExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentStatusSpec":       schema_pkg_apis_serving_v1beta1_ComponentStatusSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.CustomPredictor":           schema_pkg_apis_serving_v1beta1_CustomPredictor(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAICluster":        schema_pkg_apis_serving_v1beta1_DedicatedAICluster(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterList":    schema_pkg_apis_serving_v1beta1_DedicatedAIClusterList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterSpec":    schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterStatus":  schema_pkg_apis_serving_v1beta1_DedicatedAIClusterStatus(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DeployConfig":              schema_pkg_apis_serving_v1beta1_DeployConfig(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainerConfig":           schema_pkg_apis_serving_v1beta1_ExplainerConfig(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainersConfig":          schema_pkg_apis_serving_v1beta1_ExplainersConfig(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FailureInfo":               schema_pkg_apis_serving_v1beta1_FailureInfo(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FineTunedWeight":           schema_pkg_apis_serving_v1beta1_FineTunedWeight(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FineTunedWeightList":       schema_pkg_apis_serving_v1beta1_FineTunedWeightList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FineTunedWeightSpec":       schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceService":          schema_pkg_apis_serving_v1beta1_InferenceService(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServiceList":      schema_pkg_apis_serving_v1beta1_InferenceServiceList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServiceSpec":      schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServiceStatus":    schema_pkg_apis_serving_v1beta1_InferenceServiceStatus(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServicesConfig":   schema_pkg_apis_serving_v1beta1_InferenceServicesConfig(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.IngressConfig":             schema_pkg_apis_serving_v1beta1_IngressConfig(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.LoggerSpec":                schema_pkg_apis_serving_v1beta1_LoggerSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelCopies":               schema_pkg_apis_serving_v1beta1_ModelCopies(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelExtensionSpec":        schema_pkg_apis_serving_v1beta1_ModelExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelFormat":               schema_pkg_apis_serving_v1beta1_ModelFormat(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelRevisionStates":       schema_pkg_apis_serving_v1beta1_ModelRevisionStates(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSpec":                 schema_pkg_apis_serving_v1beta1_ModelSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatus":               schema_pkg_apis_serving_v1beta1_ModelStatus(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatusSpec":           schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig":                 schema_pkg_apis_serving_v1beta1_OCIConfig(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ObjectReference":           schema_pkg_apis_serving_v1beta1_ObjectReference(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PodSpec":                   schema_pkg_apis_serving_v1beta1_PodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PredictorExtensionSpec":    schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PredictorSpec":             schema_pkg_apis_serving_v1beta1_PredictorSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntime":            schema_pkg_apis_serving_v1beta1_ServingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimeList":        schema_pkg_apis_serving_v1beta1_ServingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimePodSpec":     schema_pkg_apis_serving_v1beta1_ServingRuntimePodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimeSpec":        schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimeStatus":      schema_pkg_apis_serving_v1beta1_ServingRuntimeStatus(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.StorageSpec":               schema_pkg_apis_serving_v1beta1_StorageSpec(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.SupportedModelFormat":      schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref),
-		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.SupportedRuntime":          schema_pkg_apis_serving_v1beta1_SupportedRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BaseModel":                       schema_pkg_apis_serving_v1beta1_BaseModel(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BaseModelList":                   schema_pkg_apis_serving_v1beta1_BaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BaseModelSpec":                   schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BuiltInAdapter":                  schema_pkg_apis_serving_v1beta1_BuiltInAdapter(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterBaseModel":                schema_pkg_apis_serving_v1beta1_ClusterBaseModel(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterBaseModelList":            schema_pkg_apis_serving_v1beta1_ClusterBaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterServingRuntime":           schema_pkg_apis_serving_v1beta1_ClusterServingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ClusterServingRuntimeList":       schema_pkg_apis_serving_v1beta1_ClusterServingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentExtensionSpec":          schema_pkg_apis_serving_v1beta1_ComponentExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentStatusSpec":             schema_pkg_apis_serving_v1beta1_ComponentStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.CustomPredictor":                 schema_pkg_apis_serving_v1beta1_CustomPredictor(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAICluster":              schema_pkg_apis_serving_v1beta1_DedicatedAICluster(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterList":          schema_pkg_apis_serving_v1beta1_DedicatedAIClusterList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfile":       schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfile(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileList":   schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfileList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileSpec":   schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfileSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileStatus": schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfileStatus(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterSpec":          schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterStatus":        schema_pkg_apis_serving_v1beta1_DedicatedAIClusterStatus(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DeployConfig":                    schema_pkg_apis_serving_v1beta1_DeployConfig(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FailureInfo":                     schema_pkg_apis_serving_v1beta1_FailureInfo(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FineTunedWeight":                 schema_pkg_apis_serving_v1beta1_FineTunedWeight(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FineTunedWeightList":             schema_pkg_apis_serving_v1beta1_FineTunedWeightList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FineTunedWeightSpec":             schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceService":                schema_pkg_apis_serving_v1beta1_InferenceService(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServiceList":            schema_pkg_apis_serving_v1beta1_InferenceServiceList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServiceSpec":            schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServiceStatus":          schema_pkg_apis_serving_v1beta1_InferenceServiceStatus(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.InferenceServicesConfig":         schema_pkg_apis_serving_v1beta1_InferenceServicesConfig(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.IngressConfig":                   schema_pkg_apis_serving_v1beta1_IngressConfig(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.LoggerSpec":                      schema_pkg_apis_serving_v1beta1_LoggerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelCopies":                     schema_pkg_apis_serving_v1beta1_ModelCopies(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelExtensionSpec":              schema_pkg_apis_serving_v1beta1_ModelExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelFormat":                     schema_pkg_apis_serving_v1beta1_ModelFormat(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelRevisionStates":             schema_pkg_apis_serving_v1beta1_ModelRevisionStates(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSpec":                       schema_pkg_apis_serving_v1beta1_ModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatus":                     schema_pkg_apis_serving_v1beta1_ModelStatus(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatusSpec":                 schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig":                       schema_pkg_apis_serving_v1beta1_OCIConfig(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ObjectReference":                 schema_pkg_apis_serving_v1beta1_ObjectReference(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PodSpec":                         schema_pkg_apis_serving_v1beta1_PodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PredictorExtensionSpec":          schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PredictorSpec":                   schema_pkg_apis_serving_v1beta1_PredictorSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntime":                  schema_pkg_apis_serving_v1beta1_ServingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimeList":              schema_pkg_apis_serving_v1beta1_ServingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimePodSpec":           schema_pkg_apis_serving_v1beta1_ServingRuntimePodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimeSpec":              schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ServingRuntimeStatus":            schema_pkg_apis_serving_v1beta1_ServingRuntimeStatus(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.StorageSpec":                     schema_pkg_apis_serving_v1beta1_StorageSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.SupportedModelFormat":            schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.SupportedRuntime":                schema_pkg_apis_serving_v1beta1_SupportedRuntime(ref),
 	}
 }
 
@@ -197,6 +199,11 @@ func schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref common.ReferenceCallback)
 						},
 					},
 					"modelCapabilities": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelCapabilities of the model, e.g., \"TEXT_GENERATION\", \"TEXT_SUMMARIZATION\", \"TEXT_EMBEDDINGS\"",
 							Type:        []string{"array"},
@@ -264,6 +271,11 @@ func schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref common.ReferenceCallback)
 						},
 					},
 					"servingMode": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Type: []string{"array"},
 							Items: &spec.SchemaOrArray{
@@ -598,7 +610,7 @@ func schema_pkg_apis_serving_v1beta1_ComponentExtensionSpec(ref common.Reference
 							Format:      "int64",
 						},
 					},
-					"timeout": {
+					"timeoutSeconds": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
 							Type:        []string{"integer"},
@@ -719,7 +731,7 @@ func schema_pkg_apis_serving_v1beta1_ComponentStatusSpec(ref common.ReferenceCal
 							Ref:         ref("knative.dev/pkg/apis.URL"),
 						},
 					},
-					"restUrl": {
+					"restURL": {
 						SchemaProps: spec.SchemaProps{
 							Description: "REST endpoint of the component if available.",
 							Ref:         ref("knative.dev/pkg/apis.URL"),
@@ -1285,16 +1297,120 @@ func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterList(ref common.Reference
 	}
 }
 
-func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfile(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "DedicatedAIClusterSpec defines the desired state of DedicatedAICluster",
+				Description: "DedicatedAIClusterProfile is the Schema for the dedicatedaiclusterprofiles API",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileStatus"),
+						},
+					},
+				},
+				Required: []string{"spec", "status"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileSpec", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfileStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfileList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterProfileList contains a list of DedicatedAIClusterProfile",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfile"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfile", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfileSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterProfileSpec defines the desired state of DedicatedAIClusterProfile",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"disabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Set to true to disable use of this profile.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"count": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Count is the number of resources in the DAC",
+							Description: "Count is the number of units in the DAC",
 							Default:     0,
 							Type:        []string{"integer"},
 							Format:      "int32",
@@ -1314,6 +1430,106 @@ func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref common.Reference
 						},
 					},
 					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Tolerations specifies the tolerations for scheduling the resources on tainted nodes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"nodeSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector specifies node selectors for scheduling the resources on specific nodes.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"priorityClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PriorityClassName is the priority class assigned to workloads in this Dedicated AI Cluster.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfileStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterProfileStatus defines the observed state of DedicatedAIClusterProfile",
+				Type:        []string{"object"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterSpec defines the desired state of DedicatedAICluster",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"profile": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DedicatedAIClusterProfileName is the name of the DedicatedAIClusterProfile to use for this DedicatedAICluster.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"count": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Count is the number of resources in the DAC",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The resource requirements of the DAC, get from spec.type + spec.shape",
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The GPU shape affinity of DAC, get from spec.type + spec.shape",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Tolerations specifies the tolerations for scheduling the resources on tainted nodes.",
 							Type:        []string{"array"},
@@ -1387,6 +1603,11 @@ func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterStatus(ref common.Referen
 						},
 					},
 					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Conditions reflects the current state of the cluster.",
 							Type:        []string{"array"},
@@ -1430,55 +1651,6 @@ func schema_pkg_apis_serving_v1beta1_DeployConfig(ref common.ReferenceCallback) 
 				},
 			},
 		},
-	}
-}
-
-func schema_pkg_apis_serving_v1beta1_ExplainerConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"image": {
-						SchemaProps: spec.SchemaProps{
-							Description: "explainer docker image name",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"defaultImageVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "default explainer docker image version",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-				Required: []string{"image", "defaultImageVersion"},
-			},
-		},
-	}
-}
-
-func schema_pkg_apis_serving_v1beta1_ExplainersConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"art": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainerConfig"),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainerConfig"},
 	}
 }
 
@@ -2540,7 +2712,7 @@ func schema_pkg_apis_serving_v1beta1_ModelStatus(ref common.ReferenceCallback) c
 							Format:      "",
 						},
 					},
-					"states": {
+					"modelRevisionStates": {
 						SchemaProps: spec.SchemaProps{
 							Description: "State information of the predictor's model.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelRevisionStates"),
@@ -2552,7 +2724,7 @@ func schema_pkg_apis_serving_v1beta1_ModelStatus(ref common.ReferenceCallback) c
 							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.FailureInfo"),
 						},
 					},
-					"copies": {
+					"modelCopies": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Model copy information of the predictor's model.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelCopies"),
@@ -3976,7 +4148,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorSpec(ref common.ReferenceCallback)
 							Format:      "int64",
 						},
 					},
-					"timeout": {
+					"timeoutSeconds": {
 						SchemaProps: spec.SchemaProps{
 							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
 							Type:        []string{"integer"},
@@ -4289,6 +4461,11 @@ func schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref common.ReferenceCall
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"supportedModelFormats": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Model formats and version supported by this runtime",
 							Type:        []string{"array"},

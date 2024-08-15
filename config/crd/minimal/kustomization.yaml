@@ -5,4 +5,7 @@ resources:
   - ome.io_inferenceservices.yaml
   - ome.io_clusterservingruntimes.yaml
   - ome.io_servingruntimes.yaml
-  - ome.io_clusterstoragecontainers.yaml
+  - ome.io_basemodels.yaml
+  - ome.io_clusterbasemodels.yaml
+  - ome.io_dedicatedaiclusters.yaml
+  - ome.io_dedicatedaiclusterprofiles.yaml

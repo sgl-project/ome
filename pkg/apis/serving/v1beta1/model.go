@@ -54,6 +54,7 @@ type BaseModelSpec struct {
 	ModelParameterSize *string `json:"modelParameterSize,omitempty"`
 
 	// ModelCapabilities of the model, e.g., "TEXT_GENERATION", "TEXT_SUMMARIZATION", "TEXT_EMBEDDINGS"
+	// +listType=atomic
 	// +optional
 	ModelCapabilities []string `json:"modelCapabilities,omitempty"`
 
@@ -73,6 +74,7 @@ type BaseModelSpec struct {
 	ModelExtension ModelExtensionSpec `json:",inline"`
 
 	// +optional Serving mode of the model, e.g., ["On-demand", "Dedicated"]
+	// +listType=atomic
 	ServingMode []string `json:"servingMode,omitempty"`
 
 	// +optional

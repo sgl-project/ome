@@ -24,6 +24,14 @@ func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeI
 	return &FakeClusterServingRuntimes{c}
 }
 
+func (c *FakeOmeV1beta1) DedicatedAIClusters() v1beta1.DedicatedAIClusterInterface {
+	return &FakeDedicatedAIClusters{c}
+}
+
+func (c *FakeOmeV1beta1) DedicatedAIClusterProfiles() v1beta1.DedicatedAIClusterProfileInterface {
+	return &FakeDedicatedAIClusterProfiles{c}
+}
+
 func (c *FakeOmeV1beta1) FineTunedWeights(namespace string) v1beta1.FineTunedWeightInterface {
 	return &FakeFineTunedWeights{c, namespace}
 }

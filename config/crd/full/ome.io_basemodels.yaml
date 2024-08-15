@@ -81,6 +81,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               modelConfiguration:
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
@@ -101,6 +102,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               storage:
                 properties:
                   key:

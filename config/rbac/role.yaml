@@ -68,9 +68,22 @@ rules:
   resources:
   - namespaces
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces/finalizers
+  verbs:
+  - create
+  - delete
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:
@@ -249,6 +262,40 @@ rules:
 - apiGroups:
   - ome.io
   resources:
+  - dedicatedaiclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ome.io
+  resources:
+  - dedicatedaiclusters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ome.io
+  resources:
+  - dedicatedaiclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ome.io
+  resources:
+  - inferenceservices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ome.io
+  resources:
   - inferenceservices
   - inferenceservices/finalizers
   verbs:
@@ -316,6 +363,32 @@ rules:
   - ray.io
   resources:
   - rayclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - scheduling.volcano.sh
+  resources:
+  - queues
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduling.volcano.sh
+  resources:
+  - queues/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - scheduling.volcano.sh
+  resources:
+  - queues/status
   verbs:
   - get
   - patch

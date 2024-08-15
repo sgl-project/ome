@@ -5,6 +5,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// DacLifecycleState is a string enumeration type for the state of the Dedicated AI Cluster.
+// +kubebuilder:validation:Enum=ACTIVE;CREATING;DELETING;FAILED;UPDATING
 type DacLifecycleState string
 
 // LifecycleState Enum
@@ -17,20 +19,27 @@ const (
 )
 
 // DedicatedAIClusterSpec defines the desired state of DedicatedAICluster
+// +k8s:openapi-gen=true
 type DedicatedAIClusterSpec struct {
+
+	// DedicatedAIClusterProfileName is the name of the DedicatedAIClusterProfile to use for this DedicatedAICluster.
+	// +optional
+	Profile string `json:"profile,omitempty"`
+
 	// Count is the number of resources in the DAC
 	// +optional
 	Count int `json:"count"`
 
 	// The resource requirements of the DAC, get from spec.type + spec.shape
-	// +required
-	Resources corev1.ResourceRequirements `json:"resources,omitempty" protobuf:"bytes,8,opt,name=resources"`
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty" protobuf:"bytes,8,opt,name=resources"`
 
 	// The GPU shape affinity of DAC, get from spec.type + spec.shape
-	// +required
+	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
 	// Tolerations specifies the tolerations for scheduling the resources on tainted nodes.
+	// +listType=atomic
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
@@ -44,6 +53,7 @@ type DedicatedAIClusterSpec struct {
 }
 
 // DedicatedAIClusterStatus defines the observed state of DedicatedAICluster
+// +k8s:openapi-gen=true
 type DedicatedAIClusterStatus struct {
 	//The available number of GPU for allocation
 	AvailableGpu int `json:"availableGpu,omitempty"`
@@ -55,16 +65,24 @@ type DedicatedAIClusterStatus struct {
 	DacLifecycleState DacLifecycleState `json:"dacLifecycleState,omitempty"`
 
 	// Conditions reflects the current state of the cluster.
+	// +listType=atomic
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// A message describing the current state in more detail that can provide actionable information.
 	LifecycleDetail string `json:"lifecycleDetail,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-
 // DedicatedAICluster is the Schema for the dedicatedaiclusters API
+// +kubebuilder:subresource:status
+// +k8s:openapi-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
+// +genclient:nonNamespaced
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
+// +kubebuilder:printcolumn:name="Count",type="integer",JSONPath=".spec.count"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type DedicatedAICluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -73,11 +91,17 @@ type DedicatedAICluster struct {
 	Status DedicatedAIClusterStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-
 // DedicatedAIClusterList contains a list of DedicatedAICluster
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type DedicatedAIClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []DedicatedAICluster `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&DedicatedAICluster{}, &DedicatedAIClusterList{})
+	SchemeBuilder.Register(&DedicatedAIClusterProfile{}, &DedicatedAIClusterProfileList{})
 }

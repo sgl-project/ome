@@ -365,6 +365,7 @@ const (
 	IstioVirtualServiceKind = "VirtualService"
 	KnativeServiceKind      = "Service"
 	RayClusterKind          = "RayCluster"
+	VolcanoQueueKind        = "Queue"
 )
 
 // Model Agent & Model Controller

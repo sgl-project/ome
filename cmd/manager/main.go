@@ -3,7 +3,8 @@ package main
 import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	v1beta1controller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice"
+	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac"
+	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
@@ -28,6 +29,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 var (
@@ -146,6 +148,19 @@ func main() {
 		}
 	}
 
+	volcanoFound, volcanoCheckErr := utils.IsCrdAvailable(cfg, volcano.SchemeGroupVersion.String(), constants.VolcanoQueueKind)
+	if volcanoCheckErr != nil {
+		setupLog.Error(volcanoCheckErr, "error when checking if Volcano Queue kind is available")
+		os.Exit(1)
+	}
+	if volcanoFound {
+		setupLog.Info("Setting up Volcano scheme")
+		if err := volcano.AddToScheme(mgr.GetScheme()); err != nil {
+			setupLog.Error(err, "unable to add Volcano APIs to scheme")
+			os.Exit(1)
+		}
+	}
+
 	ksvcFound, ksvcCheckErr := utils.IsCrdAvailable(cfg, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if ksvcCheckErr != nil {
 		setupLog.Error(ksvcCheckErr, "error when checking if Knative Service kind is available")
@@ -182,8 +197,9 @@ func main() {
 	// Setup all Controllers
 	setupLog.Info("Setting up v1beta1 controller")
 	eventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up InferenceService controller")
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
-	if err = (&v1beta1controller.InferenceServiceReconciler{
+	if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
 		Client:    mgr.GetClient(),
 		Clientset: clientSet,
 		Log:       ctrl.Log.WithName("v1beta1Controllers").WithName("InferenceService"),
@@ -192,6 +208,19 @@ func main() {
 			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
 		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "InferenceService")
+		os.Exit(1)
+	}
+
+	dedicatedAIClusterEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up DedicatedAICluster controller")
+	dedicatedAIClusterEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1dacccontroller.DedicatedAIClusterReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("v1beta1Controllers").WithName("DedicatedAICluster"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "DedicatedAICluster")
 		os.Exit(1)
 	}
 

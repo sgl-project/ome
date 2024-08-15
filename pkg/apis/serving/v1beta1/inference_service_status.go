@@ -59,7 +59,7 @@ type ComponentStatusSpec struct {
 	URL *apis.URL `json:"url,omitempty"`
 	// REST endpoint of the component if available.
 	// +optional
-	RestURL *apis.URL `json:"restUrl,omitempty"`
+	RestURL *apis.URL `json:"restURL,omitempty"`
 	// Addressable endpoint for the InferenceService
 	// +optional
 	Address *duckv1.Addressable `json:"address,omitempty"`
@@ -96,7 +96,7 @@ type ModelStatus struct {
 
 	// State information of the predictor's model.
 	// +optional
-	ModelRevisionStates *ModelRevisionStates `json:"states,omitempty"`
+	ModelRevisionStates *ModelRevisionStates `json:"modelRevisionStates,omitempty"`
 
 	// Details of last failure, when load of target model is failed or blocked.
 	// +optional
@@ -104,7 +104,7 @@ type ModelStatus struct {
 
 	// Model copy information of the predictor's model.
 	// +optional
-	ModelCopies *ModelCopies `json:"copies,omitempty"`
+	ModelCopies *ModelCopies `json:"modelCopies,omitempty"`
 }
 
 type ModelRevisionStates struct {

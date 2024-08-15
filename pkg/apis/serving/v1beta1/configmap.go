@@ -25,19 +25,6 @@ const (
 )
 
 // +kubebuilder:object:generate=false
-type ExplainerConfig struct {
-	// explainer docker image name
-	ContainerImage string `json:"image"`
-	// default explainer docker image version
-	DefaultImageVersion string `json:"defaultImageVersion"`
-}
-
-// +kubebuilder:object:generate=false
-type ExplainersConfig struct {
-	ARTExplainer ExplainerConfig `json:"art,omitempty"`
-}
-
-// +kubebuilder:object:generate=false
 type InferenceServicesConfig struct {
 	// OCIConfig contains all OCI Configuration
 	OCIConfig OCIConfig `json:"ociEtc"`

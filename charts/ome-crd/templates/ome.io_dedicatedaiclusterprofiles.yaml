@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.15.0
-  name: dedicatedaiclusters.ome.io
+  name: dedicatedaiclusterprofiles.ome.io
 spec:
   group: ome.io
   names:
-    kind: DedicatedAICluster
-    listKind: DedicatedAIClusterList
-    plural: dedicatedaiclusters
-    singular: dedicatedaicluster
+    kind: DedicatedAIClusterProfile
+    listKind: DedicatedAIClusterProfileList
+    plural: dedicatedaiclusterprofiles
+    singular: dedicatedaiclusterprofile
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -443,13 +443,13 @@ spec:
                 type: object
               count:
                 type: integer
+              disabled:
+                type: boolean
               nodeSelector:
                 additionalProperties:
                   type: string
                 type: object
               priorityClassName:
-                type: string
-              profile:
                 type: string
               resources:
                 properties:
@@ -501,61 +501,11 @@ spec:
                 x-kubernetes-list-type: atomic
             type: object
           status:
-            properties:
-              allocatedGpu:
-                type: integer
-              availableGpu:
-                type: integer
-              conditions:
-                items:
-                  properties:
-                    lastTransitionTime:
-                      format: date-time
-                      type: string
-                    message:
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
-                x-kubernetes-list-type: atomic
-              dacLifecycleState:
-                enum:
-                - ACTIVE
-                - CREATING
-                - DELETING
-                - FAILED
-                - UPDATING
-                type: string
-              lifecycleDetail:
-                type: string
             type: object
+        required:
+        - spec
+        - status
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
+    subresources: {}

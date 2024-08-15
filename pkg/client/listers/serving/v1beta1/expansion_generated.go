@@ -18,6 +18,14 @@ type ClusterBaseModelListerExpansion interface{}
 // ClusterServingRuntimeLister.
 type ClusterServingRuntimeListerExpansion interface{}
 
+// DedicatedAIClusterListerExpansion allows custom methods to be added to
+// DedicatedAIClusterLister.
+type DedicatedAIClusterListerExpansion interface{}
+
+// DedicatedAIClusterProfileListerExpansion allows custom methods to be added to
+// DedicatedAIClusterProfileLister.
+type DedicatedAIClusterProfileListerExpansion interface{}
+
 // FineTunedWeightListerExpansion allows custom methods to be added to
 // FineTunedWeightLister.
 type FineTunedWeightListerExpansion interface{}
