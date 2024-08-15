@@ -8,14 +8,14 @@ metadata:
   annotations:
     models.ome.io/runtime: "vllm-serving-runtime-small"
     models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "true"
-    models.ome.io/internal: "false"
+    models.ome.io/experimental: {{ .Values.phi-3-mini-128k-instruct.isExperimental }}
+    models.ome.io/internal: {{ .Values.phi-3-mini-128k-instruct.isInternal }}
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
   displayName: microsoft.phi-3-mini-128k-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/model-store/o/microsoft/phi-3-mini-128k-instruct"
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ .Values.phi-3-mini-128k-instruct.osBucket }}/o/{{ .Values.phi-3-mini-128k-instruct.vendor }}/{{ .Values.phi-3-mini-128k-instruct.osPrefixOverride }}"
     storageUri: /mnt/data/models/microsoft/phi-3-mini-128k-instruct
   vendor: microsoft
   version: "1.0.0"

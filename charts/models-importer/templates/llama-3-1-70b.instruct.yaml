@@ -8,14 +8,14 @@ metadata:
   annotations:
     models.ome.io/runtime: "vllm-serving-runtime-medium"
     models.ome.io/category: "LARGE"
-    models.ome.io/experimental: "false"
-    models.ome.io/internal: "false"
+    models.ome.io/experimental: {{ .Values.llama-3-1-70b-instruct.isExperimental }}
+    models.ome.io/internal: {{ .Values.llama-3-1-70b-instruct.isInternal }}
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
   displayName: meta.llama-3.1-70b-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/model-store/o/meta/llama-3-1-70b-instruct"
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ .Values.llama-3-1-70b-instruct.osBucket }}/o/{{ .Values.llama-3-1-70b-instruct.vendor }}/{{ .Values.llama-3-1-70b-instruct.osPrefixOverride }}"
     storageUri: /mnt/data/models/meta/llama-3-1-70b-instruct
   vendor: meta
   version: "1.0.0"
