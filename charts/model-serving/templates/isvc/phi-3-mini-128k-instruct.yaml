@@ -1,0 +1,15 @@
+{{- if index .Values "phi-3-mini-128k-instruct" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: phi-3-mini-128k-instruct
+  namespace: phi-3-mini-128k-instruct
+spec:
+  predictor:
+    model:
+      runtime: vllm-serving-runtime-medium
+      baseModel: phi-3-mini-128k-instruct
+      protocolVersion: openAI
+    minReplicas: {{ index .Values "phi-3-mini-128k-instruct" "minReplicas" }}
+    maxReplicas: {{ index .Values "phi-3-mini-128k-instruct" "maxReplicas" }}
+{{- end }}
