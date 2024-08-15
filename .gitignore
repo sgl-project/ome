@@ -17,7 +17,7 @@ venv/
 *.out
 
 # Kubernetes Generated files - skip generated files, except for vendored files
-
+vendor
 !vendor/**/zz_generated.*
 
 # Mac file system

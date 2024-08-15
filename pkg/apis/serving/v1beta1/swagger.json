@@ -640,6 +640,133 @@
         }
       }
     },
+    "v1beta1.DedicatedAICluster": {
+      "description": "DedicatedAICluster is the Schema for the dedicatedaiclusters API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterStatus"
+        }
+      }
+    },
+    "v1beta1.DedicatedAIClusterList": {
+      "description": "DedicatedAIClusterList contains a list of DedicatedAICluster",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.DedicatedAICluster"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.DedicatedAIClusterSpec": {
+      "description": "DedicatedAIClusterSpec defines the desired state of DedicatedAICluster",
+      "type": "object",
+      "properties": {
+        "affinity": {
+          "description": "The GPU shape affinity of DAC, get from spec.type + spec.shape",
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "count": {
+          "description": "Count is the number of resources in the DAC",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "nodeSelector": {
+          "description": "NodeSelector specifies node selectors for scheduling the resources on specific nodes.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "priorityClassName": {
+          "description": "PriorityClassName is the priority class assigned to workloads in this Dedicated AI Cluster.",
+          "type": "string"
+        },
+        "resources": {
+          "description": "The resource requirements of the DAC, get from spec.type + spec.shape",
+          "default": {},
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "tolerations": {
+          "description": "Tolerations specifies the tolerations for scheduling the resources on tainted nodes.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Toleration"
+          }
+        }
+      }
+    },
+    "v1beta1.DedicatedAIClusterStatus": {
+      "description": "DedicatedAIClusterStatus defines the observed state of DedicatedAICluster",
+      "type": "object",
+      "properties": {
+        "allocatedGpu": {
+          "description": "The number of GPU already allocated",
+          "type": "integer",
+          "format": "int32"
+        },
+        "availableGpu": {
+          "description": "The available number of GPU for allocation",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "description": "Conditions reflects the current state of the cluster.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          }
+        },
+        "dacLifecycleState": {
+          "description": "DacLifecycleState indicates the current phase of the Dedicated AI Cluster (e.g., \"active\", \"creating\", \"Failed\" etc.).",
+          "type": "string"
+        },
+        "lifecycleDetail": {
+          "description": "A message describing the current state in more detail that can provide actionable information.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.DeployConfig": {
       "type": "object",
       "properties": {

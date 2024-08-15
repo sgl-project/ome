@@ -25,6 +25,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentExtensionSpec":    schema_pkg_apis_serving_v1beta1_ComponentExtensionSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentStatusSpec":       schema_pkg_apis_serving_v1beta1_ComponentStatusSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.CustomPredictor":           schema_pkg_apis_serving_v1beta1_CustomPredictor(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAICluster":        schema_pkg_apis_serving_v1beta1_DedicatedAICluster(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterList":    schema_pkg_apis_serving_v1beta1_DedicatedAIClusterList(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterSpec":    schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterStatus":  schema_pkg_apis_serving_v1beta1_DedicatedAIClusterStatus(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DeployConfig":              schema_pkg_apis_serving_v1beta1_DeployConfig(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainerConfig":           schema_pkg_apis_serving_v1beta1_ExplainerConfig(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ExplainersConfig":          schema_pkg_apis_serving_v1beta1_ExplainersConfig(ref),
@@ -1182,6 +1186,232 @@ func schema_pkg_apis_serving_v1beta1_CustomPredictor(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAICluster(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAICluster is the Schema for the dedicatedaiclusters API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterSpec", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterList contains a list of DedicatedAICluster",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAICluster"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAICluster", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterSpec defines the desired state of DedicatedAICluster",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"count": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Count is the number of resources in the DAC",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The resource requirements of the DAC, get from spec.type + spec.shape",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The GPU shape affinity of DAC, get from spec.type + spec.shape",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"tolerations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tolerations specifies the tolerations for scheduling the resources on tainted nodes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"nodeSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector specifies node selectors for scheduling the resources on specific nodes.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"priorityClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PriorityClassName is the priority class assigned to workloads in this Dedicated AI Cluster.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DedicatedAIClusterStatus defines the observed state of DedicatedAICluster",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"availableGpu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The available number of GPU for allocation",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"allocatedGpu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The number of GPU already allocated",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"dacLifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DacLifecycleState indicates the current phase of the Dedicated AI Cluster (e.g., \"active\", \"creating\", \"Failed\" etc.).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"conditions": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions reflects the current state of the cluster.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"lifecycleDetail": {
+						SchemaProps: spec.SchemaProps{
+							Description: "A message describing the current state in more detail that can provide actionable information.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }
 
