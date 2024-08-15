@@ -4,6 +4,8 @@ kind: MutatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: inferenceservice.ome.io
+  annotations:
+    cert-manager.io/inject-ca-from: ome/serving-cert
 webhooks:
   - clientConfig:
       caBundle: Cg==
