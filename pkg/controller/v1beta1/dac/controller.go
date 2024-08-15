@@ -11,6 +11,7 @@ import (
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -53,6 +54,29 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		r.Log.Error(err, "unable to get dedicatedAiCluster", "namespace", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
+
+	// Initialize mergedSpec with the DAC spec
+	mergedSpec := dac.Spec.DeepCopy()
+
+	// If a profile is specified, fetch the corresponding DedicatedAIClusterProfile
+	if dac.Spec.Profile != "" {
+		profile := &omev1beta1.DedicatedAIClusterProfile{}
+		profileNamespacedName := types.NamespacedName{Name: dac.Spec.Profile}
+
+		// Fetch the cluster-scoped DedicatedAIClusterProfile
+		if err := r.Get(ctx, profileNamespacedName, profile); err != nil {
+			if apierr.IsNotFound(err) {
+				r.Log.Error(err, "Profile not found", "profile", dac.Spec.Profile)
+				return ctrl.Result{}, err
+			}
+			r.Log.Error(err, "unable to get DedicatedAIClusterProfile", "profile", dac.Spec.Profile)
+			return ctrl.Result{}, err
+		}
+
+		// Merge the specs with DAC taking precedence
+		mergedSpec = mergeSpecs(&profile.Spec, mergedSpec)
+	}
+
 	// Reconcile Namespace
 	namespaceReconcile, err := nsreconciler.NewNamespaceReconciler(r.Client, r.Scheme, req.NamespacedName.Name)
 	if err != nil {
@@ -72,7 +96,7 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Set namespace controller at the first time
 	r.Log.Info("namespace", "namespace", namespace)
 
-	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, dac.Spec.Resources, dac.Spec.Affinity)
+	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -122,6 +146,49 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// mergeSpecs merges the profile spec with the DAC spec, giving priority to DAC fields.
+func mergeSpecs(profileSpec *omev1beta1.DedicatedAIClusterProfileSpec, dacSpec *omev1beta1.DedicatedAIClusterSpec) *omev1beta1.DedicatedAIClusterSpec {
+
+	// Merge Resources
+	if dacSpec.Resources == nil {
+		dacSpec.Resources = &profileSpec.Resources
+	} else {
+		if dacSpec.Resources.Requests == nil {
+			dacSpec.Resources.Requests = profileSpec.Resources.Requests
+		}
+		if dacSpec.Resources.Limits == nil {
+			dacSpec.Resources.Limits = profileSpec.Resources.Limits
+		}
+	}
+
+	// Merge Affinity
+	if dacSpec.Affinity == nil {
+		dacSpec.Affinity = profileSpec.Affinity
+	}
+
+	// Merge Tolerations
+	if dacSpec.Tolerations == nil {
+		dacSpec.Tolerations = profileSpec.Tolerations
+	}
+
+	// Merge NodeSelector
+	if dacSpec.NodeSelector == nil {
+		dacSpec.NodeSelector = profileSpec.NodeSelector
+	}
+
+	// Merge PriorityClassName
+	if dacSpec.PriorityClassName == "" {
+		dacSpec.PriorityClassName = profileSpec.PriorityClassName
+	}
+
+	// Merge Count
+	if dacSpec.Count == 0 {
+		dacSpec.Count = profileSpec.Count
+	}
+
+	return dacSpec
 }
 
 // SetupWithManager sets up the controller with the Manager.

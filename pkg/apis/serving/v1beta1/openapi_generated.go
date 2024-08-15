@@ -1337,7 +1337,6 @@ func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfile(ref common.Refere
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
 			},
 		},
 		Dependencies: []string{
