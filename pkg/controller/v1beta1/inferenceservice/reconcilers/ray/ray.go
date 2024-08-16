@@ -82,7 +82,7 @@ func createRayCluster(meta metav1.ObjectMeta, ext *v1beta1.ComponentExtensionSpe
 				},
 				RayStartParams: map[string]string{
 					"dashboard-host":      "0.0.0.0",
-					"metrics-export-port": "8080",
+					"metrics-export-port": "8000",
 				},
 				ServiceType: corev1.ServiceTypeClusterIP,
 				Template: corev1.PodTemplateSpec{
