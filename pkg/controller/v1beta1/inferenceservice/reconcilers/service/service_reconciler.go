@@ -45,27 +45,9 @@ func createService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.Compon
 	var servicePorts []corev1.ServicePort
 	if len(podSpec.Containers) != 0 {
 		container := podSpec.Containers[0]
-		for _, c := range podSpec.Containers {
-			if c.Name == constants.TransformerContainerName {
-				container = c
-				break
-			}
-		}
 		if len(container.Ports) > 0 {
-			var servicePort corev1.ServicePort
-			servicePort = corev1.ServicePort{
-				Name: container.Ports[0].Name,
-				Port: constants.CommonDefaultHttpPort,
-				TargetPort: intstr.IntOrString{
-					Type:   intstr.Int,
-					IntVal: container.Ports[0].ContainerPort,
-				},
-				Protocol: container.Ports[0].Protocol,
-			}
-			servicePorts = append(servicePorts, servicePort)
-
-			for i := 1; i < len(container.Ports); i++ {
-				port := container.Ports[i]
+			for _, port := range container.Ports {
+				var servicePort corev1.ServicePort
 				if port.Protocol == "" {
 					port.Protocol = corev1.ProtocolTCP
 				}
@@ -76,7 +58,7 @@ func createService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.Compon
 						Type:   intstr.Int,
 						IntVal: port.ContainerPort,
 					},
-					Protocol: port.Protocol,
+					Protocol: corev1.ProtocolTCP,
 				}
 				servicePorts = append(servicePorts, servicePort)
 			}
