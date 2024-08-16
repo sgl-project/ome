@@ -71,7 +71,7 @@ type BaseModelSpec struct {
 	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// ModelExtension is the common extension of the model
-	ModelExtension ModelExtensionSpec `json:",inline"`
+	ModelExtensionSpec `json:",inline"`
 
 	// +optional Serving mode of the model, e.g., ["On-demand", "Dedicated"]
 	// +listType=atomic

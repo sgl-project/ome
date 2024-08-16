@@ -105,7 +105,7 @@ func (in *BaseModelSpec) DeepCopyInto(out *BaseModelSpec) {
 		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	in.ModelExtension.DeepCopyInto(&out.ModelExtension)
+	in.ModelExtensionSpec.DeepCopyInto(&out.ModelExtensionSpec)
 	if in.ServingMode != nil {
 		in, out := &in.ServingMode, &out.ServingMode
 		*out = make([]string, len(*in))
