@@ -1,10 +1,11 @@
 package dac
 
 import (
+	"context"
+
 	omev1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	nsreconciler "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/reconcilers/namespace"
 	queueReconciler "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/reconcilers/volcanoqueue"
-	"context"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -113,6 +114,11 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile queue")
 	}
 
+	err = r.updateDedicatedAIClusterStatus(dac, queue)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
+	}
+
 	dacFinalizer := "dedicatedaiclusters.ome.io/finalizer"
 	if dac.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(dac, dacFinalizer) {
@@ -190,6 +196,23 @@ func mergeSpecs(profileSpec *omev1beta1.DedicatedAIClusterProfileSpec, dacSpec *
 	}
 
 	return dacSpec
+}
+
+func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
+	dac *omev1beta1.DedicatedAICluster,
+	queue *schedulingv1beta1.Queue) error {
+	if queue.Status.State == schedulingv1beta1.QueueStateOpen {
+		dac.Status.DacLifecycleState = omev1beta1.ACTIVE
+	} else {
+		dac.Status.DacLifecycleState = omev1beta1.FAILED
+	}
+
+	err := r.Client.Status().Update(context.TODO(), dac)
+	if err != nil {
+		r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
+		return err
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
