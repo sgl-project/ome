@@ -34,6 +34,10 @@ spec:
   containers:
     - name: ome-container
       image: fra.ocir.io/idqj093njucb/official-vllm-openai:e3c664b
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
       args:
         - --served-model-name=vllm-model
         - --disable-log-stats
