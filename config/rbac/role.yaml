@@ -262,6 +262,14 @@ rules:
 - apiGroups:
   - ome.io
   resources:
+  - dedicatedaiclusterprofiles
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ome.io
+  resources:
   - dedicatedaiclusters
   verbs:
   - create

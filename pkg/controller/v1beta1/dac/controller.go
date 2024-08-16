@@ -30,6 +30,7 @@ import (
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues/finalizers,verbs=update
+// +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusterprofiles,verbs=get;list;watch
 
 // DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
 // DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
