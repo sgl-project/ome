@@ -83,7 +83,7 @@ type BaseModelSpec struct {
 
 	// DeprecationTime is the time the model was deprecated
 	// +optional
-	DeprecationTime *metav1.Time `json:"deprecationTime,omitempty"`
+	DeprecationTime metav1.Time `json:"deprecationTime,omitempty"`
 
 	// LongTermSupported indicates if the model is long term supported
 	// +optional

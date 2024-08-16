@@ -116,10 +116,7 @@ func (in *BaseModelSpec) DeepCopyInto(out *BaseModelSpec) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.DeprecationTime != nil {
-		in, out := &in.DeprecationTime, &out.DeprecationTime
-		*out = (*in).DeepCopy()
-	}
+	in.DeprecationTime.DeepCopyInto(&out.DeprecationTime)
 	if in.IsLongTermSupported != nil {
 		in, out := &in.IsLongTermSupported, &out.IsLongTermSupported
 		*out = new(bool)
