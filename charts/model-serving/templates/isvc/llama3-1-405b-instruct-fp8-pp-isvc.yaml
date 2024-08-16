@@ -2,8 +2,8 @@
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: llama3-1-405b-instruct-fp8-pp
-  namespace: llama3-1-405b-instruct-fp8-pp
+  name: llama-3-1-405b-instruct-fp8-pp
+  namespace: llama-3-1-405b-instruct-fp8-pp
 spec:
   predictor:
     model:
