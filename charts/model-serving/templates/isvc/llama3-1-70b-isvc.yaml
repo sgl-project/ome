@@ -8,7 +8,7 @@ spec:
   predictor:
     model:
       runtime: vllm-serving-runtime-medium
-      baseModel: llama-3-1-70b
+      baseModel: llama-3-1-70b-instruct
       protocolVersion: openAI
     minReplicas: {{ index .Values "llama-3-1-70b-instruct" "minReplicas" }}
     maxReplicas: {{ index .Values "llama-3-1-70b-instruct" "maxReplicas" }}
