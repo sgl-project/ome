@@ -27,7 +27,6 @@ spec:
   modelParameterSize: 405B
   modelCapabilities:
     - "CHAT"
-    - "TEXT_GENERATION"
   maxTokens: 16384
   additionalMetadata:
     dacShapeConfigs: |-

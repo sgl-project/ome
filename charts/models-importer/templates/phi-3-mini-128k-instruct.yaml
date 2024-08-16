@@ -27,7 +27,6 @@ spec:
   modelParameterSize: 4.15B
   modelCapabilities:
     - "CHAT"
-    - "VISION"
   maxTokens: 32768
   additionalMetadata:
     dacShapeConfigs: |-
