@@ -1,11 +1,23 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-serving-runtime-large
+  name: vllm-small-text-generation
 spec:
   annotations:
-    prometheus.ome.io/port: '8080'
-    prometheus.ome.io/path: "/metrics"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    linkerd.io/inject: "enabled"
+  labels:
+    logging-forward: enabled
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -25,10 +37,12 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
-  volumes:
-    - name: dshm
-      emptyDir:
-        medium: Memory
+    - name: safetensors
+      modelType: transformer
+      modelArchitecture: MistralForCausalLM
+      version: "1"
+      autoSelect: true
+      priority: 1
   protocolVersions:
     - openAI
   containers:
@@ -38,28 +52,32 @@ spec:
         - containerPort: 8080
           name: http
           protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
       args:
-        - --served-model-name=vllm-model
-        - --disable-log-stats
-        - --enable-chunked-prefill
-        - --gpu-memory-utilization=0.9
-        - --port=8080
-        - --tensor-parallel-size=8
-        - --disable-log-requests
-        - --max-model-len=32768
-        - --quantization=fbgemm_fp8
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port=8080 \
+          --disable-log-stats \
+          --model="$MODEL_PATH" \
+          --disable-log-requests \
+          --served-model-name=vllm-model \
+          --tensor-parallel-size=1 \
+          --enable-chunked-prefill
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 1
         limits:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:

@@ -159,7 +159,7 @@ const (
 )
 
 // FailureReason enum
-// +kubebuilder:validation:Enum=ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
+// +kubebuilder:validation:Enum=BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
 type FailureReason string
 
 // FailureReason enum values

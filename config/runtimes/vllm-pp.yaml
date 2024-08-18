@@ -1,13 +1,20 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-serving-runtime-large-pp
+  name: vllm-pp
 spec:
-  pipelineParallelism: true
   annotations:
-    prometheus.ome.io/port: '8080'
-    prometheus.ome.io/path: "/metrics"
-    ray.io/overwrite-container-cmd: "true"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    linkerd.io/inject: "enabled"
+  labels:
+    logging-forward: enabled
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+  pipelineParallelism: true
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -46,8 +53,21 @@ spec:
         - |
           ulimit -n 65536;
           eval "$KUBERAY_GEN_RAY_START_CMD" &
-          (while ! ray status | grep -q '0.0/16.0 GPU'; do echo 'Waiting for GPUs to be available...'; sleep 2; done;
-          python3 -m  vllm.entrypoints.openai.api_server --port=8000 --disable-log-stats --model="$MODEL_PATH" --disable-log-requests --served-model-name=vllm-model --tensor-parallel-size=8 --pipeline-parallel-size=2 --enable-chunked-prefill) &
+          (
+            while ! ray status | grep -q '0.0/16.0 GPU'; do
+              echo 'Waiting for GPUs to be available...';
+              sleep 2;
+            done;
+            python3 -m vllm.entrypoints.openai.api_server \
+              --port=8080 \
+              --disable-log-stats \
+              --model="$MODEL_PATH" \
+              --disable-log-requests \
+              --served-model-name=vllm-model \
+              --tensor-parallel-size=8 \
+              --pipeline-parallel-size=2 \
+              --enable-chunked-prefill
+          ) &
           wait
       volumeMounts:
         - mountPath: /dev/shm

@@ -1,0 +1,13 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: e5-mistral-7b-instruct
+  namespace: e5-mistral-7b-instruct
+spec:
+  predictor:
+    model:
+      runtime: vllm-embedding
+      baseModel: e5-mistral-7b-instruct
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

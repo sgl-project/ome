@@ -1,0 +1,34 @@
+{{- if .Values.llama_3_1_405b_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-1-405b-instruct-fp8
+  namespace: llama3-1-405b-instruct-fp8
+spec:
+  predictor:
+    {{- with .Values.llama_3_1_405b_instruct.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      {{- if .Values.llama_3_1_405b_instruct.enableRDMA }}
+      runtime: vllm-pp-rdma
+      {{- else }}
+      runtime: vllm-pp
+      {{- end }}
+      baseModel: llama-3-1-405b-instruct-fp8
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_3_1_405b_instruct.maxReplicas}}
+    maxReplicas: {{ .Values.llama_3_1_405b_instruct.maxReplicas}}
+    {{- with .Values.llama_3_1_405b_instruct.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_405b_instruct.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_405b_instruct.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_405b_instruct.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}

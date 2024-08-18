@@ -86,6 +86,11 @@ func createRayCluster(meta metav1.ObjectMeta, ext *v1beta1.ComponentExtensionSpe
 				},
 				ServiceType: corev1.ServiceTypeClusterIP,
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      meta.Labels,
+						Name:        meta.Name,
+						Annotations: annotations,
+					},
 					Spec: *spec,
 				},
 			},
@@ -95,6 +100,11 @@ func createRayCluster(meta metav1.ObjectMeta, ext *v1beta1.ComponentExtensionSpe
 					RayStartParams: map[string]string{},
 					Replicas:       &workerReplicas,
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels:      meta.Labels,
+							Name:        meta.Name,
+							Annotations: annotations,
+						},
 						Spec: *workerPodSpec,
 					},
 				},

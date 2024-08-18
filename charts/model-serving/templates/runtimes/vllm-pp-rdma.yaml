@@ -1,13 +1,18 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-serving-runtime-large-pp-rdma
+  name: vllm-pp-rdma
 spec:
   pipelineParallelism: true
-  annotations:
-    prometheus.ome.io/port: '8080'
-    prometheus.ome.io/path: "/metrics"
-    ray.io/overwrite-container-cmd: "true"
+  {{with .Values.commonAnnotations}}
+  annotations: {{ toYaml . | nindent 6 }}
+  {{end}}
+  {{with .Values.commonLabels}}
+  labels: {{ toYaml . | nindent 6 }}
+  {{end}}
+  {{with .Values.commonTolerations}}
+  tolerations: {{ toYaml . | nindent 6 }}
+  {{end}}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -27,6 +32,7 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+
   volumes:
     - name: dshm
       emptyDir:
@@ -40,7 +46,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:bd70013
+      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.commonImage.tag }}
       env:
         - name: NCCL_NET_PLUGIN
           value: none
@@ -93,8 +99,21 @@ spec:
         - |
           ulimit -n 65536;
           eval "$KUBERAY_GEN_RAY_START_CMD" &
-          (while ! ray status | grep -q '0.0/16.0 GPU'; do echo 'Waiting for GPUs to be available...'; sleep 2; done;
-          python3 -m vllm.entrypoints.openai.api_server --port=8000 --disable-log-stats --model="$MODEL_PATH" --disable-log-requests --served-model-name=vllm-model --tensor-parallel-size=8 --pipeline-parallel-size=2 --enable-chunked-prefill) &
+          (
+            while ! ray status | grep -q '0.0/16.0 GPU'; do
+              echo 'Waiting for GPUs to be available...';
+              sleep 2;
+            done;
+            python3 -m vllm.entrypoints.openai.api_server \
+              --port={{.Values.vllm.port}} \
+              --disable-log-stats \
+              --model="$MODEL_PATH" \
+              --disable-log-requests \
+              --served-model-name={{.Values.vllm.serveModelName}} \
+              --tensor-parallel-size=8 \
+              --pipeline-parallel-size=2 \
+              --enable-chunked-prefill
+          ) &
           wait
       volumeMounts:
         - mountPath: /dev/shm

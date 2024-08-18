@@ -1,0 +1,13 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: phi-3-mini-128k-instruct
+  namespace: phi-3-mini-128k-instruct
+spec:
+  predictor:
+    model:
+      runtime: vllm-vision
+      baseModel: phi-3-mini-128k-instruct
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

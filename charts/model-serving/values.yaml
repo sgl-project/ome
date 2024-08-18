@@ -1,24 +1,78 @@
-llama-3-1-70b-instruct:
+vllm:
+  port: 8080
+  serveModelName: vllm-model
+  commonImage:
+    repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
+    tag: &defaultVLLMImageTag bd70013
+
+commonAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+  linkerd.io/inject: "enabled"
+
+commonLabels:
+  logging-forward: enabled
+
+commonTolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: "NoSchedule"
+
+
+llama_3_1_70b_instruct:
   enabled: true
+  annotations: {}
+  affinity: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
   minReplicas: 1
   maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
 
-llama-3-1-405b-instruct-fp8:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 1
-
-llama-3-1-405b-instruct-fp8-pp:
+llama_3_1_405b_instruct:
   enabled: true
+  enableRDMA: false
+  annotations: {}
+  affinity: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
+  # The number of replicas to start with must be 2 or more, as the model is too large to fit in a single GPU node
   minReplicas: 2
   maxReplicas: 2
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
 
-llama-3-1-405b-instruct-fp8-rdma:
+phi_3_mini_128k_instruct:
   enabled: false
-  minReplicas: 2
-  maxReplicas: 2
-
-phi-3-mini-128k-instruct:
-  enabled: false
+  annotations: { }
+  affinity: { }
+  tolerations: [ ]
+  topologySpreadConstraints: [ ]
+  volumes: [ ]
   minReplicas: 1
   maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
+
+e5_mistral_7b_instruct:
+  enabled: false
+  annotations: { }
+  affinity: { }
+  tolerations: [ ]
+  topologySpreadConstraints: [ ]
+  volumes: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag

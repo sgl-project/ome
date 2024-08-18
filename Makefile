@@ -28,6 +28,9 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.15.0
 
+# Define the directory containing the charts
+CHARTS_DIR := ./charts
+
 # CPU/Memory limits for controller-manager
 OME_CONTROLLER_CPU_LIMIT ?= 100m
 OME_CONTROLLER_MEMORY_LIMIT ?= 300Mi
@@ -37,7 +40,7 @@ $(shell perl -pi -e 's/memory:.*/memory: $(OME_CONTROLLER_MEMORY_LIMIT)/' config
 all: test manager
 
 # Run tests
-test: fmt vet manifests envtest
+test: fmt vet manifests envtest helm-lint
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/apis/serving/v1beta1/openapi_generated.go) ./cmd/... -coverprofile coverage.out -coverpkg ./pkg... ./cmd...
 
 # Build manager binary
@@ -154,3 +157,13 @@ telepresence:
 
 helm-docs:
 	hack/update-helm-docs.sh
+
+# Target to lint all charts
+helm-lint:
+	@for chart in $(CHARTS_DIR)/*/; do \
+	  echo "Linting $$chart..."; \
+	  if ! helm lint $$chart; then \
+	    echo "Error: Linting failed for $$chart" >&2; \
+	    exit 1; \
+	  fi \
+	done

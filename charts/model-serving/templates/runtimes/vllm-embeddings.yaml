@@ -1,11 +1,17 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-serving-runtime-medium
+  name: vllm-embeddings
 spec:
-  annotations:
-    prometheus.ome.io/port: '8080'
-    prometheus.ome.io/path: "/metrics"
+  {{with .Values.commonAnnotations}}
+  annotations: {{ toYaml . | nindent 6 }}
+  {{end}}
+  {{with .Values.commonLabels}}
+  labels: {{ toYaml . | nindent 6 }}
+  {{end}}
+  {{with .Values.commonTolerations}}
+  tolerations: {{ toYaml . | nindent 6 }}
+  {{end}}
   volumes:
     - name: dshm
       emptyDir:
@@ -25,7 +31,7 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
+      modelArchitecture: MistralModel
       version: "1"
       autoSelect: true
       priority: 1
@@ -33,32 +39,39 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:e3c664b
+      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.commonImage.tag }}
       ports:
         - containerPort: 8080
           name: http
           protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
       args:
-        - --served-model-name=vllm-model
-        - --disable-log-stats
-        - --enable-chunked-prefill
-        - --gpu-memory-utilization=0.9
-        - --port=8080
-        - --tensor-parallel-size=4
-        - --disable-log-requests
-        - --max-model-len=8192
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{.Values.vllm.port}} \
+          --disable-log-stats \
+          --model="$MODEL_PATH" \
+          --disable-log-requests \
+          --served-model-name={{.Values.vllm.serveModelName}} \
+          --tensor-parallel-size=1 \
+          --embedding-mode \
+          --enforce-eager \
+          --gpu-memory-utilization=0.8 \
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 70
-          memory: 216Gi
-          nvidia.com/gpu: 4
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 1
         limits:
-          cpu: 70
-          memory: 216Gi
-          nvidia.com/gpu: 4
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:

@@ -1031,7 +1031,7 @@ func TestGetHostPrefix(t *testing.T) {
 			},
 			disableVirtualHost: true,
 			useDefault:         false,
-			matcher:            gomega.Equal(fmt.Sprintf("%s-predictor", serviceName)),
+			matcher:            gomega.Equal(fmt.Sprintf("%s", serviceName)),
 		},
 		"istio is disabled and useDefault is true": {
 			isvc: &v1beta1.InferenceService{
