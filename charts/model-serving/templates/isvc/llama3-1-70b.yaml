@@ -31,4 +31,10 @@ spec:
     scaleMetric: {{ toYaml . | nindent 6 }}
     {{- end }}
 
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-1-70b-instruct
+
 {{- end }}
