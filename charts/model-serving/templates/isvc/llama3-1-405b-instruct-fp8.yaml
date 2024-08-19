@@ -3,7 +3,7 @@ apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
   name: llama-3-1-405b-instruct-fp8
-  namespace: llama3-1-405b-instruct-fp8
+  namespace: llama-3-1-405b-instruct-fp8
 spec:
   predictor:
     {{- with .Values.llama_3_1_405b_instruct.annotations }}
@@ -36,6 +36,6 @@ spec:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: llama3-1-405b-instruct-fp8
+  name: llama-3-1-405b-instruct-fp8
 
 {{- end }}
