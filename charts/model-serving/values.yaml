@@ -21,7 +21,7 @@ commonTolerations:
 
 
 llama_3_1_70b_instruct:
-  enabled: true
+  enabled: false
   annotations: {}
   affinity: {}
   tolerations: []
@@ -35,7 +35,7 @@ llama_3_1_70b_instruct:
     tag: *defaultVLLMImageTag
 
 llama_3_1_405b_instruct:
-  enabled: true
+  enabled: false
   enableRDMA: false
   annotations: {}
   affinity: {}
