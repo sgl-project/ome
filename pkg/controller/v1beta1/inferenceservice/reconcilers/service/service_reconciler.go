@@ -75,12 +75,6 @@ func createService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.Compon
 			})
 		}
 	}
-	if componentExt != nil {
-		servicePorts[0].TargetPort = intstr.IntOrString{
-			Type:   intstr.Int,
-			IntVal: constants.InferenceServiceDefaultAgentPort,
-		}
-	}
 	if componentExt != nil && componentExt.Logger != nil {
 		servicePorts[0].TargetPort = intstr.IntOrString{
 			Type:   intstr.Int,
