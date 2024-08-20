@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "vllm-serving-runtime-small"
+    models.ome.io/runtime: "vllm-vision"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "phi-3-mini-128k-instruct" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "phi-3-mini-128k-instruct" "isInternal" }}"
