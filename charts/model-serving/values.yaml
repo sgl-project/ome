@@ -3,7 +3,7 @@ vllm:
   serveModelName: vllm-model
   commonImage:
     repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
-    tag: &defaultVLLMImageTag bd70013
+    tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
 
 commonAnnotations:
   prometheus.io/scrape: "true"
