@@ -9,6 +9,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,7 +78,7 @@ func createRayCluster(meta metav1.ObjectMeta, ext *v1beta1.ComponentExtensionSpe
 			HeadGroupSpec: ray.HeadGroupSpec{
 				HeadService: &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:        meta.Name,
+						Name:        rayutils.CheckName(meta.Name),   // kuberay not allow head service name more than 50 chars
 						Namespace:   meta.Namespace,
 						Labels:      meta.Labels,
 						Annotations: annotations,

@@ -323,6 +323,14 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 			if err := controllerutil.SetControllerReference(isvc, r.Ray.RayCluster, p.scheme); err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
 			}
+
+			if r.RawDummyService != nil {
+				// set Service Controller
+				if err := controllerutil.SetControllerReference(isvc, r.RawDummyService.Service, p.scheme); err != nil {
+					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
+				}
+			}
+
 			rayCluster, err := r.Reconcile()
 			if err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")

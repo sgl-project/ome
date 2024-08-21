@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	service "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 type MultiNodeVllmReconciler struct {
@@ -21,6 +22,7 @@ type MultiNodeVllmReconciler struct {
 	Ray    *raycluster.RayReconciler
 	URL    *knapis.URL
 	//TODO - Add other reconcilers such as ingress and autoscaling
+	RawDummyService  *service.RayDummyServiceReconciler
 	componentExt *v1beta1.ComponentExtensionSpec
 }
 
@@ -36,10 +38,16 @@ func NewMultiNodeVllmReconciler(client client.Client,
 		return nil, err
 	}
 
+	var RawDummyService *service.RayDummyServiceReconciler = nil
+	if len(componentMeta.Name) > 50 {
+		RawDummyService = service.NewRayDummyServiceReconciler(client, scheme, componentMeta, componentExt, podSpec)
+	}
+
 	return &MultiNodeVllmReconciler{
 		client: client,
 		scheme: scheme,
 		Ray:    raycluster.NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec),
+		RawDummyService: RawDummyService,
 		URL:    url,
 	}, nil
 }
@@ -65,6 +73,13 @@ func (r *MultiNodeVllmReconciler) Reconcile() (*ray.RayCluster, error) {
 	rayCluster, err := r.Ray.Reconcile()
 	if err != nil {
 		return nil, err
+	}
+	// reconcile Raw Dummy service
+	if r.RawDummyService != nil {
+		_, err := r.RawDummyService.Reconcile()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return rayCluster, nil
 }
