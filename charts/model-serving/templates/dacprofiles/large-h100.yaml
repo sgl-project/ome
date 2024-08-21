@@ -3,15 +3,15 @@ kind: DedicatedAIClusterProfile
 metadata:
   name: large-h100
 spec:
-  count: 1
+  count: 2
   resources:
     limits:
-      cpu: 20
-      memory: 240Gi
+      cpu: 128
+      memory: 216Gi
       nvidia.com/gpu: 8
     requests:
-      cpu: 20
-      memory: 240Gi
+      cpu: 128
+      memory: 216Gi
       nvidia.com/gpu: 8
   affinity:
     nodeAffinity:
