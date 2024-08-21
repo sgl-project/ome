@@ -41,6 +41,21 @@ func GetDeploymentMode(annotations map[string]string, deployConfig *v1beta1.Depl
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
 }
 
+func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
+	// Check if the VolcanoQueue annotation exists and set the label if it does.
+	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {
+		metadata.Labels[constants.VolcanoQueueName] = volcanoQueue
+	} else if dac, ok := metadata.Annotations[constants.DedicatedAICluster]; ok {
+		// If VolcanoQueue annotation does not exist, check and set DedicatedAICluster.
+		metadata.Labels[constants.VolcanoQueueName] = dac
+	}
+
+	// Always set the RayScheduler label if the annotation exists.
+	if _, ok := metadata.Annotations[constants.VolcanoScheduler]; ok {
+		metadata.Labels[constants.RayScheduler] = constants.VolcanoScheduler
+	}
+}
+
 // MergeRuntimeContainers Merge the predictor Container struct with the runtime Container struct, allowing users
 // to override runtime container settings from the predictor spec.
 func MergeRuntimeContainers(runtimeContainer *v1.Container, predictorContainer *v1.Container) (*v1.Container, error) {

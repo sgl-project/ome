@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
@@ -46,6 +47,7 @@ func createRawDeployment(componentMeta metav1.ObjectMeta,
 	podSpec *corev1.PodSpec) *appsv1.Deployment {
 	podMetadata := componentMeta
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
+	utils.SetPodLabelsFromAnnotations(&podMetadata)
 	setDefaultPodSpec(podSpec)
 	deployment := &appsv1.Deployment{
 		ObjectMeta: componentMeta,

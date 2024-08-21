@@ -1,6 +1,7 @@
 package raycluster
 
 import (
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 	"fmt"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -53,6 +54,8 @@ func createRayCluster(meta metav1.ObjectMeta, ext *v1beta1.ComponentExtensionSpe
 	if ext.MaxReplicas != 0 {
 		annotations[constants.MaxScaleAnnotationKey] = fmt.Sprint(ext.MaxReplicas)
 	}
+
+	utils.SetPodLabelsFromAnnotations(&meta)
 
 	workerReplicas := int32(*ext.MinReplicas - 1)
 

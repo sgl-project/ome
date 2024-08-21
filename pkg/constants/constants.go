@@ -48,25 +48,35 @@ const (
 
 // InferenceService Annotations
 var (
-	InferenceServiceGKEAcceleratorAnnotationKey = OMEAPIGroupName + "/gke-accelerator"
-	DeploymentMode                              = OMEAPIGroupName + "/deploymentMode"
-	EnableRoutingTagAnnotationKey               = OMEAPIGroupName + "/enable-tag-routing"
-	AutoscalerClass                             = OMEAPIGroupName + "/autoscalerClass"
-	AutoscalerMetrics                           = OMEAPIGroupName + "/metrics"
-	TargetUtilizationPercentage                 = OMEAPIGroupName + "/targetUtilizationPercentage"
-	MinScaleAnnotationKey                       = KnativeAutoscalingAPIGroupName + "/min-scale"
-	MaxScaleAnnotationKey                       = KnativeAutoscalingAPIGroupName + "/max-scale"
-	RollOutDurationAnnotationKey                = KnativeServingAPIGroupName + "/rollout-duration"
-	KnativeOpenshiftEnablePassthroughKey        = "serving.knative.openshift.io/enablePassthrough"
-	EnableMetricAggregation                     = OMEAPIGroupName + "/enable-metric-aggregation"
-	SetPrometheusAnnotation                     = OMEAPIGroupName + "/enable-prometheus-scraping"
-	ContainerPrometheusPortKey                  = "prometheus.ome.io/port"
-	ContainerPrometheusPathKey                  = "prometheus.ome.io/path"
-	PrometheusPortAnnotationKey                 = "prometheus.io/port"
-	PrometheusPathAnnotationKey                 = "prometheus.io/path"
-	DefaultPrometheusPath                       = "/metrics"
-	QueueProxyAggregatePrometheusMetricsPort    = 9088
-	DefaultPodPrometheusPort                    = "9091"
+	DeploymentMode                           = OMEAPIGroupName + "/deploymentMode"
+	EnableRoutingTagAnnotationKey            = OMEAPIGroupName + "/enable-tag-routing"
+	AutoscalerClass                          = OMEAPIGroupName + "/autoscalerClass"
+	AutoscalerMetrics                        = OMEAPIGroupName + "/metrics"
+	TargetUtilizationPercentage              = OMEAPIGroupName + "/targetUtilizationPercentage"
+	MinScaleAnnotationKey                    = KnativeAutoscalingAPIGroupName + "/min-scale"
+	MaxScaleAnnotationKey                    = KnativeAutoscalingAPIGroupName + "/max-scale"
+	RollOutDurationAnnotationKey             = KnativeServingAPIGroupName + "/rollout-duration"
+	KnativeOpenshiftEnablePassthroughKey     = "serving.knative.openshift.io/enablePassthrough"
+	EnableMetricAggregation                  = OMEAPIGroupName + "/enable-metric-aggregation"
+	SetPrometheusAnnotation                  = OMEAPIGroupName + "/enable-prometheus-scraping"
+	DedicatedAICluster                       = OMEAPIGroupName + "/dedicated-ai-cluster"
+	VolcanoQueue                             = OMEAPIGroupName + "/volcano-queue"
+	Scheduler                                = OMEAPIGroupName + "/scheduler"
+	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
+	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
+	PrometheusPortAnnotationKey              = "prometheus.io/port"
+	PrometheusPathAnnotationKey              = "prometheus.io/path"
+	DefaultPrometheusPath                    = "/metrics"
+	QueueProxyAggregatePrometheusMetricsPort = 9088
+	DefaultPodPrometheusPort                 = "9091"
+)
+
+// Label Constants
+var (
+	RayClusterLabel  = "ray.io/cluster"
+	RayScheduler     = "ray.io/scheduler-name"
+	VolcanoQueueName = "volcano.sh/queue-name"
+	VolcanoScheduler = "volcano"
 )
 
 // InferenceService Internal Annotations

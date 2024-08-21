@@ -1,6 +1,7 @@
 package knative
 
 import (
+	isvcutils "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 	"fmt"
 
@@ -135,6 +136,8 @@ func createKnativeService(componentMeta metav1.ObjectMeta,
 	labels := utils.Filter(componentMeta.Labels, func(key string) bool {
 		return !utils.Includes(constants.RevisionTemplateLabelDisallowedList, key)
 	})
+
+	isvcutils.SetPodLabelsFromAnnotations(&componentMeta)
 
 	service := &knservingv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
