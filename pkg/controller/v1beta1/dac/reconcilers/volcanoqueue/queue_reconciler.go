@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 var log = logf.Log.WithName("QueueReconciler")
@@ -23,8 +24,8 @@ type QueueReconciler struct {
 	Queue  *schedulingv1beta1.Queue
 }
 
-func NewQueueReconciler(client client.Client, scheme *runtime.Scheme, queueName string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity) (*QueueReconciler, error) {
-	queue := createQueue(queueName, resources, affinity)
+func NewQueueReconciler(client client.Client, scheme *runtime.Scheme, queueName string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity, count int) (*QueueReconciler, error) {
+	queue := createQueue(queueName, resources, affinity, count)
 	return &QueueReconciler{
 		client: client,
 		scheme: scheme,
@@ -32,10 +33,18 @@ func NewQueueReconciler(client client.Client, scheme *runtime.Scheme, queueName 
 	}, nil
 }
 
-func createQueue(queueName string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity) *schedulingv1beta1.Queue {
+func createQueue(queueName string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity, count int) *schedulingv1beta1.Queue {
 	reclaimable := false
 	weight := 1
 	values := extractValuesFromNodeAffinity(affinity.NodeAffinity)
+
+	// Volcano need as least one pod buffer on CPU and Memory to start scheduling
+	cpuRequest := resources.Requests[corev1.ResourceCPU]
+	resourceQuantityAfterMultiply(&cpuRequest, count + 1)
+	memoryRequest := resources.Requests[corev1.ResourceMemory]
+	resourceQuantityAfterMultiply(&memoryRequest, count + 1)
+	gpuRequest := resources.Requests[corev1.ResourceName("nvidia.com/gpu")]
+	resourceQuantityAfterMultiply(&gpuRequest, count)
 
 	return &schedulingv1beta1.Queue{
 		ObjectMeta: metav1.ObjectMeta{
@@ -45,15 +54,15 @@ func createQueue(queueName string, resources *corev1.ResourceRequirements, affin
 			Reclaimable: &reclaimable,
 			Weight:      int32(weight),
 			Capability: corev1.ResourceList{
-				"cpu":            resources.Requests[corev1.ResourceCPU],
-				"memory":         resources.Requests[corev1.ResourceMemory],
-				"nvidia.com/gpu": resources.Requests[corev1.ResourceName("nvidia.com/gpu")],
+				"cpu":            cpuRequest,
+				"memory":         memoryRequest,
+				"nvidia.com/gpu": gpuRequest,
 			},
 			Guarantee: schedulingv1beta1.Guarantee{
 				Resource: corev1.ResourceList{
-					"cpu":            resources.Requests[corev1.ResourceCPU],
-					"memory":         resources.Requests[corev1.ResourceMemory],
-					"nvidia.com/gpu": resources.Requests[corev1.ResourceName("nvidia.com/gpu")],
+					"cpu":            cpuRequest,
+					"memory":         memoryRequest,
+					"nvidia.com/gpu": gpuRequest,
 				},
 			},
 			Affinity: &schedulingv1beta1.Affinity{
@@ -116,4 +125,8 @@ func (r *QueueReconciler) Reconcile() (*schedulingv1beta1.Queue, error) {
 		return nil, err
 	}
 	return existingQueue, nil
+}
+
+func resourceQuantityAfterMultiply(res *resource.Quantity, count int) {
+	res.Mul(int64(count))
 }

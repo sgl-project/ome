@@ -98,7 +98,7 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Set namespace controller at the first time
 	r.Log.Info("namespace", "namespace", namespace)
 
-	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity)
+	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, mergedSpec.Count)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
