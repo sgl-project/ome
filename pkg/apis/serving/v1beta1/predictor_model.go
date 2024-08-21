@@ -5,6 +5,8 @@ import (
 	goerrors "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sort"
+	"strconv"
+	"strings"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
@@ -111,14 +113,14 @@ func (m *ModelSpec) GetSupportingRuntimes(cl client.Client, namespace string) ([
 			srSpecs = append(srSpecs, SupportedRuntime{Name: rt.GetName(), Spec: rt.Spec})
 		}
 	}
-	sortSupportedRuntimeByPriority(srSpecs, model.ModelFormat)
+	sortSupportedRuntimeByPriority(srSpecs, model.ModelFormat, parseModelSize(*model.ModelParameterSize))
 	for i := range clusterRuntimes.Items {
 		crt := &clusterRuntimes.Items[i]
 		if !crt.Spec.IsDisabled() && m.RuntimeSupportsModel(&crt.Spec, model) && crt.Spec.IsProtocolVersionSupported(modelProtocolVersion) {
 			clusterSrSpecs = append(clusterSrSpecs, SupportedRuntime{Name: crt.GetName(), Spec: crt.Spec})
 		}
 	}
-	sortSupportedRuntimeByPriority(clusterSrSpecs, model.ModelFormat)
+	sortSupportedRuntimeByPriority(clusterSrSpecs, model.ModelFormat, parseModelSize(*model.ModelParameterSize))
 	srSpecs = append(srSpecs, clusterSrSpecs...)
 	return srSpecs, nil
 }
@@ -129,7 +131,18 @@ func (m *ModelSpec) RuntimeSupportsModel(srSpec *ServingRuntimeSpec, modelSpec *
 	runtimeLabelSet := m.getServingRuntimeSupportedModelFormatLabelSet(srSpec.SupportedModelFormats)
 	modelLabel := m.getModelFormatLabel(modelSpec)
 	// if the runtime has the model's label, then it supports that model.
-	return runtimeLabelSet.contains(modelLabel)
+	if !runtimeLabelSet.contains(modelLabel) {
+		return false
+	}
+	// Check if the model's size is within the runtime's supported size range.
+	if modelSpec.ModelParameterSize != nil && srSpec.ModelSizeRange != nil {
+		modelSize := parseModelSize(*modelSpec.ModelParameterSize)
+		if modelSize > parseModelSize(*srSpec.ModelSizeRange.Min) && modelSize < parseModelSize(*srSpec.ModelSizeRange.Max) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (m *ModelSpec) getModelFormatLabel(modelSpec *BaseModelSpec) string {
@@ -196,13 +209,41 @@ func sortClusterServingRuntimeList(runtimes *ClusterServingRuntimeList) {
 	})
 }
 
-func sortSupportedRuntimeByPriority(runtimes []SupportedRuntime, modelFormat ModelFormat) {
+// Updated sort function to prioritize runtimes with a matching size range
+func sortSupportedRuntimeByPriority(runtimes []SupportedRuntime, modelFormat ModelFormat, modelSize int64) {
 	sort.Slice(runtimes, func(i, j int) bool {
 		p1 := runtimes[i].Spec.GetPriority(modelFormat.Name)
 		p2 := runtimes[j].Spec.GetPriority(modelFormat.Name)
 
+		// First, prioritize by model size range
+		r1HasSizeRange := runtimes[i].Spec.ModelSizeRange != nil
+		r2HasSizeRange := runtimes[j].Spec.ModelSizeRange != nil
+
+		// Check if both have size ranges and if one of them matches the model size better
+		if r1HasSizeRange && r2HasSizeRange {
+			r1FitsModel := modelSize >= parseModelSize(*runtimes[i].Spec.ModelSizeRange.Min) &&
+				modelSize <= parseModelSize(*runtimes[i].Spec.ModelSizeRange.Max)
+			r2FitsModel := modelSize >= parseModelSize(*runtimes[j].Spec.ModelSizeRange.Min) &&
+				modelSize <= parseModelSize(*runtimes[j].Spec.ModelSizeRange.Max)
+
+			if r1FitsModel && !r2FitsModel {
+				return true
+			} else if !r1FitsModel && r2FitsModel {
+				return false
+			}
+		}
+
+		// If only one has a size range, prioritize the one with the range
+		if r1HasSizeRange && !r2HasSizeRange {
+			return true
+		}
+		if !r1HasSizeRange && r2HasSizeRange {
+			return false
+		}
+
+		// Finally, fallback to prioritizing by explicit priority values
 		switch {
-		case p1 == nil && p2 == nil: // if both runtimes does not specify the priority, the order is kept.
+		case p1 == nil && p2 == nil: // if both runtimes do not specify the priority, the order is kept.
 			return false
 		case p1 == nil && p2 != nil: // runtime with priority specified takes precedence
 			return false
@@ -211,4 +252,28 @@ func sortSupportedRuntimeByPriority(runtimes []SupportedRuntime, modelFormat Mod
 		}
 		return *p1 > *p2
 	})
+}
+
+func parseModelSize(sizeStr string) int64 {
+	// Define multipliers for different size suffixes
+	var multiplier int64 = 1
+
+	switch {
+	case strings.HasSuffix(sizeStr, "T"):
+		multiplier = 1_000_000_000_000
+		sizeStr = strings.TrimSuffix(sizeStr, "T")
+	case strings.HasSuffix(sizeStr, "B"):
+		multiplier = 1_000_000_000
+		sizeStr = strings.TrimSuffix(sizeStr, "B")
+	case strings.HasSuffix(sizeStr, "M"):
+		multiplier = 1_000_000
+		sizeStr = strings.TrimSuffix(sizeStr, "M")
+	}
+
+	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	if err != nil {
+		return 0 // Handle the error or return a default value
+	}
+
+	return size * multiplier
 }

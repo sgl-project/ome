@@ -43,6 +43,9 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+  modelSizeRange:
+    min: 128B
+    max: 60B
   protocolVersions:
     - openAI
   containers:

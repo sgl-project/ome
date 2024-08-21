@@ -146,7 +146,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		// Get first supporting runtime.
 		sRuntime = runtimes[0].Spec
 		isvc.Spec.Predictor.Model.Runtime = &runtimes[0].Name
-
+		p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime)
 		// set runtime defaults
 		isvc.SetRuntimeDefaults()
 	}

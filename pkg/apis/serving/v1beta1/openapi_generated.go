@@ -49,6 +49,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelExtensionSpec":              schema_pkg_apis_serving_v1beta1_ModelExtensionSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelFormat":                     schema_pkg_apis_serving_v1beta1_ModelFormat(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelRevisionStates":             schema_pkg_apis_serving_v1beta1_ModelRevisionStates(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSizeRangeSpec":              schema_pkg_apis_serving_v1beta1_ModelSizeRangeSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSpec":                       schema_pkg_apis_serving_v1beta1_ModelSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatus":                     schema_pkg_apis_serving_v1beta1_ModelStatus(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatusSpec":                 schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref),
@@ -2378,6 +2379,33 @@ func schema_pkg_apis_serving_v1beta1_ModelRevisionStates(ref common.ReferenceCal
 	}
 }
 
+func schema_pkg_apis_serving_v1beta1_ModelSizeRangeSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ModelSizeRangeSpec defines the range of model sizes supported by this runtime",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"min": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Minimum size of the model in bytes",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"max": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Maximum size of the model in bytes",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4478,6 +4506,12 @@ func schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref common.ReferenceCall
 							},
 						},
 					},
+					"modelSizeRange": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ModelSizeRange is the range of model sizes supported by this runtime",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSizeRangeSpec"),
+						},
+					},
 					"disabled": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Set to true to disable use of this runtime",
@@ -4660,7 +4694,7 @@ func schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BuiltInAdapter", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.SupportedModelFormat", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.BuiltInAdapter", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSizeRangeSpec", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.SupportedModelFormat", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 

@@ -1285,6 +1285,20 @@
         }
       }
     },
+    "v1beta1.ModelSizeRangeSpec": {
+      "description": "ModelSizeRangeSpec defines the range of model sizes supported by this runtime",
+      "type": "object",
+      "properties": {
+        "max": {
+          "description": "Maximum size of the model in bytes",
+          "type": "string"
+        },
+        "min": {
+          "description": "Minimum size of the model in bytes",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.ModelSpec": {
       "type": "object",
       "properties": {
@@ -2510,6 +2524,10 @@
             "type": "string",
             "default": ""
           }
+        },
+        "modelSizeRange": {
+          "description": "ModelSizeRange is the range of model sizes supported by this runtime",
+          "$ref": "#/definitions/v1beta1.ModelSizeRangeSpec"
         },
         "nodeSelector": {
           "description": "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",

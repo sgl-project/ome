@@ -241,7 +241,7 @@ func main() {
 	hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
 		Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 	})
-	
+
 	if err = ctrl.NewWebhookManagedBy(mgr).
 		For(&v1beta1.InferenceService{}).
 		Complete(); err != nil {

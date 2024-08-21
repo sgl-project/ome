@@ -99,6 +99,10 @@ type ServingRuntimeSpec struct {
 	// +listType=atomic
 	SupportedModelFormats []SupportedModelFormat `json:"supportedModelFormats,omitempty"`
 
+	// ModelSizeRange is the range of model sizes supported by this runtime
+	// +optional
+	ModelSizeRange *ModelSizeRangeSpec `json:"modelSizeRange,omitempty"`
+
 	// Set to true to disable use of this runtime
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
@@ -130,6 +134,17 @@ type ServingRuntimeSpec struct {
 	// This is an experimental feature and may not be supported by all runtimes.
 	// +optional
 	PipelineParallelism *bool `json:"pipelineParallelism,omitempty"`
+}
+
+// ModelSizeRangeSpec defines the range of model sizes supported by this runtime
+// +k8s:openapi-gen=true
+type ModelSizeRangeSpec struct {
+	// Minimum size of the model in bytes
+	// +optional
+	Min *string `json:"min,omitempty"`
+	// Maximum size of the model in bytes
+	// +optional
+	Max *string `json:"max,omitempty"`
 }
 
 // ServingRuntimeStatus defines the observed state of ServingRuntime
