@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 )
 
 var (
@@ -160,6 +161,20 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	volcanoBatchFound, volcanoCheckErr := utils.IsCrdAvailable(cfg, volcanobatch.SchemeGroupVersion.String(), constants.VolcanoJobKind)
+	if volcanoCheckErr != nil {
+		setupLog.Error(volcanoCheckErr, "error when checking if Volcano Job kind is available")
+		os.Exit(1)
+	}
+	if volcanoBatchFound {
+		setupLog.Info("Setting up Volcano Batch scheme")
+		if err := volcanobatch.AddToScheme(mgr.GetScheme()); err != nil {
+			setupLog.Error(err, "unable to add Volcano Batch APIs to scheme")
+			os.Exit(1)
+		}
+	}
+
 
 	ksvcFound, ksvcCheckErr := utils.IsCrdAvailable(cfg, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if ksvcCheckErr != nil {

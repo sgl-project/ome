@@ -58,13 +58,6 @@ func createQueue(queueName string, resources *corev1.ResourceRequirements, affin
 				"memory":         memoryRequest,
 				"nvidia.com/gpu": gpuRequest,
 			},
-			Guarantee: schedulingv1beta1.Guarantee{
-				Resource: corev1.ResourceList{
-					"cpu":            cpuRequest,
-					"memory":         memoryRequest,
-					"nvidia.com/gpu": gpuRequest,
-				},
-			},
 			Affinity: &schedulingv1beta1.Affinity{
 				NodeGroupAffinity: &schedulingv1beta1.NodeGroupAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: values,

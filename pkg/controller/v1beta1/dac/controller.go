@@ -2,9 +2,12 @@ package dac
 
 import (
 	"context"
+	"fmt"
+	"sort"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	nsreconciler "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/reconcilers/namespace"
+	volcanoJobReconciler "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/reconcilers/volcanojob"
 	queueReconciler "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/reconcilers/volcanoqueue"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -16,9 +19,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
@@ -31,6 +36,11 @@ import (
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues/finalizers,verbs=update
+// +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=podgroups,verbs=get;list;watch
+// +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=podgroups/status,verbs=get;list;watch
+// +kubebuilder:rbac:groups=batch.volcano.sh,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch.volcano.sh,resources=jobs/finalizers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch.volcano.sh,resources=jobs/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusterprofiles,verbs=get;list;watch
 
 // DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
@@ -114,7 +124,24 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile queue")
 	}
 
-	err = r.updateDedicatedAIClusterStatus(dac, queue)
+	reservationJobReconciler, err := volcanoJobReconciler.NewReservationJobReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, mergedSpec.Count)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if reservationJobReconciler.ReservationJob != nil && !metav1.IsControlledBy(reservationJobReconciler.ReservationJob, dac) {
+		r.Log.Info("add reservation job controller")
+		if err := controllerutil.SetControllerReference(dac, reservationJobReconciler.ReservationJob, r.Scheme); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to set reservation job owner reference for dac")
+		}
+	}
+
+	reservationJob, err := reservationJobReconciler.Reconcile()
+	if err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile reservation job")
+	}
+
+	err = r.updateDedicatedAIClusterStatus(dac, queue, reservationJob)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
 	}
@@ -148,6 +175,13 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 			controllerutil.RemoveFinalizer(queue, dacFinalizer)
 			if err := r.Update(context.Background(), queue); err != nil {
 				r.Log.Error(err, "failed to remove queue finalizer")
+			}
+		}
+		if controllerutil.ContainsFinalizer(reservationJob, dacFinalizer) {
+			r.Log.Info("remove reservationJob finalizer")
+			controllerutil.RemoveFinalizer(reservationJob, dacFinalizer)
+			if err := r.Update(context.Background(), reservationJob); err != nil {
+				r.Log.Error(err, "failed to remove reservationJob finalizer")
 			}
 		}
 	}
@@ -200,19 +234,82 @@ func mergeSpecs(profileSpec *omev1beta1.DedicatedAIClusterProfileSpec, dacSpec *
 
 func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 	dac *omev1beta1.DedicatedAICluster,
-	queue *schedulingv1beta1.Queue) error {
-	if queue.Status.State == schedulingv1beta1.QueueStateOpen {
-		dac.Status.DacLifecycleState = omev1beta1.ACTIVE
-	} else {
-		dac.Status.DacLifecycleState = omev1beta1.FAILED
+	queue *schedulingv1beta1.Queue,
+	reservationJob *volbatchv1alpha1.Job) error {
+	
+	checkStatus := func() error {
+		if reservationJob.Status.State.Phase == volbatchv1alpha1.Running {
+			dac.Status.DacLifecycleState = omev1beta1.ACTIVE
+		} else {
+			if queue.Status.Running == 0 {  // nothing could be allocated
+				condition, err := r.getFailedReservationPodGroupCondition(reservationJob)
+				if err != nil {
+					return err
+				}
+
+				if condition != nil {
+					if condition.Type == schedulingv1beta1.PodGroupUnschedulableType {
+						dac.Status.DacLifecycleState = omev1beta1.FAILED
+						dac.Status.LifecycleDetail = condition.Reason
+					} else {
+						return fmt.Errorf("need further investigation on the volcanoJob %s condition", reservationJob.Name)
+					}
+				} else {
+					dac.Status.DacLifecycleState = omev1beta1.CREATING
+				}
+			} else {
+				dac.Status.DacLifecycleState = omev1beta1.ACTIVE
+			}
+		}
+		return nil
 	}
 
-	err := r.Client.Status().Update(context.TODO(), dac)
+	err := checkStatus()
+	if err != nil {
+		dac.Status.DacLifecycleState = omev1beta1.FAILED
+		dac.Status.LifecycleDetail = err.Error()
+	}
+
+	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		r.Client.Status().Update(context.TODO(), dac)
+		if err != nil {
+			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
 		return err
 	}
 	return nil
+}
+
+func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
+	reservationJob *volbatchv1alpha1.Job) (*schedulingv1beta1.PodGroupCondition, error) {
+	existingPodGroup := &schedulingv1beta1.PodGroup{}
+	podGroupName := fmt.Sprintf("%s-%s", reservationJob.Name, reservationJob.UID)
+	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: podGroupName, Namespace: reservationJob.Namespace}, existingPodGroup)
+	if err != nil {
+		return nil, err
+	}
+
+	if existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupPending || 
+		existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupUnknown ||
+		existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupInqueue {
+		conditions := existingPodGroup.Status.Conditions
+		if len(conditions) == 0 {
+			return nil, nil
+		} else {
+			sort.Slice(conditions, func(a, b int) bool {
+				return conditions[a].LastTransitionTime.After(conditions[b].LastTransitionTime.Time)
+			})
+		}
+
+		return &conditions[0], nil
+	} 
+
+	return nil, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -222,5 +319,6 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		For(&omev1beta1.DedicatedAICluster{}).
 		Owns(&corev1.Namespace{}).
 		Owns(&schedulingv1beta1.Queue{}).
+		Owns(&volbatchv1alpha1.Job{}).
 		Complete(r)
 }

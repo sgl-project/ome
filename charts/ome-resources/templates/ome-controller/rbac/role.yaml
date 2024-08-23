@@ -42,6 +42,38 @@ rules:
   - update
   - watch
 - apiGroups:
+  - batch.volcano.sh
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch.volcano.sh
+  resources:
+  - jobs/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch.volcano.sh
+  resources:
+  - jobs/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - ""
   resources:
   - configmaps
@@ -375,6 +407,22 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - scheduling.volcano.sh
+  resources:
+  - podgroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - scheduling.volcano.sh
+  resources:
+  - podgroups/status
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - scheduling.volcano.sh
   resources:

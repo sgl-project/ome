@@ -62,3 +62,15 @@ data:
       "enableMetricAggregation": "{{ .Values.ome.metricsaggregator.enableMetricAggregation }}",
       "enablePrometheusScraping" : "{{ .Values.ome.metricsaggregator.enablePrometheusScraping }}"
     }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dedicatedaicluster-config
+  namespace: ome
+data:
+  reservationJob: |-
+    {
+      "image": "{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}"
+    }

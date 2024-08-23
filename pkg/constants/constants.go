@@ -30,6 +30,7 @@ var (
 	InferenceServiceAPIName       = "inferenceservices"
 	InferenceServicePodLabelKey   = OMEAPIGroupName + "/" + InferenceServiceName
 	InferenceServiceConfigMapName = "inferenceservice-config"
+	DedicatedAIClusterConfigMapName = "dedicatedaicluster-config"
 )
 
 // InferenceService MultiModel Constants
@@ -75,8 +76,16 @@ var (
 var (
 	RayClusterLabel  = "ray.io/cluster"
 	RayScheduler     = "ray.io/scheduler-name"
+	RayPrioriyClass  = "ray.io/priority-class-name"
 	VolcanoQueueName = "volcano.sh/queue-name"
 	VolcanoScheduler = "volcano"
+	VolcanoPreemptable = "volcano.sh/preemptable"
+)
+
+// PrioriryClass
+var (
+	DedicatedAiClusterReservationPriorityClass = "volcano-reservation-low-priority"
+	DedicatedAiClusterPreemptionPriorityClass = "volcano-scheduling-high-priority"
 )
 
 // InferenceService Internal Annotations
@@ -376,6 +385,7 @@ const (
 	KnativeServiceKind      = "Service"
 	RayClusterKind          = "RayCluster"
 	VolcanoQueueKind        = "Queue"
+	VolcanoJobKind          = "Job"
 )
 
 // Model Agent & Model Controller
