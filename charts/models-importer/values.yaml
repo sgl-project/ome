@@ -3,9 +3,12 @@ osnamespace: mynamespace
 
 llama-3-1-405b-instruct-fp8:
   enabled: false
+  lifecyclePhase: "ACTIVE"
 
 llama-3-1-70b-instruct:
   enabled: false
+  lifecyclePhase: "ACTIVE"
 
 phi-3-mini-128k-instruct:
   enabled: false
+  lifecyclePhase: "ACTIVE"

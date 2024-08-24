@@ -10,6 +10,7 @@ metadata:
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "phi-3-mini-128k-instruct" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "phi-3-mini-128k-instruct" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "phi-3-mini-128k-instruct" "lifecyclePhase" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
