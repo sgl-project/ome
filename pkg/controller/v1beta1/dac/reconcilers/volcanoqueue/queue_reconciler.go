@@ -9,11 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"knative.dev/pkg/kmp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/api/equality"
 )
 
 var log = logf.Log.WithName("QueueReconciler")
@@ -35,35 +35,47 @@ func NewQueueReconciler(client client.Client, scheme *runtime.Scheme, queueName 
 
 func createQueue(queueName string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity, count int) *schedulingv1beta1.Queue {
 	reclaimable := false
-	weight := 1
-	values := extractValuesFromNodeAffinity(affinity.NodeAffinity)
 
-	// Volcano need as least one pod buffer on CPU and Memory to start scheduling
-	cpuRequest := resources.Requests[corev1.ResourceCPU]
-	resourceQuantityAfterMultiply(&cpuRequest, count + 1)
-	memoryRequest := resources.Requests[corev1.ResourceMemory]
-	resourceQuantityAfterMultiply(&memoryRequest, count + 1)
-	gpuRequest := resources.Requests[corev1.ResourceName("nvidia.com/gpu")]
-	resourceQuantityAfterMultiply(&gpuRequest, count)
+	if count > 0 {
+		values := extractValuesFromNodeAffinity(affinity.NodeAffinity)
 
-	return &schedulingv1beta1.Queue{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: queueName,
-		},
-		Spec: schedulingv1beta1.QueueSpec{
-			Reclaimable: &reclaimable,
-			Weight:      int32(weight),
-			Capability: corev1.ResourceList{
-				"cpu":            cpuRequest,
-				"memory":         memoryRequest,
-				"nvidia.com/gpu": gpuRequest,
+		// Volcano need as least one pod buffer on CPU and Memory to start scheduling
+		cpuRequest := resources.Requests[corev1.ResourceCPU]
+		resourceQuantityAfterMultiply(&cpuRequest, count + 1)
+		memoryRequest := resources.Requests[corev1.ResourceMemory]
+		resourceQuantityAfterMultiply(&memoryRequest, count + 1)
+		gpuRequest := resources.Requests[corev1.ResourceName("nvidia.com/gpu")]
+		resourceQuantityAfterMultiply(&gpuRequest, count)
+
+		return &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: queueName,
 			},
-			Affinity: &schedulingv1beta1.Affinity{
-				NodeGroupAffinity: &schedulingv1beta1.NodeGroupAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: values,
+			Spec: schedulingv1beta1.QueueSpec{
+				Reclaimable: &reclaimable,
+				Weight:      1,
+				Capability: corev1.ResourceList{
+					"cpu":            cpuRequest,
+					"memory":         memoryRequest,
+					"nvidia.com/gpu": gpuRequest,
+				},
+				Affinity: &schedulingv1beta1.Affinity{
+					NodeGroupAffinity: &schedulingv1beta1.NodeGroupAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: values,
+					},
 				},
 			},
-		},
+		}
+	} else {
+		return &schedulingv1beta1.Queue{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: queueName,
+			},
+			Spec: schedulingv1beta1.QueueSpec{
+				Reclaimable: &reclaimable,
+				Weight:      0,
+			},
+		}
 	}
 }
 
@@ -91,33 +103,45 @@ func (r *QueueReconciler) checkQueueExist() (constants.CheckResultType, *schedul
 		}
 		return constants.CheckResultUnknown, nil, err
 	}
-	if err := r.client.Update(context.TODO(), r.Queue, client.DryRunAll); err != nil {
-		log.Error(err, "Failed to perform dry-run update of queue", "Queue", r.Queue.Name)
-		return constants.CheckResultUnknown, nil, err
+	// existed, check equivalent
+	if semanticQueueEquals(r.Queue, existingQueue) {
+		return constants.CheckResultExisted, existingQueue, nil
 	}
-	if diff, err := kmp.SafeDiff(r.Queue.Spec, existingQueue.Spec); err != nil {
-		return constants.CheckResultUnknown, nil, err
-	} else if diff != "" {
-		log.Info("Queue Updated", "Diff", diff)
-		return constants.CheckResultUpdate, existingQueue, nil
-	}
-	return constants.CheckResultExisted, existingQueue, nil
+
+	return constants.CheckResultUpdate, existingQueue, nil
+}
+
+func semanticQueueEquals(desired, existing *schedulingv1beta1.Queue) bool {
+	return equality.Semantic.DeepEqual(desired.Spec.Weight, existing.Spec.Weight) &&
+	equality.Semantic.DeepEqual(desired.Spec.Reclaimable, existing.Spec.Reclaimable) &&
+	equality.Semantic.DeepEqual(desired.Spec.Capability, existing.Spec.Capability) &&
+	equality.Semantic.DeepEqual(desired.Spec.Affinity, existing.Spec.Affinity)
 }
 
 func (r *QueueReconciler) Reconcile() (*schedulingv1beta1.Queue, error) {
-	existingQueue := &schedulingv1beta1.Queue{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: r.Queue.Name, Namespace: r.Queue.Namespace}, existingQueue)
+	checkResult, queue, err := r.checkQueueExist()
+
 	if err != nil {
-		if errors.IsNotFound(err) {
-			err = r.client.Create(context.TODO(), r.Queue)
-			if err != nil {
-				return nil, err
-			}
-			return r.Queue, nil
-		}
 		return nil, err
 	}
-	return existingQueue, nil
+	log.Info("queue reconcile", "checkResult", checkResult, "err", err)
+
+	var opErr error
+	switch checkResult {
+	case constants.CheckResultCreate:
+		opErr = r.client.Create(context.TODO(), r.Queue)
+	case constants.CheckResultUpdate:
+		r.Queue.SetResourceVersion(queue.GetResourceVersion())
+		opErr = r.client.Update(context.TODO(), r.Queue)
+	default:
+		return queue, nil
+	}
+
+	if opErr != nil {
+		return nil, opErr
+	}
+
+	return r.Queue, nil
 }
 
 func resourceQuantityAfterMultiply(res *resource.Quantity, count int) {

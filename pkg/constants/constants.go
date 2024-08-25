@@ -429,12 +429,15 @@ func ModelConfigName(isvcName string) string {
 	return fmt.Sprintf("modelconfig-%s", isvcName)
 }
 
-func PVName(isvcName string) string {
-	var maxLen = 20
-	if len(isvcName) > maxLen {
-		isvcName = isvcName[len(isvcName)-maxLen:]
+func PVName(isvcName string, isvcNamespace string) string {
+	var maxSubLen = 10
+	if len(isvcNamespace) > maxSubLen {
+		isvcNamespace = isvcNamespace[len(isvcNamespace)-maxSubLen:]
 	}
-	return fmt.Sprintf("pv-%s", isvcName)
+	if len(isvcName) > maxSubLen {
+		isvcName = isvcName[len(isvcName)-maxSubLen:]
+	}
+	return fmt.Sprintf("pv-%s-%s", isvcNamespace, isvcName)
 }
 
 func PVCName(isvcName string) string {

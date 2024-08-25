@@ -72,5 +72,10 @@ metadata:
 data:
   reservationJob: |-
     {
-      "image": "{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}"
+      "image": "{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}",
+      "creationFailedTimeThresholdSecond" : 30
+    }
+  dacReconcilePolicy: |-
+    {
+      "reconcileFailedLifecycleState": false
     }

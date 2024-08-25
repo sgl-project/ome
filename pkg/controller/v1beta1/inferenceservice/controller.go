@@ -129,7 +129,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// The object is being deleted
 		if utils.Includes(isvc.ObjectMeta.Finalizers, finalizerName) {
 
-			pvName := constants.PVName(isvc.Name)
+			pvName := constants.PVName(isvc.Name, isvc.Namespace)
 			r.Log.Info("Force deleting PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
 			if err := r.ForceDeletePV(pvName); err != nil {
 				return ctrl.Result{}, err

@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	OCIConfigName        = "ociEtc"
-	IngressConfigKeyName = "ingress"
-	DeployConfigName     = "deploy"
+	OCIConfigName                = "ociEtc"
+	IngressConfigKeyName         = "ingress"
+	DeployConfigName             = "deploy"
+	DacReconcilePolicyConfigname = "dacReconcilePolicy"
 
 	DefaultDomainTemplate = "{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -76,6 +77,12 @@ type OCIConfig struct {
 type DeployConfig struct {
 	DefaultDeploymentMode string `json:"defaultDeploymentMode,omitempty"`
 }
+
+// +kubebuilder:object:generate=false
+type DacReconcilePolicyConfig struct {
+	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
+}
+
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
@@ -187,4 +194,20 @@ func NewOciConfig(clientset kubernetes.Interface) (*OCIConfig, error) {
 		}
 	}
 	return ociConfig, nil
+}
+
+func NewDacReconcilePolicyConfig(clientset kubernetes.Interface) (*DacReconcilePolicyConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.DedicatedAIClusterConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	dacPolicyConfig := &DacReconcilePolicyConfig{}
+	for _, err := range []error{
+		getComponentConfig(DacReconcilePolicyConfigname, configMap, &dacPolicyConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return dacPolicyConfig, nil
 }

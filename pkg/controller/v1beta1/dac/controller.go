@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	nsreconciler "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/reconcilers/namespace"
@@ -21,8 +22,13 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
@@ -47,11 +53,12 @@ import (
 // DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
 type DedicatedAIClusterReconciler struct {
 	client.Client
-	ClientConfig *rest.Config
-	Clientset    kubernetes.Interface
-	Log          logr.Logger
-	Scheme       *runtime.Scheme
-	Recorder     record.EventRecorder
+	DacReconcilePolicy *omev1beta1.DacReconcilePolicyConfig
+	ClientConfig       *rest.Config
+	Clientset          kubernetes.Interface
+	Log                logr.Logger
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
 }
 
 func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -108,7 +115,14 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Set namespace controller at the first time
 	r.Log.Info("namespace", "namespace", namespace)
 
-	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, mergedSpec.Count)
+	queueCount := mergedSpec.Count
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
+		if dac.Status.DacLifecycleState == omev1beta1.FAILED {
+			queueCount = 0
+		}
+	}
+
+	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, queueCount)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -124,7 +138,12 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile queue")
 	}
 
-	reservationJobReconciler, err := volcanoJobReconciler.NewReservationJobReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, mergedSpec.Count)
+	replicaCount, err := r.GetDesiredReservationReplicaCount(dac, mergedSpec.Count)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	reservationJobReconciler, err := volcanoJobReconciler.NewReservationJobReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, replicaCount)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -141,9 +160,12 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile reservation job")
 	}
 
-	err = r.updateDedicatedAIClusterStatus(dac, queue, reservationJob)
+	requeue, err := r.updateDedicatedAIClusterStatus(dac, queue, reservationJob, reservationJobReconciler.CreationFailedTimeThreshold)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
+		return ctrl.Result{Requeue: true}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
+	}
+	if requeue {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	dacFinalizer := "dedicatedaiclusters.ome.io/finalizer"
@@ -235,36 +257,70 @@ func mergeSpecs(profileSpec *omev1beta1.DedicatedAIClusterProfileSpec, dacSpec *
 func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 	dac *omev1beta1.DedicatedAICluster,
 	queue *schedulingv1beta1.Queue,
-	reservationJob *volbatchv1alpha1.Job) error {
+	reservationJob *volbatchv1alpha1.Job,
+	creationFailedTimeThreshold time.Duration) (bool, error) {
 	
-	checkStatus := func() error {
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
+		if dac.Status.DacLifecycleState == omev1beta1.FAILED {
+			return false, nil
+		}
+	}
+	
+	checkStatus := func() (bool, error) {
 		if reservationJob.Status.State.Phase == volbatchv1alpha1.Running {
 			dac.Status.DacLifecycleState = omev1beta1.ACTIVE
+			dac.Status.LifecycleDetail = string(omev1beta1.ACTIVE)
 		} else {
 			if queue.Status.Running == 0 {  // nothing could be allocated
-				condition, err := r.getFailedReservationPodGroupCondition(reservationJob)
+				condition, hasScheduled, err := r.getFailedReservationPodGroupCondition(reservationJob)
 				if err != nil {
-					return err
+					return false, err
 				}
 
 				if condition != nil {
 					if condition.Type == schedulingv1beta1.PodGroupUnschedulableType {
-						dac.Status.DacLifecycleState = omev1beta1.FAILED
-						dac.Status.LifecycleDetail = condition.Reason
+						if hasScheduled {
+							dac.Status.DacLifecycleState = omev1beta1.UPDATING
+							dac.Status.LifecycleDetail = condition.Reason
+						} else {
+							if reservationJob.CreationTimestamp.Add(creationFailedTimeThreshold).Before(time.Now()) {
+								if shouldMarkFailed(dac) {
+									dac.Status.DacLifecycleState = omev1beta1.FAILED
+									dac.Status.LifecycleDetail = condition.Reason
+								}
+							} else {
+								dac.Status.DacLifecycleState = omev1beta1.CREATING
+								dac.Status.LifecycleDetail = string(omev1beta1.CREATING)
+							}
+						}
 					} else {
-						return fmt.Errorf("need further investigation on the volcanoJob %s condition", reservationJob.Name)
+						return false, fmt.Errorf("need further investigation on the volcanoJob %s condition", reservationJob.Name)
 					}
 				} else {
-					dac.Status.DacLifecycleState = omev1beta1.CREATING
+					if reservationJob.CreationTimestamp.Add(creationFailedTimeThreshold).Before(time.Now()) {
+						if shouldMarkFailed(dac) {
+							dac.Status.DacLifecycleState = omev1beta1.FAILED
+							dac.Status.LifecycleDetail = "NotEnoughResources"
+						}
+					} else {
+						dac.Status.DacLifecycleState = omev1beta1.CREATING
+						dac.Status.LifecycleDetail = string(omev1beta1.CREATING)
+					}
 				}
 			} else {
 				dac.Status.DacLifecycleState = omev1beta1.ACTIVE
+				dac.Status.LifecycleDetail = string(omev1beta1.ACTIVE)
 			}
 		}
-		return nil
+
+		if dac.Status.DacLifecycleState == omev1beta1.FAILED || dac.Status.DacLifecycleState == omev1beta1.ACTIVE {
+			return false, nil
+		} else {
+			return true, nil
+		}
 	}
 
-	err := checkStatus()
+	requeue, err := checkStatus()
 	if err != nil {
 		dac.Status.DacLifecycleState = omev1beta1.FAILED
 		dac.Status.LifecycleDetail = err.Error()
@@ -276,49 +332,122 @@ func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
 			return err
 		}
+		r.Client.Status().Update(context.TODO(), dac)
+		if err != nil {
+			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
+			return err
+		}
 		return nil
 	})
 	if err != nil {
 		r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
-		return err
+		return false, err
 	}
-	return nil
+	return requeue, nil
+}
+
+func shouldMarkFailed(dac *omev1beta1.DedicatedAICluster) bool {
+	return dac.Status.DacLifecycleState == omev1beta1.CREATING || dac.Status.DacLifecycleState == ""
 }
 
 func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
-	reservationJob *volbatchv1alpha1.Job) (*schedulingv1beta1.PodGroupCondition, error) {
+	reservationJob *volbatchv1alpha1.Job) (*schedulingv1beta1.PodGroupCondition, bool, error) {
+
 	existingPodGroup := &schedulingv1beta1.PodGroup{}
-	podGroupName := fmt.Sprintf("%s-%s", reservationJob.Name, reservationJob.UID)
+	podGroupName := fmt.Sprintf("%s-%s", reservationJob.Name, reservationJob.UID) 
 	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: podGroupName, Namespace: reservationJob.Namespace}, existingPodGroup)
 	if err != nil {
-		return nil, err
+		if apierr.IsNotFound(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
 
+	var hasScheduled bool = false
 	if existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupPending || 
 		existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupUnknown ||
 		existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupInqueue {
 		conditions := existingPodGroup.Status.Conditions
 		if len(conditions) == 0 {
-			return nil, nil
+			return nil, false, nil
 		} else {
 			sort.Slice(conditions, func(a, b int) bool {
 				return conditions[a].LastTransitionTime.After(conditions[b].LastTransitionTime.Time)
 			})
-		}
 
-		return &conditions[0], nil
+
+			for _, c := range(conditions) {
+				if c.Type == schedulingv1beta1.PodGroupScheduled {
+					hasScheduled = true
+					break
+				}
+			}
+			return &conditions[0], hasScheduled, nil
+		}
 	} 
 
-	return nil, nil
+	return nil, false, nil
+}
+
+func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *omev1beta1.DedicatedAICluster, reservationCount int) (int, error) {
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
+		if dac.Status.DacLifecycleState == omev1beta1.FAILED {
+			return 0, nil
+		}
+	}
+
+	isvcList := &omev1beta1.InferenceServiceList{}
+	if err := r.List(context.TODO(), isvcList, client.InNamespace(dac.Name)); err != nil {
+		return 0, err
+	}
+
+	if len(isvcList.Items) == 0 {
+		return reservationCount, nil
+	}
+
+	var totalIsvcReplicas int
+	for _, isvc := range isvcList.Items {
+		totalIsvcReplicas += isvc.Spec.Predictor.ComponentExtensionSpec.MaxReplicas
+	}
+
+	if reservationCount - totalIsvcReplicas < 0 {
+		return 0, nil
+	}
+	return reservationCount - totalIsvcReplicas, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacReconcilePolicyConfig *omev1beta1.DacReconcilePolicyConfig) error {
 	r.ClientConfig = mgr.GetConfig()
+	r.DacReconcilePolicy = dacReconcilePolicyConfig
+
+	predicates := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+	}
+	eventHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		return []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{ Name: obj.GetNamespace() },
+			},
+		}
+	})
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&omev1beta1.DedicatedAICluster{}).
 		Owns(&corev1.Namespace{}).
 		Owns(&schedulingv1beta1.Queue{}).
 		Owns(&volbatchv1alpha1.Job{}).
+		Watches(
+			&omev1beta1.InferenceService{},
+			eventHandler,
+			builder.WithPredicates(predicates)).
 		Complete(r)
 }

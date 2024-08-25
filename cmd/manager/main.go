@@ -136,6 +136,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	dacReconcilePolicyConfig, err := v1beta1.NewDacReconcilePolicyConfig(clientSet)
+	if err != nil {
+		setupLog.Error(err, "unable to get dacReconcilePolicy config.")
+		os.Exit(1)
+	}
+
 	rayFound, rayCheckErr := utils.IsCrdAvailable(cfg, ray.SchemeGroupVersion.String(), constants.RayClusterKind)
 	if rayCheckErr != nil {
 		setupLog.Error(rayCheckErr, "error when checking if Ray Cluster kind is available")
@@ -234,7 +240,7 @@ func main() {
 		Log:      ctrl.Log.WithName("v1beta1Controllers").WithName("DedicatedAICluster"),
 		Scheme:   mgr.GetScheme(),
 		Recorder: dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, dacReconcilePolicyConfig); err != nil {
 		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "DedicatedAICluster")
 		os.Exit(1)
 	}

@@ -33,7 +33,7 @@ func NewPredictorPVReconciler(client client.Client, clientset kubernetes.Interfa
 
 func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *v1beta1.BaseModelSpec) (ctrl.Result, error) {
 	log.Info("Reconciling PersistentVolume", "inference service", isvc.Name, "namespace", isvc.Namespace)
-	pvName := constants.PVName(isvc.Name)
+	pvName := constants.PVName(isvc.Name, isvc.Namespace)
 
 	_, err := c.clientset.CoreV1().PersistentVolumes().Get(context.TODO(), pvName, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
@@ -56,31 +56,8 @@ func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *
 				},
 				PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 				PersistentVolumeSource: corev1.PersistentVolumeSource{
-					Local: &corev1.LocalVolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
 						Path: *baseModelSpec.Storage.StorageUri,
-					},
-				},
-				NodeAffinity: &corev1.VolumeNodeAffinity{
-					Required: &corev1.NodeSelector{
-						NodeSelectorTerms: []corev1.NodeSelectorTerm{
-							{
-								MatchExpressions: []corev1.NodeSelectorRequirement{
-									{
-										Key:      "beta.kubernetes.io/instance-type",
-										Operator: corev1.NodeSelectorOpIn,
-										Values: []string{
-											"BM.GPU2.2", "BM.GPU3.8", "BM.GPU4.8",
-											"VM.GPU2.1", "VM.GPU3.1", "VM.GPU3.2",
-											"VM.GPU3.4", "BM.GPU.T1.2", "BM.GPU.T1-2.4",
-											"BM.GPU.A100-v2.8", "BM.GPU.GM4.8", "BM.GPU.A10.4",
-											"BM.GPU.GU1.4", "VM.GPU.A10.1", "VM.GPU.GU1.1",
-											"VM.GPU.A10.2", "VM.GPU.GU1.2", "BM.GPU.B4.8",
-											"BM.GPU.H100.8",
-										},
-									},
-								},
-							},
-						},
 					},
 				},
 			},

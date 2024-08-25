@@ -55,6 +55,7 @@ func (c *PVCReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, 
 						corev1.ResourceStorage: resource.MustParse("999Gi"),
 					},
 				},
+				VolumeName: constants.PVName(isvc.Name, isvc.Namespace),
 			},
 		}
 		if err := controllerutil.SetControllerReference(isvc, newPVC, c.scheme); err != nil {
