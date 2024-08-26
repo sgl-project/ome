@@ -4,6 +4,18 @@ metadata:
   name: inferenceservice-config
   namespace: ome
 data:
+  multinodeProber: |-
+    {
+        "image" : "{{.Values.ome.multinodeProber.image}}:{{.Values.ome.multinodeProber.tag}}",
+        "memoryRequest": "{{.Values.ome.multinodeProber.memoryRequest}}",
+        "memoryLimit": "{{.Values.ome.multinodeProber.memoryLimit}}",
+        "cpuRequest": "{{.Values.ome.multinodeProber.cpuRequest}}",
+        "cpuLimit": "{{.Values.ome.multinodeProber.cpuLimit}}",
+        "startupFailureThreshold": "{{.Values.ome.multinodeProber.startupFailureThreshold}}",
+        "startupPeriodSeconds": "{{.Values.ome.multinodeProber.startupPeriodSeconds}}",
+        "startupTimeoutSeconds": "{{.Values.ome.multinodeProber.startupTimeoutSeconds}}",
+        "startupInitialDelaySeconds": "{{.Values.ome.multinodeProber.startupInitialDelaySeconds}}"
+    }
   ingress: |-
     {
         "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",

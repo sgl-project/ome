@@ -43,8 +43,8 @@ llama_3_1_405b_instruct:
   topologySpreadConstraints: []
   volumes: []
   # The number of replicas to start with must be 2 or more, as the model is too large to fit in a single GPU node
-  minReplicas: 2
-  maxReplicas: 2
+  minReplicas: 1
+  maxReplicas: 1
   image:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag

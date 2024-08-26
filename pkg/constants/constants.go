@@ -26,10 +26,10 @@ var (
 
 // InferenceService Constants
 var (
-	InferenceServiceName          = "inferenceservice"
-	InferenceServiceAPIName       = "inferenceservices"
-	InferenceServicePodLabelKey   = OMEAPIGroupName + "/" + InferenceServiceName
-	InferenceServiceConfigMapName = "inferenceservice-config"
+	InferenceServiceName            = "inferenceservice"
+	InferenceServiceAPIName         = "inferenceservices"
+	InferenceServicePodLabelKey     = OMEAPIGroupName + "/" + InferenceServiceName
+	InferenceServiceConfigMapName   = "inferenceservice-config"
 	DedicatedAIClusterConfigMapName = "dedicatedaicluster-config"
 )
 
@@ -74,18 +74,18 @@ var (
 
 // Label Constants
 var (
-	RayClusterLabel  = "ray.io/cluster"
-	RayScheduler     = "ray.io/scheduler-name"
-	RayPrioriyClass  = "ray.io/priority-class-name"
-	VolcanoQueueName = "volcano.sh/queue-name"
-	VolcanoScheduler = "volcano"
+	RayClusterLabel    = "ray.io/cluster"
+	RayScheduler       = "ray.io/scheduler-name"
+	RayPrioriyClass    = "ray.io/priority-class-name"
+	VolcanoQueueName   = "volcano.sh/queue-name"
+	VolcanoScheduler   = "volcano"
 	VolcanoPreemptable = "volcano.sh/preemptable"
 )
 
 // PrioriryClass
 var (
 	DedicatedAiClusterReservationPriorityClass = "volcano-reservation-low-priority"
-	DedicatedAiClusterPreemptionPriorityClass = "volcano-scheduling-high-priority"
+	DedicatedAiClusterPreemptionPriorityClass  = "volcano-scheduling-high-priority"
 )
 
 // InferenceService Internal Annotations
@@ -277,7 +277,9 @@ const (
 // InferenceService container names
 const (
 	InferenceServiceContainerName   = "ome-container"
+	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
+	MultiNodeProberContainerPort    = 8080
 
 	// TransformerContainerName transformer container name in collocation
 	TransformerContainerName = "transformer-container"

@@ -14,7 +14,7 @@ func TempDir() (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	return tmp, func() { os.RemoveAll(tmp) }, nil
+	return tmp, func() { _ = os.RemoveAll(tmp) }, nil
 }
 
 // TempFile will return a temporary file and a closer func for the file.
@@ -23,7 +23,7 @@ func TempFile() (*os.File, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return tmp, func() { os.Remove(tmp.Name()) }, nil
+	return tmp, func() { _ = os.Remove(tmp.Name()) }, nil
 }
 
 // PerformRequest will make the given request to the supplied handler and return

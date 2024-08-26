@@ -1049,7 +1049,7 @@ func TestGetHostPrefix(t *testing.T) {
 			},
 			disableVirtualHost: true,
 			useDefault:         true,
-			matcher:            gomega.Equal(fmt.Sprintf("%s-predictor-default", serviceName)),
+			matcher:            gomega.Equal(fmt.Sprint(serviceName + "-predictor-default")),
 		},
 	}
 

@@ -1,0 +1,23 @@
+# Build the manager binary
+FROM odo-docker-signed-local.artifactory-builds.oci.oraclecorp.com/oke/go-boringcrypto-4493:1.22.1-1 AS builder
+ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
+
+# Copy in the go src
+WORKDIR /go/src/bitbucket.oci.oraclecorp.com/gen/ome
+COPY go.mod  go.mod
+COPY go.sum  go.sum
+
+RUN go mod download
+
+COPY cmd/    cmd/
+COPY pkg/    pkg/
+
+# Build
+RUN go build -o multinode-prober ./cmd/multinode-prober
+
+# Copy the controller-manager into a thin image
+FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:8-slim
+COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol8:1.34 / /
+
+COPY --from=builder /go/src/bitbucket.oci.oraclecorp.com/gen/ome/multinode-prober /
+ENTRYPOINT ["/multinode-prober"]

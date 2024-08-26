@@ -15,6 +15,17 @@ ome:
     airportCode: ORD
     adNumberName: ad2
     namespace: ax0pqskufyud
+  multinodeProber:
+    image: eu-frankfurt-1.ocir.io/idlsnvn0f2is/multinode-prober
+    tag: v0.1
+    memoryRequest: 100Mi
+    cpuRequest: 100m
+    memoryLimit: 100Mi
+    cpuLimit: 100m
+    startupFailureThreshold: 150
+    startupPeriodSeconds: 30
+    startupTimeoutSeconds: 60
+    startupInitialDelaySeconds: 120
   controller:
     replicaCount: 3
     deploymentMode: "RawDeployment"

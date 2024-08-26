@@ -39,6 +39,6 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
-	t.Stop()
+	_ = t.Stop()
 	os.Exit(code)
 }

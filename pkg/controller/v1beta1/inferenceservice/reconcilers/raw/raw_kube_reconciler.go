@@ -74,7 +74,7 @@ func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*
 // Reconcile ...
 func (r *RawKubeReconciler) Reconcile() (*appsv1.Deployment, error) {
 	// reconcile Deployment
-	deployment, err := r.Deployment.Reconcile()
+	dply, err := r.Deployment.Reconcile()
 	if err != nil {
 		return nil, err
 	}
@@ -88,5 +88,5 @@ func (r *RawKubeReconciler) Reconcile() (*appsv1.Deployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	return deployment, nil
+	return dply, nil
 }

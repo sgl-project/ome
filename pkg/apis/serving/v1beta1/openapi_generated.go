@@ -25,6 +25,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentExtensionSpec":          schema_pkg_apis_serving_v1beta1_ComponentExtensionSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ComponentStatusSpec":             schema_pkg_apis_serving_v1beta1_ComponentStatusSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.CustomPredictor":                 schema_pkg_apis_serving_v1beta1_CustomPredictor(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DacReconcilePolicyConfig":        schema_pkg_apis_serving_v1beta1_DacReconcilePolicyConfig(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAICluster":              schema_pkg_apis_serving_v1beta1_DedicatedAICluster(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterList":          schema_pkg_apis_serving_v1beta1_DedicatedAIClusterList(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterProfile":       schema_pkg_apis_serving_v1beta1_DedicatedAIClusterProfile(ref),
@@ -53,6 +54,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelSpec":                       schema_pkg_apis_serving_v1beta1_ModelSpec(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatus":                     schema_pkg_apis_serving_v1beta1_ModelStatus(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ModelStatusSpec":                 schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.MultiNodeProberConfig":           schema_pkg_apis_serving_v1beta1_MultiNodeProberConfig(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig":                       schema_pkg_apis_serving_v1beta1_OCIConfig(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.ObjectReference":                 schema_pkg_apis_serving_v1beta1_ObjectReference(ref),
 		"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.PodSpec":                         schema_pkg_apis_serving_v1beta1_PodSpec(ref),
@@ -1202,6 +1204,24 @@ func schema_pkg_apis_serving_v1beta1_CustomPredictor(ref common.ReferenceCallbac
 	}
 }
 
+func schema_pkg_apis_serving_v1beta1_DacReconcilePolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"reconcileFailedLifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_serving_v1beta1_DedicatedAICluster(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2122,12 +2142,19 @@ func schema_pkg_apis_serving_v1beta1_InferenceServicesConfig(ref common.Referenc
 							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig"),
 						},
 					},
+					"multinodeProber": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MultiNodeProber contains all MultiNodeProber Configuration",
+							Default:     map[string]interface{}{},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.MultiNodeProberConfig"),
+						},
+					},
 				},
-				Required: []string{"ociEtc"},
+				Required: []string{"ociEtc", "multinodeProber"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig"},
+			"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.MultiNodeProberConfig", "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1.OCIConfig"},
 	}
 }
 
@@ -2346,7 +2373,6 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -2717,7 +2743,6 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -2818,6 +2843,82 @@ func schema_pkg_apis_serving_v1beta1_ModelStatusSpec(ref common.ReferenceCallbac
 					},
 				},
 				Required: []string{"state"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_MultiNodeProberConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"containerImage": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"cpuRequest": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"memoryRequest": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"cpuLimit": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"memoryLimit": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"startupFailureThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+					"startupPeriodSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+					"startupInitialDelaySeconds": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+					"startupTimeoutSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+				},
+				Required: []string{"containerImage", "cpuRequest", "memoryRequest", "cpuLimit", "memoryLimit", "startupFailureThreshold", "startupPeriodSeconds", "startupInitialDelaySeconds", "startupTimeoutSeconds"},
 			},
 		},
 	}
@@ -3685,7 +3786,6 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -4815,7 +4915,6 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
-				
 			},
 		},
 	}

@@ -2,19 +2,19 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: llama3-1-405b-instruct-fp8
+  name: llama3-1-405b-instruct
 ---
 
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: llama-3-1-405b-instruct-fp8
-  namespace: llama3-1-405b-instruct-fp8
+  name: llama-3-1-405b-instruct
+  namespace: llama3-1-405b-instruct
 spec:
   predictor:
     model:
       runtime: vllm-pp
       baseModel: llama-3-1-405b-instruct-fp8
       protocolVersion: openAI
-    minReplicas: 2
-    maxReplicas: 2
+    minReplicas: 1
+    maxReplicas: 1

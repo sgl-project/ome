@@ -115,9 +115,12 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 
 	tempTargetFilePath := targetFilePath + ".temp"
 
-	os.Remove(tempTargetFilePath)
+	err := os.Remove(tempTargetFilePath)
+	if err != nil {
+		return err
+	}
 
-	err := os.MkdirAll(path.Dir(tempTargetFilePath), os.ModePerm)
+	err = os.MkdirAll(path.Dir(tempTargetFilePath), os.ModePerm)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to create the directory %s under the target path %s, error: %+v",
@@ -125,14 +128,22 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 	}
 
 	tmpFile, err := os.OpenFile(tempTargetFilePath, os.O_RDWR|os.O_CREATE, 0644)
-	defer tmpFile.Close()
+	defer func(tmpFile *os.File) {
+		err := tmpFile.Close()
+		if err != nil {
+
+		}
+	}(tmpFile)
 	if err != nil {
 		return err
 	}
 
 	for part := range downloadedParts {
 		if part.err != nil {
-			os.Remove(tempTargetFilePath)
+			err := os.Remove(tempTargetFilePath)
+			if err != nil {
+				return err
+			}
 			return part.err
 		}
 
@@ -141,7 +152,10 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 			return err
 		}
 	}
-	tmpFile.Close()
+	err = tmpFile.Close()
+	if err != nil {
+		return err
+	}
 
 	err = os.Rename(tempTargetFilePath, targetFilePath)
 	if err != nil {
@@ -191,7 +205,10 @@ func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]b
 	for i := 0; i < chunkSizeInByte/bufferSizeInByte; i++ {
 		bytesRead, _ := file.Read(buf)
 		if bytesRead > 0 {
-			io.Copy(md5Calculator, bytes.NewReader(buf[:bytesRead]))
+			_, err := io.Copy(md5Calculator, bytes.NewReader(buf[:bytesRead]))
+			if err != nil {
+				return nil, false
+			}
 		}
 
 		if bytesRead < bufferSizeInByte {
@@ -206,12 +223,12 @@ func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]b
 // We used to upload big files with part size of 500MB, and small files with part size of 25000000.
 // Now we're using 50000000 bytes for all files. This is for back compatibility
 func multipartMd5Matched(targetFilePath string, objectMd5 *string, logger logging.Interface) (bool, error) {
-	chunk_sizes := []int{SMALL_CHUNK_SIZE_IN_BYTE, SMALL_CHUNK_SIZE_50MB_IN_BYTE, LARGE_CHUNK_SIZE_IN_BYTE}
-	buffer_size := []int{SMALL_CHUNK_FILE_BUFFER_SIZE, SMALL_CHUNK_FILE_BUFFER_SIZE, LARGE_CHUNK_FILE_BUFFER_SIZE}
+	chunkSizes := []int{SMALL_CHUNK_SIZE_IN_BYTE, SMALL_CHUNK_SIZE_50MB_IN_BYTE, LARGE_CHUNK_SIZE_IN_BYTE}
+	bufferSize := []int{SMALL_CHUNK_FILE_BUFFER_SIZE, SMALL_CHUNK_FILE_BUFFER_SIZE, LARGE_CHUNK_FILE_BUFFER_SIZE}
 	var err error
 	var finalMd5 string
-	for i, chunk_size := range chunk_sizes {
-		finalMd5, err = calculateMultipartMd5(chunk_size, buffer_size[i], targetFilePath, logger)
+	for i, chunkSize := range chunkSizes {
+		finalMd5, err = calculateMultipartMd5(chunkSize, bufferSize[i], targetFilePath, logger)
 		if err == nil && *objectMd5 == finalMd5 {
 			return true, nil
 		}
@@ -360,7 +377,12 @@ func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload, logger 
 		return err
 	}
 	responseContent := response.Content
-	defer responseContent.Close()
+	defer func(responseContent io.ReadCloser) {
+		err := responseContent.Close()
+		if err != nil {
+			logger.Errorf("Failed to close response content: %s", err)
+		}
+	}(responseContent)
 
 	if response.ContentLength == nil {
 		logger.Infof("Download %s", fileToDownload.source.ObjectName)

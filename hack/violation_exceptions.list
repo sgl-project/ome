@@ -17,6 +17,7 @@ API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/gen/ome/pkg/a
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ServingRuntimePodSpec,Tolerations
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ServingRuntimePodSpec,Volumes
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,ServingRuntimeSpec,ProtocolVersions
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,InferenceServicesConfig,MultiNodeProber
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,InferenceServicesConfig,OCIConfig
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,IngressConfig,IngressServiceName
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1,IngressConfig,LocalGatewayServiceName

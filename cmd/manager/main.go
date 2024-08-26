@@ -29,8 +29,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 var (
@@ -180,7 +180,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
 
 	ksvcFound, ksvcCheckErr := utils.IsCrdAvailable(cfg, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if ksvcCheckErr != nil {

@@ -26,15 +26,15 @@ const (
 )
 
 type ReservationJobConfig struct {
-	Image                                string         `json:"image"`  
-	CreationFailedTimeThresholdSecond    int            `json:"creationFailedTimeThresholdSecond"`
+	Image                             string `json:"image"`
+	CreationFailedTimeThresholdSecond int    `json:"creationFailedTimeThresholdSecond"`
 }
 
 type ReservationJobReconciler struct {
-	client client.Client
-	scheme *runtime.Scheme
+	client                      client.Client
+	scheme                      *runtime.Scheme
 	CreationFailedTimeThreshold time.Duration
-	ReservationJob *volbatchv1alpha1.Job
+	ReservationJob              *volbatchv1alpha1.Job
 }
 
 func NewReservationJobReconciler(client client.Client, scheme *runtime.Scheme, namespace string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity, count int) (*ReservationJobReconciler, error) {
@@ -45,10 +45,10 @@ func NewReservationJobReconciler(client client.Client, scheme *runtime.Scheme, n
 	}
 
 	return &ReservationJobReconciler{
-		client: client,
-		scheme: scheme,
+		client:                      client,
+		scheme:                      scheme,
 		CreationFailedTimeThreshold: time.Duration(creationFailedTimeThresholdSecond) * time.Second,
-		ReservationJob: reservationJob,
+		ReservationJob:              reservationJob,
 	}, nil
 }
 
@@ -71,19 +71,19 @@ func createReservationJob(client client.Client, jobName string, namespace string
 	var terminationGracePeriodSeconds int64 = 5
 	return &volbatchv1alpha1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: jobName,
+			Name:      jobName,
 			Namespace: namespace,
 		},
 		Spec: volbatchv1alpha1.JobSpec{
-			SchedulerName: constants.VolcanoScheduler,
+			SchedulerName:     constants.VolcanoScheduler,
 			PriorityClassName: constants.DedicatedAiClusterReservationPriorityClass,
-			MinAvailable: int32(count),
-			MaxRetry: 3,
-			Queue: namespace,
+			MinAvailable:      int32(count),
+			MaxRetry:          3,
+			Queue:             namespace,
 			Tasks: []volbatchv1alpha1.TaskSpec{
 				{
 					Replicas: int32(count),
-					Name: mainTaskName,
+					Name:     mainTaskName,
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
@@ -92,11 +92,11 @@ func createReservationJob(client client.Client, jobName string, namespace string
 						},
 						Spec: corev1.PodSpec{
 							TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
-							RestartPolicy: corev1.RestartPolicyAlways,
+							RestartPolicy:                 corev1.RestartPolicyAlways,
 							Containers: []corev1.Container{
 								{
 									ImagePullPolicy: corev1.PullIfNotPresent,
-									Image: reservationJobConfig.Image,
+									Image:           reservationJobConfig.Image,
 									Command: []string{
 										"/bin/bash",
 									},
@@ -136,20 +136,20 @@ func (r *ReservationJobReconciler) checkJobExist() (constants.CheckResultType, *
 
 	if semanticJobEquals(r.ReservationJob, existingRjob) {
 		return constants.CheckResultExisted, existingRjob, nil
-	} 
+	}
 	return constants.CheckResultUpdate, existingRjob, nil
 }
 
 func semanticJobEquals(desired, existing *volbatchv1alpha1.Job) bool {
 	return equality.Semantic.DeepEqual(desired.Spec.SchedulerName, existing.Spec.SchedulerName) &&
-	equality.Semantic.DeepEqual(desired.Spec.PriorityClassName, existing.Spec.PriorityClassName) &&
-	equality.Semantic.DeepEqual(desired.Spec.MinAvailable, existing.Spec.MinAvailable) &&
-	equality.Semantic.DeepEqual(desired.Spec.Queue, existing.Spec.Queue) &&
-	equality.Semantic.DeepEqual(len(desired.Spec.Tasks), len(existing.Spec.Tasks)) &&
-	equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Replicas, existing.Spec.Tasks[0].Replicas) &&
-	equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.ObjectMeta, existing.Spec.Tasks[0].Template.ObjectMeta) &&
-	equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.Spec.Containers[0].Resources, existing.Spec.Tasks[0].Template.Spec.Containers[0].Resources) &&
-	equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.Spec.Affinity, existing.Spec.Tasks[0].Template.Spec.Affinity)
+		equality.Semantic.DeepEqual(desired.Spec.PriorityClassName, existing.Spec.PriorityClassName) &&
+		equality.Semantic.DeepEqual(desired.Spec.MinAvailable, existing.Spec.MinAvailable) &&
+		equality.Semantic.DeepEqual(desired.Spec.Queue, existing.Spec.Queue) &&
+		equality.Semantic.DeepEqual(len(desired.Spec.Tasks), len(existing.Spec.Tasks)) &&
+		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Replicas, existing.Spec.Tasks[0].Replicas) &&
+		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.ObjectMeta, existing.Spec.Tasks[0].Template.ObjectMeta) &&
+		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.Spec.Containers[0].Resources, existing.Spec.Tasks[0].Template.Spec.Containers[0].Resources) &&
+		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.Spec.Affinity, existing.Spec.Tasks[0].Template.Spec.Affinity)
 }
 
 func (r *ReservationJobReconciler) Reconcile() (*volbatchv1alpha1.Job, error) {

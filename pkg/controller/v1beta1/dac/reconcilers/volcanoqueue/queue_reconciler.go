@@ -5,15 +5,15 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/api/equality"
 )
 
 var log = logf.Log.WithName("QueueReconciler")
@@ -41,9 +41,9 @@ func createQueue(queueName string, resources *corev1.ResourceRequirements, affin
 
 		// Volcano need as least one pod buffer on CPU and Memory to start scheduling
 		cpuRequest := resources.Requests[corev1.ResourceCPU]
-		resourceQuantityAfterMultiply(&cpuRequest, count + 1)
+		resourceQuantityAfterMultiply(&cpuRequest, count+1)
 		memoryRequest := resources.Requests[corev1.ResourceMemory]
-		resourceQuantityAfterMultiply(&memoryRequest, count + 1)
+		resourceQuantityAfterMultiply(&memoryRequest, count+1)
 		gpuRequest := resources.Requests[corev1.ResourceName("nvidia.com/gpu")]
 		resourceQuantityAfterMultiply(&gpuRequest, count)
 
@@ -113,9 +113,9 @@ func (r *QueueReconciler) checkQueueExist() (constants.CheckResultType, *schedul
 
 func semanticQueueEquals(desired, existing *schedulingv1beta1.Queue) bool {
 	return equality.Semantic.DeepEqual(desired.Spec.Weight, existing.Spec.Weight) &&
-	equality.Semantic.DeepEqual(desired.Spec.Reclaimable, existing.Spec.Reclaimable) &&
-	equality.Semantic.DeepEqual(desired.Spec.Capability, existing.Spec.Capability) &&
-	equality.Semantic.DeepEqual(desired.Spec.Affinity, existing.Spec.Affinity)
+		equality.Semantic.DeepEqual(desired.Spec.Reclaimable, existing.Spec.Reclaimable) &&
+		equality.Semantic.DeepEqual(desired.Spec.Capability, existing.Spec.Capability) &&
+		equality.Semantic.DeepEqual(desired.Spec.Affinity, existing.Spec.Affinity)
 }
 
 func (r *QueueReconciler) Reconcile() (*schedulingv1beta1.Queue, error) {

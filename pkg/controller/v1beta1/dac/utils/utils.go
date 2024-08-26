@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetDedicatedAIClausterConfigMap(client client.Client, ) (*corev1.ConfigMap, error) {
+func GetDedicatedAIClausterConfigMap(client client.Client) (*corev1.ConfigMap, error) {
 	configMap := &corev1.ConfigMap{}
 	err := client.Get(context.TODO(), types.NamespacedName{Name: constants.DedicatedAIClusterConfigMapName, Namespace: constants.OMENamespace}, configMap)
 	if err != nil {

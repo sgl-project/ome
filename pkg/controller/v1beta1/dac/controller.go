@@ -259,19 +259,19 @@ func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 	queue *schedulingv1beta1.Queue,
 	reservationJob *volbatchv1alpha1.Job,
 	creationFailedTimeThreshold time.Duration) (bool, error) {
-	
+
 	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
 		if dac.Status.DacLifecycleState == omev1beta1.FAILED {
 			return false, nil
 		}
 	}
-	
+
 	checkStatus := func() (bool, error) {
 		if reservationJob.Status.State.Phase == volbatchv1alpha1.Running {
 			dac.Status.DacLifecycleState = omev1beta1.ACTIVE
 			dac.Status.LifecycleDetail = string(omev1beta1.ACTIVE)
 		} else {
-			if queue.Status.Running == 0 {  // nothing could be allocated
+			if queue.Status.Running == 0 { // nothing could be allocated
 				condition, hasScheduled, err := r.getFailedReservationPodGroupCondition(reservationJob)
 				if err != nil {
 					return false, err
@@ -327,12 +327,18 @@ func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 	}
 
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		r.Client.Status().Update(context.TODO(), dac)
+		err := r.Client.Status().Update(context.TODO(), dac)
+		if err != nil {
+			return err
+		}
 		if err != nil {
 			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
 			return err
 		}
-		r.Client.Status().Update(context.TODO(), dac)
+		err = r.Client.Status().Update(context.TODO(), dac)
+		if err != nil {
+			return err
+		}
 		if err != nil {
 			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
 			return err
@@ -354,7 +360,7 @@ func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
 	reservationJob *volbatchv1alpha1.Job) (*schedulingv1beta1.PodGroupCondition, bool, error) {
 
 	existingPodGroup := &schedulingv1beta1.PodGroup{}
-	podGroupName := fmt.Sprintf("%s-%s", reservationJob.Name, reservationJob.UID) 
+	podGroupName := fmt.Sprintf("%s-%s", reservationJob.Name, reservationJob.UID)
 	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: podGroupName, Namespace: reservationJob.Namespace}, existingPodGroup)
 	if err != nil {
 		if apierr.IsNotFound(err) {
@@ -364,7 +370,7 @@ func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
 	}
 
 	var hasScheduled bool = false
-	if existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupPending || 
+	if existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupPending ||
 		existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupUnknown ||
 		existingPodGroup.Status.Phase == schedulingv1beta1.PodGroupInqueue {
 		conditions := existingPodGroup.Status.Conditions
@@ -375,8 +381,7 @@ func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
 				return conditions[a].LastTransitionTime.After(conditions[b].LastTransitionTime.Time)
 			})
 
-
-			for _, c := range(conditions) {
+			for _, c := range conditions {
 				if c.Type == schedulingv1beta1.PodGroupScheduled {
 					hasScheduled = true
 					break
@@ -384,7 +389,7 @@ func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
 			}
 			return &conditions[0], hasScheduled, nil
 		}
-	} 
+	}
 
 	return nil, false, nil
 }
@@ -410,7 +415,7 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *om
 		totalIsvcReplicas += isvc.Spec.Predictor.ComponentExtensionSpec.MaxReplicas
 	}
 
-	if reservationCount - totalIsvcReplicas < 0 {
+	if reservationCount-totalIsvcReplicas < 0 {
 		return 0, nil
 	}
 	return reservationCount - totalIsvcReplicas, nil
@@ -435,7 +440,7 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 	eventHandler := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 		return []reconcile.Request{
 			{
-				NamespacedName: types.NamespacedName{ Name: obj.GetNamespace() },
+				NamespacedName: types.NamespacedName{Name: obj.GetNamespace()},
 			},
 		}
 	})

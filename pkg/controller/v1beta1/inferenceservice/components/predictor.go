@@ -320,22 +320,27 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewMultiNodeVllmReconciler for predictor")
 			}
 			// set Ray controller
-			if err := controllerutil.SetControllerReference(isvc, r.Ray.RayCluster, p.scheme); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
+			for _, ray := range r.Ray.RayClusters {
+				if err := controllerutil.SetControllerReference(isvc, ray, p.scheme); err != nil {
+					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
+				}
+			}
+			if err = controllerutil.SetControllerReference(isvc, r.MultiNodeProber.Deployment, p.scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to set prober owner reference for predictor")
 			}
 
-			if r.RawDummyService != nil {
+			if r.RawMultiNodeService != nil {
 				// set Service Controller
-				if err := controllerutil.SetControllerReference(isvc, r.RawDummyService.Service, p.scheme); err != nil {
+				if err := controllerutil.SetControllerReference(isvc, r.RawMultiNodeService.Service, p.scheme); err != nil {
 					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
 				}
 			}
 
-			rayCluster, err := r.Reconcile()
+			_, err = r.Reconcile()
 			if err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
 			}
-			isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, rayCluster, r.URL)
+			isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployment, r.URL)
 		}
 
 	} else {

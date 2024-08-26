@@ -256,3 +256,32 @@ data:
       "enableMetricAggregation": "false",
       "enablePrometheusScraping" : "false"
     }
+
+  multinodeProber: |-
+    {
+      "containerImage" : "ord.ocir.io/idqj093njucb/ome/multinode-prober:v1.0-84-3-g5dff59e",
+      "memoryRequest": "100Mi",
+      "memoryLimit": "100Mi",
+      "cpuRequest": "100m",
+      "cpuLimit": "100m",
+      "startupFailureThreshold": 150,
+      "startupPeriodSeconds": 30,
+      "startupTimeoutSeconds": 60,
+      "startupInitialDelaySeconds": 200
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dedicatedaicluster-config
+  namespace: ome
+data:
+  reservationJob: |-
+    {
+      "image": "ord.ocir.io/idqj093njucb/ome/manager:v1.0-84-2-g721d410-dirty",
+      "creationFailedTimeThresholdSecond" : 30
+    }
+  dacReconcilePolicy: |-
+    {
+      "reconcileFailedLifecycleState": false
+    }

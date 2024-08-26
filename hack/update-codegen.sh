@@ -4,7 +4,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-KUBE_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
+KUBE_ROOT=$(dirname "${BASH_SOURCE[0]}")/internal/tools
+CURRENT_DIR=$(dirname "${BASH_SOURCE[0]}")
 CODEGEN_VERSION=$(cd "${KUBE_ROOT}" && grep 'k8s.io/code-generator' go.mod | awk '{print $2}')
 echo "KUBE_ROOT: ${KUBE_ROOT}"
 if [ -z "${GOPATH:-}" ]; then
@@ -25,4 +26,4 @@ chmod +x "${CODEGEN_PKG}/generate-internal-groups.sh"
     "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client" \
     "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis" \
     "serving:v1beta1" \
-    --go-header-file "${KUBE_ROOT}/hack/boilerplate.go.txt"
+    --go-header-file "${CURRENT_DIR}/boilerplate.go.txt"

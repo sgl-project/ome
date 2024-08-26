@@ -67,7 +67,12 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, prefix str
 		return err
 	}
 	responseContent := response.Content
-	defer responseContent.Close()
+	defer func(responseContent io.ReadCloser) {
+		err := responseContent.Close()
+		if err != nil {
+			fmt.Printf("failed to close the response content, error: %+v", err)
+		}
+	}(responseContent)
 
 	// Write downloaded object to the target file
 	targetFilePath := filepath.Join(target, ExtractNonPrefixObjectName(source.ObjectName, prefix))

@@ -18,6 +18,7 @@ const (
 	IngressConfigKeyName         = "ingress"
 	DeployConfigName             = "deploy"
 	DacReconcilePolicyConfigname = "dacReconcilePolicy"
+	MultiNodeProberName          = "multinodeProber"
 
 	DefaultDomainTemplate = "{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -29,6 +30,8 @@ const (
 type InferenceServicesConfig struct {
 	// OCIConfig contains all OCI Configuration
 	OCIConfig OCIConfig `json:"ociEtc"`
+	// MultiNodeProber contains all MultiNodeProber Configuration
+	MultiNodeProber MultiNodeProberConfig `json:"multinodeProber"`
 }
 
 // +kubebuilder:object:generate=false
@@ -45,6 +48,19 @@ type IngressConfig struct {
 	DisableIstioVirtualHost  bool      `json:"disableIstioVirtualHost,omitempty"`
 	PathTemplate             string    `json:"pathTemplate,omitempty"`
 	DisableIngressCreation   bool      `json:"disableIngressCreation,omitempty"`
+}
+
+// +kubebuilder:object:generate=false
+type MultiNodeProberConfig struct {
+	ContainerImage             string `json:"containerImage"`
+	CPURequest                 string `json:"cpuRequest"`
+	MemoryRequest              string `json:"memoryRequest"`
+	CPULimit                   string `json:"cpuLimit"`
+	MemoryLimit                string `json:"memoryLimit"`
+	StartupFailureThreshold    int32  `json:"startupFailureThreshold"`
+	StartupPeriodSeconds       int32  `json:"startupPeriodSeconds"`
+	StartupInitialDelaySeconds int32  `json:"startupInitialDelaySeconds"`
+	StartupTimeoutSeconds      int32  `json:"startupTimeoutSeconds"`
 }
 
 // +kubebuilder:object:generate=false
@@ -83,7 +99,6 @@ type DacReconcilePolicyConfig struct {
 	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
 }
 
-
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
 	if err != nil {
@@ -92,6 +107,7 @@ func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServi
 	icfg := &InferenceServicesConfig{}
 	for _, err := range []error{
 		getComponentConfig(OCIConfigName, configMap, &icfg.OCIConfig),
+		getComponentConfig(MultiNodeProberName, configMap, &icfg.MultiNodeProber),
 	} {
 		if err != nil {
 			return nil, err
@@ -210,4 +226,19 @@ func NewDacReconcilePolicyConfig(clientset kubernetes.Interface) (*DacReconcileP
 		}
 	}
 	return dacPolicyConfig, nil
+}
+func NewMultiNodeProberConfig(clientset kubernetes.Interface) (*MultiNodeProberConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	multiNodeProberConfig := &MultiNodeProberConfig{}
+	for _, err := range []error{
+		getComponentConfig(MultiNodeProberName, configMap, &multiNodeProberConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return multiNodeProberConfig, nil
 }
