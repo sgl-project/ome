@@ -401,6 +401,22 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *om
 		}
 	}
 
+	var baseCount int
+	if len(dac.Spec.Profile) > 0 {
+		dacProfile := &omev1beta1.DedicatedAIClusterProfile{}
+		err := r.Get(context.TODO(), types.NamespacedName{Name: dac.Spec.Profile}, dacProfile)
+		if err != nil {
+			if apierr.IsNotFound(err) {
+				r.Log.Error(err, "Failed to find the DedicatedAICluster Profile ",  dac.Spec.Profile, " DedicatedAICluster", dac.Name)
+			}
+			return 0, err
+		}
+
+		baseCount = dacProfile.Spec.Count
+	} else {
+		baseCount = 1
+	}
+
 	isvcList := &omev1beta1.InferenceServiceList{}
 	if err := r.List(context.TODO(), isvcList, client.InNamespace(dac.Name)); err != nil {
 		return 0, err
@@ -410,15 +426,15 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *om
 		return reservationCount, nil
 	}
 
-	var totalIsvcReplicas int
+	var totalIsvcOccupation int = 0
 	for _, isvc := range isvcList.Items {
-		totalIsvcReplicas += isvc.Spec.Predictor.ComponentExtensionSpec.MaxReplicas
+		totalIsvcOccupation += (isvc.Spec.Predictor.ComponentExtensionSpec.MaxReplicas * baseCount)
 	}
 
-	if reservationCount-totalIsvcReplicas < 0 {
+	if reservationCount-totalIsvcOccupation < 0 {
 		return 0, nil
 	}
-	return reservationCount - totalIsvcReplicas, nil
+	return reservationCount - totalIsvcOccupation, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
