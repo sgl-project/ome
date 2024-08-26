@@ -27,7 +27,7 @@ spec:
           name: BaseModel
           type: string
         - jsonPath: .spec.predictor.model.runtime
-          name: BaseModel
+          name: Runtime
           type: string
         - jsonPath: .status.components.predictor.traffic[?(@.tag=='prev')].percent
           name: Prev
