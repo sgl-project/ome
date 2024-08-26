@@ -22,6 +22,12 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
+    - jsonPath: .spec.predictor.model.baseModel
+      name: BaseModel
+      type: string
+    - jsonPath: .spec.predictor.model.runtime
+      name: BaseModel
+      type: string
     - jsonPath: .status.components.predictor.traffic[?(@.tag=='prev')].percent
       name: Prev
       type: integer
