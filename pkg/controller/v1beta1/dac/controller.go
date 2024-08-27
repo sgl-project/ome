@@ -407,7 +407,7 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *om
 		err := r.Get(context.TODO(), types.NamespacedName{Name: dac.Spec.Profile}, dacProfile)
 		if err != nil {
 			if apierr.IsNotFound(err) {
-				r.Log.Error(err, "Failed to find the DedicatedAICluster Profile ",  dac.Spec.Profile, " DedicatedAICluster", dac.Name)
+				r.Log.Error(err, "Failed to find the DedicatedAICluster Profile ", dac.Spec.Profile, " DedicatedAICluster", dac.Name)
 			}
 			return 0, err
 		}

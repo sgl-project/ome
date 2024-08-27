@@ -63,6 +63,7 @@ spec:
         args:
         - "--metrics-addr=:8080"
         - "--leader-elect"
+        - "--webhook"
         - "--zap-encoder=console"
         env:
           - name: POD_NAMESPACE

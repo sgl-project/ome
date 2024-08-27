@@ -47,6 +47,7 @@ type Options struct {
 	metricsAddr          string
 	webhookPort          int
 	enableLeaderElection bool
+	enableWebhook        bool
 	probeAddr            string
 	zapOpts              zap.Options
 }
@@ -57,6 +58,7 @@ func DefaultOptions() Options {
 		metricsAddr:          ":8080",
 		webhookPort:          9443,
 		enableLeaderElection: false,
+		enableWebhook:        false,
 		probeAddr:            ":8081",
 		zapOpts:              zap.Options{},
 	}
@@ -70,6 +72,7 @@ func GetOptions() Options {
 	flag.BoolVar(&opts.enableLeaderElection, "leader-elect", opts.enableLeaderElection,
 		"Enable leader election for ome controller manager. "+
 			"Enabling this will ensure there is only one active ome controller manager.")
+	flag.BoolVar(&opts.enableWebhook, "webhook", opts.enableWebhook, "Enable the webhook server.")
 	flag.StringVar(&opts.probeAddr, "health-probe-addr", opts.probeAddr, "The address the probe endpoint binds to.")
 	opts.zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -244,29 +247,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("setting up webhook server")
-	hookServer := mgr.GetWebhookServer()
+	if options.enableWebhook {
+		setupLog.Info("setting up webhook server")
+		hookServer := mgr.GetWebhookServer()
 
-	setupLog.Info("registering webhooks to the webhook server")
-	hookServer.Register("/mutate-pods", &webhook.Admission{
-		Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
-	})
+		setupLog.Info("registering webhooks to the webhook server")
+		hookServer.Register("/mutate-pods", &webhook.Admission{
+			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
 
-	setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
-	hookServer.Register("/validate-serving-ome-io-v1alpha1-clusterservingruntime", &webhook.Admission{
-		Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-	})
+		setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
+		hookServer.Register("/validate-serving-ome-io-v1alpha1-clusterservingruntime", &webhook.Admission{
+			Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
 
-	setupLog.Info("registering serving runtime validator webhook to the webhook server")
-	hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
-		Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
-	})
+		setupLog.Info("registering serving runtime validator webhook to the webhook server")
+		hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
+			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
 
-	if err = ctrl.NewWebhookManagedBy(mgr).
-		For(&v1beta1.InferenceService{}).
-		Complete(); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "v1beta1")
-		os.Exit(1)
+		if err = ctrl.NewWebhookManagedBy(mgr).
+			For(&v1beta1.InferenceService{}).
+			Complete(); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "v1beta1")
+			os.Exit(1)
+		}
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", func(req *http.Request) error {

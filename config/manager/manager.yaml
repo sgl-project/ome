@@ -28,6 +28,7 @@ spec:
         args:
           - "--metrics-addr=:8080"
           - "--leader-elect"
+          - "webhook"
           - "--zap-encoder=console"
         image: ko://bitbucket.oci.oraclecorp.com/gen/ome/cmd/manager
         imagePullPolicy: Always
