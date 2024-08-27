@@ -63,7 +63,8 @@ spec:
           --disable-log-requests \
           --served-model-name={{.Values.vllm.serveModelName}} \
           --tensor-parallel-size=4 \
-          --enable-chunked-prefill
+          --enable-chunked-prefill \
+          --max-model-len=8192
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
