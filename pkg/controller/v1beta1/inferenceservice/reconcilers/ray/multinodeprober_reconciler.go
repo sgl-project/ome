@@ -101,7 +101,7 @@ func getDefaultPodSpec(multiNodeProberConfig *v1beta1.MultiNodeProberConfig, url
 		Containers: []corev1.Container{
 			{
 				Name:            constants.MultiNodeProberContainerName,
-				Image:           multiNodeProberConfig.ContainerImage,
+				Image:           multiNodeProberConfig.Image,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{

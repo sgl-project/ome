@@ -259,7 +259,7 @@ data:
 
   multinodeProber: |-
     {
-      "containerImage" : "ord.ocir.io/idqj093njucb/ome/multinode-prober:v1.0-84-3-g5dff59e",
+      "image" : "ord.ocir.io/idqj093njucb/ome/multinode-prober:v1.0-84-3-g5dff59e",
       "memoryRequest": "100Mi",
       "memoryLimit": "100Mi",
       "cpuRequest": "100m",

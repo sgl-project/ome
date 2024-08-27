@@ -39,11 +39,19 @@ func NewRayReconciler(client client.Client,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *RayReconciler {
+	
+	rayClusters := make([]*ray.RayCluster, 0)
+	for i := 0; i < int(*componentExt.MinReplicas); i++ {
+		rayCluster := createRayCluster(&componentMeta, podSpec, i)
+		rayClusters = append(rayClusters, rayCluster)
+	}
+
 	return &RayReconciler{
 		client:        client,
 		scheme:        scheme,
 		componentMeta: &componentMeta,
 		componentExt:  componentExt,
+		RayClusters:   rayClusters,
 		podSpec:       podSpec,
 	}
 }
@@ -87,7 +95,7 @@ func (r *RayReconciler) sortRayClustersByIndex(existingRayClusters *ray.RayClust
 }
 
 func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.RayClusterList) error {
-	desired := createRayCluster(r.componentMeta, r.podSpec, index)
+	desired := r.RayClusters[index]
 	existing := &ray.RayCluster{}
 
 	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
@@ -109,7 +117,6 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 	if err != nil {
 		return err
 	}
-	r.RayClusters = append(r.RayClusters, desired)
 	return nil
 }
 

@@ -405,7 +405,7 @@ func GetModelsLabelWithUid(uid types.UID) string {
 
 // GetRawServiceLabel generate native service label
 func GetRawServiceLabel(service string) string {
-	return "isvc." + service
+	return service
 }
 
 func (e InferenceServiceComponent) String() string {

@@ -52,7 +52,7 @@ type IngressConfig struct {
 
 // +kubebuilder:object:generate=false
 type MultiNodeProberConfig struct {
-	ContainerImage             string `json:"containerImage"`
+	Image                      string `json:"image"`
 	CPURequest                 string `json:"cpuRequest"`
 	MemoryRequest              string `json:"memoryRequest"`
 	CPULimit                   string `json:"cpuLimit"`
