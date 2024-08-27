@@ -81,6 +81,13 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 			})
 			return ctrl.Result{}, err
 		}
+		if *baseModel.Disabled {
+			isvc.Status.UpdateModelTransitionStatus(v1beta1.InvalidSpec, &v1beta1.FailureInfo{
+				Reason:  v1beta1.BaseModelDisabled,
+				Message: "Specified base model is disabled",
+			})
+			return ctrl.Result{}, fmt.Errorf("specified base model %s is disabled", *isvc.Spec.Predictor.Model.BaseModel)
+		}
 		baseModel = *bm
 	}
 
