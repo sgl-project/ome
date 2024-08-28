@@ -58,7 +58,6 @@ func getDefaultJobSpec(componentMeta metav1.ObjectMeta, componentExt *v1beta1.Co
 	return &volcanobatch.JobSpec{
 		Plugins: map[string][]string{
 			"env": {"[]"},
-			"ssh": {"[]"},
 		},
 		MinAvailable:  int32(*componentExt.MinReplicas),
 		SchedulerName: constants.VolcanoScheduler,
