@@ -48,7 +48,7 @@ func NewMultiNodeVllmReconciler(client client.Client,
 		client:              client,
 		scheme:              scheme,
 		Ray:                 raycluster.NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec),
-		MultiNodeProber:     raycluster.NewMultiNodeProberReconciler(client, scheme, componentMeta, multinodeProberConfig, url),
+		MultiNodeProber:     raycluster.NewMultiNodeProberReconciler(client, scheme, componentMeta, componentExt, multinodeProberConfig),
 		RawMultiNodeService: service.NewRayServiceReconciler(client, scheme, componentMeta, podSpec),
 		URL:                 url,
 	}, nil

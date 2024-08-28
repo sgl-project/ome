@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -134,22 +134,63 @@ func (r *ReservationJobReconciler) checkJobExist() (constants.CheckResultType, *
 		return constants.CheckResultUnknown, nil, err
 	}
 
-	if semanticJobEquals(r.ReservationJob, existingRjob) {
-		return constants.CheckResultExisted, existingRjob, nil
+	r.mergeVolcanoJobSpecAndStatus(r.ReservationJob, existingRjob)
+	r.ReservationJob.SetResourceVersion(existingRjob.GetResourceVersion())
+	if !semanticJobEquals(r.ReservationJob, existingRjob) {
+		return constants.CheckResultUpdate, existingRjob, nil
 	}
-	return constants.CheckResultUpdate, existingRjob, nil
+
+	return constants.CheckResultExisted, existingRjob, nil
+}
+
+func (r *ReservationJobReconciler) mergeVolcanoJobSpecAndStatus(desired, existing *volbatchv1alpha1.Job) {
+	// Merge the Spec fields that are not allowed to be updated
+	desired.Spec.Queue = existing.Spec.Queue
+	desired.Spec.Policies = existing.Spec.Policies
+	desired.Spec.Plugins = existing.Spec.Plugins
+	desired.Spec.PriorityClassName = existing.Spec.PriorityClassName
+	desired.Spec.MaxRetry = existing.Spec.MaxRetry
+	desired.Spec.SchedulerName = existing.Spec.SchedulerName
+
+	// Merge the tasks (excluding replicas)
+	for i := range desired.Spec.Tasks {
+		if i < len(existing.Spec.Tasks) {
+			desired.Spec.Tasks[i].Name = existing.Spec.Tasks[i].Name
+			desired.Spec.Tasks[i].Template = existing.Spec.Tasks[i].Template
+			desired.Spec.Tasks[i].Policies = existing.Spec.Tasks[i].Policies
+			desired.Spec.Tasks[i].MaxRetry = existing.Spec.Tasks[i].MaxRetry
+		}
+	}
+
+	// Merge the Status fields
+	desired.Status.State = existing.Status.State
+	desired.Status.Pending = existing.Status.Pending
+	desired.Status.Running = existing.Status.Running
+	desired.Status.Succeeded = existing.Status.Succeeded
+	desired.Status.Failed = existing.Status.Failed
+	desired.Status.Terminating = existing.Status.Terminating
 }
 
 func semanticJobEquals(desired, existing *volbatchv1alpha1.Job) bool {
-	return equality.Semantic.DeepEqual(desired.Spec.SchedulerName, existing.Spec.SchedulerName) &&
-		equality.Semantic.DeepEqual(desired.Spec.PriorityClassName, existing.Spec.PriorityClassName) &&
-		equality.Semantic.DeepEqual(desired.Spec.MinAvailable, existing.Spec.MinAvailable) &&
-		equality.Semantic.DeepEqual(desired.Spec.Queue, existing.Spec.Queue) &&
-		equality.Semantic.DeepEqual(len(desired.Spec.Tasks), len(existing.Spec.Tasks)) &&
-		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Replicas, existing.Spec.Tasks[0].Replicas) &&
-		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.ObjectMeta, existing.Spec.Tasks[0].Template.ObjectMeta) &&
-		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.Spec.Containers[0].Resources, existing.Spec.Tasks[0].Template.Spec.Containers[0].Resources) &&
-		equality.Semantic.DeepEqual(desired.Spec.Tasks[0].Template.Spec.Affinity, existing.Spec.Tasks[0].Template.Spec.Affinity)
+	// Check if MinAvailable is equal
+	if !equality.Semantic.DeepEqual(desired.Spec.MinAvailable, existing.Spec.MinAvailable) {
+		return false
+	}
+
+	// Check if the number of tasks in the desired job is greater or equal to the existing job
+	if len(desired.Spec.Tasks) < len(existing.Spec.Tasks) {
+		return false
+	}
+
+	// Compare only the `Replicas` field in each task, ignoring other fields
+	for i := range existing.Spec.Tasks {
+		if !equality.Semantic.DeepEqual(desired.Spec.Tasks[i].Replicas, existing.Spec.Tasks[i].Replicas) {
+			return false
+		}
+	}
+
+	// If all checks pass, the jobs are considered equal for the purpose of reconciliation
+	return true
 }
 
 func (r *ReservationJobReconciler) Reconcile() (*volbatchv1alpha1.Job, error) {
@@ -164,7 +205,6 @@ func (r *ReservationJobReconciler) Reconcile() (*volbatchv1alpha1.Job, error) {
 	case constants.CheckResultCreate:
 		opErr = r.client.Create(context.TODO(), r.ReservationJob)
 	case constants.CheckResultUpdate:
-		r.ReservationJob.SetResourceVersion(reservationJob.GetResourceVersion())
 		opErr = r.client.Update(context.TODO(), r.ReservationJob)
 	default:
 		return reservationJob, nil

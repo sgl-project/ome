@@ -1,11 +1,10 @@
 package v1beta1
 
 import (
-	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"reflect"
+	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -295,7 +294,7 @@ func (ss *InferenceServiceStatus) PropagateRawStatus(
 
 func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(
 	component ComponentType,
-	rayCluster *ray.RayCluster,
+	vcJob *volcanobatch.Job,
 	url *apis.URL) {
 	if len(ss.Components) == 0 {
 		ss.Components = make(map[ComponentType]ComponentStatusSpec)
@@ -306,25 +305,25 @@ func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(
 	}
 
 	statusSpec.LatestCreatedRevision = "1"
-	condition := getRayClusterCondition(rayCluster, rayv1.Ready)
+	condition := getVolcanoJobCondition(vcJob, volcanobatch.Running)
 	if condition != nil && condition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
 	}
 	readyCondition := readyConditionsMap[component]
 	ss.SetCondition(readyCondition, condition)
 	ss.Components[component] = statusSpec
-	ss.ObservedGeneration = rayCluster.Status.ObservedGeneration
+	ss.ObservedGeneration = 1
 }
 
-func getRayClusterCondition(rayCluster *ray.RayCluster, conditionType rayv1.ClusterState) *apis.Condition {
+func getVolcanoJobCondition(vcJob *volcanobatch.Job, conditionType volcanobatch.JobPhase) *apis.Condition {
 	condition := apis.Condition{}
-	if rayCluster.Status.State == conditionType {
+	if vcJob.Status.State.Phase == conditionType {
 		condition.Type = apis.ConditionType(conditionType)
 		condition.Status = v1.ConditionTrue
 		condition.LastTransitionTime = apis.VolatileTime{
-			Inner: *rayCluster.Status.LastUpdateTime,
+			Inner: vcJob.Status.State.LastTransitionTime,
 		}
-		condition.Reason = rayCluster.Status.Reason
+		condition.Reason = vcJob.Status.State.Reason
 	}
 	return &condition
 }

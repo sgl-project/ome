@@ -139,7 +139,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
 				}
 			}
-			if err = controllerutil.SetControllerReference(isvc, r.MultiNodeProber.Deployment, p.scheme); err != nil {
+			if err = controllerutil.SetControllerReference(isvc, r.MultiNodeProber.VolcanoJobs, p.scheme); err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to set prober owner reference for predictor")
 			}
 
@@ -154,7 +154,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 			if err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
 			}
-			isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployment, r.URL)
+			isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.VolcanoJobs, r.URL)
 		}
 
 	} else {

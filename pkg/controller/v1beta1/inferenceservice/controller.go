@@ -7,6 +7,7 @@ import (
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
+	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -304,6 +305,7 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
+		Owns(&volbatchv1alpha1.Job{}).
 		Owns(&v1.PersistentVolumeClaim{}).
 		Owns(&ray.RayCluster{})
 
