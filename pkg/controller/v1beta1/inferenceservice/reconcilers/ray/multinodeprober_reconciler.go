@@ -3,7 +3,6 @@ package raycluster
 import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
-	"fmt"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	knapis "knative.dev/pkg/apis"
@@ -84,7 +83,7 @@ func getPodSpec(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.
 		Containers: []corev1.Container{
 			{
 				Name:            constants.MultiNodeProberContainerName,
-				Image:           multiNodeProberConfig.ContainerImage,
+				Image:           multiNodeProberConfig.Image,
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -241,83 +240,6 @@ func semanticJobEquals(desired, existing *volcanobatch.Job) bool {
 
 	// If all checks pass, the jobs are considered equal for the purpose of reconciliation
 	return true
-}
-
-func getDefaultPodSpec(multiNodeProberConfig *v1beta1.MultiNodeProberConfig, url *knapis.URL) *corev1.PodSpec {
-	return &corev1.PodSpec{
-		Containers: []corev1.Container{
-			{
-				Name:            constants.MultiNodeProberContainerName,
-				Image:           multiNodeProberConfig.Image,
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Resources: corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse(multiNodeProberConfig.CPULimit),
-						corev1.ResourceMemory: resource.MustParse(multiNodeProberConfig.MemoryLimit),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse(multiNodeProberConfig.CPURequest),
-						corev1.ResourceMemory: resource.MustParse(multiNodeProberConfig.MemoryRequest),
-					},
-				},
-				ReadinessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Port: intstr.IntOrString{
-								IntVal: constants.MultiNodeProberContainerPort,
-							},
-							Path: "/healthz",
-						},
-					},
-					TimeoutSeconds:   5,
-					PeriodSeconds:    30,
-					SuccessThreshold: 1,
-					FailureThreshold: 3,
-				},
-				LivenessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Port: intstr.IntOrString{
-								IntVal: constants.MultiNodeProberContainerPort,
-							},
-							Path: "/readyz",
-						},
-					},
-					TimeoutSeconds:   5,
-					PeriodSeconds:    30,
-					SuccessThreshold: 1,
-					FailureThreshold: 3,
-				},
-				StartupProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Port: intstr.IntOrString{
-								IntVal: constants.MultiNodeProberContainerPort,
-							},
-							Path: "/startupz",
-						},
-					},
-					TimeoutSeconds:      multiNodeProberConfig.StartupTimeoutSeconds,
-					PeriodSeconds:       multiNodeProberConfig.StartupPeriodSeconds,
-					SuccessThreshold:    1,
-					FailureThreshold:    multiNodeProberConfig.StartupFailureThreshold,
-					InitialDelaySeconds: multiNodeProberConfig.StartupInitialDelaySeconds,
-				},
-				Args: []string{
-					"--vllm-endpoint",
-					fmt.Sprintf("%s:%s", url.String(), constants.InferenceServiceDefaultHttpPort),
-					"--addr",
-					"0.0.0.0:8080",
-				},
-				Ports: []corev1.ContainerPort{
-					{
-						Name:          "http",
-						ContainerPort: constants.MultiNodeProberContainerPort,
-					},
-				},
-			},
-		},
-	}
 }
 
 func (r *MultiNodeProberReconciler) Reconcile() (*volcanobatch.Job, error) {
