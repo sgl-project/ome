@@ -84,6 +84,10 @@ A Helm chart for Kubernetes
 | ome.multinodeProber.image | string | `"eu-frankfurt-1.ocir.io/idlsnvn0f2is/multinode-prober"` |  |
 | ome.multinodeProber.memoryLimit | string | `"100Mi"` |  |
 | ome.multinodeProber.memoryRequest | string | `"100Mi"` |  |
+| ome.multinodeProber.startupFailureThreshold | int | `150` |  |
+| ome.multinodeProber.startupInitialDelaySeconds | int | `120` |  |
+| ome.multinodeProber.startupPeriodSeconds | int | `30` |  |
+| ome.multinodeProber.startupTimeoutSeconds | int | `60` |  |
 | ome.multinodeProber.tag | string | `"v0.1"` |  |
 | ome.ociETC.adNumberName | string | `"ad2"` |  |
 | ome.ociETC.airportCode | string | `"ORD"` |  |

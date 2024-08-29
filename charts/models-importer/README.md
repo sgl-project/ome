@@ -10,7 +10,10 @@ A Helm chart for importing ome base models
 |-----|------|---------|-------------|
 | compartmentID | string | `"ocid1.compartment.oc1..aaaaaaaazq"` |  |
 | llama-3-1-405b-instruct-fp8.enabled | bool | `false` |  |
+| llama-3-1-405b-instruct-fp8.lifecyclePhase | string | `"ACTIVE"` |  |
 | llama-3-1-70b-instruct.enabled | bool | `false` |  |
+| llama-3-1-70b-instruct.lifecyclePhase | string | `"ACTIVE"` |  |
 | osnamespace | string | `"mynamespace"` |  |
 | phi-3-mini-128k-instruct.enabled | bool | `false` |  |
+| phi-3-mini-128k-instruct.lifecyclePhase | string | `"ACTIVE"` |  |
 
