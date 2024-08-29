@@ -57,7 +57,7 @@ spec:
           --disable-log-requests \
           --served-model-name={{.Values.vllm.serveModelName}} \
           --tensor-parallel-size=1 \
-          --embedding-mode \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --enforce-eager \
           --gpu-memory-utilization=0.8 \
       volumeMounts:

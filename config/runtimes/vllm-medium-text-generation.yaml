@@ -50,7 +50,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:bd70013
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
       ports:
         - containerPort: 8080
           name: http
@@ -66,6 +66,7 @@ spec:
           --disable-log-stats \
           --model="$MODEL_PATH" \
           --disable-log-requests \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --served-model-name=vllm-model \
           --tensor-parallel-size=4 \
           --enable-chunked-prefill \
