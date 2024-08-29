@@ -19,7 +19,7 @@ spec:
     path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-1-405b-instruct-fp8" "osBucket" }}/o/{{ index .Values "llama-3-1-405b-instruct-fp8" "vendor" }}/{{ index .Values "llama-3-1-405b-instruct-fp8" "osPrefixOverride" }}"
     storageUri: /mnt/data/models/meta/llama-3-1-405b-instruct-fp8
   vendor: meta
-  version: "1.0"
+  version: "1.0.0"
   modelFormat:
     name: safetensors
     version: "1"
