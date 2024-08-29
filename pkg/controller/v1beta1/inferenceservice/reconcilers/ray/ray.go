@@ -39,7 +39,7 @@ func NewRayReconciler(client client.Client,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *RayReconciler {
-	
+
 	rayClusters := make([]*ray.RayCluster, 0)
 	for i := 0; i < int(*componentExt.MinReplicas); i++ {
 		rayCluster := createRayCluster(&componentMeta, podSpec, i)

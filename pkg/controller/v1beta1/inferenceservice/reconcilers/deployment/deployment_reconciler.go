@@ -85,18 +85,18 @@ func (r *DeploymentReconciler) checkDeploymentExist(client kclient.Client) (cons
 		return constants.CheckResultUnknown, nil, err
 	}
 	// existed, check equivalence
-	// for HPA scaling, we should ignore Replicas of Deployment
+	// for HPA scaling, we should ignore Replicas of Deployments
 	ignoreFields := cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas")
 	// Do a dry-run update. This will populate our local deployment object with any default values
 	// that are present on the remote version.
 	if err := client.Update(context.TODO(), r.Deployment, kclient.DryRunAll); err != nil {
-		log.Error(err, "Failed to perform dry-run update of deployment", "Deployment", r.Deployment.Name)
+		log.Error(err, "Failed to perform dry-run update of deployment", "Deployments", r.Deployment.Name)
 		return constants.CheckResultUnknown, nil, err
 	}
 	if diff, err := kmp.SafeDiff(r.Deployment.Spec, existingDeployment.Spec, ignoreFields); err != nil {
 		return constants.CheckResultUnknown, nil, err
 	} else if diff != "" {
-		log.Info("Deployment Updated", "Diff", diff)
+		log.Info("Deployments Updated", "Diff", diff)
 		return constants.CheckResultUpdate, existingDeployment, nil
 	}
 	return constants.CheckResultExisted, existingDeployment, nil
@@ -189,7 +189,7 @@ func setDefaultDeploymentSpec(spec *appsv1.DeploymentSpec) {
 
 // Reconcile ...
 func (r *DeploymentReconciler) Reconcile() (*appsv1.Deployment, error) {
-	// Reconcile Deployment
+	// Reconcile Deployments
 	checkResult, deployment, err := r.checkDeploymentExist(r.client)
 	if err != nil {
 		return nil, err

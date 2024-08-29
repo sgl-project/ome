@@ -84,7 +84,7 @@ func (r *MultiNodeVllmReconciler) Reconcile() ([]*ray.RayCluster, error) {
 		}
 	}
 	// reconcile MultiNodeProber
-	_, err = r.MultiNodeProber.Reconcile()
+	err = r.MultiNodeProber.Reconcile()
 	if err != nil {
 		return nil, err
 	}

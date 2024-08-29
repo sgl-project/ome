@@ -3,29 +3,30 @@ package raycluster
 import (
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
-	"k8s.io/apimachinery/pkg/api/equality"
+	"fmt"
 	"k8s.io/apimachinery/pkg/api/resource"
 	knapis "knative.dev/pkg/apis"
-	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"knative.dev/pkg/kmp"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // MultiNodeProberReconciler reconciles the raw kubernetes deployment resource for multi node prober
 type MultiNodeProberReconciler struct {
-	client       kclient.Client
-	scheme       *runtime.Scheme
-	VolcanoJobs  *volcanobatch.Job
-	componentExt *v1beta1.ComponentExtensionSpec
-	URL          *knapis.URL
+	client      kclient.Client
+	scheme      *runtime.Scheme
+	Deployments []*appsv1.Deployment
+	URL         *knapis.URL
 }
 
 func NewMultiNodeProberReconciler(client kclient.Client,
@@ -33,51 +34,79 @@ func NewMultiNodeProberReconciler(client kclient.Client,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
 	multiNodeProberConfig *v1beta1.MultiNodeProberConfig) *MultiNodeProberReconciler {
+	deployments := make([]*appsv1.Deployment, 0)
+	for i := 0; i < *componentExt.MinReplicas; i++ {
+		url := &knapis.URL{}
+		url.Scheme = "http"
+		url.Host = fmt.Sprintf("%s-%d.%s.svc.cluster.local", componentMeta.Name, i, componentMeta.Namespace)
+		dply := createRawDeployment(componentMeta, multiNodeProberConfig, url, i)
+		deployments = append(deployments, dply)
+	}
 	return &MultiNodeProberReconciler{
-		client:       client,
-		scheme:       scheme,
-		componentExt: componentExt,
-		VolcanoJobs:  createVolcanoJob(componentMeta, componentExt, multiNodeProberConfig),
+		client:      client,
+		scheme:      scheme,
+		Deployments: deployments,
 	}
 }
 
-func createVolcanoJob(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec, multiNodeProberConfig *v1beta1.MultiNodeProberConfig) *volcanobatch.Job {
-	jobMetadata := componentMeta
-	jobMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
-	utils.SetPodLabelsFromAnnotations(&jobMetadata)
-	jobSpec := getDefaultJobSpec(componentMeta, componentExt, multiNodeProberConfig)
-	volcanoJob := &volcanobatch.Job{
-		ObjectMeta: jobMetadata,
-		Spec:       *jobSpec,
-	}
-	return volcanoJob
-}
-
-func getDefaultJobSpec(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec, multiNodeProberConfig *v1beta1.MultiNodeProberConfig) *volcanobatch.JobSpec {
-
-	return &volcanobatch.JobSpec{
-		Plugins: map[string][]string{
-			"env": {"[]"},
-		},
-		MinAvailable:  int32(*componentExt.MinReplicas),
-		SchedulerName: constants.VolcanoScheduler,
-		MaxRetry:      3,
-		Queue:         "default",
-
-		Tasks: []volcanobatch.TaskSpec{
-			{
-				Replicas: int32(*componentExt.MinReplicas),
-				Name:     constants.MultiNodeProberContainerName,
-				Template: corev1.PodTemplateSpec{
-					Spec: *getPodSpec(componentMeta, multiNodeProberConfig),
+func createRawDeployment(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+	url *knapis.URL, index int) *appsv1.Deployment {
+	podMetadata := componentMeta
+	podMetadata.Name = fmt.Sprintf("%s-%d", componentMeta.Name, index)
+	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
+	utils.SetPodLabelsFromAnnotations(&podMetadata)
+	podSpec := getDefaultPodSpec(multiNodeProberConfig, url, index)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: podMetadata,
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": constants.GetRawServiceLabel(componentMeta.Name),
 				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: podMetadata,
+				Spec:       *podSpec,
 			},
 		},
 	}
+	setDefaultDeploymentSpec(&deployment.Spec)
+	return deployment
 }
 
-func getPodSpec(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.MultiNodeProberConfig) *corev1.PodSpec {
+// checkDeploymentExist checks if the deployment exists?
+func (r *MultiNodeProberReconciler) checkDeploymentExist(client kclient.Client, dply *appsv1.Deployment) (constants.CheckResultType, *appsv1.Deployment, error) {
+	// get deployment
+	existingDeployment := &appsv1.Deployment{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: dply.ObjectMeta.Namespace,
+		Name:      dply.ObjectMeta.Name,
+	}, existingDeployment)
+	if err != nil {
+		if apierr.IsNotFound(err) {
+			return constants.CheckResultCreate, nil, nil
+		}
+		return constants.CheckResultUnknown, nil, err
+	}
+	// existed, check equivalence
+	// for HPA scaling, we should ignore Replicas of Deployments
+	ignoreFields := cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas")
+	// Do a dry-run update. This will populate our local deployment object with any default values
+	// that are present on the remote version.
+	if err := client.Update(context.TODO(), dply, kclient.DryRunAll); err != nil {
+		log.Error(err, "Failed to perform dry-run update of deployment", "Deployments", dply.Name)
+		return constants.CheckResultUnknown, nil, err
+	}
+	if diff, err := kmp.SafeDiff(dply.Spec, existingDeployment.Spec, ignoreFields); err != nil {
+		return constants.CheckResultUnknown, nil, err
+	} else if diff != "" {
+		log.Info("Deployments Updated", "Diff", diff)
+		return constants.CheckResultUpdate, existingDeployment, nil
+	}
+	return constants.CheckResultExisted, existingDeployment, nil
+}
 
+func getDefaultPodSpec(multiNodeProberConfig *v1beta1.MultiNodeProberConfig, url *knapis.URL, index int) *corev1.PodSpec {
 	return &corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
@@ -137,26 +166,12 @@ func getPodSpec(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.
 					FailureThreshold:    multiNodeProberConfig.StartupFailureThreshold,
 					InitialDelaySeconds: multiNodeProberConfig.StartupInitialDelaySeconds,
 				},
-				Env: []corev1.EnvVar{
-					{
-						Name:  "RAY_ADDRESS",
-						Value: componentMeta.Name,
-					},
-					{
-						Name:  "NAMESPACE",
-						Value: componentMeta.Namespace,
-					},
-				},
-
-				Command: []string{
-					"/bin/bash",
-					"-lc",
-					"--",
-				},
 				Args: []string{
-					`/multinode-prober \
-					--vllm-endpoint http://$RAY_ADDRESS-$VC_TASK_INDEX.$NAMESPACE.svc.cluster.local:8080 \
-					--addr 0.0.0.0:8080`},
+					"--vllm-endpoint",
+					fmt.Sprintf("%s:%s", url.String(), constants.InferenceServiceDefaultHttpPort),
+					"--addr",
+					"0.0.0.0:8080",
+				},
 				Ports: []corev1.ContainerPort{
 					{
 						Name:          "http",
@@ -168,99 +183,45 @@ func getPodSpec(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.
 	}
 }
 
-func (r *MultiNodeProberReconciler) checkVolcanoJobExist(client kclient.Client) (constants.CheckResultType, *volcanobatch.Job, error) {
-	// get the job
-	existingJob := &volcanobatch.Job{}
-	err := client.Get(context.TODO(), types.NamespacedName{
-		Namespace: r.VolcanoJobs.ObjectMeta.Namespace,
-		Name:      r.VolcanoJobs.ObjectMeta.Name,
-	}, existingJob)
-	if err != nil {
-		if apierr.IsNotFound(err) {
-			return constants.CheckResultCreate, nil, nil
-		}
-		return constants.CheckResultUnknown, nil, err
+func setDefaultDeploymentSpec(spec *appsv1.DeploymentSpec) {
+	if spec.Strategy.Type == "" {
+		spec.Strategy.Type = appsv1.RollingUpdateDeploymentStrategyType
 	}
-
-	r.mergeVolcanoJobSpecAndStatus(r.VolcanoJobs, existingJob)
-	r.VolcanoJobs.SetResourceVersion(existingJob.GetResourceVersion())
-
-	if !semanticJobEquals(r.VolcanoJobs, existingJob) {
-		return constants.CheckResultUpdate, existingJob, nil
-	}
-	return constants.CheckResultExisted, existingJob, nil
-}
-
-func (r *MultiNodeProberReconciler) mergeVolcanoJobSpecAndStatus(desired, existing *volcanobatch.Job) {
-	// Merge the Spec fields that are not allowed to be updated
-	desired.Spec.Queue = existing.Spec.Queue
-	desired.Spec.Policies = existing.Spec.Policies
-	desired.Spec.Plugins = existing.Spec.Plugins
-	desired.Spec.PriorityClassName = existing.Spec.PriorityClassName
-	desired.Spec.MaxRetry = existing.Spec.MaxRetry
-	desired.Spec.SchedulerName = existing.Spec.SchedulerName
-
-	// Merge the tasks (excluding replicas)
-	for i := range desired.Spec.Tasks {
-		if i < len(existing.Spec.Tasks) {
-			desired.Spec.Tasks[i].Name = existing.Spec.Tasks[i].Name
-			desired.Spec.Tasks[i].Template = existing.Spec.Tasks[i].Template
-			desired.Spec.Tasks[i].Policies = existing.Spec.Tasks[i].Policies
-			desired.Spec.Tasks[i].MaxRetry = existing.Spec.Tasks[i].MaxRetry
+	if spec.Strategy.Type == appsv1.RollingUpdateDeploymentStrategyType && spec.Strategy.RollingUpdate == nil {
+		spec.Strategy.RollingUpdate = &appsv1.RollingUpdateDeployment{
+			MaxUnavailable: &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+			MaxSurge:       &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
 		}
 	}
-
-	// Merge the Status fields
-	desired.Status.State = existing.Status.State
-	desired.Status.Pending = existing.Status.Pending
-	desired.Status.Running = existing.Status.Running
-	desired.Status.Succeeded = existing.Status.Succeeded
-	desired.Status.Failed = existing.Status.Failed
-	desired.Status.Terminating = existing.Status.Terminating
+	if spec.RevisionHistoryLimit == nil {
+		revisionHistoryLimit := int32(10)
+		spec.RevisionHistoryLimit = &revisionHistoryLimit
+	}
+	if spec.ProgressDeadlineSeconds == nil {
+		progressDeadlineSeconds := int32(600)
+		spec.ProgressDeadlineSeconds = &progressDeadlineSeconds
+	}
 }
 
-func semanticJobEquals(desired, existing *volcanobatch.Job) bool {
-	// Check if MinAvailable is equal
-	if !equality.Semantic.DeepEqual(desired.Spec.MinAvailable, existing.Spec.MinAvailable) {
-		return false
-	}
-
-	// Check if the number of tasks in the desired job is greater or equal to the existing job
-	if len(desired.Spec.Tasks) < len(existing.Spec.Tasks) {
-		return false
-	}
-
-	// Compare only the `Replicas` field in each task, ignoring other fields
-	for i := range existing.Spec.Tasks {
-		if !equality.Semantic.DeepEqual(desired.Spec.Tasks[i].Replicas, existing.Spec.Tasks[i].Replicas) {
-			return false
+// Reconcile ...
+func (r *MultiNodeProberReconciler) Reconcile() error {
+	// Reconcile Deployments
+	for _, deployment := range r.Deployments {
+		result, _, err := r.checkDeploymentExist(r.client, deployment)
+		if err != nil {
+			return err
+		}
+		log.Info("deployment reconcile", "checkResult", result, "err", err)
+		var opErr error
+		switch result {
+		case constants.CheckResultCreate:
+			opErr = r.client.Create(context.TODO(), deployment)
+		case constants.CheckResultUpdate:
+			opErr = r.client.Update(context.TODO(), deployment)
+		}
+		if opErr != nil {
+			return opErr
 		}
 	}
-
-	// If all checks pass, the jobs are considered equal for the purpose of reconciliation
-	return true
-}
-
-func (r *MultiNodeProberReconciler) Reconcile() (*volcanobatch.Job, error) {
-	// Reconcile Volcano Job
-	checkResult, vcJob, err := r.checkVolcanoJobExist(r.client)
-	if err != nil {
-		return nil, err
-	}
-	log.Info("Volcano job reconcile", "checkResult", checkResult, "err", err)
-
-	var opErr error
-	switch checkResult {
-	case constants.CheckResultCreate:
-		opErr = r.client.Create(context.TODO(), r.VolcanoJobs)
-	case constants.CheckResultUpdate:
-		opErr = r.client.Update(context.TODO(), r.VolcanoJobs)
-	default:
-		return vcJob, nil
-	}
-
-	if opErr != nil {
-		return nil, opErr
-	}
-	return r.VolcanoJobs, nil
+	return nil
 }

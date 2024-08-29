@@ -1,9 +1,6 @@
 package v1beta1
 
 import (
-	"reflect"
-	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
-
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -11,6 +8,7 @@ import (
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
+	"reflect"
 )
 
 // InferenceServiceStatus defines the observed state of InferenceService
@@ -294,7 +292,7 @@ func (ss *InferenceServiceStatus) PropagateRawStatus(
 
 func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(
 	component ComponentType,
-	vcJob *volcanobatch.Job,
+	deployment []*appsv1.Deployment,
 	url *apis.URL) {
 	if len(ss.Components) == 0 {
 		ss.Components = make(map[ComponentType]ComponentStatusSpec)
@@ -304,27 +302,39 @@ func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(
 		ss.Components[component] = ComponentStatusSpec{}
 	}
 
-	statusSpec.LatestCreatedRevision = "1"
-	condition := getVolcanoJobCondition(vcJob, volcanobatch.Running)
+	statusSpec.LatestCreatedRevision = deployment[0].GetObjectMeta().GetAnnotations()["deployment.kubernetes.io/revision"]
+
+	condition := getMultiDeploymentCondition(deployment, appsv1.DeploymentAvailable)
 	if condition != nil && condition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
 	}
 	readyCondition := readyConditionsMap[component]
 	ss.SetCondition(readyCondition, condition)
 	ss.Components[component] = statusSpec
-	ss.ObservedGeneration = 1
+	ss.ObservedGeneration = deployment[0].Status.ObservedGeneration
 }
 
-func getVolcanoJobCondition(vcJob *volcanobatch.Job, conditionType volcanobatch.JobPhase) *apis.Condition {
+func getMultiDeploymentCondition(deployment []*appsv1.Deployment, conditionType appsv1.DeploymentConditionType) *apis.Condition {
 	condition := apis.Condition{}
-	if vcJob.Status.State.Phase == conditionType {
+	allDeploymentsAvailable := true
+	for _, d := range deployment {
+		for _, con := range d.Status.Conditions {
+			if con.Type == conditionType && con.Status == v1.ConditionFalse {
+				allDeploymentsAvailable = false
+				break
+			}
+		}
+	}
+	if allDeploymentsAvailable {
 		condition.Type = apis.ConditionType(conditionType)
 		condition.Status = v1.ConditionTrue
+		condition.Message = deployment[0].Status.Conditions[0].Message
 		condition.LastTransitionTime = apis.VolatileTime{
-			Inner: vcJob.Status.State.LastTransitionTime,
+			Inner: deployment[0].Status.Conditions[0].LastTransitionTime,
 		}
-		condition.Reason = vcJob.Status.State.Reason
+		condition.Reason = deployment[0].Status.Conditions[0].Reason
 	}
+
 	return &condition
 }
 

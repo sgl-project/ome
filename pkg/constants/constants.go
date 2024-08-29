@@ -390,6 +390,11 @@ const (
 	VolcanoJobKind          = "Job"
 )
 
+// Volcano Job Labels
+const (
+	VolcanoJobLabelName = "volcano.sh/job-name"
+)
+
 // Model Agent & Model Controller
 var (
 	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"

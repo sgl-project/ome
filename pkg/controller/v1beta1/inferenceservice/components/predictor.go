@@ -109,7 +109,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 			if err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewRawKubeReconciler for predictor")
 			}
-			// set Deployment Controller
+			// set Deployments Controller
 			if err := controllerutil.SetControllerReference(isvc, r.Deployment.Deployment, p.scheme); err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to set deployment owner reference for predictor")
 			}
@@ -133,28 +133,27 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 			if err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewMultiNodeVllmReconciler for predictor")
 			}
-			// set Ray controller
 			for _, ray := range r.Ray.RayClusters {
 				if err := controllerutil.SetControllerReference(isvc, ray, p.scheme); err != nil {
 					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
 				}
 			}
-			if err = controllerutil.SetControllerReference(isvc, r.MultiNodeProber.VolcanoJobs, p.scheme); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to set prober owner reference for predictor")
+			for _, dply := range r.MultiNodeProber.Deployments {
+				if err := controllerutil.SetControllerReference(isvc, dply, p.scheme); err != nil {
+					return ctrl.Result{}, errors.Wrapf(err, "fails to set prober owner reference for predictor")
+				}
 			}
 
-			if r.RawMultiNodeService != nil {
-				// set Service Controller
-				if err := controllerutil.SetControllerReference(isvc, r.RawMultiNodeService.Service, p.scheme); err != nil {
-					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
-				}
+			if err := controllerutil.SetControllerReference(isvc, r.RawMultiNodeService.Service, p.scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
 			}
 
 			_, err = r.Reconcile()
 			if err != nil {
 				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
 			}
-			isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.VolcanoJobs, r.URL)
+
+			isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
 		}
 
 	} else {
