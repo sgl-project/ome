@@ -324,8 +324,9 @@ const (
 type DeploymentModeType string
 
 const (
-	Serverless    DeploymentModeType = "Serverless"
-	RawDeployment DeploymentModeType = "RawDeployment"
+	Serverless       DeploymentModeType = "Serverless"
+	RawDeployment    DeploymentModeType = "RawDeployment"
+	MultiNodeRayVLLM DeploymentModeType = "MultiNodeRayVLLM"
 )
 
 const (

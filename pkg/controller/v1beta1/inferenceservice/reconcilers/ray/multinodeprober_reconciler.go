@@ -52,7 +52,7 @@ func NewMultiNodeProberReconciler(client kclient.Client,
 func createRawDeployment(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
 	url *knapis.URL, index int) *appsv1.Deployment {
 	podMetadata := componentMeta
-	podMetadata.Name = fmt.Sprintf("%s-%d", componentMeta.Name, index)
+	podMetadata.Name = fmt.Sprintf("%s-mnp-%d", componentMeta.Name, index)
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
 	utils.SetPodLabelsFromAnnotations(&podMetadata)
 	podSpec := getDefaultPodSpec(multiNodeProberConfig, url, index)

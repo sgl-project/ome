@@ -1,12 +1,18 @@
 package components
 
 import (
+	"context"
+	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
 	predictorpv "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pv"
 	predictorpvc "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pvc"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
-	"context"
-	"fmt"
+	isvcutils "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -19,12 +25,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
-	isvcutils "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
 )
 
 var _ Component = &Predictor{}
@@ -39,6 +39,7 @@ type Predictor struct {
 	Log                    logr.Logger
 }
 
+// NewPredictor creates a new Predictor instance.
 func NewPredictor(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme,
 	inferenceServiceConfig *v1beta1.InferenceServicesConfig, deploymentMode constants.DeploymentModeType) Component {
 	return &Predictor{
@@ -53,8 +54,7 @@ func NewPredictor(client client.Client, clientset kubernetes.Interface, scheme *
 
 // Reconcile observes the predictor and attempts to drive the status towards the desired state.
 func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
-
-	// Reconcile base model
+	// Reconcile the base model
 	baseModel, result, err := p.reconcileBaseModel(isvc)
 	if err != nil {
 		return result, err
@@ -65,175 +65,243 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	// Reconcile runtime
+	// Reconcile and validate runtime
 	sRuntime, result, err := p.getRuntime(isvc, baseModel)
 	if err != nil {
 		return result, err
 	}
 
-	// Validate runtime
 	if result, err := p.validateRuntime(isvc, sRuntime); err != nil {
 		return result, err
 	}
 
-	// find the OME container index, the container name must be ome-container; nothing else will be accepted
-	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
-	// particularly when we have multiple containers and multiple nodes in the serving runtime
-	omeContainerIdx := p.getOmeContainerIndex(sRuntime.Containers)
-
-	// Reconcile predictor's pod and container spec
-	container, podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime, omeContainerIdx)
-	if err != nil {
-		return result, err
-	}
-
-	// Reconcile object meta
+	// Reconcile object metadata and pod spec
 	objectMeta, result, err := p.reconcileObjectMeta(isvc, sRuntime)
 	if err != nil {
 		return result, err
 	}
 
-	p.Log.Info("Resolved container", "container", container, "podSpec", podSpec)
-	var rawDeployment bool
-	var podLabelKey string
-	var podLabelValue string
-
-	// Here we allow switch between knative and vanilla deployment
-	if p.deploymentMode == constants.RawDeployment {
-		rawDeployment = true
-		podLabelKey = constants.RawDeploymentAppLabel
-		// If PipelineParallelism is enabled, we will not create raw deployment
-		if sRuntime.PipelineParallelism == nil || *sRuntime.PipelineParallelism == false {
-			r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec,
-				&podSpec)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewRawKubeReconciler for predictor")
-			}
-			// set Deployments Controller
-			if err := controllerutil.SetControllerReference(isvc, r.Deployment.Deployment, p.scheme); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to set deployment owner reference for predictor")
-			}
-			// set Service Controller
-			if err := controllerutil.SetControllerReference(isvc, r.Service.Service, p.scheme); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to set service owner reference for predictor")
-			}
-			// set autoscaler Controller
-			if err := r.Scaler.Autoscaler.SetControllerReferences(isvc, p.scheme); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to set autoscaler owner references for predictor")
-			}
-
-			deployment, err := r.Reconcile()
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
-			}
-			isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, deployment, r.URL)
-		} else {
-			p.Log.Info("PipelineParallelism is enabled, will not create raw deployment", "inference service", isvc.Name)
-			r, err := multinodevllm.NewMultiNodeVllmReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, &podSpec)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to create NewMultiNodeVllmReconciler for predictor")
-			}
-			for _, ray := range r.Ray.RayClusters {
-				if err := controllerutil.SetControllerReference(isvc, ray, p.scheme); err != nil {
-					return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
-				}
-			}
-			for _, dply := range r.MultiNodeProber.Deployments {
-				if err := controllerutil.SetControllerReference(isvc, dply, p.scheme); err != nil {
-					return ctrl.Result{}, errors.Wrapf(err, "fails to set prober owner reference for predictor")
-				}
-			}
-
-			if err := controllerutil.SetControllerReference(isvc, r.RawMultiNodeService.Service, p.scheme); err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to set ray owner reference for predictor")
-			}
-
-			_, err = r.Reconcile()
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
-			}
-
-			isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
-		}
-
-	} else {
-		podLabelKey = constants.RevisionLabel
-		r := knative.NewKsvcReconciler(p.client, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec,
-			&podSpec, isvc.Status.Components[v1beta1.PredictorComponent])
-		if err := controllerutil.SetControllerReference(isvc, r.Service, p.scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to set owner reference for predictor")
-		}
-		status, err := r.Reconcile()
-		if err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "fails to reconcile predictor")
-		}
-		isvc.Status.PropagateStatus(v1beta1.PredictorComponent, status)
-	}
-	statusSpec := isvc.Status.Components[v1beta1.PredictorComponent]
-	if rawDeployment {
-		podLabelValue = constants.GetRawServiceLabel(objectMeta.Name)
-	} else {
-		podLabelValue = statusSpec.LatestCreatedRevision
-	}
-	predictorPods, err := isvcutils.ListPodsByLabel(p.client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
+	container, podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "fails to list inferenceservice pods by label")
+		return result, err
 	}
-	isvc.Status.PropagateModelStatus(statusSpec, predictorPods, rawDeployment)
+
+	p.Log.Info("Resolved container and podSpec", "container", container, "podSpec", podSpec)
+
+	// Reconcile deployment based on the deployment mode
+	if result, err := p.reconcileDeployment(isvc, sRuntime, objectMeta, &podSpec); err != nil {
+		return result, err
+	}
+
+	// Update the predictor status
+	if err := p.updatePredictorStatus(isvc, objectMeta); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
+// reconcileDeployment manages the deployment logic for different deployment modes.
+func (p *Predictor) reconcileDeployment(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
+	if p.deploymentMode == constants.RawDeployment && (sRuntime.PipelineParallelism == nil || !*sRuntime.PipelineParallelism) {
+		return p.reconcileRawDeployment(isvc, objectMeta, podSpec)
+	}
+	if p.deploymentMode == constants.MultiNodeRayVLLM || (p.deploymentMode == constants.RawDeployment && sRuntime.PipelineParallelism != nil && *sRuntime.PipelineParallelism) {
+		return p.reconcileMultiNodeVLLM(isvc, objectMeta, podSpec)
+	}
+	if p.deploymentMode == constants.Serverless {
+		return p.reconcileKnativeDeployment(isvc, objectMeta, podSpec)
+	}
+	p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Invalid deployment mode")
+	return ctrl.Result{}, errors.New("invalid deployment mode")
+}
+
+func (p *Predictor) reconcileRawDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
+	r, err := p.createRawKubeReconciler(isvc, objectMeta, podSpec)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	deployment, err := r.Reconcile()
+	if err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
+	}
+	isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, deployment, r.URL)
+	return ctrl.Result{}, nil
+}
+
+func (p *Predictor) reconcileMultiNodeVLLM(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
+	p.Log.Info("PipelineParallelism is enabled, skipping raw deployment", "inference service", isvc.Name)
+	r, err := p.createMultiNodeVllmReconciler(isvc, objectMeta, podSpec)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := p.setMultiNodeReferences(isvc, r); err != nil {
+		return ctrl.Result{}, err
+	}
+	if _, err := r.Reconcile(); err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
+	}
+	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
+	return ctrl.Result{}, nil
+}
+
+// reconcileKnativeDeployment handles the deployment for Knative deployments.
+func (p *Predictor) reconcileKnativeDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
+	r := knative.NewKsvcReconciler(p.client, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, podSpec, isvc.Status.Components[v1beta1.PredictorComponent])
+	if err := controllerutil.SetControllerReference(isvc, r.Service, p.scheme); err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to set owner reference for predictor")
+	}
+	status, err := r.Reconcile()
+	if err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
+	}
+	isvc.Status.PropagateStatus(v1beta1.PredictorComponent, status)
+	return ctrl.Result{}, nil
+}
+
+// updatePredictorStatus updates the status of the predictor.
+func (p *Predictor) updatePredictorStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
+	rawDeployment := p.deploymentMode == constants.RawDeployment
+	statusSpec := isvc.Status.Components[v1beta1.PredictorComponent]
+	podLabelKey, podLabelValue := p.getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
+
+	predictorPods, err := isvcutils.ListPodsByLabel(p.client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
+	if err != nil {
+		return errors.Wrapf(err, "failed to list inference service pods by label")
+	}
+	isvc.Status.PropagateModelStatus(statusSpec, predictorPods, rawDeployment)
+	return nil
+}
+
+// getPodLabelInfo returns the pod label key and value based on the deployment mode.
+func (p *Predictor) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMeta, statusSpec v1beta1.ComponentStatusSpec) (string, string) {
+	if rawDeployment {
+		return constants.RawDeploymentAppLabel, constants.GetRawServiceLabel(objectMeta.Name)
+	}
+	return constants.RevisionLabel, statusSpec.LatestCreatedRevision
+}
+
+// createRawKubeReconciler creates a new RawKubeReconciler instance.
+func (p *Predictor) createRawKubeReconciler(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (*raw.RawKubeReconciler, error) {
+	r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, podSpec)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create RawKubeReconciler for predictor")
+	}
+	if err := p.setRawReferences(isvc, r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// createMultiNodeVllmReconciler creates a new MultiNodeVllmReconciler instance.
+func (p *Predictor) createMultiNodeVllmReconciler(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (*multinodevllm.MultiNodeVllmReconciler, error) {
+	r, err := multinodevllm.NewMultiNodeVllmReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, podSpec)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create MultiNodeVllmReconciler for predictor")
+	}
+	return r, nil
+}
+
+// setRawReferences sets the necessary references for raw deployment.
+func (p *Predictor) setRawReferences(isvc *v1beta1.InferenceService, r *raw.RawKubeReconciler) error {
+	if err := controllerutil.SetControllerReference(isvc, r.Deployment.Deployment, p.scheme); err != nil {
+		return errors.Wrapf(err, "failed to set deployment owner reference for predictor")
+	}
+	if err := controllerutil.SetControllerReference(isvc, r.Service.Service, p.scheme); err != nil {
+		return errors.Wrapf(err, "failed to set service owner reference for predictor")
+	}
+	return r.Scaler.Autoscaler.SetControllerReferences(isvc, p.scheme)
+}
+
+// setMultiNodeReferences sets the necessary references for multi-node deployment.
+func (p *Predictor) setMultiNodeReferences(isvc *v1beta1.InferenceService, r *multinodevllm.MultiNodeVllmReconciler) error {
+	for _, ray := range r.Ray.RayClusters {
+		if err := controllerutil.SetControllerReference(isvc, ray, p.scheme); err != nil {
+			return errors.Wrapf(err, "failed to set ray owner reference for predictor")
+		}
+	}
+	for _, dply := range r.MultiNodeProber.Deployments {
+		if err := controllerutil.SetControllerReference(isvc, dply, p.scheme); err != nil {
+			return errors.Wrapf(err, "failed to set prober owner reference for predictor")
+		}
+	}
+	return controllerutil.SetControllerReference(isvc, r.RawMultiNodeService.Service, p.scheme)
+}
+
+// reconcileObjectMeta reconciles the object metadata.
 func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (metav1.ObjectMeta, ctrl.Result, error) {
-	var sRuntimeLabels map[string]string
-	var sRuntimeAnnotations map[string]string
-	predictor := isvc.Spec.Predictor.GetImplementation()
+	annotations, err := p.processAnnotations(isvc, sRuntime)
+	if err != nil {
+		return metav1.ObjectMeta{}, ctrl.Result{}, err
+	}
+
+	predictorName, err := p.determinePredictorName(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{}, ctrl.Result{}, err
+	}
+
+	objectMeta := p.buildObjectMeta(isvc, sRuntime, predictorName, annotations)
+	return objectMeta, ctrl.Result{}, nil
+}
+
+// processAnnotations processes the annotations for the predictor.
+func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
-	// Label filter will be handled in ksvc_reconciler
-	sRuntimeLabels = sRuntime.ServingRuntimePodSpec.Labels
-	sRuntimeAnnotations = utils.Filter(sRuntime.ServingRuntimePodSpec.Annotations, func(key string) bool {
+
+	sRuntimeAnnotations := utils.Filter(sRuntime.ServingRuntimePodSpec.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
-	// Knative does not support INIT containers or mounting, so we add annotations that trigger the
-	// StorageInitializer injector to mutate the underlying deployment to provision model data
-	if sourceURI := predictor.GetStorageUri(); sourceURI != nil {
-		if _, ok := annotations[constants.StorageInitializerSourceUriInternalAnnotationKey]; ok {
-			return metav1.ObjectMeta{}, ctrl.Result{}, errors.New("must provide only one of storageUri and storage.path")
-		}
-		annotations[constants.StorageInitializerSourceUriInternalAnnotationKey] = *sourceURI
-		err := isvcutils.ValidateStorageURI(sourceURI, p.client)
-		if err != nil {
-			return metav1.ObjectMeta{}, ctrl.Result{}, fmt.Errorf("StorageURI not supported: %w", err)
-		}
+	if err := p.handleStorageURI(isvc, annotations); err != nil {
+		return nil, err
 	}
 
-	predictorName := constants.PredictorServiceName(isvc.Name)
+	return utils.Union(sRuntimeAnnotations, annotations, isvc.Spec.Predictor.Annotations), nil
+}
+
+// handleStorageURI handles the storage URI for the predictor.
+func (p *Predictor) handleStorageURI(isvc *v1beta1.InferenceService, annotations map[string]string) error {
+	predictor := isvc.Spec.Predictor.GetImplementation()
+	if sourceURI := predictor.GetStorageUri(); sourceURI != nil {
+		if _, ok := annotations[constants.StorageInitializerSourceUriInternalAnnotationKey]; ok {
+			return errors.New("must provide only one of storageUri and storage.path")
+		}
+		annotations[constants.StorageInitializerSourceUriInternalAnnotationKey] = *sourceURI
+		if err := isvcutils.ValidateStorageURI(sourceURI, p.client); err != nil {
+			return fmt.Errorf("StorageURI not supported: %w", err)
+		}
+	}
+	return nil
+}
+
+// determinePredictorName determines the name of the predictor.
+func (p *Predictor) determinePredictorName(isvc *v1beta1.InferenceService) (string, error) {
+	defaultPredictorName := constants.DefaultPredictorServiceName(isvc.Name)
+	existingName := defaultPredictorName
+
 	if p.deploymentMode == constants.RawDeployment {
 		existing := &v1.Service{}
-		err := p.client.Get(context.TODO(), types.NamespacedName{Name: constants.DefaultPredictorServiceName(isvc.Name), Namespace: isvc.Namespace}, existing)
-		if err == nil {
-			predictorName = constants.DefaultPredictorServiceName(isvc.Name)
+		if err := p.client.Get(context.TODO(), types.NamespacedName{Name: defaultPredictorName, Namespace: isvc.Namespace}, existing); err == nil {
+			return existingName, nil
 		}
 	} else {
 		existing := &knservingv1.Service{}
-		err := p.client.Get(context.TODO(), types.NamespacedName{Name: constants.DefaultPredictorServiceName(isvc.Name), Namespace: isvc.Namespace}, existing)
-		if err == nil {
-			predictorName = constants.DefaultPredictorServiceName(isvc.Name)
+		if err := p.client.Get(context.TODO(), types.NamespacedName{Name: defaultPredictorName, Namespace: isvc.Namespace}, existing); err == nil {
+			return existingName, nil
 		}
 	}
 
-	// Labels and annotations from predictor component
-	// Label filter will be handled in ksvc_reconciler
-	predictorLabels := isvc.Spec.Predictor.Labels
-	predictorAnnotations := utils.Filter(isvc.Spec.Predictor.Annotations, func(key string) bool {
-		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
-	})
+	return constants.PredictorServiceName(isvc.Name), nil
+}
 
-	// Labels and annotations priority: predictor component > isvc > ServingRuntimePodSpec
-	// Labels and annotations from high priority will overwrite that from low priority
-	objectMeta := metav1.ObjectMeta{
+// buildObjectMeta builds the object metadata.
+func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, predictorName string, annotations map[string]string) metav1.ObjectMeta {
+	predictorLabels := isvc.Spec.Predictor.Labels
+	sRuntimeLabels := sRuntime.ServingRuntimePodSpec.Labels
+
+	return metav1.ObjectMeta{
 		Name:      predictorName,
 		Namespace: isvc.Namespace,
 		Labels: utils.Union(
@@ -245,59 +313,93 @@ func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime
 				constants.KServiceComponentLabel:      string(v1beta1.PredictorComponent),
 			},
 		),
-		Annotations: utils.Union(
-			sRuntimeAnnotations,
-			annotations,
-			predictorAnnotations,
-		),
+		Annotations: annotations,
 	}
-	return objectMeta, ctrl.Result{}, nil
 }
 
-func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int) (*v1.Container, v1.PodSpec, ctrl.Result, error) {
-	var container *v1.Container
-	var podSpec v1.PodSpec
+// reconcilePodSpec reconciles the pod spec.
+func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (*v1.Container, v1.PodSpec, ctrl.Result, error) {
+	// find the OME container index, the container name must be ome-container; nothing else will be accepted
+	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
+	// particularly when we have multiple containers and multiple nodes in the serving runtime
+	omeContainerIdx := p.getOmeContainerIndex(sRuntime.Containers)
+	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
+	if err != nil {
+		return nil, v1.PodSpec{}, ctrl.Result{}, err
+	}
 
+	podSpec, err := p.createMergedPodSpec(isvc, sRuntime)
+	if err != nil {
+		return nil, v1.PodSpec{}, ctrl.Result{}, err
+	}
+
+	p.updateVolumeMounts(isvc, container)
+	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec)
+
+	return container, podSpec, ctrl.Result{}, nil
+}
+
+// createMergedContainer merges the runtime and model containers.
+func (p *Predictor) createMergedContainer(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int) (*v1.Container, error) {
 	container, err := isvcutils.MergeRuntimeContainers(&sRuntime.Containers[omeContainerIdx], &isvc.Spec.Predictor.Model.Container)
 	if err != nil {
 		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to get runtime container")
-		return nil, v1.PodSpec{}, ctrl.Result{}, errors.Wrapf(err, "failed to get runtime container")
+		return nil, errors.Wrapf(err, "failed to get runtime container")
 	}
 
+	if err = isvcutils.ReplacePlaceholders(container, isvc.ObjectMeta); err != nil {
+		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to replace placeholders in serving runtime Container")
+		return nil, errors.Wrapf(err, "failed to replace placeholders in serving runtime Container")
+	}
+
+	isvcutils.UpdateImageTag(container, isvc.Spec.Predictor.Model.RuntimeVersion, isvc.Spec.Predictor.Model.Runtime)
+	return container, nil
+}
+
+// createMergedPodSpec merges the runtime and model pod specs.
+func (p *Predictor) createMergedPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (v1.PodSpec, error) {
 	mergedPodSpec, err := isvcutils.MergePodSpec(&sRuntime.ServingRuntimePodSpec, &isvc.Spec.Predictor.PodSpec)
 	if err != nil {
 		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to get runtime PodSpec")
-		return nil, v1.PodSpec{}, ctrl.Result{}, errors.Wrapf(err, "failed to consolidate serving runtime PodSpecs")
+		return v1.PodSpec{}, errors.Wrapf(err, "failed to consolidate serving runtime PodSpecs")
 	}
-
-	// Replace placeholders in runtime container by values from inferenceservice metadata
-	if err = isvcutils.ReplacePlaceholders(container, isvc.ObjectMeta); err != nil {
-		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to replace placeholders in serving runtime Container")
-		return nil, v1.PodSpec{}, ctrl.Result{}, errors.Wrapf(err, "failed to replace placeholders in serving runtime Container")
-	}
-
-	// Update image tag if GPU is enabled or runtime version is provided
-	isvcutils.UpdateImageTag(container, isvc.Spec.Predictor.Model.RuntimeVersion, isvc.Spec.Predictor.Model.Runtime)
-
-	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
-	modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
-	vm := v1.VolumeMount{Name: constants.PVCName(isvc.Name), MountPath: modelMountPath, ReadOnly: true}
-	volume := v1.Volume{Name: constants.PVCName(isvc.Name), VolumeSource: v1.VolumeSource{PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: constants.PVCName(isvc.Name)}}}
-	isvcutils.UpdateVolumeMounts(container, &vm)
-	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{{Name: "MODEL_PATH", Value: modelMountPath}})
-
-	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "container", container)
-
-	podSpec = *mergedPodSpec
-	podSpec.Containers = []v1.Container{
-		*container,
-	}
-	podSpec.Volumes = append(podSpec.Volumes, volume)
-	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[:omeContainerIdx]...)
-	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[omeContainerIdx+1:]...)
-	return container, podSpec, ctrl.Result{}, err
+	return *mergedPodSpec, nil
 }
 
+// updateVolumeMounts updates the volume mounts for the predictor.
+func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container) {
+	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
+	modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
+	vm := v1.VolumeMount{
+		Name:      constants.PVCName(isvc.Name),
+		MountPath: modelMountPath,
+		ReadOnly:  true,
+	}
+	isvcutils.UpdateVolumeMounts(container, &vm)
+	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+		{Name: "MODEL_PATH", Value: modelMountPath},
+	})
+}
+
+// updatePodSpec updates the pod spec for the predictor.
+func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec) {
+	podSpec.Containers = append([]v1.Container{*container}, sRuntime.Containers[:omeContainerIdx]...)
+	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[omeContainerIdx+1:]...)
+
+	volume := v1.Volume{
+		Name: constants.PVCName(isvc.Name),
+		VolumeSource: v1.VolumeSource{
+			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+				ClaimName: constants.PVCName(isvc.Name),
+			},
+		},
+	}
+	podSpec.Volumes = append(podSpec.Volumes, volume)
+
+	p.Log.Info("PodSpec updated", "inference service", isvc.Name)
+}
+
+// validateRuntime validates the runtime for the predictor.
 func (p *Predictor) validateRuntime(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (ctrl.Result, error) {
 	if len(sRuntime.Containers) == 0 {
 		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "No container configuration found in selected serving runtime")
@@ -311,6 +413,7 @@ func (p *Predictor) validateRuntime(isvc *v1beta1.InferenceService, sRuntime v1b
 	return ctrl.Result{}, nil
 }
 
+// getOmeContainerIndex returns the index of the OME container in the runtime containers.
 func (p *Predictor) getOmeContainerIndex(containers []v1.Container) int {
 	for i, container := range containers {
 		if container.Name == constants.InferenceServiceContainerName {
@@ -320,6 +423,7 @@ func (p *Predictor) getOmeContainerIndex(containers []v1.Container) int {
 	return -1
 }
 
+// getRuntime retrieves the serving runtime for the predictor.
 func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.Runtime != nil {
 		return p.getSpecifiedRuntime(isvc, baseModel)
@@ -327,33 +431,35 @@ func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1
 	return p.getSupportingRuntime(isvc, baseModel)
 }
 
+// getSpecifiedRuntime retrieves the specified runtime for the predictor.
 func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
 	isvc.SetRuntimeDefaults()
 
 	rt, err := isvcutils.GetServingRuntime(p.client, *isvc.Spec.Predictor.Model.Runtime, isvc.Namespace)
 	if err != nil {
-		p.updateModelTransitionStatus(isvc, v1beta1.RuntimeNotRecognized, "Waiting for rt to become available")
+		p.updateModelTransitionStatus(isvc, v1beta1.RuntimeNotRecognized, "Waiting for runtime to become available")
 		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, err
 	}
 
 	if rt.IsDisabled() {
-		p.updateModelTransitionStatus(isvc, v1beta1.RuntimeDisabled, "Specified rt is disabled")
-		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified rt %s is disabled", *isvc.Spec.Predictor.Model.Runtime)
+		p.updateModelTransitionStatus(isvc, v1beta1.RuntimeDisabled, "Specified runtime is disabled")
+		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s is disabled", *isvc.Spec.Predictor.Model.Runtime)
 	}
 
 	if !p.isProtocolVersionSupported(isvc, rt) {
-		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified rt does not support specified protocol version")
-		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified rt %s does not support specified protocol version", *isvc.Spec.Predictor.Model.Runtime)
+		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified runtime does not support specified protocol version")
+		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s does not support specified protocol version", *isvc.Spec.Predictor.Model.Runtime)
 	}
 
 	if !isvc.Spec.Predictor.Model.RuntimeSupportsModel(rt, &baseModel) {
-		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified rt does not support specified framework/version")
-		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified rt %s does not support specified predictor with model type: %v", *isvc.Spec.Predictor.Model.Runtime, baseModel.ModelFormat.Name)
+		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified runtime does not support specified framework/version")
+		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s does not support specified predictor with model type: %v", *isvc.Spec.Predictor.Model.Runtime, baseModel.ModelFormat.Name)
 	}
 
 	return *rt, ctrl.Result{}, nil
 }
 
+// getSupportingRuntime retrieves the supporting runtime for the predictor.
 func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
 	runtimes, err := isvc.Spec.Predictor.Model.GetSupportingRuntimes(p.client, isvc.Namespace)
 	if err != nil {
@@ -373,6 +479,7 @@ func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseMod
 	return runtimes[0].Spec, ctrl.Result{}, nil
 }
 
+// isProtocolVersionSupported checks if the protocol version is supported by the runtime.
 func (p *Predictor) isProtocolVersionSupported(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec) bool {
 	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
 		return true
@@ -380,6 +487,7 @@ func (p *Predictor) isProtocolVersionSupported(isvc *v1beta1.InferenceService, r
 	return runtime.IsProtocolVersionSupported(*isvc.Spec.Predictor.Model.ProtocolVersion)
 }
 
+// reconcilePVPVC reconciles the PersistentVolume and PersistentVolumeClaim for the predictor.
 func (p *Predictor) reconcilePVPVC(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (ctrl.Result, error) {
 	pvReconciler := predictorpv.NewPredictorPVReconciler(p.client, p.clientset, p.scheme)
 	pvcReconciler := predictorpvc.NewPredictorPVCReconciler(p.client, p.clientset, p.scheme)
@@ -394,6 +502,7 @@ func (p *Predictor) reconcilePVPVC(isvc *v1beta1.InferenceService, baseModel v1b
 	return ctrl.Result{}, nil
 }
 
+// reconcileBaseModel reconciles the base model for the predictor.
 func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.BaseModel == nil {
 		return v1beta1.BaseModelSpec{}, ctrl.Result{}, nil
@@ -412,6 +521,7 @@ func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.
 	return baseModel, ctrl.Result{}, nil
 }
 
+// getBaseModelSpec retrieves the base model spec.
 func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, error) {
 	bm, err := isvcutils.GetBaseModel(p.client, *isvc.Spec.Predictor.Model.BaseModel, isvc.Namespace)
 	if err != nil {
@@ -421,6 +531,7 @@ func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (v1beta1.Ba
 	return *bm, nil
 }
 
+// updateModelTransitionStatus updates the model transition status for the predictor.
 func (p *Predictor) updateModelTransitionStatus(isvc *v1beta1.InferenceService, reason v1beta1.FailureReason, message string) {
 	isvc.Status.UpdateModelTransitionStatus(v1beta1.InvalidSpec, &v1beta1.FailureInfo{
 		Reason:  reason,

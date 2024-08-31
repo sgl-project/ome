@@ -318,6 +318,10 @@ func getMultiDeploymentCondition(deployment []*appsv1.Deployment, conditionType 
 	condition := apis.Condition{}
 	allDeploymentsAvailable := true
 	for _, d := range deployment {
+		if d.Status.Conditions == nil {
+			allDeploymentsAvailable = false
+			break
+		}
 		for _, con := range d.Status.Conditions {
 			if con.Type == conditionType && con.Status == v1.ConditionFalse {
 				allDeploymentsAvailable = false

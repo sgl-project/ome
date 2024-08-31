@@ -35,7 +35,7 @@ case 2: ome.io/deploymentMode is set
 func GetDeploymentMode(annotations map[string]string, deployConfig *v1beta1.DeployConfig) constants.DeploymentModeType {
 	deploymentMode, ok := annotations[constants.DeploymentMode]
 	if ok && (deploymentMode == string(constants.RawDeployment) || deploymentMode ==
-		string(constants.Serverless)) {
+		string(constants.Serverless)) || deploymentMode == string(constants.MultiNodeRayVLLM) {
 		return constants.DeploymentModeType(deploymentMode)
 	}
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
