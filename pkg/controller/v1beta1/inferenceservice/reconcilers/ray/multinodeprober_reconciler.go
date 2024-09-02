@@ -1,27 +1,27 @@
 package raycluster
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
-	knapis "knative.dev/pkg/apis"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	knapis "knative.dev/pkg/apis"
 	"knative.dev/pkg/kmp"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// MultiNodeProberReconciler reconciles the raw kubernetes deployment resource for multi node prober
+// MultiNodeProberReconciler reconciles the Kubernetes Deployment resource for MultiNodeProber
 type MultiNodeProberReconciler struct {
 	client      kclient.Client
 	scheme      *runtime.Scheme
@@ -29,16 +29,20 @@ type MultiNodeProberReconciler struct {
 	URL         *knapis.URL
 }
 
-func NewMultiNodeProberReconciler(client kclient.Client,
+// NewMultiNodeProberReconciler initializes a new MultiNodeProberReconciler
+func NewMultiNodeProberReconciler(
+	client kclient.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
-	multiNodeProberConfig *v1beta1.MultiNodeProberConfig) *MultiNodeProberReconciler {
-	deployments := make([]*appsv1.Deployment, 0)
+	multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+) *MultiNodeProberReconciler {
+	deployments := make([]*appsv1.Deployment, 0, *componentExt.MinReplicas)
 	for i := 0; i < *componentExt.MinReplicas; i++ {
-		url := &knapis.URL{}
-		url.Scheme = "http"
-		url.Host = fmt.Sprintf("%s-%d.%s.svc.cluster.local", componentMeta.Name, i, componentMeta.Namespace)
+		url := &knapis.URL{
+			Scheme: "http",
+			Host:   fmt.Sprintf("%s-%d.%s.svc.cluster.local", componentMeta.Name, i, componentMeta.Namespace),
+		}
 		dply := createRawDeployment(componentMeta, multiNodeProberConfig, url, i)
 		deployments = append(deployments, dply)
 	}
@@ -49,15 +53,20 @@ func NewMultiNodeProberReconciler(client kclient.Client,
 	}
 }
 
-func createRawDeployment(componentMeta metav1.ObjectMeta, multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
-	url *knapis.URL, index int) *appsv1.Deployment {
-	podMetadata := componentMeta
+func createRawDeployment(
+	componentMeta metav1.ObjectMeta,
+	multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+	url *knapis.URL,
+	index int,
+) *appsv1.Deployment {
+	podMetadata := componentMeta.DeepCopy()
 	podMetadata.Name = fmt.Sprintf("%s-mnp-%d", componentMeta.Name, index)
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
-	utils.SetPodLabelsFromAnnotations(&podMetadata)
-	podSpec := getDefaultPodSpec(multiNodeProberConfig, url, index)
+	utils.SetPodLabelsFromAnnotations(podMetadata)
+
+	podSpec := getDefaultPodSpec(multiNodeProberConfig, url)
 	deployment := &appsv1.Deployment{
-		ObjectMeta: podMetadata,
+		ObjectMeta: *podMetadata,
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -65,48 +74,20 @@ func createRawDeployment(componentMeta metav1.ObjectMeta, multiNodeProberConfig 
 				},
 			},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: podMetadata,
+				ObjectMeta: *podMetadata,
 				Spec:       *podSpec,
 			},
 		},
 	}
+
 	setDefaultDeploymentSpec(&deployment.Spec)
 	return deployment
 }
 
-// checkDeploymentExist checks if the deployment exists?
-func (r *MultiNodeProberReconciler) checkDeploymentExist(client kclient.Client, dply *appsv1.Deployment) (constants.CheckResultType, *appsv1.Deployment, error) {
-	// get deployment
-	existingDeployment := &appsv1.Deployment{}
-	err := client.Get(context.TODO(), types.NamespacedName{
-		Namespace: dply.ObjectMeta.Namespace,
-		Name:      dply.ObjectMeta.Name,
-	}, existingDeployment)
-	if err != nil {
-		if apierr.IsNotFound(err) {
-			return constants.CheckResultCreate, nil, nil
-		}
-		return constants.CheckResultUnknown, nil, err
-	}
-	// existed, check equivalence
-	// for HPA scaling, we should ignore Replicas of Deployments
-	ignoreFields := cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas")
-	// Do a dry-run update. This will populate our local deployment object with any default values
-	// that are present on the remote version.
-	if err := client.Update(context.TODO(), dply, kclient.DryRunAll); err != nil {
-		log.Error(err, "Failed to perform dry-run update of deployment", "Deployments", dply.Name)
-		return constants.CheckResultUnknown, nil, err
-	}
-	if diff, err := kmp.SafeDiff(dply.Spec, existingDeployment.Spec, ignoreFields); err != nil {
-		return constants.CheckResultUnknown, nil, err
-	} else if diff != "" {
-		log.Info("Deployments Updated", "Diff", diff)
-		return constants.CheckResultUpdate, existingDeployment, nil
-	}
-	return constants.CheckResultExisted, existingDeployment, nil
-}
-
-func getDefaultPodSpec(multiNodeProberConfig *v1beta1.MultiNodeProberConfig, url *knapis.URL, index int) *corev1.PodSpec {
+func getDefaultPodSpec(
+	multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+	url *knapis.URL,
+) *corev1.PodSpec {
 	return &corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
@@ -123,49 +104,9 @@ func getDefaultPodSpec(multiNodeProberConfig *v1beta1.MultiNodeProberConfig, url
 						corev1.ResourceMemory: resource.MustParse(multiNodeProberConfig.MemoryRequest),
 					},
 				},
-				ReadinessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Port: intstr.IntOrString{
-								IntVal: constants.MultiNodeProberContainerPort,
-							},
-							Path: "/healthz",
-						},
-					},
-					TimeoutSeconds:   5,
-					PeriodSeconds:    30,
-					SuccessThreshold: 1,
-					FailureThreshold: 3,
-				},
-				LivenessProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Port: intstr.IntOrString{
-								IntVal: constants.MultiNodeProberContainerPort,
-							},
-							Path: "/readyz",
-						},
-					},
-					TimeoutSeconds:   5,
-					PeriodSeconds:    30,
-					SuccessThreshold: 1,
-					FailureThreshold: 3,
-				},
-				StartupProbe: &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						HTTPGet: &corev1.HTTPGetAction{
-							Port: intstr.IntOrString{
-								IntVal: constants.MultiNodeProberContainerPort,
-							},
-							Path: "/startupz",
-						},
-					},
-					TimeoutSeconds:      multiNodeProberConfig.StartupTimeoutSeconds,
-					PeriodSeconds:       multiNodeProberConfig.StartupPeriodSeconds,
-					SuccessThreshold:    1,
-					FailureThreshold:    multiNodeProberConfig.StartupFailureThreshold,
-					InitialDelaySeconds: multiNodeProberConfig.StartupInitialDelaySeconds,
-				},
+				ReadinessProbe: createProbe("/healthz"),
+				LivenessProbe:  createProbe("/readyz"),
+				StartupProbe:   createStartupProbe(multiNodeProberConfig),
 				Args: []string{
 					"--vllm-endpoint",
 					fmt.Sprintf("%s:%s", url.String(), constants.InferenceServiceDefaultHttpPort),
@@ -180,6 +121,41 @@ func getDefaultPodSpec(multiNodeProberConfig *v1beta1.MultiNodeProberConfig, url
 				},
 			},
 		},
+	}
+}
+
+func createProbe(path string) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.IntOrString{
+					IntVal: constants.MultiNodeProberContainerPort,
+				},
+				Path: path,
+			},
+		},
+		TimeoutSeconds:   5,
+		PeriodSeconds:    30,
+		SuccessThreshold: 1,
+		FailureThreshold: 3,
+	}
+}
+
+func createStartupProbe(config *v1beta1.MultiNodeProberConfig) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.IntOrString{
+					IntVal: constants.MultiNodeProberContainerPort,
+				},
+				Path: "/startupz",
+			},
+		},
+		TimeoutSeconds:      config.StartupTimeoutSeconds,
+		PeriodSeconds:       config.StartupPeriodSeconds,
+		SuccessThreshold:    1,
+		FailureThreshold:    config.StartupFailureThreshold,
+		InitialDelaySeconds: config.StartupInitialDelaySeconds,
 	}
 }
 
@@ -203,25 +179,60 @@ func setDefaultDeploymentSpec(spec *appsv1.DeploymentSpec) {
 	}
 }
 
-// Reconcile ...
+// Reconcile reconciles the Deployments managed by MultiNodeProberReconciler
 func (r *MultiNodeProberReconciler) Reconcile() error {
-	// Reconcile Deployments
 	for _, deployment := range r.Deployments {
-		result, _, err := r.checkDeploymentExist(r.client, deployment)
+		result, existingDeployment, err := r.checkDeploymentExist(deployment)
 		if err != nil {
 			return err
 		}
-		log.Info("deployment reconcile", "checkResult", result, "err", err)
+
 		var opErr error
 		switch result {
 		case constants.CheckResultCreate:
 			opErr = r.client.Create(context.TODO(), deployment)
 		case constants.CheckResultUpdate:
+			deployment.ResourceVersion = existingDeployment.ResourceVersion
 			opErr = r.client.Update(context.TODO(), deployment)
 		}
+
 		if opErr != nil {
 			return opErr
 		}
 	}
+
 	return nil
+}
+
+// checkDeploymentExist checks if the deployment exists and determines if it should be created, updated, or is already present
+func (r *MultiNodeProberReconciler) checkDeploymentExist(dply *appsv1.Deployment) (constants.CheckResultType, *appsv1.Deployment, error) {
+	existingDeployment := &appsv1.Deployment{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Namespace: dply.ObjectMeta.Namespace,
+		Name:      dply.ObjectMeta.Name,
+	}, existingDeployment)
+	if err != nil {
+		if apierr.IsNotFound(err) {
+			return constants.CheckResultCreate, nil, nil
+		}
+		return constants.CheckResultUnknown, nil, err
+	}
+
+	// Ignore Replicas field for HPA scaling when comparing deployments
+	ignoreFields := cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas")
+
+	// Perform a dry-run update to compare deployments
+	if err := r.client.Update(context.TODO(), dply, kclient.DryRunAll); err != nil {
+		log.Error(err, "Failed to perform dry-run update of deployment", "Deployments", dply.Name)
+		return constants.CheckResultUnknown, nil, err
+	}
+
+	if diff, err := kmp.SafeDiff(dply.Spec, existingDeployment.Spec, ignoreFields); err != nil {
+		return constants.CheckResultUnknown, nil, err
+	} else if diff != "" {
+		log.Info("Deployments Updated", "Diff", diff)
+		return constants.CheckResultUpdate, existingDeployment, nil
+	}
+
+	return constants.CheckResultExisted, existingDeployment, nil
 }
