@@ -60,7 +60,6 @@ spec:
             done;
             python3 -m vllm.entrypoints.openai.api_server \
               --port=8080 \
-              --disable-log-stats \
               --model="$MODEL_PATH" \
               --disable-log-requests \
               --middleware=vllm.entrypoints.openai.middleware.log_opc_header \

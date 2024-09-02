@@ -52,7 +52,6 @@ spec:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
           --port={{.Values.vllm.port}} \
-          --disable-log-stats \
           --model="$MODEL_PATH" \
           --disable-log-requests \
           --served-model-name={{.Values.vllm.serveModelName}} \
