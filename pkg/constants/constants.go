@@ -407,6 +407,25 @@ var (
 	ObjectStorageUrlPrefix    = "oci://"
 )
 
+func (c CheckResultType) String() string {
+	switch c {
+	case CheckResultCreate:
+		return "Create"
+	case CheckResultUpdate:
+		return "Update"
+	case CheckResultExisted:
+		return "Existed"
+	case CheckResultUnknown:
+		return "Unknown"
+	case CheckResultDelete:
+		return "Delete"
+	case CheckResultSkipped:
+		return "Skipped"
+	default:
+		return "Invalid"
+	}
+}
+
 func GetModelsLabelWithUid(uid types.UID) string {
 	return ModelsLabelPrefix + string(uid)
 }

@@ -3,15 +3,19 @@ package raycluster
 import (
 	"context"
 	"fmt"
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
@@ -20,9 +24,6 @@ import (
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var log = logf.Log.WithName("RayClusterReconciler")
@@ -85,10 +86,8 @@ func (r *RayReconciler) Reconcile() ([]*ray.RayCluster, error) {
 func (r *RayReconciler) listExistingRayClusters() (*ray.RayClusterList, error) {
 	existingRayClusters := &ray.RayClusterList{}
 	labelSelector := client.MatchingLabels(r.componentMeta.Labels)
-	if err := r.client.List(context.TODO(), existingRayClusters, client.InNamespace(r.componentMeta.Namespace), labelSelector); err != nil {
-		return nil, err
-	}
-	return existingRayClusters, nil
+	err := r.client.List(context.TODO(), existingRayClusters, client.InNamespace(r.componentMeta.Namespace), labelSelector)
+	return existingRayClusters, err
 }
 
 func (r *RayReconciler) sortRayClustersByIndex(existingRayClusters *ray.RayClusterList) {
@@ -113,118 +112,93 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 			return err
 		}
 
-		// Check the health of the mnp deployment
 		mnpName := fmt.Sprintf("%s-mnp", desired.Name)
-		if shouldRecreate, err := r.isMNPDeploymentUnavailable(existing, mnpName, r.unavailableThreshold); err != nil {
+		if shouldRecreate, err := r.isMNPDeploymentUnavailable(existing, mnpName); err != nil {
 			return err
 		} else if shouldRecreate {
-			log.Info("MNP deployment is unavailable, recreating Ray cluster", "namespace", desired.Namespace, "name", desired.Name)
+			log.Info("Recreating Ray cluster due to unavailable MNP deployment", "namespace", desired.Namespace, "name", desired.Name)
 			if err := r.client.Delete(context.TODO(), existing); err != nil {
-				log.Error(err, "Failed to delete Ray cluster", "name", existing.Name)
+				log.Error(err, "Failed to delete Ray cluster", "namespace", existing.Namespace, "name", existing.Name)
 				return err
 			}
 
-			// Reset the unavailable-since annotation in the desired object before creation
-			if desired.Annotations == nil {
-				desired.Annotations = make(map[string]string)
-			}
-			delete(desired.Annotations, constants.RayClusterUnavailableSince)
+			resetUnavailableSinceAnnotation(desired)
 
-			// Create the RayCluster
 			if err := r.client.Create(context.TODO(), desired); err != nil {
 				return err
 			}
 		}
 
-		// Continue with standard reconciliation
 		desired.ResourceVersion = existing.ResourceVersion
-
-		// Preserve existing annotations
-		if existing.Annotations != nil {
-			if desired.Annotations == nil {
-				desired.Annotations = make(map[string]string)
-			}
-			for k, v := range existing.Annotations {
-				if _, exists := desired.Annotations[k]; !exists {
-					desired.Annotations[k] = v
-				}
-			}
-		}
+		preserveAnnotations(desired, existing)
 
 		if err := reconcileRayCluster(desired, existing); err != nil {
 			return err
 		}
 		return r.client.Update(context.TODO(), desired)
 	})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
-func (r *RayReconciler) isMNPDeploymentUnavailable(rayCluster *ray.RayCluster, mnpName string, threshold time.Duration) (bool, error) {
+func (r *RayReconciler) isMNPDeploymentUnavailable(rayCluster *ray.RayCluster, mnpName string) (bool, error) {
 	deployment := &appsv1.Deployment{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: mnpName, Namespace: rayCluster.Namespace}, deployment)
 	if err != nil {
 		if apierr.IsNotFound(err) {
-			log.Error(err, "MNP deployment not found", "name", mnpName)
+			log.Error(err, "MNP deployment not found", "namespace", rayCluster.Namespace, "name", mnpName)
 			return true, nil
 		}
-		log.Error(err, "Failed to get MNP deployment", "name", mnpName)
+		log.Error(err, "Failed to get MNP deployment", "namespace", rayCluster.Namespace, "name", mnpName)
 		return false, err
 	}
 
 	if rayCluster.Status.AvailableWorkerReplicas > 0 && rayCluster.Status.State == ray.Ready {
 		if deployment.Status.UnavailableReplicas > 0 {
-			// Fetch or set the 'unavailable-since' annotation
-			if rayCluster.Annotations == nil {
-				rayCluster.Annotations = make(map[string]string)
-			}
-
-			unavailableSince, exists := rayCluster.Annotations[constants.RayClusterUnavailableSince]
-			if !exists {
-				// If the annotation doesn't exist, set it to the current time
-				unavailableSince = time.Now().Format(time.RFC3339)
-				rayCluster.Annotations[constants.RayClusterUnavailableSince] = unavailableSince
-				// Update the RayCluster with the new annotation
-				if err := r.client.Update(context.TODO(), rayCluster); err != nil {
-					log.Error(err, "Failed to update RayCluster with unavailable-since annotation", "name", rayCluster.Name)
-					return false, err
-				}
-				log.Info("MNP deployment became unavailable", "name", mnpName, "unavailable_since", unavailableSince)
-			} else {
-				// Parse the timestamp from the annotation
-				unavailableSinceTime, err := time.Parse(time.RFC3339, unavailableSince)
-				if err != nil {
-					log.Error(err, "Failed to parse unavailable-since annotation", "name", rayCluster.Name, "unavailable_since", unavailableSince)
-					return false, err
-				}
-
-				// Calculate how long the deployment has been unavailable
-				unavailableDuration := time.Since(unavailableSinceTime)
-				log.Info("MNP deployment is unavailable", "name", mnpName, "duration", unavailableDuration)
-
-				// Check if the duration exceeds the threshold
-				if unavailableDuration > threshold {
-					log.Info("MNP deployment has been unavailable for too long", "name", mnpName, "duration", unavailableDuration, "threshold", threshold)
-					return true, nil
-				}
-			}
-		} else {
-			// Clear the 'unavailable-since' annotation if the deployment is available
-			if _, exists := rayCluster.Annotations[constants.RayClusterUnavailableSince]; exists {
-				delete(rayCluster.Annotations, constants.RayClusterUnavailableSince)
-				if err := r.client.Update(context.TODO(), rayCluster); err != nil {
-					log.Error(err, "Failed to clear unavailable-since annotation", "name", rayCluster.Name)
-					return false, err
-				}
-				log.Info("MNP deployment is now available, clearing unavailable-since annotation", "name", mnpName)
-			}
+			return r.handleUnavailableMNP(rayCluster, mnpName)
 		}
-	} else {
-		log.Info("RayCluster is not yet ready or does not have available worker replicas, skipping annotation update", "name", rayCluster.Name)
+		return r.clearUnavailableSinceAnnotation(rayCluster, mnpName)
 	}
+	log.Info("RayCluster is not ready or has no available worker replicas, skipping annotation update", "namespace", rayCluster.Namespace, "name", rayCluster.Name)
+	return false, nil
+}
 
+func (r *RayReconciler) handleUnavailableMNP(rayCluster *ray.RayCluster, mnpName string) (bool, error) {
+	unavailableSince, exists := rayCluster.Annotations[constants.RayClusterUnavailableSince]
+	if !exists {
+		unavailableSince = time.Now().Format(time.RFC3339)
+		rayCluster.Annotations[constants.RayClusterUnavailableSince] = unavailableSince
+		if err := r.client.Update(context.TODO(), rayCluster); err != nil {
+			log.Error(err, "Failed to update RayCluster with unavailable-since annotation", "namespace", rayCluster.Namespace, "name", rayCluster.Name)
+			return false, err
+		}
+		log.Info("MNP deployment became unavailable", "namespace", rayCluster.Namespace, "name", mnpName, "unavailable_since", unavailableSince)
+	} else {
+		unavailableSinceTime, err := time.Parse(time.RFC3339, unavailableSince)
+		if err != nil {
+			log.Error(err, "Failed to parse unavailable-since annotation", "namespace", rayCluster.Namespace, "name", rayCluster.Name, "unavailable_since", unavailableSince)
+			return false, err
+		}
+
+		unavailableDuration := time.Since(unavailableSinceTime)
+		log.Info("MNP deployment is still unavailable", "namespace", rayCluster.Namespace, "name", mnpName, "duration", unavailableDuration)
+
+		if unavailableDuration > r.unavailableThreshold {
+			log.Info("MNP deployment has been unavailable for too long", "namespace", rayCluster.Namespace, "name", mnpName, "duration", unavailableDuration, "threshold", r.unavailableThreshold)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *RayReconciler) clearUnavailableSinceAnnotation(rayCluster *ray.RayCluster, mnpName string) (bool, error) {
+	if _, exists := rayCluster.Annotations[constants.RayClusterUnavailableSince]; exists {
+		delete(rayCluster.Annotations, constants.RayClusterUnavailableSince)
+		if err := r.client.Update(context.TODO(), rayCluster); err != nil {
+			log.Error(err, "Failed to clear unavailable-since annotation", "namespace", rayCluster.Namespace, "name", rayCluster.Name)
+			return false, err
+		}
+		log.Info("MNP deployment is now available, clearing unavailable-since annotation", "namespace", rayCluster.Namespace, "name", mnpName)
+	}
 	return false, nil
 }
 
@@ -232,13 +206,13 @@ func (r *RayReconciler) deleteExtraRayClusters(existingRayClusters *ray.RayClust
 	for _, existingCluster := range existingRayClusters.Items {
 		clusterIndex, err := extractClusterIndex(existingCluster.Name)
 		if err != nil {
-			log.Error(err, "Failed to extract index from cluster name", "name", existingCluster.Name)
+			log.Error(err, "Failed to extract index from cluster name", "namespace", existingCluster.Namespace, "name", existingCluster.Name)
 			continue
 		}
 		if clusterIndex >= int(*r.componentExt.MinReplicas) {
 			log.Info("Deleting extra Ray cluster", "namespace", existingCluster.Namespace, "name", existingCluster.Name)
 			if err := r.client.Delete(context.TODO(), &existingCluster); err != nil {
-				log.Error(err, "Failed to delete Ray cluster", "name", existingCluster.Name)
+				log.Error(err, "Failed to delete Ray cluster", "namespace", existingCluster.Namespace, "name", existingCluster.Name)
 			}
 		}
 	}
@@ -247,7 +221,6 @@ func (r *RayReconciler) deleteExtraRayClusters(existingRayClusters *ray.RayClust
 
 func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) *ray.RayCluster {
 	clusterName := fmt.Sprintf("%s-%d", meta.Name, index)
-	annotations := meta.GetAnnotations()
 
 	utils.SetPodLabelsFromAnnotations(meta)
 	workerReplicas := int32(constants.DefaultMinReplicas)
@@ -260,7 +233,7 @@ func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) 
 			Name:        clusterName,
 			Namespace:   meta.Namespace,
 			Labels:      meta.Labels,
-			Annotations: annotations,
+			Annotations: meta.GetAnnotations(),
 		},
 		Spec: ray.RayClusterSpec{
 			HeadGroupSpec: ray.HeadGroupSpec{
@@ -269,7 +242,7 @@ func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) 
 						Name:        rayutils.CheckName(clusterName),
 						Namespace:   meta.Namespace,
 						Labels:      meta.Labels,
-						Annotations: annotations,
+						Annotations: meta.GetAnnotations(),
 					},
 				},
 				RayStartParams: map[string]string{
@@ -281,7 +254,7 @@ func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) 
 					ObjectMeta: metav1.ObjectMeta{
 						Labels:      meta.Labels,
 						Name:        clusterName,
-						Annotations: annotations,
+						Annotations: meta.GetAnnotations(),
 					},
 					Spec: *spec,
 				},
@@ -295,7 +268,7 @@ func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) 
 						ObjectMeta: metav1.ObjectMeta{
 							Labels:      meta.Labels,
 							Name:        clusterName,
-							Annotations: annotations,
+							Annotations: meta.GetAnnotations(),
 						},
 						Spec: *workerPodSpec,
 					},
@@ -331,11 +304,7 @@ func deepCopyWorkerPodSpec(spec *corev1.PodSpec) *corev1.PodSpec {
 func extractClusterIndex(name string) (int, error) {
 	parts := strings.Split(name, "-")
 	indexStr := parts[len(parts)-1]
-	index, err := strconv.Atoi(indexStr)
-	if err != nil {
-		return -1, fmt.Errorf("failed to parse index from name: %s", name)
-	}
-	return index, nil
+	return strconv.Atoi(indexStr)
 }
 
 func reconcileRayCluster(desired *ray.RayCluster, existing *ray.RayCluster) error {
@@ -352,4 +321,23 @@ func semanticEquals(desiredCluster, cluster *ray.RayCluster) bool {
 	return equality.Semantic.DeepEqual(desiredCluster.Spec, cluster.Spec) &&
 		equality.Semantic.DeepEqual(desiredCluster.ObjectMeta.Labels, cluster.ObjectMeta.Labels) &&
 		equality.Semantic.DeepEqual(desiredCluster.ObjectMeta.Annotations, cluster.ObjectMeta.Annotations)
+}
+
+func resetUnavailableSinceAnnotation(rayCluster *ray.RayCluster) {
+	if rayCluster.Annotations != nil {
+		delete(rayCluster.Annotations, constants.RayClusterUnavailableSince)
+	}
+}
+
+func preserveAnnotations(desired, existing *ray.RayCluster) {
+	if existing.Annotations != nil {
+		if desired.Annotations == nil {
+			desired.Annotations = make(map[string]string)
+		}
+		for k, v := range existing.Annotations {
+			if _, exists := desired.Annotations[k]; !exists {
+				desired.Annotations[k] = v
+			}
+		}
+	}
 }

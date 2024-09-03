@@ -4,18 +4,15 @@ import (
 	multimodelconfig "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"context"
 	"fmt"
-	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"reflect"
-	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
-
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -23,6 +20,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"knative.dev/pkg/apis"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -305,7 +303,6 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
-		Owns(&volbatchv1alpha1.Job{}).
 		Owns(&v1.PersistentVolumeClaim{}).
 		Owns(&ray.RayCluster{})
 

@@ -1,11 +1,11 @@
 package deployment
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,7 +21,7 @@ import (
 
 var log = logf.Log.WithName("DeploymentReconciler")
 
-// DeploymentReconciler reconciles the raw kubernetes deployment resource
+// DeploymentReconciler reconciles raw Kubernetes Deployment resources
 type DeploymentReconciler struct {
 	client       kclient.Client
 	scheme       *runtime.Scheme
@@ -43,12 +43,14 @@ func NewDeploymentReconciler(client kclient.Client,
 }
 
 func createRawDeployment(componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec, //nolint:unparam
+	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *appsv1.Deployment {
+
 	podMetadata := componentMeta
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
 	utils.SetPodLabelsFromAnnotations(&podMetadata)
 	setDefaultPodSpec(podSpec)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: componentMeta,
 		Spec: appsv1.DeploymentSpec{
@@ -63,18 +65,18 @@ func createRawDeployment(componentMeta metav1.ObjectMeta,
 			},
 		},
 	}
+
 	if componentExt.DeploymentStrategy != nil {
 		deployment.Spec.Strategy = *componentExt.DeploymentStrategy
 	}
+
 	setDefaultDeploymentSpec(&deployment.Spec)
 	return deployment
 }
 
-// checkDeploymentExist checks if the deployment exists?
-func (r *DeploymentReconciler) checkDeploymentExist(client kclient.Client) (constants.CheckResultType, *appsv1.Deployment, error) {
-	// get deployment
+func (r *DeploymentReconciler) checkDeploymentExist() (constants.CheckResultType, *appsv1.Deployment, error) {
 	existingDeployment := &appsv1.Deployment{}
-	err := client.Get(context.TODO(), types.NamespacedName{
+	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Namespace: r.Deployment.ObjectMeta.Namespace,
 		Name:      r.Deployment.ObjectMeta.Name,
 	}, existingDeployment)
@@ -84,19 +86,22 @@ func (r *DeploymentReconciler) checkDeploymentExist(client kclient.Client) (cons
 		}
 		return constants.CheckResultUnknown, nil, err
 	}
-	// existed, check equivalence
-	// for HPA scaling, we should ignore Replicas of Deployments
+
+	// Ignore fields related to HPA scaling
 	ignoreFields := cmpopts.IgnoreFields(appsv1.DeploymentSpec{}, "Replicas")
-	// Do a dry-run update. This will populate our local deployment object with any default values
-	// that are present on the remote version.
-	if err := client.Update(context.TODO(), r.Deployment, kclient.DryRunAll); err != nil {
-		log.Error(err, "Failed to perform dry-run update of deployment", "Deployments", r.Deployment.Name)
+
+	// Perform a dry-run update to populate default values
+	if err := r.client.Update(context.TODO(), r.Deployment, kclient.DryRunAll); err != nil {
+		log.Error(err, "Failed to perform dry-run update of deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name)
 		return constants.CheckResultUnknown, nil, err
 	}
-	if diff, err := kmp.SafeDiff(r.Deployment.Spec, existingDeployment.Spec, ignoreFields); err != nil {
+
+	diff, err := kmp.SafeDiff(r.Deployment.Spec, existingDeployment.Spec, ignoreFields)
+	if err != nil {
 		return constants.CheckResultUnknown, nil, err
-	} else if diff != "" {
-		log.Info("Deployments Updated", "Diff", diff)
+	}
+	if diff != "" {
+		log.Info("Deployments differ", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "diff", diff)
 		return constants.CheckResultUpdate, existingDeployment, nil
 	}
 	return constants.CheckResultExisted, existingDeployment, nil
@@ -110,8 +115,8 @@ func setDefaultPodSpec(podSpec *corev1.PodSpec) {
 		podSpec.RestartPolicy = corev1.RestartPolicyAlways
 	}
 	if podSpec.TerminationGracePeriodSeconds == nil {
-		TerminationGracePeriodSeconds := int64(corev1.DefaultTerminationGracePeriodSeconds)
-		podSpec.TerminationGracePeriodSeconds = &TerminationGracePeriodSeconds
+		terminationGracePeriodSeconds := int64(corev1.DefaultTerminationGracePeriodSeconds)
+		podSpec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
 	}
 	if podSpec.SecurityContext == nil {
 		podSpec.SecurityContext = &corev1.PodSecurityContext{}
@@ -119,6 +124,10 @@ func setDefaultPodSpec(podSpec *corev1.PodSpec) {
 	if podSpec.SchedulerName == "" {
 		podSpec.SchedulerName = corev1.DefaultSchedulerName
 	}
+	setDefaultContainerSettings(podSpec)
+}
+
+func setDefaultContainerSettings(podSpec *corev1.PodSpec) {
 	for i := range podSpec.Containers {
 		container := &podSpec.Containers[i]
 		if container.TerminationMessagePath == "" {
@@ -130,38 +139,29 @@ func setDefaultPodSpec(podSpec *corev1.PodSpec) {
 		if container.ImagePullPolicy == "" {
 			container.ImagePullPolicy = corev1.PullIfNotPresent
 		}
-		// generate default readiness probe for model server container and for transformer container in case of collocation
-		if container.Name == constants.InferenceServiceContainerName || container.Name == constants.TransformerContainerName {
-			if container.ReadinessProbe == nil {
-				if len(container.Ports) == 0 {
-					container.ReadinessProbe = &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							TCPSocket: &corev1.TCPSocketAction{
-								Port: intstr.IntOrString{
-									IntVal: 8080,
-								},
-							},
+		setDefaultReadinessProbe(container)
+	}
+}
+
+func setDefaultReadinessProbe(container *corev1.Container) {
+	if container.Name == constants.InferenceServiceContainerName || container.Name == constants.TransformerContainerName {
+		if container.ReadinessProbe == nil {
+			port := int32(8080)
+			if len(container.Ports) > 0 {
+				port = container.Ports[0].ContainerPort
+			}
+			container.ReadinessProbe = &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.IntOrString{
+							IntVal: port,
 						},
-						TimeoutSeconds:   1,
-						PeriodSeconds:    10,
-						SuccessThreshold: 1,
-						FailureThreshold: 3,
-					}
-				} else {
-					container.ReadinessProbe = &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							TCPSocket: &corev1.TCPSocketAction{
-								Port: intstr.IntOrString{
-									IntVal: container.Ports[0].ContainerPort,
-								},
-							},
-						},
-						TimeoutSeconds:   1,
-						PeriodSeconds:    10,
-						SuccessThreshold: 1,
-						FailureThreshold: 3,
-					}
-				}
+					},
+				},
+				TimeoutSeconds:   1,
+				PeriodSeconds:    10,
+				SuccessThreshold: 1,
+				FailureThreshold: 3,
 			}
 		}
 	}
@@ -173,8 +173,8 @@ func setDefaultDeploymentSpec(spec *appsv1.DeploymentSpec) {
 	}
 	if spec.Strategy.Type == appsv1.RollingUpdateDeploymentStrategyType && spec.Strategy.RollingUpdate == nil {
 		spec.Strategy.RollingUpdate = &appsv1.RollingUpdateDeployment{
-			MaxUnavailable: &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
-			MaxSurge:       &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+			MaxUnavailable: &intstr.IntOrString{Type: intstr.String, StrVal: "1"},
+			MaxSurge:       &intstr.IntOrString{Type: intstr.String, StrVal: "1"},
 		}
 	}
 	if spec.RevisionHistoryLimit == nil {
@@ -187,14 +187,12 @@ func setDefaultDeploymentSpec(spec *appsv1.DeploymentSpec) {
 	}
 }
 
-// Reconcile ...
 func (r *DeploymentReconciler) Reconcile() (*appsv1.Deployment, error) {
-	// Reconcile Deployments
-	checkResult, deployment, err := r.checkDeploymentExist(r.client)
+	checkResult, deployment, err := r.checkDeploymentExist()
 	if err != nil {
 		return nil, err
 	}
-	log.Info("deployment reconcile", "checkResult", checkResult, "err", err)
+	log.Info("Reconciling deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name, "checkResult", checkResult.String())
 
 	var opErr error
 	switch checkResult {
@@ -207,6 +205,7 @@ func (r *DeploymentReconciler) Reconcile() (*appsv1.Deployment, error) {
 	}
 
 	if opErr != nil {
+		log.Error(opErr, "Failed to reconcile deployment", "namespace", r.Deployment.Namespace, "name", r.Deployment.Name)
 		return nil, opErr
 	}
 
