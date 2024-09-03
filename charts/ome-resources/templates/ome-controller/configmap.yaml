@@ -15,6 +15,7 @@ data:
         "startupPeriodSeconds": {{.Values.ome.multinodeProber.startupPeriodSeconds}},
         "startupTimeoutSeconds": {{.Values.ome.multinodeProber.startupTimeoutSeconds}},
         "startupInitialDelaySeconds": {{.Values.ome.multinodeProber.startupInitialDelaySeconds}}
+        "unavailableThresholdSeconds": {{ .Values.ome.multinodeProber.unavailableThresholdSeconds }}
     }
   ingress: |-
     {
@@ -27,7 +28,6 @@ data:
         "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
         "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
         "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }},
-        "unavailableThresholdSeconds": {{ .Values.ome.multinodeProber.unavailableThresholdSeconds }}
     }
 
   logger: |-

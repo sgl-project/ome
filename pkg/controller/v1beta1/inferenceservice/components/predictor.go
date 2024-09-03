@@ -86,7 +86,11 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	p.Log.Info("Resolved container and podSpec for inference service", isvc.Name, "namespace", isvc.Namespace, "container", container, "podSpec", podSpec)
+	p.Log.Info("Resolved container and podSpec for inference service",
+		"inferenceServiceName", isvc.Name,
+		"namespace", isvc.Namespace,
+		"container", container,
+		"podSpec", podSpec)
 
 	// Reconcile deployment based on the deployment mode
 	if result, err := p.reconcileDeployment(isvc, sRuntime, objectMeta, &podSpec); err != nil {
