@@ -7,6 +7,7 @@ import (
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
+	"time"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
@@ -47,7 +48,7 @@ func NewMultiNodeVllmReconciler(client client.Client,
 	return &MultiNodeVllmReconciler{
 		client:              client,
 		scheme:              scheme,
-		Ray:                 raycluster.NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec),
+		Ray:                 raycluster.NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec, time.Duration(multinodeProberConfig.UnavailableThresholdSeconds)*time.Second),
 		MultiNodeProber:     raycluster.NewMultiNodeProberReconciler(client, scheme, componentMeta, componentExt, multinodeProberConfig),
 		RawMultiNodeService: service.NewRayServiceReconciler(client, scheme, componentMeta, podSpec),
 		URL:                 url,

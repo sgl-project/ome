@@ -26,6 +26,7 @@ ome:
     startupPeriodSeconds: 30
     startupTimeoutSeconds: 60
     startupInitialDelaySeconds: 120
+    unavailableThresholdSeconds: 600
   controller:
     replicaCount: 3
     deploymentMode: "RawDeployment"

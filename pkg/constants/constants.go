@@ -74,12 +74,14 @@ var (
 
 // Label Constants
 var (
-	RayClusterLabel    = "ray.io/cluster"
-	RayScheduler       = "ray.io/scheduler-name"
-	RayPrioriyClass    = "ray.io/priority-class-name"
-	VolcanoQueueName   = "volcano.sh/queue-name"
-	VolcanoScheduler   = "volcano"
-	VolcanoPreemptable = "volcano.sh/preemptable"
+	RayClusterLabel            = "ray.io/cluster"
+	RayScheduler               = "ray.io/scheduler-name"
+	RayPrioriyClass            = "ray.io/priority-class-name"
+	RayClusterStartTime        = "raycluster/start-time"
+	RayClusterUnavailableSince = "raycluster/unavailable-since"
+	VolcanoQueueName           = "volcano.sh/queue-name"
+	VolcanoScheduler           = "volcano"
+	VolcanoPreemptable         = "volcano.sh/preemptable"
 )
 
 // PrioriryClass

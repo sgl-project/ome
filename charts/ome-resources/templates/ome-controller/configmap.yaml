@@ -26,7 +26,8 @@ data:
         "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
         "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
         "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
-        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }}
+        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }},
+        "unavailableThresholdSeconds": {{ .Values.ome.multinodeProber.unavailableThresholdSeconds }}
     }
 
   logger: |-

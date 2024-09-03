@@ -52,15 +52,16 @@ type IngressConfig struct {
 
 // +kubebuilder:object:generate=false
 type MultiNodeProberConfig struct {
-	Image                      string `json:"image"`
-	CPURequest                 string `json:"cpuRequest"`
-	MemoryRequest              string `json:"memoryRequest"`
-	CPULimit                   string `json:"cpuLimit"`
-	MemoryLimit                string `json:"memoryLimit"`
-	StartupFailureThreshold    int32  `json:"startupFailureThreshold"`
-	StartupPeriodSeconds       int32  `json:"startupPeriodSeconds"`
-	StartupInitialDelaySeconds int32  `json:"startupInitialDelaySeconds"`
-	StartupTimeoutSeconds      int32  `json:"startupTimeoutSeconds"`
+	Image                       string `json:"image"`
+	CPURequest                  string `json:"cpuRequest"`
+	MemoryRequest               string `json:"memoryRequest"`
+	CPULimit                    string `json:"cpuLimit"`
+	MemoryLimit                 string `json:"memoryLimit"`
+	StartupFailureThreshold     int32  `json:"startupFailureThreshold"`
+	StartupPeriodSeconds        int32  `json:"startupPeriodSeconds"`
+	StartupInitialDelaySeconds  int32  `json:"startupInitialDelaySeconds"`
+	StartupTimeoutSeconds       int32  `json:"startupTimeoutSeconds"`
+	UnavailableThresholdSeconds int32  `json:"unavailableThresholdSeconds"`
 }
 
 // +kubebuilder:object:generate=false

@@ -42,7 +42,7 @@ func TestGenerateDomainName(t *testing.T) {
 					DomainTemplate: v1beta1.DefaultDomainTemplate,
 				},
 			},
-			want: "model-test.example.com",
+			want: "model.test.example.com",
 		},
 		{
 			name: "template with dot",

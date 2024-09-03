@@ -267,7 +267,9 @@ data:
       "startupFailureThreshold": 150,
       "startupPeriodSeconds": 30,
       "startupTimeoutSeconds": 60,
-      "startupInitialDelaySeconds": 200
+      "startupInitialDelaySeconds": 200,
+      "unavailableThresholdSeconds": 600,
+    
     }
 ---
 apiVersion: v1

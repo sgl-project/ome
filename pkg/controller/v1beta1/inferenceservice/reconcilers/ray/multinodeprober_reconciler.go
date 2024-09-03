@@ -60,7 +60,7 @@ func createRawDeployment(
 	index int,
 ) *appsv1.Deployment {
 	podMetadata := componentMeta.DeepCopy()
-	podMetadata.Name = fmt.Sprintf("%s-mnp-%d", componentMeta.Name, index)
+	podMetadata.Name = fmt.Sprintf("%s-%d-mnp", componentMeta.Name, index)
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
 	utils.SetPodLabelsFromAnnotations(podMetadata)
 
