@@ -3,6 +3,7 @@ package raycluster
 import (
 	"context"
 	"fmt"
+	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
@@ -60,7 +61,7 @@ func createRawDeployment(
 	index int,
 ) *appsv1.Deployment {
 	podMetadata := componentMeta.DeepCopy()
-	podMetadata.Name = fmt.Sprintf("%s-%d-mnp", componentMeta.Name, index)
+	podMetadata.Name = rayutils.CheckName(fmt.Sprintf("%s-%d-mnp", componentMeta.Name, index))
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
 	utils.SetPodLabelsFromAnnotations(podMetadata)
 

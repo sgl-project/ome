@@ -112,7 +112,7 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 			return err
 		}
 
-		mnpName := fmt.Sprintf("%s-mnp", desired.Name)
+		mnpName := rayutils.CheckName(fmt.Sprintf("%s-mnp", desired.Name))
 		if shouldRecreate, err := r.isMNPDeploymentUnavailable(existing, mnpName); err != nil {
 			return err
 		} else if shouldRecreate {
