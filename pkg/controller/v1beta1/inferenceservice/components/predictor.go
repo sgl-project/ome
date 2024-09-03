@@ -86,7 +86,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	p.Log.Info("Resolved container and podSpec", "container", container, "podSpec", podSpec)
+	p.Log.Info("Resolved container and podSpec for inference service", isvc.Name, "namespace", isvc.Namespace, "container", container, "podSpec", podSpec)
 
 	// Reconcile deployment based on the deployment mode
 	if result, err := p.reconcileDeployment(isvc, sRuntime, objectMeta, &podSpec); err != nil {
@@ -130,7 +130,7 @@ func (p *Predictor) reconcileRawDeployment(isvc *v1beta1.InferenceService, objec
 }
 
 func (p *Predictor) reconcileMultiNodeVLLM(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
-	p.Log.Info("PipelineParallelism is enabled, skipping raw deployment", "inference service", isvc.Name)
+	p.Log.Info("PipelineParallelism is enabled, skipping raw deployment", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	r, err := p.createMultiNodeVllmReconciler(isvc, objectMeta, podSpec)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -396,7 +396,7 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 	}
 	podSpec.Volumes = append(podSpec.Volumes, volume)
 
-	p.Log.Info("PodSpec updated", "inference service", isvc.Name)
+	p.Log.Info("PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 }
 
 // validateRuntime validates the runtime for the predictor.
@@ -473,7 +473,7 @@ func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseMod
 
 	// Use the first supporting runtime.
 	isvc.Spec.Predictor.Model.Runtime = &runtimes[0].Name
-	p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime)
+	p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime, "inference service", isvc.Name, "namespace", isvc.Namespace)
 	isvc.SetRuntimeDefaults()
 
 	return runtimes[0].Spec, ctrl.Result{}, nil

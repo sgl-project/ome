@@ -173,8 +173,8 @@ func setDefaultDeploymentSpec(spec *appsv1.DeploymentSpec) {
 	}
 	if spec.Strategy.Type == appsv1.RollingUpdateDeploymentStrategyType && spec.Strategy.RollingUpdate == nil {
 		spec.Strategy.RollingUpdate = &appsv1.RollingUpdateDeployment{
-			MaxUnavailable: &intstr.IntOrString{Type: intstr.String, StrVal: "1"},
-			MaxSurge:       &intstr.IntOrString{Type: intstr.String, StrVal: "1"},
+			MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+			MaxSurge:       &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
 		}
 	}
 	if spec.RevisionHistoryLimit == nil {

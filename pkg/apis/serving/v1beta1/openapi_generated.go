@@ -2373,6 +2373,7 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -2743,6 +2744,7 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -2854,7 +2856,7 @@ func schema_pkg_apis_serving_v1beta1_MultiNodeProberConfig(ref common.ReferenceC
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
-					"containerImage": {
+					"image": {
 						SchemaProps: spec.SchemaProps{
 							Default: "",
 							Type:    []string{"string"},
@@ -2917,8 +2919,15 @@ func schema_pkg_apis_serving_v1beta1_MultiNodeProberConfig(ref common.ReferenceC
 							Format:  "int32",
 						},
 					},
+					"unavailableThresholdSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
 				},
-				Required: []string{"containerImage", "cpuRequest", "memoryRequest", "cpuLimit", "memoryLimit", "startupFailureThreshold", "startupPeriodSeconds", "startupInitialDelaySeconds", "startupTimeoutSeconds"},
+				Required: []string{"image", "cpuRequest", "memoryRequest", "cpuLimit", "memoryLimit", "startupFailureThreshold", "startupPeriodSeconds", "startupInitialDelaySeconds", "startupTimeoutSeconds", "unavailableThresholdSeconds"},
 			},
 		},
 	}
@@ -3786,6 +3795,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4915,6 +4925,7 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
+				
 			},
 		},
 	}

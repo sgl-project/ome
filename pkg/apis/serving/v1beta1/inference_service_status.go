@@ -156,36 +156,38 @@ const (
 )
 
 // FailureReason enum
-// +kubebuilder:validation:Enum=BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
+// +kubebuilder:validation:Enum=BaseModelNotReady;BaseModelNotFound;ModelLoadFailed;RuntimeUnhealthy;RuntimeDisabled;NoSupportingRuntime;RuntimeNotRecognized;InvalidPredictorSpec
 type FailureReason string
 
 // FailureReason enum values
 const (
-	// The model failed to load within a ServingRuntime container
+	// ModelLoadFailed The model failed to load within a ServingRuntime container
 	ModelLoadFailed FailureReason = "ModelLoadFailed"
-	// Corresponding ServingRuntime containers failed to start or are unhealthy
+	// RuntimeUnhealthy Corresponding ServingRuntime containers failed to start or are unhealthy
 	RuntimeUnhealthy FailureReason = "RuntimeUnhealthy"
-	// The ServingRuntime is disabled
+	// RuntimeDisabled The ServingRuntime is disabled
 	RuntimeDisabled FailureReason = "RuntimeDisabled"
-	// There are no ServingRuntime which support the specified model type
+	// NoSupportingRuntime There are no ServingRuntime which support the specified model type
 	NoSupportingRuntime FailureReason = "NoSupportingRuntime"
-	// There is no ServingRuntime defined with the specified runtime name
+	// RuntimeNotRecognized There is no ServingRuntime defined with the specified runtime name
 	RuntimeNotRecognized FailureReason = "RuntimeNotRecognized"
-	// The current Predictor Spec is invalid or unsupported
+	// InvalidPredictorSpec The current Predictor Spec is invalid or unsupported
 	InvalidPredictorSpec FailureReason = "InvalidPredictorSpec"
-	// BaseModel not found
+	// BaseModelNotFound base model is not found either from the cluster level or from the specified namespace
 	BaseModelNotFound FailureReason = "BaseModelNotFound"
+	// BaseModelNotReady base model is not ready
+	BaseModelNotReady FailureReason = "BaseModelNotReady"
 	// FineTunedWeightsNotFound not found
 	FineTunedWeightsNotFound FailureReason = "FineTunedWeightsNotFound"
-	// BaseModelDisabled
+	// BaseModelDisabled base model is disabled
 	BaseModelDisabled FailureReason = "BaseModelDisabled"
-	// FineTunedWeightsDisabled
+	// FineTunedWeightsDisabled the fine-tuned weights are disabled
 	FineTunedWeightsDisabled FailureReason = "FineTunedWeightsDisabled"
-	// BaseModelDeprecated
+	// BaseModelDeprecated base model is deprecated
 	BaseModelDeprecated FailureReason = "BaseModelDeprecated"
-	// FineTunedWeightsDeprecated
+	// FineTunedWeightsDeprecated the fine-tuned weights are deprecated
 	FineTunedWeightsDeprecated FailureReason = "FineTunedWeightsDeprecated"
-	// FineTuneWeightLoadFailed
+	// FineTuneWeightLoadFailed fine-tuned weights load failed
 	FineTuneWeightLoadFailed FailureReason = "FineTuneWeightLoadFailed"
 )
 

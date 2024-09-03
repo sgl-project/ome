@@ -3548,6 +3548,7 @@ spec:
                           type: string
                         reason:
                           enum:
+                            - BaseModelNotReady
                             - BaseModelNotFound
                             - ModelLoadFailed
                             - RuntimeUnhealthy

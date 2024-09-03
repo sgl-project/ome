@@ -20,7 +20,7 @@ import (
 
 var log = logf.Log.WithName("HPAReconciler")
 
-// HPAReconciler is the struct of Raw K8S Object
+// HPAReconciler reconciles the HorizontalPodAutoscaler resource
 type HPAReconciler struct {
 	client       client.Client
 	scheme       *runtime.Scheme
@@ -32,6 +32,7 @@ func NewHPAReconciler(client client.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec) *HPAReconciler {
+
 	return &HPAReconciler{
 		client:       client,
 		scheme:       scheme,
@@ -40,58 +41,14 @@ func NewHPAReconciler(client client.Client,
 	}
 }
 
-func getHPAMetrics(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) []autoscalingv2.MetricSpec {
-	var metrics []autoscalingv2.MetricSpec
-	var utilization int32
-	annotations := metadata.Annotations
-	resourceName := corev1.ResourceCPU
-
-	if value, ok := annotations[constants.TargetUtilizationPercentage]; ok {
-		utilizationInt, _ := strconv.Atoi(value)
-		utilization = int32(utilizationInt) // #nosec G109
-	} else {
-		utilization = constants.DefaultCPUUtilization
-	}
-
-	if componentExt.ScaleTarget != nil {
-		utilization = int32(*componentExt.ScaleTarget)
-	}
-
-	if componentExt.ScaleMetric != nil {
-		resourceName = corev1.ResourceName(*componentExt.ScaleMetric)
-	}
-
-	metricTarget := autoscalingv2.MetricTarget{
-		Type:               "Utilization",
-		AverageUtilization: &utilization,
-	}
-
-	ms := autoscalingv2.MetricSpec{
-		Type: autoscalingv2.ResourceMetricSourceType,
-		Resource: &autoscalingv2.ResourceMetricSource{
-			Name:   resourceName,
-			Target: metricTarget,
-		},
-	}
-	metrics = append(metrics, ms)
-	return metrics
-}
-
 func createHPA(componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec) *autoscalingv2.HorizontalPodAutoscaler {
-	var minReplicas int32
-	if componentExt.MinReplicas == nil || (*componentExt.MinReplicas) < constants.DefaultMinReplicas {
-		minReplicas = int32(constants.DefaultMinReplicas)
-	} else {
-		minReplicas = int32(*componentExt.MinReplicas)
-	}
 
-	maxReplicas := int32(componentExt.MaxReplicas)
-	if maxReplicas < minReplicas {
-		maxReplicas = minReplicas
-	}
+	minReplicas := calculateMinReplicas(componentExt)
+	maxReplicas := calculateMaxReplicas(componentExt, minReplicas)
 	metrics := getHPAMetrics(componentMeta, componentExt)
-	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+
+	return &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: componentMeta,
 		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
@@ -105,29 +62,78 @@ func createHPA(componentMeta metav1.ObjectMeta,
 			Behavior:    &autoscalingv2.HorizontalPodAutoscalerBehavior{},
 		},
 	}
-	return hpa
 }
 
-// checkHPAExist checks if the hpa exists?
-func (r *HPAReconciler) checkHPAExist(client client.Client) (constants.CheckResultType, *autoscalingv2.HorizontalPodAutoscaler, error) {
-	// get hpa
+func calculateMinReplicas(componentExt *v1beta1.ComponentExtensionSpec) int32 {
+	if componentExt.MinReplicas == nil || *componentExt.MinReplicas < constants.DefaultMinReplicas {
+		return int32(constants.DefaultMinReplicas)
+	}
+	return int32(*componentExt.MinReplicas)
+}
+
+func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec, minReplicas int32) int32 {
+	maxReplicas := int32(componentExt.MaxReplicas)
+	if maxReplicas < minReplicas {
+		maxReplicas = minReplicas
+	}
+	return maxReplicas
+}
+
+func getHPAMetrics(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) []autoscalingv2.MetricSpec {
+	utilization := getTargetUtilization(metadata, componentExt)
+	resourceName := getResourceName(componentExt)
+
+	metricTarget := autoscalingv2.MetricTarget{
+		Type:               "Utilization",
+		AverageUtilization: &utilization,
+	}
+
+	return []autoscalingv2.MetricSpec{
+		{
+			Type: autoscalingv2.ResourceMetricSourceType,
+			Resource: &autoscalingv2.ResourceMetricSource{
+				Name:   resourceName,
+				Target: metricTarget,
+			},
+		},
+	}
+}
+
+func getTargetUtilization(metadata metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec) int32 {
+	if value, ok := metadata.Annotations[constants.TargetUtilizationPercentage]; ok {
+		utilization, _ := strconv.Atoi(value)
+		return int32(utilization) // #nosec G109
+	}
+	if componentExt.ScaleTarget != nil {
+		return int32(*componentExt.ScaleTarget)
+	}
+	return constants.DefaultCPUUtilization
+}
+
+func getResourceName(componentExt *v1beta1.ComponentExtensionSpec) corev1.ResourceName {
+	if componentExt.ScaleMetric != nil {
+		return corev1.ResourceName(*componentExt.ScaleMetric)
+	}
+	return corev1.ResourceCPU
+}
+
+func (r *HPAReconciler) checkHPAExist() (constants.CheckResultType, *autoscalingv2.HorizontalPodAutoscaler, error) {
 	existingHPA := &autoscalingv2.HorizontalPodAutoscaler{}
-	err := client.Get(context.TODO(), types.NamespacedName{
-		Namespace: r.HPA.ObjectMeta.Namespace,
-		Name:      r.HPA.ObjectMeta.Name,
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Namespace: r.HPA.Namespace,
+		Name:      r.HPA.Name,
 	}, existingHPA)
+
 	if err != nil {
 		if apierr.IsNotFound(err) {
 			if shouldCreateHPA(r.HPA) {
 				return constants.CheckResultCreate, nil, nil
-			} else {
-				return constants.CheckResultSkipped, nil, nil
 			}
+			return constants.CheckResultSkipped, nil, nil
 		}
 		return constants.CheckResultUnknown, nil, err
 	}
 
-	// existed, check equivalent
 	if semanticHPAEquals(r.HPA, existingHPA) {
 		return constants.CheckResultExisted, existingHPA, nil
 	}
@@ -138,32 +144,26 @@ func (r *HPAReconciler) checkHPAExist(client client.Client) (constants.CheckResu
 }
 
 func semanticHPAEquals(desired, existing *autoscalingv2.HorizontalPodAutoscaler) bool {
-	desiredAutoscalerClass, hasDesiredAutoscalerClass := desired.Annotations[constants.AutoscalerClass]
-	existingAutoscalerClass, hasExistingAutoscalerClass := existing.Annotations[constants.AutoscalerClass]
-	var autoscalerClassChanged bool
-	if hasDesiredAutoscalerClass && hasExistingAutoscalerClass {
-		autoscalerClassChanged = desiredAutoscalerClass != existingAutoscalerClass
-	} else if hasDesiredAutoscalerClass || hasExistingAutoscalerClass {
-		autoscalerClassChanged = true
-	}
+	desiredAutoscalerClass := desired.Annotations[constants.AutoscalerClass]
+	existingAutoscalerClass := existing.Annotations[constants.AutoscalerClass]
+
+	autoscalerClassChanged := desiredAutoscalerClass != existingAutoscalerClass
 	return equality.Semantic.DeepEqual(desired.Spec, existing.Spec) && !autoscalerClassChanged
 }
 
 func shouldDeleteHPA(desired *autoscalingv2.HorizontalPodAutoscaler) bool {
-	desiredAutoscalerClass, hasDesiredAutoscalerClass := desired.Annotations[constants.AutoscalerClass]
-	return hasDesiredAutoscalerClass && constants.AutoscalerClassType(desiredAutoscalerClass) == constants.AutoscalerClassExternal
+	desiredAutoscalerClass := desired.Annotations[constants.AutoscalerClass]
+	return constants.AutoscalerClassType(desiredAutoscalerClass) == constants.AutoscalerClassExternal
 }
 
 func shouldCreateHPA(desired *autoscalingv2.HorizontalPodAutoscaler) bool {
-	desiredAutoscalerClass, hasDesiredAutoscalerClass := desired.Annotations[constants.AutoscalerClass]
-	return !hasDesiredAutoscalerClass || (hasDesiredAutoscalerClass && constants.AutoscalerClassType(desiredAutoscalerClass) == constants.AutoscalerClassHPA)
+	desiredAutoscalerClass := desired.Annotations[constants.AutoscalerClass]
+	return desiredAutoscalerClass == "" || constants.AutoscalerClassType(desiredAutoscalerClass) == constants.AutoscalerClassHPA
 }
 
-// Reconcile ...
 func (r *HPAReconciler) Reconcile() (*autoscalingv2.HorizontalPodAutoscaler, error) {
-	// reconcile HorizontalPodAutoscaler
-	checkResult, existingHPA, err := r.checkHPAExist(r.client)
-	log.Info("HorizontalPodAutoscaler reconcile", "checkResult", checkResult, "err", err)
+	checkResult, existingHPA, err := r.checkHPAExist()
+	log.Info("Reconciling HPA", "namespace", r.HPA.Namespace, "name", r.HPA.Name, "checkResult", checkResult.String())
 	if err != nil {
 		return nil, err
 	}
@@ -181,11 +181,13 @@ func (r *HPAReconciler) Reconcile() (*autoscalingv2.HorizontalPodAutoscaler, err
 	}
 
 	if opErr != nil {
+		log.Error(opErr, "Failed to reconcile HPA", "namespace", r.HPA.Namespace, "name", r.HPA.Name)
 		return nil, opErr
 	}
 
 	return r.HPA, nil
 }
+
 func (r *HPAReconciler) SetControllerReferences(owner metav1.Object, scheme *runtime.Scheme) error {
 	return controllerutil.SetControllerReference(owner, r.HPA, scheme)
 }

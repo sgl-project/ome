@@ -17,7 +17,7 @@ const (
 	OCIConfigName                = "ociEtc"
 	IngressConfigKeyName         = "ingress"
 	DeployConfigName             = "deploy"
-	DacReconcilePolicyConfigname = "dacReconcilePolicy"
+	DacReconcilePolicyConfigName = "dacReconcilePolicy"
 	MultiNodeProberName          = "multinodeProber"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
@@ -220,7 +220,7 @@ func NewDacReconcilePolicyConfig(clientset kubernetes.Interface) (*DacReconcileP
 	}
 	dacPolicyConfig := &DacReconcilePolicyConfig{}
 	for _, err := range []error{
-		getComponentConfig(DacReconcilePolicyConfigname, configMap, &dacPolicyConfig),
+		getComponentConfig(DacReconcilePolicyConfigName, configMap, &dacPolicyConfig),
 	} {
 		if err != nil {
 			return nil, err
