@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

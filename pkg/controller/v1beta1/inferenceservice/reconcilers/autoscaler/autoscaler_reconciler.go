@@ -3,9 +3,9 @@ package autoscaler
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	hpa "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/hpa"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	hpa "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/hpa"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

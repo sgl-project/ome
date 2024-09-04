@@ -9,8 +9,8 @@ import (
 
 	"regexp"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/serving/pkg/apis/autoscaling"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"

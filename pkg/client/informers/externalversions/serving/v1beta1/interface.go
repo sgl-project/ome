@@ -3,7 +3,7 @@
 package v1beta1
 
 import (
-	internalinterfaces "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions/internalinterfaces"
+	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to all the informers in this group version.

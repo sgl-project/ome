@@ -1,9 +1,9 @@
 package secret_retrieval
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
-	omesecrets "bitbucket.oci.oraclecorp.com/gen/ome/pkg/secrets"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	omesecrets "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"context"
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/secrets"

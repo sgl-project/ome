@@ -1,7 +1,7 @@
 package pod
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"

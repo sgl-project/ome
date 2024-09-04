@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env/vars"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 	"github.com/hashicorp/go-multierror"
 )
 

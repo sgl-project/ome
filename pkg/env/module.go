@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 var Module fx.Option = fx.Provide(

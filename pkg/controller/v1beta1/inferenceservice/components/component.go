@@ -1,7 +1,7 @@
 package components
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 

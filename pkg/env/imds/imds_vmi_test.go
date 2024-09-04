@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 const (

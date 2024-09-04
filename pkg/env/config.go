@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env/imds"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env/vars"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/imds"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 const ViperConfigKey = "env"

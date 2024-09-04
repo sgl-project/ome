@@ -1,9 +1,9 @@
 package key_management
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/secrets"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"context"
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/keymanagement"

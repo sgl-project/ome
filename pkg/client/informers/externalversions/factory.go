@@ -7,9 +7,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned"
-	internalinterfaces "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions/internalinterfaces"
-	serving "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions/serving"
+	versioned "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
+	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
+	serving "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/serving"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

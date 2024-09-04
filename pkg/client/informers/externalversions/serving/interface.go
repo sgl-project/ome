@@ -3,8 +3,8 @@
 package serving
 
 import (
-	internalinterfaces "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/informers/externalversions/serving/v1beta1"
+	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
+	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/serving/v1beta1"
 )
 
 // Interface provides access to each of this group's versions.

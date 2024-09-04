@@ -3,7 +3,7 @@ package ingress
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

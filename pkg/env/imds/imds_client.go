@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 const (

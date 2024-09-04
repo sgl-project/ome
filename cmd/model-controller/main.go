@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	omev1beta1client "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned"
-	modelcontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/model"
+	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
+	modelcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/model"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"

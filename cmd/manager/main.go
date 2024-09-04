@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/dac"
-	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/gen/ome/pkg/controller/v1beta1/inferenceservice"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/pod"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/webhook/admission/servingruntime"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
+	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 	"flag"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	istionetworking "istio.io/api/networking/v1beta1"

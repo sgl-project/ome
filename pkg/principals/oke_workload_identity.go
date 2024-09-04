@@ -3,8 +3,8 @@ package principals
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env/vars"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 	"github.com/oracle/oci-go-sdk/v65/common"
 )
 

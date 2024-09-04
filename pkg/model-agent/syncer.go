@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/casperagent"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/util/wait"

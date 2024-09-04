@@ -23,7 +23,7 @@ chmod +x "${CODEGEN_PKG}/generate-internal-groups.sh"
 # Generating files for v1beta1
 "${CODEGEN_PKG}/generate-groups.sh" \
     "deepcopy,client,informer,lister" \
-    "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client" \
-    "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis" \
+    "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client" \
+    "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis" \
     "serving:v1beta1" \
     --go-header-file "${CURRENT_DIR}/boilerplate.go.txt"

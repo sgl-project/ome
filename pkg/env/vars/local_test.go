@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/configutils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 )
 
 func TestLocal_Resolve_HappyCase(t *testing.T) {

@@ -1,7 +1,7 @@
 package aes_cipher
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/secrets"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"

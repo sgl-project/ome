@@ -30,7 +30,7 @@ spec:
           - "--leader-elect"
           - "webhook"
           - "--zap-encoder=console"
-        image: ko://bitbucket.oci.oraclecorp.com/gen/ome/cmd/manager
+        image: ko://bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/manager
         imagePullPolicy: Always
         name: manager
         securityContext:

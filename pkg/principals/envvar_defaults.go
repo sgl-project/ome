@@ -1,6 +1,6 @@
 package principals
 
-import "bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
+import "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 
 const (
 	/** common **/

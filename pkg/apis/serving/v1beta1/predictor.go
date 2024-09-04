@@ -3,8 +3,8 @@ package v1beta1
 import (
 	"reflect"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 )
 

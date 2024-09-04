@@ -1,8 +1,8 @@
 package casper
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"context"
 	"crypto/md5"
 	"encoding/base64"

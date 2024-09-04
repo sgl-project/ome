@@ -1,4 +1,4 @@
-module bitbucket.oci.oraclecorp.com/gen/ome/hack/internal/tools
+module bitbucket.oci.oraclecorp.com/genaicore/ome/hack/internal/tools
 
 go 1.22.1
 

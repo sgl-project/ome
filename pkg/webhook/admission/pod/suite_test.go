@@ -10,8 +10,8 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
-	pkgtest "bitbucket.oci.oraclecorp.com/gen/ome/pkg/testing"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	pkgtest "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 )
 
 var cfg *rest.Config

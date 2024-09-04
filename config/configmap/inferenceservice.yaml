@@ -97,7 +97,7 @@ data:
            # The following variables can be used in the template for generating url.
            # Name of the inference service  ( {{ .Name}} )
            # Namespace of the inference service ( {{ .Namespace }} )
-           # For more info https://bitbucket.oci.oraclecorp.com/gen/ome/issues/2257.
+           # For more info https://bitbucket.oci.oraclecorp.com/genaicore/ome/issues/2257.
            # NOTE: This configuration only applicable to serverless deployment.
            "pathTemplate": "/serving/{{ .Namespace }}/{{ .Name }}"
        }
@@ -183,7 +183,7 @@ data:
          "enableMetricAggregation": "false",
          "enablePrometheusScraping" : "false"
        }
-     # For more info see https://bitbucket.oci.oraclecorp.com/gen/ome/blob/master/qpext/README.md
+     # For more info see https://bitbucket.oci.oraclecorp.com/genaicore/ome/blob/master/qpext/README.md
      metricsAggregator: |-
        {
          # enableMetricAggregation configures metric aggregation annotation. This adds the annotation ome.io/enable-metric-aggregation to every

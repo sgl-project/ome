@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 )
 
 // EnvVar represents a configuration used to resolve the value for some

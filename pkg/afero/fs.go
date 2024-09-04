@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 type File interface {

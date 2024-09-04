@@ -5,8 +5,8 @@ package v1beta1
 import (
 	"net/http"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned/scheme"
+	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

@@ -1,7 +1,7 @@
 package secrets
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"errors"
 	"fmt"
 )

@@ -1,4 +1,4 @@
-module bitbucket.oci.oraclecorp.com/gen/ome
+module bitbucket.oci.oraclecorp.com/genaicore/ome
 
 go 1.22.0
 

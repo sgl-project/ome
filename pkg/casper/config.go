@@ -1,9 +1,9 @@
 package casper
 
 import (
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/principals"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"errors"
 	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/common"

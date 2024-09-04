@@ -3,7 +3,7 @@
 package fake
 
 import (
-	v1beta1 "bitbucket.oci.oraclecorp.com/gen/ome/pkg/client/clientset/versioned/typed/serving/v1beta1"
+	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/serving/v1beta1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/casperagent"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/principalsagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principalsagent"
 )
 
 func NewCasperDataStore(authType string) (casper.CasperDataStore, error) {

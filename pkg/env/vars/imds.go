@@ -3,8 +3,8 @@ package vars
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/env/imds"
-	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/imds"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 var (
