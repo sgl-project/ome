@@ -3,9 +3,15 @@ kind: ClusterServingRuntime
 metadata:
   name: vllm-pp
 spec:
-  {{with .Values.commonAnnotations}}
-  annotations: {{ toYaml . | nindent 6 }}
-  {{end}}
+  {{- if or .Values.commonAnnotations .Values.llama_3_1_405b_instruct.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_1_405b_instruct.annotations }}
+    {{ toYaml .Values.llama_3_1_405b_instruct.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
   {{with .Values.commonLabels}}
   labels: {{ toYaml . | nindent 6 }}
   {{end}}
