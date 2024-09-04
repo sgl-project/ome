@@ -7,6 +7,7 @@ import (
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/gen/ome/pkg/apis/serving/v1beta1"
@@ -71,23 +72,24 @@ func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*
 	return url, nil
 }
 
-func (r *MultiNodeVllmReconciler) Reconcile() ([]*ray.RayCluster, error) {
+func (r *MultiNodeVllmReconciler) Reconcile() ([]*ray.RayCluster, ctrl.Result, error) {
 	//reconcile Ray cluster
-	rayCluster, err := r.Ray.Reconcile()
+	rayclusters, rayResult, err := r.Ray.Reconcile()
 	if err != nil {
-		return nil, err
+		return nil, rayResult, err
 	}
+
 	// reconcile Raw service
 	if r.RawMultiNodeService != nil {
 		_, err := r.RawMultiNodeService.Reconcile()
 		if err != nil {
-			return nil, err
+			return nil, ctrl.Result{}, err
 		}
 	}
 	// reconcile MultiNodeProber
 	err = r.MultiNodeProber.Reconcile()
 	if err != nil {
-		return nil, err
+		return nil, ctrl.Result{}, err
 	}
-	return rayCluster, nil
+	return rayclusters, rayResult, nil
 }

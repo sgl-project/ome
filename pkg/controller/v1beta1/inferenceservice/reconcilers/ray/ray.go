@@ -3,6 +3,7 @@ package raycluster
 import (
 	"context"
 	"fmt"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,25 +63,30 @@ func NewRayReconciler(client client.Client,
 	}
 }
 
-func (r *RayReconciler) Reconcile() ([]*ray.RayCluster, error) {
+func (r *RayReconciler) Reconcile() ([]*ray.RayCluster, ctrl.Result, error) {
+	// List existing Ray clusters
 	existingRayClusters, err := r.listExistingRayClusters()
 	if err != nil {
-		return nil, err
+		return nil, ctrl.Result{}, err
 	}
 
+	// Sort Ray clusters by index for deterministic processing
 	r.sortRayClustersByIndex(existingRayClusters)
 
+	// Reconcile each Ray cluster based on MinReplicas
 	for i := 0; i < int(*r.componentExt.MinReplicas); i++ {
-		if err := r.reconcileRayCluster(i, existingRayClusters); err != nil {
-			return nil, err
+		result, err := r.reconcileRayCluster(i, existingRayClusters)
+		if err != nil {
+			return nil, result, err // Return the result and requeue as needed based on the reconcileRayCluster logic
 		}
 	}
 
+	// Delete any extra Ray clusters beyond MinReplicas
 	if err := r.deleteExtraRayClusters(existingRayClusters); err != nil {
-		return nil, err
+		return nil, ctrl.Result{}, err
 	}
 
-	return r.RayClusters, nil
+	return r.RayClusters, ctrl.Result{}, nil
 }
 
 func (r *RayReconciler) listExistingRayClusters() (*ray.RayClusterList, error) {
@@ -98,7 +104,7 @@ func (r *RayReconciler) sortRayClustersByIndex(existingRayClusters *ray.RayClust
 	})
 }
 
-func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.RayClusterList) error {
+func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.RayClusterList) (ctrl.Result, error) {
 	desired := r.RayClusters[index]
 	existing := &ray.RayCluster{}
 
@@ -107,6 +113,7 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 		if err := r.client.Get(context.TODO(), types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, existing); err != nil {
 			if apierr.IsNotFound(err) {
 				log.Info("Creating Ray cluster", "namespace", desired.Namespace, "name", desired.Name)
+				resetUnavailableSinceAnnotation(desired)
 				return r.client.Create(context.TODO(), desired)
 			}
 			return err
@@ -117,6 +124,14 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 			return err
 		} else if shouldRecreate {
 			log.Info("Recreating Ray cluster due to unavailable MNP deployment", "namespace", desired.Namespace, "name", desired.Name)
+
+			// Ensure the annotation is reset on the existing cluster before deletion
+			resetUnavailableSinceAnnotation(existing)
+			if err := r.client.Update(context.TODO(), existing); err != nil {
+				log.Error(err, "Failed to clear annotation on existing Ray cluster", "namespace", existing.Namespace, "name", existing.Name)
+				return err
+			}
+
 			if err := r.client.Delete(context.TODO(), existing); err != nil {
 				log.Error(err, "Failed to delete Ray cluster", "namespace", existing.Namespace, "name", existing.Name)
 				return err
@@ -127,6 +142,8 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 			if err := r.client.Create(context.TODO(), desired); err != nil {
 				return err
 			}
+
+			log.Info("Ray cluster recreated successfully", "namespace", desired.Namespace, "name", desired.Name)
 		}
 
 		desired.ResourceVersion = existing.ResourceVersion
@@ -137,7 +154,20 @@ func (r *RayReconciler) reconcileRayCluster(index int, existingRayClusters *ray.
 		}
 		return r.client.Update(context.TODO(), desired)
 	})
-	return err
+
+	// If MNP deployment is still not ready, requeue the reconciliation
+	if err == nil {
+		mnpName := rayutils.CheckName(fmt.Sprintf("%s-mnp", desired.Name))
+		if stillUnavailable, err := r.isMNPDeploymentUnavailable(existing, mnpName); err != nil {
+			log.Error(err, "Failed to check MNP deployment status", "namespace", existing.Namespace, "name", mnpName)
+			return ctrl.Result{}, err
+		} else if stillUnavailable {
+			log.Info("MNP deployment still not ready, requeuing after threshold", "namespace", desired.Namespace, "name", desired.Name)
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	return ctrl.Result{}, err
 }
 
 func (r *RayReconciler) isMNPDeploymentUnavailable(rayCluster *ray.RayCluster, mnpName string) (bool, error) {
@@ -145,7 +175,7 @@ func (r *RayReconciler) isMNPDeploymentUnavailable(rayCluster *ray.RayCluster, m
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: mnpName, Namespace: rayCluster.Namespace}, deployment)
 	if err != nil {
 		if apierr.IsNotFound(err) {
-			log.Error(err, "MNP deployment not found", "namespace", rayCluster.Namespace, "name", mnpName)
+			log.Info("MNP deployment not found", "namespace", rayCluster.Namespace, "name", mnpName)
 			return true, nil
 		}
 		log.Error(err, "Failed to get MNP deployment", "namespace", rayCluster.Namespace, "name", mnpName)

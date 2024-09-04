@@ -142,11 +142,12 @@ func (p *Predictor) reconcileMultiNodeVLLM(isvc *v1beta1.InferenceService, objec
 	if err := p.setMultiNodeReferences(isvc, r); err != nil {
 		return ctrl.Result{}, err
 	}
-	if _, err := r.Reconcile(); err != nil {
+	_, result, err := r.Reconcile()
+	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
 	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 // reconcileKnativeDeployment handles the deployment for Knative deployments.
