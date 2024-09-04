@@ -42,7 +42,7 @@ func NewMultiNodeProberReconciler(
 	for i := 0; i < *componentExt.MinReplicas; i++ {
 		url := &knapis.URL{
 			Scheme: "http",
-			Host:   fmt.Sprintf("%s-%d.%s.svc.cluster.local", componentMeta.Name, i, componentMeta.Namespace),
+			Host:   fmt.Sprintf("%s.%s.svc.cluster.local", constants.DefaultRayHeadServiceName(componentMeta.Name, i), componentMeta.Namespace),
 		}
 		dply := createRawDeployment(componentMeta, multiNodeProberConfig, url, i)
 		deployments = append(deployments, dply)

@@ -2,6 +2,7 @@ package constants
 
 import (
 	"fmt"
+	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	"os"
 	"regexp"
 	"strings"
@@ -559,4 +560,8 @@ func exact(regexp string) string {
 
 func optional(regexp string) string {
 	return "(" + regexp + ")?"
+}
+
+func DefaultRayHeadServiceName(name string, index int) string {
+	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
 }

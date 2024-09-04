@@ -269,7 +269,7 @@ func createRayCluster(meta *metav1.ObjectMeta, spec *corev1.PodSpec, index int) 
 			HeadGroupSpec: ray.HeadGroupSpec{
 				HeadService: &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:        rayutils.CheckName(clusterName),
+						Name:        constants.DefaultRayHeadServiceName(meta.Name, index),
 						Namespace:   meta.Namespace,
 						Labels:      meta.Labels,
 						Annotations: meta.GetAnnotations(),
