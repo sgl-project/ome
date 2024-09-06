@@ -1,4 +1,4 @@
-FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493-x86_64:1.21.6-281 AS builder
+FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:1.23.0-1 AS builder
 ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 
 # Copy in the go src

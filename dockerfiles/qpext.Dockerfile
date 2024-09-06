@@ -1,9 +1,9 @@
 # Build the omae qpext binary
-FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493-x86_64:1.21.6-281 AS builder
+FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:1.23.0-1 AS builder
 ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 
 # Copy in the go src
-WORKDIR /go/src/bitbucket.oci.oraclecorp.com/genai_agent/aok
+WORKDIR /go/src/bitbucket.oci.oraclecorp.com/genaicore/ome
 COPY go.mod  go.mod
 COPY go.sum  go.sum
 
@@ -20,7 +20,7 @@ COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-su
 RUN microdnf install io-ol8-container-hardening && rm -rf /var/cache/yum
 
 # Copy the built binary from the builder image
-COPY --from=builder /go/src/bitbucket.oci.oraclecorp.com/genai_agent/aok/qpext /
+COPY --from=builder /go/src/bitbucket.oci.oraclecorp.com/genaicore/ome/qpext /
 # Create a new user 'appuser' and change ownership of relevant files
 RUN adduser --system --no-create-home --uid 10001 appuser && \
     chown appuser /qpext
