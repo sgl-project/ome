@@ -32,6 +32,7 @@ var (
 	InferenceServicePodLabelKey     = OMEAPIGroupName + "/" + InferenceServiceName
 	InferenceServiceConfigMapName   = "inferenceservice-config"
 	DedicatedAIClusterConfigMapName = "dedicatedaicluster-config"
+	DedicatedAiClusterFinalizer     = "dedicatedaiclusters.ome.io/finalizer"
 )
 
 // InferenceService MultiModel Constants

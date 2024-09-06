@@ -7,6 +7,7 @@ import (
 	"time"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	nsreconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/namespace"
 	volcanoJobReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/volcanojob"
 	queueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/volcanoqueue"
@@ -72,6 +73,16 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 		r.Log.Error(err, "unable to get dedicatedAiCluster", "namespace", req.NamespacedName)
 		return ctrl.Result{}, err
+	}
+
+	if !dac.ObjectMeta.DeletionTimestamp.IsZero() { // dac is under deletion
+		if controllerutil.ContainsFinalizer(dac, constants.DedicatedAiClusterFinalizer) {
+			r.Log.Info("remove dac finalizer", "dac", dac.Name)
+			controllerutil.RemoveFinalizer(dac, constants.DedicatedAiClusterFinalizer)
+			if err := r.Update(context.Background(), dac); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 	}
 
 	// Initialize mergedSpec with the DAC spec
@@ -168,40 +179,39 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	dacFinalizer := "dedicatedaiclusters.ome.io/finalizer"
 	if dac.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(dac, dacFinalizer) {
+		if !controllerutil.ContainsFinalizer(dac, constants.DedicatedAiClusterFinalizer) {
 			r.Log.Info("add dac finalizer", "dac", dac.Name)
-			controllerutil.AddFinalizer(dac, dacFinalizer)
+			controllerutil.AddFinalizer(dac, constants.DedicatedAiClusterFinalizer)
 			if err := r.Update(context.Background(), dac); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
-		if controllerutil.ContainsFinalizer(namespace, dacFinalizer) {
+		if controllerutil.ContainsFinalizer(namespace, constants.DedicatedAiClusterFinalizer) {
 			r.Log.Info("remove namespace finalizer")
-			controllerutil.RemoveFinalizer(namespace, dacFinalizer)
+			controllerutil.RemoveFinalizer(namespace, constants.DedicatedAiClusterFinalizer)
 			if err := r.Update(context.Background(), namespace); err != nil {
 				r.Log.Error(err, "failed to remove namespace finalizer")
 			}
 		}
-		if controllerutil.ContainsFinalizer(dac, dacFinalizer) {
+		if controllerutil.ContainsFinalizer(dac, constants.DedicatedAiClusterFinalizer) {
 			r.Log.Info("remove dac finalizer", "dac", dac.Name)
-			controllerutil.RemoveFinalizer(dac, dacFinalizer)
+			controllerutil.RemoveFinalizer(dac, constants.DedicatedAiClusterFinalizer)
 			if err := r.Update(context.Background(), dac); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
-		if controllerutil.ContainsFinalizer(queue, dacFinalizer) {
+		if controllerutil.ContainsFinalizer(queue, constants.DedicatedAiClusterFinalizer) {
 			r.Log.Info("remove queue finalizer")
-			controllerutil.RemoveFinalizer(queue, dacFinalizer)
+			controllerutil.RemoveFinalizer(queue, constants.DedicatedAiClusterFinalizer)
 			if err := r.Update(context.Background(), queue); err != nil {
 				r.Log.Error(err, "failed to remove queue finalizer")
 			}
 		}
-		if controllerutil.ContainsFinalizer(reservationJob, dacFinalizer) {
+		if controllerutil.ContainsFinalizer(reservationJob, constants.DedicatedAiClusterFinalizer) {
 			r.Log.Info("remove reservationJob finalizer")
-			controllerutil.RemoveFinalizer(reservationJob, dacFinalizer)
+			controllerutil.RemoveFinalizer(reservationJob, constants.DedicatedAiClusterFinalizer)
 			if err := r.Update(context.Background(), reservationJob); err != nil {
 				r.Log.Error(err, "failed to remove reservationJob finalizer")
 			}
