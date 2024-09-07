@@ -4794,7 +4794,7 @@ func schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref common.ReferenceCall
 					},
 					"pipelineParallelism": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Enable pipeline parallelism for the runtime When pipeline parallelism is enabled, the runtime informs the model server to use pipeline parallelism for model inference with multiple compute nodes via Ray Cluster and vLLM only. The number of compute nodes is determined by the number of replicas in the Inference Service. The worker node will be minimum replica minus one, which is reserved for head node. This is an experimental feature and may not be supported by all runtimes.",
+							Description: "Enable pipeline parallelism for the runtime When pipeline parallelism is enabled, the runtime informs the model server to use pipeline parallelism for model inference with multiple compute nodes via Ray Cluster and vLLM only. The number of compute nodes is determined by the number of replicas in the Inference Service. The worker node will be minimum replica minus one, which is reserved for head node. This field is deprecated and will be removed in a future release. Please use the annotation \"ome.io/deploymentMode: MultiNodeRayVLLM\" instead.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},

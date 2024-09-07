@@ -131,8 +131,10 @@ type ServingRuntimeSpec struct {
 	// for model inference with multiple compute nodes via Ray Cluster and vLLM only.
 	// The number of compute nodes is determined by the number of replicas in the Inference Service.
 	// The worker node will be minimum replica minus one, which is reserved for head node.
-	// This is an experimental feature and may not be supported by all runtimes.
+	// This field is deprecated and will be removed in a future release.
+	// Please use the annotation "ome.io/deploymentMode: MultiNodeRayVLLM" instead.
 	// +optional
+	// +deprecated
 	PipelineParallelism *bool `json:"pipelineParallelism,omitempty"`
 }
 

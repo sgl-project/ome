@@ -18,7 +18,6 @@ spec:
   {{with .Values.commonTolerations}}
   tolerations: {{ toYaml . | nindent 6 }}
   {{end}}
-  pipelineParallelism: true
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

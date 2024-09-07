@@ -3,7 +3,6 @@ kind: ClusterServingRuntime
 metadata:
   name: vllm-pp-rdma
 spec:
-  pipelineParallelism: true
   {{- if or .Values.commonAnnotations .Values.llama_3_1_405b_instruct.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}

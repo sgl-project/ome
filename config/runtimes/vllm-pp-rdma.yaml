@@ -3,7 +3,6 @@ kind: ClusterServingRuntime
 metadata:
   name: vllm-pp-rdma
 spec:
-  pipelineParallelism: true
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
@@ -11,6 +10,7 @@ spec:
     linkerd.io/inject: "enabled"
     config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
     config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
+    ome.io/deploymentMode: "MultiNodeRayVLLM"
   labels:
     logging-forward: enabled
   tolerations:
