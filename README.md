@@ -1,13 +1,33 @@
 # Welcome to OME
 
-![Architecture](docs/assets/architecture.svg)
+<a name="readme-top"></a>
 
-## Introduction
+
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/github_username/repo_name">
+    <img src="site/assets/ome-logo-hd.png" alt="Logo" width="" height="300">
+  </a>
+
+<h3 align="center">Oracle Managed ML Engine</h3>
+
+  <p align="center">
+This Project Provides AI/ML Workload Management on Oracle Kubernetes Engine (OKE)
+    <br />
+    <a href="https://PENDING"><strong>Explore the docs »</strong></a>
+    <br />
+  </p>
+</div>
+
 
 OME is a standard operator for managing the lifecycle of LLM models,
 serving, training, and dedicated AI clusters in a Kubernetes cluster.
 It is designed to be a generic operator
 that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes cluster running on OCI.
+
+## Architecture
+<p align="center"><img src="site/static/images/architecture.svg" alt="Logo" width="" height=""></p>
 
 1. **Compute Layer**: Includes OC Cluster Network, GPU, and compute images that will be used to launch individual nodes forming a larger cluster.
 2. **Kubernetes Cluster**: Sits on top of compute nodes to manage workload and scheduling. This is fully managed by OKE.

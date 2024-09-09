@@ -216,6 +216,10 @@ deploy-helm: manifests helm ## Deploy OME using Helm
 	helm install ome-crd charts/ome-crd/ --wait --timeout 180s
 	helm install ome charts/ome-resources/ --wait --timeout 180s
 
+.PHONY: artifacts
+artifacts: kustomize ## Generate artifacts for release.
+	$(KUSTOMIZE) build config/default -o artifacts/manifests.yaml
+	$(KUSTOMIZE) build config/clusterresources -o artifacts/clusterresources.yaml
 
 
 ##@ Test
