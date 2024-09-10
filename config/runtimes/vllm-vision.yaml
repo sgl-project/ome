@@ -33,13 +33,7 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralForCausalLM
+      modelArchitecture: Phi3VForCausalLM
       version: "1"
       autoSelect: true
       priority: 1
