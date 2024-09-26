@@ -5,3 +5,11 @@ resources:
   - Llama-3.1-405B-Instruct-FP8.yaml
   - Llama-3.1-70B-Instruct.yaml
   - Phi-3-mini-128k-instruct.yaml
+  - Llama-3.2-1B.yaml
+  - Llama-3.2-1B-Instruct.yaml
+  - Llama-3.2-3B.yaml
+  - Llama-3.2-3B-Instruct.yaml
+  - Llama-3.2-11B-Vision.yaml
+  - Llama-3.2-11B-Vision-Instruct.yaml
+  - Llama-3.2-90B-Vision.yaml
+  - Llama-3.2-90B-Vision-Instruct.yaml
