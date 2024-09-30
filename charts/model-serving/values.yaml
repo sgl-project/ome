@@ -4,6 +4,8 @@ vllm:
   commonImage:
     repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
     tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
+  llama3_2_image:
+    tag: v0.6.2
 
 commonAnnotations:
   prometheus.io/scrape: "true"
@@ -79,3 +81,32 @@ e5_mistral_7b_instruct:
   image:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag
+
+llama_3_2_90b_vision_instruct:
+  enabled: false
+  annotations: {}
+  affinity: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
+
+llama_3_2_11b_vision_instruct:
+  enabled: false
+  annotations: {}
+  affinity: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
+
