@@ -56,8 +56,9 @@ spec:
           --max-num-seqs=32 \
           --enforce-eager \
           --limit-mm-per-prompt="image=1" \
-          --max-model-len=128000 \
-          --gpu-memory-utilization=0.9
+          --max-model-len=131072 \
+          --gpu-memory-utilization=0.9 \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

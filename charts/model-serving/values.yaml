@@ -5,7 +5,7 @@ vllm:
     repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
     tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
   llama3_2_image:
-    tag: v0.6.2
+    tag: v0.6.2.e019c49f
 
 commonAnnotations:
   prometheus.io/scrape: "true"

@@ -36,7 +36,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.llama3_2_image.tag }}
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.2.e019c49f
       ports:
         - containerPort: 8080
           name: http
@@ -48,16 +48,17 @@ spec:
       args:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
-          --port={{.Values.vllm.port}} \
+          --port=8080 \
           --model="$MODEL_PATH" \
           --disable-log-requests \
-          --served-model-name={{.Values.vllm.serveModelName}} \
+          --served-model-name=vllm-model \
           --tensor-parallel-size=1 \
           --max-num-seqs=32 \
           --enforce-eager \
           --limit-mm-per-prompt="image=1" \
-          --max-model-len=128000 \
-          --gpu-memory-utilization=0.95
+          --max-model-len=131072 \
+          --gpu-memory-utilization=0.95 \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
