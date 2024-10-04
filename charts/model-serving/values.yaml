@@ -42,7 +42,6 @@ llama_3_1_405b_instruct:
   annotations:
     config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
     config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
-    ome.io/deploymentMode: "MultiNodeRayVLLM"
   affinity: {}
   tolerations: []
   topologySpreadConstraints: []

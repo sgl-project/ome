@@ -202,7 +202,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// check raw deployment
-	if deploymentMode == constants.RawDeployment {
+	if deploymentMode == constants.RawDeployment || deploymentMode == constants.MultiNodeRayVLLM {
 		reconciler, err := ingress.NewRawIngressReconciler(r.Client, r.Scheme, ingressConfig)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")

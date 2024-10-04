@@ -10,7 +10,6 @@ spec:
     linkerd.io/inject: "enabled"
     config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
     config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
-    ome.io/deploymentMode: "MultiNodeRayVLLM"
   labels:
     logging-forward: enabled
   tolerations:
