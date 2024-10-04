@@ -3,15 +3,17 @@ kind: ClusterServingRuntime
 metadata:
   name: vllm-llama-3-2-90b
 spec:
-  {{with .Values.commonAnnotations}}
-  annotations: {{ toYaml . | nindent 6 }}
-  {{end}}
-  {{with .Values.commonLabels}}
-  labels: {{ toYaml . | nindent 6 }}
-  {{end}}
-  {{with .Values.commonTolerations}}
-  tolerations: {{ toYaml . | nindent 6 }}
-  {{end}}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    linkerd.io/inject: "enabled"
+  labels:
+    logging-forward: enabled
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
   volumes:
     - name: dshm
       emptyDir:
