@@ -3,6 +3,7 @@ package predictorpv
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -31,10 +32,32 @@ func NewPredictorPVReconciler(client client.Client, clientset kubernetes.Interfa
 	}
 }
 
+// Reconcile handles the creation of PersistentVolumes based on the InferenceService and BaseModelSpec.
 func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *v1beta1.BaseModelSpec) (ctrl.Result, error) {
 	log.Info("Reconciling PersistentVolume", "inference service", isvc.Name, "namespace", isvc.Namespace)
-	pvName := constants.PVName(isvc.Name, isvc.Namespace)
 
+	// Reconcile primary PersistentVolume
+	pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
+	if err := c.reconcilePV(pvName, isvc, *baseModelSpec.Storage.StorageUri, "1000Gi", corev1.ReadWriteOnce); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Check if Chainsaw sidecar injection is enabled
+	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
+		// Reconcile PersistentVolumes for Chainsaw sidecar
+		for name, hostPath := range constants.OCIETCHostPath {
+			pvName := constants.PVName(isvc.Name, isvc.Namespace, name)
+			if err := c.reconcilePV(pvName, isvc, hostPath, "10Mi", corev1.ReadOnlyMany); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// reconcilePV is a helper method to create or update a PersistentVolume if it does not already exist.
+func (c *PVReconciler) reconcilePV(pvName string, isvc *v1beta1.InferenceService, hostPath string, storageSize string, accessMode corev1.PersistentVolumeAccessMode) error {
 	_, err := c.clientset.CoreV1().PersistentVolumes().Get(context.TODO(), pvName, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating PersistentVolume", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
@@ -44,29 +67,30 @@ func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *
 				Annotations: map[string]string{
 					"inferenceService": isvc.Name,
 					"namespace":        isvc.Namespace,
+					"path":             hostPath,
 				},
 			},
 			Spec: corev1.PersistentVolumeSpec{
 				StorageClassName: "manual",
 				Capacity: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("1000Gi"),
+					corev1.ResourceStorage: resource.MustParse(storageSize),
 				},
 				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
+					accessMode,
 				},
 				PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 				PersistentVolumeSource: corev1.PersistentVolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
-						Path: *baseModelSpec.Storage.StorageUri,
+						Path: hostPath,
 					},
 				},
 			},
 		}
 		if err := c.client.Create(context.TODO(), newPV); err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 	} else if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
-	return ctrl.Result{}, nil
+	return nil
 }

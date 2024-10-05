@@ -12,6 +12,10 @@ metadata:
   namespace: llama3-1-405b-rdma
   annotations:
     ome.io/deploymentMode: "MultiNodeRayVLLM"
+    chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
+    chainsaw.k8s-integration.oracle.com/inject: "disabled"
+    chainsaw.k8s-integration.oracle.com/logPath: "vllm"
+    chainsaw.k8s-integration.oracle.com/namespace: "vllm"
 spec:
   predictor:
     model:

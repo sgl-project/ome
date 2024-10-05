@@ -12,6 +12,10 @@ commonAnnotations:
   prometheus.io/port: "8080"
   prometheus.io/path: "/metrics"
   linkerd.io/inject: "enabled"
+  chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
+  chainsaw.k8s-integration.oracle.com/inject: "enabled"
+  chainsaw.k8s-integration.oracle.com/logPath: "vllm"
+  chainsaw.k8s-integration.oracle.com/namespace: "vllm"
 
 commonLabels:
   logging-forward: enabled
@@ -20,7 +24,6 @@ commonTolerations:
   - key: "nvidia.com/gpu"
     operator: "Exists"
     effect: "NoSchedule"
-
 
 llama_3_1_70b_instruct:
   enabled: false

@@ -41,6 +41,13 @@ func GetDeploymentMode(annotations map[string]string, deployConfig *v1beta1.Depl
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
 }
 
+// IsChainsawInjectEnabled checks if the Chainsaw sidecar injection is enabled
+// based on the InferenceService annotations.
+func IsChainsawInjectEnabled(annotations map[string]string) bool {
+	chainsawInject, ok := annotations[constants.ChainsawInject]
+	return ok && chainsawInject == "enabled"
+}
+
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	// Check if the VolcanoQueue annotation exists and set the label if it does.
 	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {

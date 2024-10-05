@@ -128,11 +128,19 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// The object is being deleted
 		if utils.Includes(isvc.ObjectMeta.Finalizers, finalizerName) {
 
-			pvName := constants.PVName(isvc.Name, isvc.Namespace)
+			pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
 			r.Log.Info("Force deleting PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
 			if err := r.ForceDeletePV(pvName); err != nil {
 				return ctrl.Result{}, err
 			}
+			for name, _ := range constants.OCIETCHostPath {
+				pvName := constants.PVName(isvc.Name, isvc.Namespace, name)
+				r.Log.Info("Force deleting chainsaw PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
+				if err := r.ForceDeletePV(pvName); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
 			// remove our finalizer from the list and update it.
 			isvc.ObjectMeta.Finalizers = utils.RemoveString(isvc.ObjectMeta.Finalizers, finalizerName)
 			if err := r.Update(context.Background(), isvc); err != nil {
@@ -262,6 +270,12 @@ func (r *InferenceServiceReconciler) ForceDeletePV(pvName string) error {
 	r.Log.Info("Force deleting PersistentVolume", "pv", pvName)
 	pv := &v1.PersistentVolume{}
 	if err := r.Get(context.TODO(), client.ObjectKey{Name: pvName}, pv); err != nil {
+		// If the PV is not found, return nil without an error
+		if apierr.IsNotFound(err) {
+			r.Log.Info("PersistentVolume not found, skipping deletion", "pv", pvName)
+			return nil
+		}
+		// Return any other error
 		return err
 	}
 

@@ -21,6 +21,7 @@ var (
 	OMEAPIGroupName                  = "ome.io"
 	KnativeAutoscalingAPIGroupName   = "autoscaling.knative.dev"
 	KnativeServingAPIGroupNamePrefix = "serving.knative"
+	ChainsawAPIGroupName             = "chainsaw.k8s-integration.oracle.com"
 	KnativeServingAPIGroupName       = KnativeServingAPIGroupNamePrefix + ".dev"
 	OMENamespace                     = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
@@ -72,6 +73,10 @@ var (
 	DefaultPrometheusPath                    = "/metrics"
 	QueueProxyAggregatePrometheusMetricsPort = 9088
 	DefaultPodPrometheusPort                 = "9091"
+	ChainsawInject                           = ChainsawAPIGroupName + "/inject"
+	ChainsawLogPath                          = ChainsawAPIGroupName + "/logPath"
+	ChainsawNamespace                        = ChainsawAPIGroupName + "/namespace"
+	ChainsawCompartmentID                    = ChainsawAPIGroupName + "/compartmentId"
 )
 
 // Label Constants
@@ -372,6 +377,20 @@ const (
 	Unknown
 )
 
+var OCIETCHostPath = map[string]string{
+	"region":     "/etc/region",
+	"host-class": "/etc/hostclass",
+	//This typo(avalability) is intentional, it is used in the code in chainsaw sidecar injection,
+	//so DO NOT FIX IT UNLESS YOU FIX THE CODE in chainsaw sidecar injection
+	//the exact code is here https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/core-k8s-apps/browse/logging-flow/charts/chainsaw-sidecar-injector/values.yaml#85
+	"etc-avalability-domain": "/etc/availability-domain",
+	"etc-fault-domain":       "/etc/fault-domain",
+	"etc-pki":                "/etc/pki",
+	"etc-ocipki":             "/etc/oci-pki",
+	"etc-identity-realm":     "/etc/identity-realm",
+	"etc-host":               "/etc/host",
+}
+
 // revision label
 const (
 	RevisionLabel         = "serving.knative.dev/revision"
@@ -460,23 +479,30 @@ func ModelConfigName(isvcName string) string {
 	return fmt.Sprintf("modelconfig-%s", isvcName)
 }
 
-func PVName(isvcName string, isvcNamespace string) string {
-	var maxSubLen = 10
+func PVName(isvcName string, isvcNamespace string, componentName string) string {
+	var maxSubLen = 16
 	if len(isvcNamespace) > maxSubLen {
 		isvcNamespace = isvcNamespace[len(isvcNamespace)-maxSubLen:]
 	}
 	if len(isvcName) > maxSubLen {
 		isvcName = isvcName[len(isvcName)-maxSubLen:]
 	}
-	return fmt.Sprintf("pv-%s-%s", isvcNamespace, isvcName)
+
+	if len(componentName) > maxSubLen {
+		componentName = componentName[len(componentName)-maxSubLen:]
+	}
+	return fmt.Sprintf("pv-%s-%s-%s", isvcNamespace, isvcName, componentName)
 }
 
-func PVCName(isvcName string) string {
-	var maxLen = 20
+func PVCName(isvcName string, component string) string {
+	var maxLen = 25
 	if len(isvcName) > maxLen {
 		isvcName = isvcName[len(isvcName)-maxLen:]
 	}
-	return fmt.Sprintf("pvc-%s", isvcName)
+	if len(component) > maxLen {
+		component = component[len(component)-maxLen:]
+	}
+	return fmt.Sprintf("pvc-%s-%s", isvcName, component)
 }
 
 // nolint: unused

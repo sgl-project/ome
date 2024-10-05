@@ -376,7 +376,7 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
 	vm := v1.VolumeMount{
-		Name:      constants.PVCName(isvc.Name),
+		Name:      *isvc.Spec.Predictor.Model.BaseModel,
 		MountPath: modelMountPath,
 		ReadOnly:  true,
 	}
@@ -388,18 +388,38 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 
 // updatePodSpec updates the pod spec for the predictor.
 func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec) {
+	// Update containers by inserting the custom container and keeping the other runtime containers
 	podSpec.Containers = append([]v1.Container{*container}, sRuntime.Containers[:omeContainerIdx]...)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[omeContainerIdx+1:]...)
 
-	volume := v1.Volume{
-		Name: constants.PVCName(isvc.Name),
-		VolumeSource: v1.VolumeSource{
-			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-				ClaimName: constants.PVCName(isvc.Name),
+	// Initialize volumes and add the main PVC volume
+	volumes := []v1.Volume{
+		{
+			Name: *isvc.Spec.Predictor.Model.BaseModel,
+			VolumeSource: v1.VolumeSource{
+				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+					ClaimName: constants.PVCName(isvc.Name, *isvc.Spec.Predictor.Model.BaseModel),
+				},
 			},
 		},
 	}
-	podSpec.Volumes = append(podSpec.Volumes, volume)
+
+	// Add additional volumes if Chainsaw injection is enabled
+	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
+		for name, _ := range constants.OCIETCHostPath {
+			volumes = append(volumes, v1.Volume{
+				Name: name,
+				VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+						ClaimName: constants.PVCName(isvc.Name, name),
+					},
+				},
+			})
+		}
+	}
+
+	// Append volumes to the podSpec
+	podSpec.Volumes = append(podSpec.Volumes, volumes...)
 
 	p.Log.Info("PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 }

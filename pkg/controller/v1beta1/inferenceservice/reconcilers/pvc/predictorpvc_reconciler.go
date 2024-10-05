@@ -1,6 +1,7 @@
 package predictorpvc
 
 import (
+	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
@@ -35,8 +36,28 @@ func NewPredictorPVCReconciler(client client.Client, clientset kubernetes.Interf
 
 func (c *PVCReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 	log.Info("Reconciling PersistentVolumeClaim", "inference service", isvc.Name, "namespace", isvc.Namespace)
-	pvcName := constants.PVCName(isvc.Name)
 
+	// Reconcile the main PVC
+	pvcName := constants.PVCName(isvc.Name, *isvc.Spec.Predictor.Model.BaseModel)
+	if err := c.reconcilePVC(isvc, pvcName, "999Gi", corev1.ReadWriteOnce, constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// If Chainsaw Sidecar is enabled, reconcile additional PVCs
+	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
+		for name, hostPath := range constants.OCIETCHostPath {
+			pvcName := constants.PVCName(isvc.Name, name)
+			if err := c.reconcilePVC(isvc, pvcName, "10Mi", corev1.ReadOnlyMany, constants.PVName(isvc.Name, isvc.Namespace, hostPath)); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// reconcilePVC handles the creation or update of PersistentVolumeClaims
+func (c *PVCReconciler) reconcilePVC(isvc *v1beta1.InferenceService, pvcName, storageSize string, accessMode corev1.PersistentVolumeAccessMode, volumeName string) error {
 	_, err := c.clientset.CoreV1().PersistentVolumeClaims(isvc.Namespace).Get(context.TODO(), pvcName, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating PersistentVolumeClaim", "pvc", pvcName, "inference service", isvc.Name, "namespace", isvc.Namespace)
@@ -48,28 +69,29 @@ func (c *PVCReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, 
 			Spec: corev1.PersistentVolumeClaimSpec{
 				StorageClassName: stringPtr("manual"),
 				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
+					accessMode,
 				},
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse("999Gi"),
+						corev1.ResourceStorage: resource.MustParse(storageSize),
 					},
 				},
-				VolumeName: constants.PVName(isvc.Name, isvc.Namespace),
+				VolumeName: volumeName,
 			},
 		}
 		if err := controllerutil.SetControllerReference(isvc, newPVC, c.scheme); err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 		if err := c.client.Create(context.TODO(), newPVC); err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 	} else if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
-	return ctrl.Result{}, nil
+	return nil
 }
 
+// stringPtr returns a pointer to the string
 func stringPtr(s string) *string {
 	return &s
 }
