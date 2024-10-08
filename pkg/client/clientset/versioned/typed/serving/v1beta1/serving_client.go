@@ -15,11 +15,13 @@ type OmeV1beta1Interface interface {
 	BaseModelsGetter
 	ClusterBaseModelsGetter
 	ClusterServingRuntimesGetter
+	ClusterTrainingRuntimesGetter
 	DedicatedAIClustersGetter
 	DedicatedAIClusterProfilesGetter
 	FineTunedWeightsGetter
 	InferenceServicesGetter
 	ServingRuntimesGetter
+	TrainingRuntimesGetter
 }
 
 // OmeV1beta1Client is used to interact with features provided by the ome.io group.
@@ -37,6 +39,10 @@ func (c *OmeV1beta1Client) ClusterBaseModels() ClusterBaseModelInterface {
 
 func (c *OmeV1beta1Client) ClusterServingRuntimes() ClusterServingRuntimeInterface {
 	return newClusterServingRuntimes(c)
+}
+
+func (c *OmeV1beta1Client) ClusterTrainingRuntimes() ClusterTrainingRuntimeInterface {
+	return newClusterTrainingRuntimes(c)
 }
 
 func (c *OmeV1beta1Client) DedicatedAIClusters() DedicatedAIClusterInterface {
@@ -57,6 +63,10 @@ func (c *OmeV1beta1Client) InferenceServices(namespace string) InferenceServiceI
 
 func (c *OmeV1beta1Client) ServingRuntimes(namespace string) ServingRuntimeInterface {
 	return newServingRuntimes(c, namespace)
+}
+
+func (c *OmeV1beta1Client) TrainingRuntimes(namespace string) TrainingRuntimeInterface {
+	return newTrainingRuntimes(c, namespace)
 }
 
 // NewForConfig creates a new OmeV1beta1Client for the given config.

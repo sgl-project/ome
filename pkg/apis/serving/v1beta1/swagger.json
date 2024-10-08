@@ -285,6 +285,96 @@
         }
       }
     },
+    "v1beta1.ClusterTrainingRuntime": {
+      "description": "ClusterTrainingRuntime is the Schema for the TrainingRuntimes API in cluster scope",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.TrainingRuntimeSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.TrainingRuntimeStatus"
+        }
+      }
+    },
+    "v1beta1.ClusterTrainingRuntimeList": {
+      "description": "ClusterTrainingRuntimeList contains a list of ClusterTrainingRuntime",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ClusterTrainingRuntime"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.CohereTrainingJobSpec": {
+      "description": "CohereTrainingJobSpec defines configuration shared across all cohere runtimes",
+      "type": "object",
+      "properties": {
+        "baseModel": {
+          "type": "string"
+        },
+        "datasetsSpecs": {
+          "description": "Data for training and validation",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.Storage"
+          }
+        },
+        "hyperparameters": {
+          "description": "Hyperparameters for cohere fine-tuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Hyperparameter"
+          }
+        },
+        "outputLocation": {
+          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "replicaSpecs": {
+          "description": "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaSpec"
+          }
+        }
+      }
+    },
     "v1beta1.ComponentExtensionSpec": {
       "description": "ComponentExtensionSpec defines the deployment configuration for a given InferenceService component",
       "type": "object",
@@ -894,6 +984,63 @@
         }
       }
     },
+    "v1beta1.ElasticPolicy": {
+      "type": "object",
+      "properties": {
+        "maxReplicas": {
+          "description": "upper limit for the number of pods that can be set by the autoscaler; cannot be smaller than MinReplicas, defaults to null.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "maxRestarts": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "metrics": {
+          "description": "Metrics contains the specifications which are used to calculate the desired replica count (the maximum replica count across all metrics will be used).  The desired replica count is calculated with multiplying the ratio between the target value and the current value by the current number of pods. Ergo, metrics used must decrease as the pod count is increased, and vice versa.  See the individual metric source types for more information about how each type of metric must respond. If not set, the HPA will not be created.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/k8s.io.api.autoscaling.v2.MetricSpec"
+          }
+        },
+        "minReplicas": {
+          "description": "minReplicas is the lower limit for the number of replicas to which the training job can scale down.  It defaults to null.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "nProcPerNode": {
+          "description": "Number of workers per node; supported values: [auto, cpu, gpu, int]. Deprecated: This API is deprecated in v1.7+ Use .spec.nprocPerNode instead.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "rdzvBackend": {
+          "type": "string"
+        },
+        "rdzvConf": {
+          "description": "RDZVConf contains additional rendezvous configuration (\u003ckey1\u003e=\u003cvalue1\u003e,\u003ckey2\u003e=\u003cvalue2\u003e,...).",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.RDZVConf"
+          }
+        },
+        "rdzvHost": {
+          "type": "string"
+        },
+        "rdzvId": {
+          "type": "string"
+        },
+        "rdzvPort": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "standalone": {
+          "description": "Start a local standalone rendezvous backend that is represented by a C10d TCP store on port 29400. Useful when launching single-node, multi-worker job. If specified --rdzv_backend, --rdzv_endpoint, --rdzv_id are auto-assigned; any explicitly set values are ignored.",
+          "type": "boolean"
+        }
+      }
+    },
     "v1beta1.FailureInfo": {
       "type": "object",
       "properties": {
@@ -1026,6 +1173,23 @@
         },
         "version": {
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.Hyperparameter": {
+      "description": "Hyperparameter struct",
+      "type": "object",
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "default": ""
+        },
+        "value": {
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         }
       }
     },
@@ -1212,6 +1376,42 @@
         }
       }
     },
+    "v1beta1.JobCondition": {
+      "description": "JobCondition describes the state of the job at a certain point.",
+      "type": "object",
+      "required": [
+        "type",
+        "status"
+      ],
+      "properties": {
+        "lastTransitionTime": {
+          "description": "Last time the condition transitioned from one status to another.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "lastUpdateTime": {
+          "description": "The last time this condition was updated.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "message": {
+          "description": "A human-readable message indicating details about the transition.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason for the condition's last transition.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status of the condition, one of True, False, Unknown.",
+          "type": "string",
+          "default": ""
+        },
+        "type": {
+          "description": "Type of job condition.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.LoggerSpec": {
       "description": "LoggerSpec specifies optional payload logging available for all components",
       "type": "object",
@@ -1223,6 +1423,60 @@
         "url": {
           "description": "URL to send logging events",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.MPITrainingJobSpec": {
+      "description": "MPITrainingJobSpec defines arguments for configuring MPI model training",
+      "type": "object",
+      "properties": {
+        "baseModel": {
+          "type": "string"
+        },
+        "cleanPodPolicy": {
+          "description": "CleanPodPolicy defines the policy that whether to kill pods after the job completes. Defaults to None.",
+          "type": "string"
+        },
+        "datasetsSpecs": {
+          "description": "Data for training and validation",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.Storage"
+          }
+        },
+        "hyperparameters": {
+          "description": "Hyperparameters for cohere fine-tuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Hyperparameter"
+          }
+        },
+        "mainContainer": {
+          "description": "MainContainer specifies name of the main container which executes the MPI code.",
+          "type": "string"
+        },
+        "mpiReplicaSpecs": {
+          "description": "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the MPI replicas to run.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaSpec"
+          }
+        },
+        "outputLocation": {
+          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "runPolicy": {
+          "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RunPolicy"
+        },
+        "slotsPerWorker": {
+          "description": "Specifies the number of slots per worker used in hostfile. Defaults to 1.",
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -1680,6 +1934,37 @@
         }
       }
     },
+    "v1beta1.OSStorage": {
+      "description": "OSStorage defines the arguments for object storage",
+      "type": "object",
+      "required": [
+        "bucketName",
+        "namespace"
+      ],
+      "properties": {
+        "bucketName": {
+          "type": "string",
+          "default": ""
+        },
+        "namespace": {
+          "type": "string",
+          "default": ""
+        },
+        "objectName": {
+          "type": "string"
+        },
+        "oboToken": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "storageType": {
+          "description": "Represents the type of the storage",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.ObjectReference": {
       "description": "ObjectReference contains enough information to let you inspect or modify the referred object.",
       "type": "object",
@@ -1691,6 +1976,59 @@
         "namespace": {
           "description": "Namespace of the referenced object",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.PVCStorage": {
+      "description": "PVCStorage defines the arguments for pvc storage",
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "description": "This field points to the location of the data/model which is mounted onto the pod.",
+          "type": "string",
+          "default": ""
+        },
+        "storageType": {
+          "description": "Represents the type of the storage",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.PeftTrainingJobSpec": {
+      "type": "object",
+      "properties": {
+        "baseModel": {
+          "type": "string"
+        },
+        "datasetsSpecs": {
+          "description": "Data for training and validation",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.Storage"
+          }
+        },
+        "hyperparameters": {
+          "description": "Hyperparameters for cohere fine-tuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Hyperparameter"
+          }
+        },
+        "outputLocation": {
+          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "peftFineTuningReplicaSpecs": {
+          "description": "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaSpec"
+          }
         }
       }
     },
@@ -2414,6 +2752,177 @@
         }
       }
     },
+    "v1beta1.PyTorchTrainingJobSpec": {
+      "description": "PyTorchTrainingJobSpec is a desired state description of the PyTorchJob.",
+      "type": "object",
+      "required": [
+        "runPolicy",
+        "pytorchReplicaSpecs"
+      ],
+      "properties": {
+        "baseModel": {
+          "type": "string"
+        },
+        "datasetsSpecs": {
+          "description": "Data for training and validation",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.Storage"
+          }
+        },
+        "elasticPolicy": {
+          "$ref": "#/definitions/v1beta1.ElasticPolicy"
+        },
+        "hyperparameters": {
+          "description": "Hyperparameters for cohere fine-tuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Hyperparameter"
+          }
+        },
+        "nprocPerNode": {
+          "description": "Number of workers per node; supported values: [auto, cpu, gpu, int]. For more, https://github.com/pytorch/pytorch/blob/26f7f470df64d90e092081e39507e4ac751f55d6/torch/distributed/run.py#L629-L658. Defaults to auto.",
+          "type": "string"
+        },
+        "outputLocation": {
+          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "pytorchReplicaSpecs": {
+          "description": "A map of PyTorchReplicaType (type) to ReplicaSpec (value). Specifies the PyTorch cluster configuration. For example,\n  {\n    \"Master\": PyTorchReplicaSpec,\n    \"Worker\": PyTorchReplicaSpec,\n  }",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaSpec"
+          }
+        },
+        "runPolicy": {
+          "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RunPolicy"
+        }
+      }
+    },
+    "v1beta1.RDZVConf": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.ReplicaSpec": {
+      "description": "ReplicaSpec is a description of the replica",
+      "type": "object",
+      "properties": {
+        "replicaCount": {
+          "description": "Replicas is the desired number of replicas of the given template. If unspecified, defaults to 1.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "restartPolicy": {
+          "description": "Restart policy for all replicas within the job. One of Always, OnFailure, Never and ExitCode. Default to Never.",
+          "type": "string"
+        },
+        "template": {
+          "description": "Template is the object that describes the pod that will be created for this replica. RestartPolicy in PodTemplateSpec will be overridden by RestartPolicy in ReplicaSpec",
+          "default": {},
+          "$ref": "#/definitions/v1.PodTemplateSpec"
+        }
+      }
+    },
+    "v1beta1.ReplicaStatus": {
+      "description": "ReplicaStatus represents the current observed state of the replica.",
+      "type": "object",
+      "properties": {
+        "activePodCount": {
+          "description": "The number of actively running pods.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "failedPodCount": {
+          "description": "The number of pods which reached phase Failed.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "replicaStatusType": {
+          "description": "Represents current status state of the replica",
+          "type": "string"
+        },
+        "selector": {
+          "description": "A Selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty Selector matches all objects. A null Selector matches no objects.",
+          "type": "string"
+        },
+        "succeededPodCount": {
+          "description": "The number of pods which reached phase Succeeded.",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1beta1.RunPolicy": {
+      "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
+      "type": "object",
+      "properties": {
+        "activeDeadlineSeconds": {
+          "description": "Specifies the duration in seconds relative to the startTime that the job may be active before the system tries to terminate it; value must be positive integer.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "backoffLimit": {
+          "description": "Optional number of retries before marking this job failed.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "cleanPodPolicy": {
+          "description": "CleanPodPolicy defines the policy to kill pods after the job completes. Default to None.",
+          "type": "string"
+        },
+        "schedulingPolicy": {
+          "description": "SchedulingPolicy defines the policy related to scheduling, e.g. gang-scheduling",
+          "$ref": "#/definitions/v1beta1.SchedulingPolicy"
+        },
+        "suspend": {
+          "description": "suspend specifies whether the Job controller should create Pods or not. If a Job is created with suspend set to true, no Pods are created by the Job controller. If a Job is suspended after creation (i.e. the flag goes from false to true), the Job controller will delete all active Pods and PodGroups associated with this Job. Users must design their workload to gracefully handle this. Suspending a Job will reset the StartTime field of the Job.\n\nDefaults to false.",
+          "type": "boolean"
+        },
+        "ttlSecondsAfterFinished": {
+          "description": "TTLSecondsAfterFinished is the TTL to clean up jobs. It may take extra ReconcilePeriod seconds for the cleanup, since reconcile gets called periodically. Default to infinite.",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1beta1.SchedulingPolicy": {
+      "description": "SchedulingPolicy encapsulates various scheduling policies of the distributed training job, for example `minAvailable` for gang-scheduling.",
+      "type": "object",
+      "properties": {
+        "minAvailable": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "minResources": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resource.Quantity"
+          }
+        },
+        "priorityClass": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "string"
+        },
+        "scheduleTimeoutSeconds": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
     "v1beta1.ServingRuntime": {
       "description": "ServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
@@ -2663,6 +3172,16 @@
       "description": "ServingRuntimeStatus defines the observed state of ServingRuntime",
       "type": "object"
     },
+    "v1beta1.Storage": {
+      "description": "Storage defines the storage source/location of the data/model The fields follow a \"1-of\" semantic. Users must specify exactly one URL based on given source.",
+      "type": "object",
+      "properties": {
+        "storageType": {
+          "description": "Represents the type of the storage",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.StorageSpec": {
       "type": "object",
       "properties": {
@@ -2738,6 +3257,296 @@
         "Spec": {
           "default": {},
           "$ref": "#/definitions/v1beta1.ServingRuntimeSpec"
+        }
+      }
+    },
+    "v1beta1.TensorFlowTrainingJobSpec": {
+      "description": "TensorFlowTrainingJobSpec is a desired state description of the TFJob.",
+      "type": "object",
+      "required": [
+        "runPolicy",
+        "tfReplicaSpecs"
+      ],
+      "properties": {
+        "baseModel": {
+          "type": "string"
+        },
+        "datasetsSpecs": {
+          "description": "Data for training and validation",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.Storage"
+          }
+        },
+        "enableDynamicWorker": {
+          "description": "A switch to enable dynamic worker",
+          "type": "boolean"
+        },
+        "hyperparameters": {
+          "description": "Hyperparameters for cohere fine-tuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Hyperparameter"
+          }
+        },
+        "outputLocation": {
+          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "runPolicy": {
+          "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.RunPolicy"
+        },
+        "successPolicy": {
+          "description": "SuccessPolicy defines the policy to mark the TFJob as succeeded. Default to \"\", using the default rules.",
+          "type": "string"
+        },
+        "tfReplicaSpecs": {
+          "description": "A map of TFReplicaType (type) to ReplicaSpec (value). Specifies the TF cluster configuration. For example,\n  {\n    \"PS\": ReplicaSpec,\n    \"Worker\": ReplicaSpec,\n  }",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaSpec"
+          }
+        }
+      }
+    },
+    "v1beta1.TrainingFramework": {
+      "type": "object",
+      "required": [
+        "framework"
+      ],
+      "properties": {
+        "framework": {
+          "description": "Name of the training framework.",
+          "type": "string",
+          "default": ""
+        },
+        "runtimes": {
+          "description": "Used training runtime against `ReplicaType` of current training framework.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "description": "Version of training framework. Used in validating that a trainer is supported by a runtime. Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.TrainingJob": {
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.TrainingJobSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.TrainingJobStatus"
+        }
+      }
+    },
+    "v1beta1.TrainingJobSpec": {
+      "description": "TrainingJobSpec defines the base job spec which various training job specs implement. It defines the desired state of a training job",
+      "type": "object",
+      "properties": {
+        "baseModel": {
+          "type": "string"
+        },
+        "datasetsSpecs": {
+          "description": "Data for training and validation",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.Storage"
+          }
+        },
+        "hyperparameters": {
+          "description": "Hyperparameters for cohere fine-tuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.Hyperparameter"
+          }
+        },
+        "outputLocation": {
+          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        }
+      }
+    },
+    "v1beta1.TrainingJobStatus": {
+      "type": "object",
+      "properties": {
+        "completionTime": {
+          "description": "Represents time when the training job is completed. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "conditions": {
+          "description": "Conditions is an array of current observed job conditions.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.JobCondition"
+          }
+        },
+        "details": {
+          "description": "Represents any details about the training job",
+          "type": "string"
+        },
+        "jobReplicaStatus": {
+          "description": "JobReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaStatus"
+          }
+        },
+        "lastReconcileTime": {
+          "description": "Represents last time when the job was reconciled. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "startTime": {
+          "description": "Represents time when the training job is acknowledged by the controller. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+          "$ref": "#/definitions/v1.Time"
+        }
+      }
+    },
+    "v1beta1.TrainingRuntime": {
+      "description": "TrainingRuntime is the Schema for the TrainingRuntimes API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.TrainingRuntimeSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.TrainingRuntimeStatus"
+        }
+      }
+    },
+    "v1beta1.TrainingRuntimeList": {
+      "description": "TrainingRuntimeList contains a list of TrainingRuntime",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.TrainingRuntime"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.TrainingRuntimeSpec": {
+      "description": "TrainingRuntimeSpec defines the desired state of TrainingRuntime",
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "description": "Annotations that will be added to the runtime spec. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "disabled": {
+          "description": "Set to true to disable use of this runtime",
+          "type": "boolean"
+        },
+        "labels": {
+          "description": "Labels that will be added to the runtime spec. More info: http://kubernetes.io/docs/user-guide/labels",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "replicaCount": {
+          "description": "Replicas is the desired number of replicas of the given template. If unspecified, defaults to 1.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "replicaType": {
+          "description": "The target runtime ReplicaType to specify Example: Launcher, Worker",
+          "type": "string"
+        },
+        "restartPolicy": {
+          "description": "Restart policy for all replicas within the job. One of Always, OnFailure, Never and ExitCode. Default to Never.",
+          "type": "string"
+        },
+        "supportedTrainingFrameworks": {
+          "description": "Training Framework and version supported by this runtime Example: MPI, TensorFlow, CohereFinetuning",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.TrainingFramework"
+          }
+        },
+        "template": {
+          "description": "Template is the object that describes the pod that will be created for this replica. RestartPolicy in PodTemplateSpec will be overridden by RestartPolicy in ReplicaSpec",
+          "default": {},
+          "$ref": "#/definitions/v1.PodTemplateSpec"
+        }
+      }
+    },
+    "v1beta1.TrainingRuntimeStatus": {
+      "description": "TrainingRuntimeStatus defines the observed state of TrainingRuntime",
+      "type": "object",
+      "properties": {
+        "details": {
+          "description": "Represents any details about the training runtime",
+          "type": "string"
+        },
+        "runtimeReplicaStatus": {
+          "description": "RuntimeReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.ReplicaStatus"
+          }
         }
       }
     }

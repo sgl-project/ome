@@ -18,6 +18,10 @@ type ClusterBaseModelListerExpansion interface{}
 // ClusterServingRuntimeLister.
 type ClusterServingRuntimeListerExpansion interface{}
 
+// ClusterTrainingRuntimeListerExpansion allows custom methods to be added to
+// ClusterTrainingRuntimeLister.
+type ClusterTrainingRuntimeListerExpansion interface{}
+
 // DedicatedAIClusterListerExpansion allows custom methods to be added to
 // DedicatedAIClusterLister.
 type DedicatedAIClusterListerExpansion interface{}
@@ -49,3 +53,11 @@ type ServingRuntimeListerExpansion interface{}
 // ServingRuntimeNamespaceListerExpansion allows custom methods to be added to
 // ServingRuntimeNamespaceLister.
 type ServingRuntimeNamespaceListerExpansion interface{}
+
+// TrainingRuntimeListerExpansion allows custom methods to be added to
+// TrainingRuntimeLister.
+type TrainingRuntimeListerExpansion interface{}
+
+// TrainingRuntimeNamespaceListerExpansion allows custom methods to be added to
+// TrainingRuntimeNamespaceLister.
+type TrainingRuntimeNamespaceListerExpansion interface{}

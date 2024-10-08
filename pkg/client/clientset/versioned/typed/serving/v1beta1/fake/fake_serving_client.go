@@ -24,6 +24,10 @@ func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeI
 	return &FakeClusterServingRuntimes{c}
 }
 
+func (c *FakeOmeV1beta1) ClusterTrainingRuntimes() v1beta1.ClusterTrainingRuntimeInterface {
+	return &FakeClusterTrainingRuntimes{c}
+}
+
 func (c *FakeOmeV1beta1) DedicatedAIClusters() v1beta1.DedicatedAIClusterInterface {
 	return &FakeDedicatedAIClusters{c}
 }
@@ -42,6 +46,10 @@ func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceSe
 
 func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntimeInterface {
 	return &FakeServingRuntimes{c, namespace}
+}
+
+func (c *FakeOmeV1beta1) TrainingRuntimes(namespace string) v1beta1.TrainingRuntimeInterface {
+	return &FakeTrainingRuntimes{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

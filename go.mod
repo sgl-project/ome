@@ -42,7 +42,7 @@ require (
 	knative.dev/serving v0.39.3
 	sigs.k8s.io/controller-runtime v0.16.3
 	sigs.k8s.io/yaml v1.4.0
-	volcano.sh/apis v1.6.0-alpha.0.0.20221012070524-685db38b4fae
+	volcano.sh/apis v1.9.0
 )
 
 require (

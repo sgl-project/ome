@@ -8,6 +8,8 @@ type ClusterBaseModelExpansion interface{}
 
 type ClusterServingRuntimeExpansion interface{}
 
+type ClusterTrainingRuntimeExpansion interface{}
+
 type DedicatedAIClusterExpansion interface{}
 
 type DedicatedAIClusterProfileExpansion interface{}
@@ -17,3 +19,5 @@ type FineTunedWeightExpansion interface{}
 type InferenceServiceExpansion interface{}
 
 type ServingRuntimeExpansion interface{}
+
+type TrainingRuntimeExpansion interface{}

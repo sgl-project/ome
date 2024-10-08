@@ -419,6 +419,14 @@ const (
 	VolcanoJobLabelName = "volcano.sh/job-name"
 )
 
+// DatasetType represents the different types of data
+type DatasetType string
+
+const (
+	Training   DatasetType = "training"
+	Evaluation DatasetType = "evaluation"
+)
+
 // Model Agent & Model Controller
 var (
 	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"

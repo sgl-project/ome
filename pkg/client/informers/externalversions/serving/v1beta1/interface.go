@@ -14,6 +14,8 @@ type Interface interface {
 	ClusterBaseModels() ClusterBaseModelInformer
 	// ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
 	ClusterServingRuntimes() ClusterServingRuntimeInformer
+	// ClusterTrainingRuntimes returns a ClusterTrainingRuntimeInformer.
+	ClusterTrainingRuntimes() ClusterTrainingRuntimeInformer
 	// DedicatedAIClusters returns a DedicatedAIClusterInformer.
 	DedicatedAIClusters() DedicatedAIClusterInformer
 	// DedicatedAIClusterProfiles returns a DedicatedAIClusterProfileInformer.
@@ -24,6 +26,8 @@ type Interface interface {
 	InferenceServices() InferenceServiceInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
 	ServingRuntimes() ServingRuntimeInformer
+	// TrainingRuntimes returns a TrainingRuntimeInformer.
+	TrainingRuntimes() TrainingRuntimeInformer
 }
 
 type version struct {
@@ -52,6 +56,11 @@ func (v *version) ClusterServingRuntimes() ClusterServingRuntimeInformer {
 	return &clusterServingRuntimeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
+// ClusterTrainingRuntimes returns a ClusterTrainingRuntimeInformer.
+func (v *version) ClusterTrainingRuntimes() ClusterTrainingRuntimeInformer {
+	return &clusterTrainingRuntimeInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
 // DedicatedAIClusters returns a DedicatedAIClusterInformer.
 func (v *version) DedicatedAIClusters() DedicatedAIClusterInformer {
 	return &dedicatedAIClusterInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
@@ -75,4 +84,9 @@ func (v *version) InferenceServices() InferenceServiceInformer {
 // ServingRuntimes returns a ServingRuntimeInformer.
 func (v *version) ServingRuntimes() ServingRuntimeInformer {
 	return &servingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// TrainingRuntimes returns a TrainingRuntimeInformer.
+func (v *version) TrainingRuntimes() TrainingRuntimeInformer {
+	return &trainingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
