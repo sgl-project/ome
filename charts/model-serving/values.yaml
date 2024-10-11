@@ -98,6 +98,20 @@ llama_3_2_90b_vision_instruct:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag
 
+llama_3_2_90b_vision_fp8_dynamic:
+  enabled: false
+  annotations: {}
+  affinity: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  volumes: []
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
+
 llama_3_2_11b_vision_instruct:
   enabled: false
   annotations: {}

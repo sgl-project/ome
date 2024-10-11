@@ -388,7 +388,7 @@ var OCIETCHostPath = map[string]string{
 	"etc-pki":                "/etc/pki",
 	"etc-ocipki":             "/etc/oci-pki",
 	"etc-identity-realm":     "/etc/identity-realm",
-	"etc-host":               "/etc/host",
+	"etc-hosts":              "/etc/hosts",
 }
 
 // revision label
