@@ -406,12 +406,12 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 
 	// Add additional volumes if Chainsaw injection is enabled
 	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
-		for name, _ := range constants.OCIETCHostPath {
+		for _, item := range constants.OCIETCHostPaths {
 			volumes = append(volumes, v1.Volume{
-				Name: name,
+				Name: item.Name,
 				VolumeSource: v1.VolumeSource{
 					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-						ClaimName: constants.PVCName(isvc.Name, name),
+						ClaimName: constants.PVCName(isvc.Name, item.Name),
 					},
 				},
 			})

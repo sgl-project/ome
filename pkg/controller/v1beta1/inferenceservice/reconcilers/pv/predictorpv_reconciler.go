@@ -45,9 +45,9 @@ func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *
 	// Check if Chainsaw sidecar injection is enabled
 	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
 		// Reconcile PersistentVolumes for Chainsaw sidecar
-		for name, hostPath := range constants.OCIETCHostPath {
-			pvName := constants.PVName(isvc.Name, isvc.Namespace, name)
-			if err := c.reconcilePV(pvName, isvc, hostPath, "10Mi", corev1.ReadOnlyMany); err != nil {
+		for _, item := range constants.OCIETCHostPaths {
+			pvName := constants.PVName(isvc.Name, isvc.Namespace, item.Name)
+			if err := c.reconcilePV(pvName, isvc, item.HostPath, "10Mi", corev1.ReadOnlyMany); err != nil {
 				return ctrl.Result{}, err
 			}
 		}

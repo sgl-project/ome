@@ -133,8 +133,8 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if err := r.ForceDeletePV(pvName); err != nil {
 				return ctrl.Result{}, err
 			}
-			for name, _ := range constants.OCIETCHostPath {
-				pvName := constants.PVName(isvc.Name, isvc.Namespace, name)
+			for _, item := range constants.OCIETCHostPaths {
+				pvName := constants.PVName(isvc.Name, isvc.Namespace, item.Name)
 				r.Log.Info("Force deleting chainsaw PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
 				if err := r.ForceDeletePV(pvName); err != nil {
 					return ctrl.Result{}, err

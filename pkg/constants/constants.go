@@ -377,18 +377,23 @@ const (
 	Unknown
 )
 
-var OCIETCHostPath = map[string]string{
-	"region":     "/etc/region",
-	"host-class": "/etc/hostclass",
-	//This typo(avalability) is intentional, it is used in the code in chainsaw sidecar injection,
-	//so DO NOT FIX IT UNLESS YOU FIX THE CODE in chainsaw sidecar injection
-	//the exact code is here https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/core-k8s-apps/browse/logging-flow/charts/chainsaw-sidecar-injector/values.yaml#85
-	"etc-avalability-domain": "/etc/availability-domain",
-	"etc-fault-domain":       "/etc/fault-domain",
-	"etc-pki":                "/etc/pki",
-	"etc-ocipki":             "/etc/oci-pki",
-	"etc-identity-realm":     "/etc/identity-realm",
-	"etc-hosts":              "/etc/hosts",
+type HostPath struct {
+	Name     string
+	HostPath string
+}
+
+var OCIETCHostPaths = []HostPath{
+	{"region", "/etc/region"},
+	{"host-class", "/etc/hostclass"},
+	// This typo (avalability) is intentional, it is used in the code in chainsaw sidecar injection,
+	// so DO NOT FIX IT UNLESS YOU FIX THE CODE in chainsaw sidecar injection
+	// the exact code is here https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/core-k8s-apps/browse/logging-flow/charts/chainsaw-sidecar-injector/values.yaml#85
+	{"etc-avalability-domain", "/etc/availability-domain"},
+	{"etc-fault-domain", "/etc/fault-domain"},
+	{"etc-pki", "/etc/pki"},
+	{"etc-ocipki", "/etc/oci-pki"},
+	{"etc-identity-realm", "/etc/identity-realm"},
+	{"etc-hosts", "/etc/hosts"},
 }
 
 // revision label

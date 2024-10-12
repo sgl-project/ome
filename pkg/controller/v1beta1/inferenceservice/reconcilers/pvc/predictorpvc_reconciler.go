@@ -45,9 +45,9 @@ func (c *PVCReconciler) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, 
 
 	// If Chainsaw Sidecar is enabled, reconcile additional PVCs
 	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
-		for name, _ := range constants.OCIETCHostPath {
-			pvcName := constants.PVCName(isvc.Name, name)
-			if err := c.reconcilePVC(isvc, pvcName, "10Mi", corev1.ReadOnlyMany, constants.PVName(isvc.Name, isvc.Namespace, name)); err != nil {
+		for _, item := range constants.OCIETCHostPaths {
+			pvcName := constants.PVCName(isvc.Name, item.Name)
+			if err := c.reconcilePVC(isvc, pvcName, "10Mi", corev1.ReadOnlyMany, constants.PVName(isvc.Name, isvc.Namespace, item.Name)); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
