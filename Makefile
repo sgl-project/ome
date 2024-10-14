@@ -139,8 +139,8 @@ helm-lint: ## Lint all charts
 	  fi \
 	done
 
-.PHONY: helm-document
-helm-docs: ## Generate Helm chart documentation via helm-docs
+.PHONY: helm-docs
+helm-docs: helm-document ## Generate Helm chart documentation via helm-docs
 	$(HELM_DOCS) --chart-search-root=charts --output-file=README.md
 
 ##@ Build

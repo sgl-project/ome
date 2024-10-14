@@ -1,4 +1,5 @@
-FROM odo-docker-signed-local.artifactory-builds.oci.oraclecorp.com/oke/go-boringcrypto-4493:1.22.1-1 AS builder
+# Build the manager binary
+FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:1.23.0-1 AS builder
 ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 
 # Copy in the go src

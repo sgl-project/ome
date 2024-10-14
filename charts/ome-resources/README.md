@@ -89,6 +89,7 @@ A Helm chart for Kubernetes
 | ome.multinodeProber.startupPeriodSeconds | int | `30` |  |
 | ome.multinodeProber.startupTimeoutSeconds | int | `60` |  |
 | ome.multinodeProber.tag | string | `"v0.1"` |  |
+| ome.multinodeProber.unavailableThresholdSeconds | int | `600` |  |
 | ome.ociETC.adNumberName | string | `"ad2"` |  |
 | ome.ociETC.airportCode | string | `"ORD"` |  |
 | ome.ociETC.applicationStage | string | `"prod"` |  |

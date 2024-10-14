@@ -2,9 +2,9 @@ package main
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/download-agent/injection"
-	generic_download_agent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/download-agent/generic"
-	hf_download_agent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/download-agent/hf"
-	partner_download_agent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/download-agent/partner"
+	genericdownloadagent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/download-agent/generic"
+	hfdownloadagent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/download-agent/hf"
+	partnerdownloadagent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/download-agent/partner"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
@@ -64,10 +64,10 @@ func cohereOpts(cli *cobra.Command) fx.Option {
 		logging.ModuleNamed("another_log"),
 
 		// Inject main app module
-		partner_download_agent.Module,
+		partnerdownloadagent.Module,
 
 		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, d *partner_download_agent.DownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
+		fx.Invoke(func(lc fx.Lifecycle, d *partnerdownloadagent.DownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
 			lc.Append(
 				fx.Hook{
 					OnStart: func(ctx context.Context) error {
@@ -98,10 +98,10 @@ func hfOpts(cli *cobra.Command) fx.Option {
 		logging.ModuleNamed("another_log"),
 
 		// Inject main app module
-		hf_download_agent.Module,
+		hfdownloadagent.Module,
 
 		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, d *hf_download_agent.HFDownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
+		fx.Invoke(func(lc fx.Lifecycle, d *hfdownloadagent.HFDownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
 			lc.Append(
 				fx.Hook{
 					OnStart: func(ctx context.Context) error {
@@ -133,10 +133,10 @@ func genericOpts(cli *cobra.Command) fx.Option {
 		logging.ModuleNamed("another_log"),
 
 		// Inject main app module
-		generic_download_agent.Module,
+		genericdownloadagent.Module,
 
 		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, d *generic_download_agent.GenericDownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
+		fx.Invoke(func(lc fx.Lifecycle, d *genericdownloadagent.GenericDownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
 			lc.Append(
 				fx.Hook{
 					OnStart: func(ctx context.Context) error {
