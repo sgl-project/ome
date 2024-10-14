@@ -27,6 +27,10 @@ type TrainingJobSpec struct {
 
 	// OutputLocation: define the location where training output stores. Checkpointing etc.
 	OutputLocation Storage `json:"outputLocation,omitempty"`
+
+	// The compartment ID to use for the training job
+	// +optional
+	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
 type TrainingJobStatus struct {

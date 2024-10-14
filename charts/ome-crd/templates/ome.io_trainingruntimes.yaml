@@ -43,6 +43,8 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              compartmentID:
+                type: string
               disabled:
                 type: boolean
               labels:
@@ -59,8 +61,6 @@ spec:
               supportedTrainingFrameworks:
                 items:
                   properties:
-                    autoSelect:
-                      type: boolean
                     framework:
                       type: string
                     runtimes:
@@ -3420,6 +3420,27 @@ spec:
                 type: object
             type: object
           status:
+            properties:
+              details:
+                type: string
+              runtimeReplicaStatus:
+                additionalProperties:
+                  properties:
+                    activePodCount:
+                      format: int32
+                      type: integer
+                    failedPodCount:
+                      format: int32
+                      type: integer
+                    replicaStatusType:
+                      type: string
+                    selector:
+                      type: string
+                    succeededPodCount:
+                      format: int32
+                      type: integer
+                  type: object
+                type: object
             type: object
         type: object
     served: true

@@ -26,8 +26,37 @@ spec:
             type: object
           spec:
             properties:
-              baseJobSpec:
+              baseModel:
                 type: string
+              compartmentID:
+                type: string
+              datasetsSpecs:
+                additionalProperties:
+                  properties:
+                    storageType:
+                      type: string
+                  type: object
+                type: object
+              hyperparameters:
+                items:
+                  properties:
+                    key:
+                      type: string
+                    value:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      x-kubernetes-int-or-string: true
+                  required:
+                  - key
+                  - value
+                  type: object
+                type: array
+              outputLocation:
+                properties:
+                  storageType:
+                    type: string
+                type: object
             type: object
           status:
             properties:
@@ -79,8 +108,6 @@ spec:
               lastReconcileTime:
                 format: date-time
                 type: string
-              retried:
-                type: integer
               startTime:
                 format: date-time
                 type: string

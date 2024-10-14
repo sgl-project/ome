@@ -741,6 +741,13 @@ func schema_pkg_apis_serving_v1beta1_CohereTrainingJobSpec(ref common.ReferenceC
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
 						},
 					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training job",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"replicaSpecs": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
@@ -1778,6 +1785,13 @@ func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref common.Reference
 							Format:      "",
 						},
 					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the DAC",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -2348,6 +2362,13 @@ func schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref common.ReferenceCa
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.PredictorSpec"),
 						},
 					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the inference service",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"predictor"},
 			},
@@ -2701,6 +2722,13 @@ func schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref common.ReferenceCall
 							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
+						},
+					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training job",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"slotsPerWorker": {
@@ -3664,6 +3692,13 @@ func schema_pkg_apis_serving_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCal
 							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
+						},
+					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training job",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"peftFineTuningReplicaSpecs": {
@@ -5026,6 +5061,13 @@ func schema_pkg_apis_serving_v1beta1_PyTorchTrainingJobSpec(ref common.Reference
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
 						},
 					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training job",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"runPolicy": {
 						SchemaProps: spec.SchemaProps{
 							Description: "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
@@ -5732,6 +5774,13 @@ func schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref common.ReferenceCall
 							Format:      "",
 						},
 					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the serving runtime",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"containers"},
 			},
@@ -5961,6 +6010,13 @@ func schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref common.Refere
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
 						},
 					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training job",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"runPolicy": {
 						SchemaProps: spec.SchemaProps{
 							Description: "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
@@ -6140,6 +6196,13 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallbac
 							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
+						},
+					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training job",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
@@ -6399,6 +6462,13 @@ func schema_pkg_apis_serving_v1beta1_TrainingRuntimeSpec(ref common.ReferenceCal
 									},
 								},
 							},
+						},
+					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the training runtime",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},

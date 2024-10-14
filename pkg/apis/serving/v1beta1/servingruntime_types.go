@@ -136,6 +136,10 @@ type ServingRuntimeSpec struct {
 	// +optional
 	// +deprecated
 	PipelineParallelism *bool `json:"pipelineParallelism,omitempty"`
+
+	// The compartment ID to use for the serving runtime
+	// +optional
+	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
 // ModelSizeRangeSpec defines the range of model sizes supported by this runtime

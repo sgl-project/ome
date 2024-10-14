@@ -47,6 +47,10 @@ type TrainingRuntimeSpec struct {
 	// More info: http://kubernetes.io/docs/user-guide/annotations
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// The compartment ID to use for the training runtime
+	// +optional
+	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
 // TrainingRuntimeStatus defines the observed state of TrainingRuntime

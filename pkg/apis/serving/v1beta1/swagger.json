@@ -346,6 +346,10 @@
         "baseModel": {
           "type": "string"
         },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training job",
+          "type": "string"
+        },
         "datasetsSpecs": {
           "description": "Data for training and validation",
           "type": "object",
@@ -906,6 +910,10 @@
           "description": "The GPU shape affinity of DAC, get from spec.type + spec.shape",
           "$ref": "#/definitions/v1.Affinity"
         },
+        "compartmentID": {
+          "description": "The compartment ID to use for the DAC",
+          "type": "string"
+        },
         "count": {
           "description": "Count is the number of resources in the DAC",
           "type": "integer",
@@ -1255,6 +1263,10 @@
         "predictor"
       ],
       "properties": {
+        "compartmentID": {
+          "description": "The compartment ID to use for the inference service",
+          "type": "string"
+        },
         "predictor": {
           "description": "Predictor defines the model serving spec",
           "default": {},
@@ -1435,6 +1447,10 @@
         },
         "cleanPodPolicy": {
           "description": "CleanPodPolicy defines the policy that whether to kill pods after the job completes. Defaults to None.",
+          "type": "string"
+        },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training job",
           "type": "string"
         },
         "datasetsSpecs": {
@@ -2001,6 +2017,10 @@
       "type": "object",
       "properties": {
         "baseModel": {
+          "type": "string"
+        },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training job",
           "type": "string"
         },
         "datasetsSpecs": {
@@ -2763,6 +2783,10 @@
         "baseModel": {
           "type": "string"
         },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training job",
+          "type": "string"
+        },
         "datasetsSpecs": {
           "description": "Data for training and validation",
           "type": "object",
@@ -3074,6 +3098,10 @@
           "description": "Provide the details about built-in runtime adapter",
           "$ref": "#/definitions/v1beta1.BuiltInAdapter"
         },
+        "compartmentID": {
+          "description": "The compartment ID to use for the serving runtime",
+          "type": "string"
+        },
         "containers": {
           "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
           "type": "array",
@@ -3271,6 +3299,10 @@
         "baseModel": {
           "type": "string"
         },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training job",
+          "type": "string"
+        },
         "datasetsSpecs": {
           "description": "Data for training and validation",
           "type": "object",
@@ -3367,6 +3399,10 @@
       "type": "object",
       "properties": {
         "baseModel": {
+          "type": "string"
+        },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training job",
           "type": "string"
         },
         "datasetsSpecs": {
@@ -3492,6 +3528,10 @@
             "type": "string",
             "default": ""
           }
+        },
+        "compartmentID": {
+          "description": "The compartment ID to use for the training runtime",
+          "type": "string"
         },
         "disabled": {
           "description": "Set to true to disable use of this runtime",

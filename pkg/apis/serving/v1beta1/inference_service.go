@@ -9,6 +9,10 @@ type InferenceServiceSpec struct {
 	// Predictor defines the model serving spec
 	// +required
 	Predictor PredictorSpec `json:"predictor"`
+
+	// The compartment ID to use for the inference service
+	// +optional
+	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
 // LoggerType controls the scope of log publishing

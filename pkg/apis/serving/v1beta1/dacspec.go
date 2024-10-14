@@ -50,6 +50,10 @@ type DedicatedAIClusterSpec struct {
 	// PriorityClassName is the priority class assigned to workloads in this Dedicated AI Cluster.
 	// +optional
 	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// The compartment ID to use for the DAC
+	// +optional
+	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
 // DedicatedAIClusterStatus defines the observed state of DedicatedAICluster
