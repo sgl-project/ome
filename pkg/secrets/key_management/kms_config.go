@@ -7,12 +7,17 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"errors"
 	"fmt"
+	"github.com/go-playground/validator/v10"
 	"github.com/oracle/oci-go-sdk/common"
 	"github.com/spf13/viper"
-	"strings"
 )
 
+/*
+ * These Viper key name suffix have to be consistent with mapstructure tags in the struct definition
+ */
 const (
+	NameViperKeyNameSuffix                  = "name"
+	AuthTypeViperKeyNameSuffix              = "auth_type"
 	VaultPrefixViperKeyNameSuffix           = "vault_prefix"
 	VaultIdViperKeyNameSuffix               = "vault_id"
 	KmsCryptoEndpointViperKeyNameSuffix     = "kms_crypto_endpoint"
@@ -21,11 +26,12 @@ const (
 
 type KmsConfig struct {
 	AnotherLogger         logging.Interface
-	AuthType              *principals.AuthenticationType `mapstructure:"auth_type"`
+	Name                  string                         `mapstructure:"name"`
+	AuthType              *principals.AuthenticationType `mapstructure:"auth_type" validate:"required"`
 	VaultId               *string                        `mapstructure:"vault_id"`
 	VaultPrefix           *string                        `mapstructure:"vault_prefix"`
-	KmsCryptoEndpoint     *string                        `mapstructure:"kms_crypto_endpoint"`
-	KmsManagementEndpoint *string                        `mapstructure:"kms_management_endpoint"`
+	KmsCryptoEndpoint     *string                        `mapstructure:"kms_crypto_endpoint" validate:"required"`
+	KmsManagementEndpoint *string                        `mapstructure:"kms_management_endpoint" validate:"required"`
 }
 
 // Option represents a server configuration option.
@@ -56,37 +62,28 @@ func NewKmsConfig(opts ...Option) (*KmsConfig, error) {
 }
 
 // WithViper attempts to resolve the configuration using Viper.
-func WithViper(v *viper.Viper, viperKeyNames []string) Option {
+func WithViper(v *viper.Viper) Option {
 	return func(c *KmsConfig) error {
-		fmt.Printf("What viper looks like: %+v", viperKeyNames)
-
-		// Set up config using viperKeyNames
-		for _, keyName := range viperKeyNames {
-			if strings.Contains(keyName, VaultPrefixViperKeyNameSuffix) {
-				c.VaultPrefix = common.String(v.GetString(keyName))
-				continue
-			}
-			if strings.Contains(keyName, VaultIdViperKeyNameSuffix) {
-				c.VaultId = common.String(v.GetString(keyName))
-				continue
-			}
-			if strings.Contains(keyName, KmsCryptoEndpointViperKeyNameSuffix) {
-				c.KmsCryptoEndpoint = common.String(v.GetString(keyName))
-				continue
-			}
-			if strings.Contains(keyName, KmsManagementEndpointViperKeyNameSuffix) {
-				c.KmsManagementEndpoint = common.String(v.GetString(keyName))
-				continue
-			}
+		prefix := v.GetString("viper_prefix")
+		if prefix != "" {
+			prefix = prefix + "."
 		}
 
+		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyNameSuffix))
+		c.VaultId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, VaultIdViperKeyNameSuffix)))
+		c.VaultPrefix = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, VaultPrefixViperKeyNameSuffix)))
+		c.KmsCryptoEndpoint = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, KmsCryptoEndpointViperKeyNameSuffix)))
+		c.KmsManagementEndpoint = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, KmsManagementEndpointViperKeyNameSuffix)))
+
+		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyNameSuffix), &c.AuthType); err != nil {
+			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
+		}
+
+		// Set up vault prefix via vault Id
 		if c.VaultPrefix == nil || *c.VaultPrefix == "" {
 			c.VaultPrefix = common.String(secrets.ResolveVaultPrefix(*c.VaultId))
 		}
 
-		if err := v.UnmarshalKey("auth_type", &c.AuthType); err != nil {
-			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
-		}
 		return nil
 	}
 }
@@ -204,13 +201,17 @@ func (c *KmsConfig) buildKmsManagementEndpoint() (*secrets.EnvVar, error) {
 }
 
 func (c *KmsConfig) Validate() error {
-	if c.AuthType == nil {
-		return errors.New("missing config variable - no auth_type in KMS config struct")
+	validate := validator.New()
+	// Validate by using package validator
+	if err := validate.Struct(c); err != nil {
+		return err
 	}
-	if c.KmsCryptoEndpoint == nil || *c.KmsCryptoEndpoint == "" {
+
+	// Validate further
+	if *c.KmsCryptoEndpoint == "" {
 		return errors.New("missing config variable - no kms_crypto_endpoint in KMS config struct")
 	}
-	if c.KmsManagementEndpoint == nil || *c.KmsManagementEndpoint == "" {
+	if *c.KmsManagementEndpoint == "" {
 		return errors.New("missing config variable - no kms_management_endpoint in KMS config struct")
 	}
 	return nil

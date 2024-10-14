@@ -103,7 +103,6 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 	}
 
 	prepareDownloadParts := splitToParts(totalParts, partSize, objectSize, source)
-
 	downloadedParts := multipartDownload(context.Background(), cds.Client, downloadThreads, prepareDownloadParts)
 
 	var targetFilePath string
@@ -112,11 +111,10 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 	} else {
 		targetFilePath = filepath.Join(target, source.ObjectName)
 	}
-
 	tempTargetFilePath := targetFilePath + ".temp"
 
 	err := os.Remove(tempTargetFilePath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -128,10 +126,14 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 	}
 
 	tmpFile, err := os.OpenFile(tempTargetFilePath, os.O_RDWR|os.O_CREATE, 0644)
-	defer func(tmpFile *os.File) {
-		err := tmpFile.Close()
-		if err != nil {
+	if err != nil {
+		return err
+	}
 
+	defer func(tmpFile *os.File) {
+		err = tmpFile.Close()
+		if err != nil {
+			cds.logger.Errorf("Failed to close temp file: %+v", err)
 		}
 	}(tmpFile)
 	if err != nil {
@@ -140,8 +142,8 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 
 	for part := range downloadedParts {
 		if part.err != nil {
-			err := os.Remove(tempTargetFilePath)
-			if err != nil {
+			err = os.Remove(tempTargetFilePath)
+			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
 			return part.err
@@ -151,10 +153,6 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, e
 		if err != nil {
 			return err
 		}
-	}
-	err = tmpFile.Close()
-	if err != nil {
-		return err
 	}
 
 	err = os.Rename(tempTargetFilePath, targetFilePath)
@@ -380,7 +378,7 @@ func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload, logger 
 	defer func(responseContent io.ReadCloser) {
 		err := responseContent.Close()
 		if err != nil {
-			logger.Errorf("Failed to close response content: %s", err)
+			logger.Errorf("Failed to close response content: %+v", err)
 		}
 	}(responseContent)
 

@@ -6,25 +6,31 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"errors"
 	"fmt"
+	"github.com/go-playground/validator/v10"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/spf13/viper"
-	"strings"
 )
 
+/*
+ * These Viper key name suffix have to be consistent with mapstructure tags in the struct definition
+ */
 const (
-	RegionViperKeyNameSuffix         = "region"
+	NameViperKeyNameSuffix           = "name"
+	AuthTypeViperKeyNameSuffix       = "auth_type"
 	CompartmentIdViperKeyNameSuffix  = "compartment_id"
+	RegionViperKeyNameSuffix         = "region_override"
 	EnableOboTokenViperKeyNameSuffix = "enable_obo_token"
 	OboTokenViperKeyNameSuffix       = "obo_token"
 )
 
 type Config struct {
 	AnotherLogger  logging.Interface
-	AuthType       *principals.AuthenticationType `mapstructure:"auth_type"`
+	Name           string                         `mapstructure:"name"`
+	AuthType       *principals.AuthenticationType `mapstructure:"auth_type" validate:"required"`
 	CompartmentId  *string                        `mapstructure:"compartment_id"`
-	Region         string                         `mapstructure:"region"`
+	Region         string                         `mapstructure:"region_override"`
 	EnableOboToken bool                           `mapstructure:"enable_obo_token"`
-	OboToken       string                         `mapstructure:"obo_token"`
+	OboToken       string                         `mapstructure:"obo_token" validate:"required_if=EnableOboToken true"`
 }
 
 // Option represents a server configuration option.
@@ -55,32 +61,20 @@ func NewConfig(opts ...Option) (*Config, error) {
 }
 
 // WithViper attempts to resolve the configuration using Viper.
-func WithViper(v *viper.Viper, viperKeyNames []string) Option {
+func WithViper(v *viper.Viper) Option {
 	return func(c *Config) error {
-		// Set up config using viperKeyNames
-		for _, keyName := range viperKeyNames {
-			if strings.Contains(keyName, RegionViperKeyNameSuffix) {
-				c.Region = v.GetString(keyName)
-				continue
-			}
-			if strings.Contains(keyName, CompartmentIdViperKeyNameSuffix) {
-				c.CompartmentId = common.String(v.GetString(keyName))
-				continue
-			}
-
-			if strings.Contains(keyName, EnableOboTokenViperKeyNameSuffix) {
-				c.EnableOboToken = v.GetBool(keyName)
-				continue
-			}
-
-			if strings.Contains(keyName, OboTokenViperKeyNameSuffix) {
-				c.OboToken = v.GetString(keyName)
-				continue
-			}
-
+		prefix := v.GetString("viper_prefix")
+		if prefix != "" {
+			prefix = prefix + "."
 		}
 
-		if err := v.UnmarshalKey("auth_type", &c.AuthType); err != nil {
+		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyNameSuffix))
+		c.CompartmentId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, CompartmentIdViperKeyNameSuffix)))
+		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyNameSuffix))
+		c.EnableOboToken = v.GetBool(fmt.Sprintf("%s%s", prefix, EnableOboTokenViperKeyNameSuffix))
+		c.OboToken = v.GetString(fmt.Sprintf("%s%s", prefix, OboTokenViperKeyNameSuffix))
+
+		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyNameSuffix), &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
 		return nil
@@ -107,10 +101,7 @@ func WithAnotherLog(logger logging.Interface) Option {
 }
 
 func (c *Config) Validate() error {
-	if c.AuthType == nil {
-		return errors.New("missing config variable - no auth_type in casper config struct")
-	}
-
-	// TODO: Implement
-	return nil
+	// Validate by using go-playground validator
+	validate := validator.New()
+	return validate.Struct(c)
 }

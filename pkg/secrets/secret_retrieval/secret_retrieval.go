@@ -11,17 +11,17 @@ import (
 )
 
 type SecretRetrieval struct {
-	logger                logging.Interface
-	SecretsClient         *secrets.SecretsClient
-	SecretRetrievalConfig *SecretRetrievalConfig
+	logger        logging.Interface
+	SecretsClient *secrets.SecretsClient
+	Config        *SecretRetrievalConfig
 }
 
 func NewSecretRetrieval(config *SecretRetrievalConfig, e *env.Environment) (*SecretRetrieval, error) {
 	if config == nil {
-		return nil, fmt.Errorf("SecretRetrievalConfig is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("SecretRetrievalConfig is invalid: %+v", err)
+		return nil, fmt.Errorf("config is invalid: %+v", err)
 	}
 
 	configProvider, err := getConfigProvider(config, e)
@@ -35,9 +35,9 @@ func NewSecretRetrieval(config *SecretRetrievalConfig, e *env.Environment) (*Sec
 	}
 
 	return &SecretRetrieval{
-		logger:                config.AnotherLogger,
-		SecretRetrievalConfig: config,
-		SecretsClient:         client,
+		logger:        config.AnotherLogger,
+		Config:        config,
+		SecretsClient: client,
 	}, nil
 }
 

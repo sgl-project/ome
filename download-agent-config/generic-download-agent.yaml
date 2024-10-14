@@ -1,0 +1,32 @@
+auth_type: &default_auth_type "InstancePrincipal"
+model_name: "model-name"
+temp_model_store_path: "/opt/model/store/"
+enable_size_limit_check: true
+download_size_limit_gb: "650"
+number_of_threads_for_replication: 8
+
+source_object_store_uri:
+  bucket_name: "model-store"
+  prefix: "vendor-name/vendor-name/"
+  namespace: ""
+
+source_object_store_config:
+  name: "SOURCE"
+  auth_type: *default_auth_type
+  compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+  enable_obo_token: false
+  obo_token: ""
+  region_override: "us-chicago-1"
+
+target_object_store_uri:
+  bucket_name: "model-store"
+  prefix: "vendor-name/vendor-name/"
+  namespace: ""
+
+target_object_store_config:
+  name: "TARGET"
+  auth_type: *default_auth_type
+  compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+  enable_obo_token: false
+  obo_token: ""
+  region_override: ""

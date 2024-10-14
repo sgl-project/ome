@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "download-agent.fullname" . }}
+  labels:
+    {{- include "download-agent.labels" . | nindent 4 }}
+data:
+  MODE: "{{ .Values.containerEnv.mode }}"
+  MODEL_NAME: "{{ .Values.containerEnv.modelName }}"
+  SOURCE_MODEL_ENCRYPTED: "{{ .Values.containerEnv.sourceModelEncrypted }}"
+  AUTH_TYPE: "{{ .Values.containerEnv.authType }}"
+  MODEL_PATH_CONFIG_JSON: {{ .Values.containerEnv.modelPathConfigJson | quote }}
+  SOURCE_OBJECT_BUCKET_NAME: "{{ .Values.containerEnv.sourceObjectBucketName }}"
+  SOURCE_OBJECT_PREFIX: "{{ .Values.containerEnv.sourceObjectPrefix }}"
+  SOURCE_OBJECT_COMPARTMENT_ID: "{{ .Values.containerEnv.sourceObjectCompartmentId }}"
+  SOURCE_KEY_NAME: "{{ .Values.containerEnv.sourceKeyName }}"
+  SOURCE_KEY_SECRET_COMPARTMENT_ID: "{{ .Values.containerEnv.sourceKeySecretCompartmentId }}"
+  SOURCE_SECRET_NAME: "{{ .Values.containerEnv.sourceSecretName }}"
+  SOURCE_VAULT_ID: "{{ .Values.containerEnv.sourceVaultId }}"
+  SOURCE_VAULT_PREFIX: "{{ .Values.containerEnv.sourceVaultPrefix }}"
+  SOURCE_REGION_OVERRIDE: "{{ .Values.containerEnv.sourceRegionOverride }}"
+  SOURCE_KMS_CRYPTO_ENDPOINT: "{{ .Values.containerEnv.sourceKmsCryptoEndpoint }}"
+  SOURCE_KMS_MANAGEMENT_ENDPOINT: "{{ .Values.containerEnv.sourceKmsManagementEndpoint }}"
+  TARGET_OBJECT_BUCKET_NAME: "{{ .Values.containerEnv.targetObjectBucketName }}"
+  TARGET_OBJECT_PREFIX: "{{ .Values.containerEnv.targetObjectPrefix }}"
+  TARGET_OBJECT_COMPARTMENT_ID: "{{ .Values.containerEnv.targetObjectCompartmentId }}"
+  TARGET_KEY_SECRET_COMPARTMENT_ID: "{{ .Values.containerEnv.targetKeySecretCompartmentId }}"
+  TARGET_KEY_NAME: "{{ .Values.containerEnv.targetKeyName }}"
+  TARGET_ENABLE_KEY_DEFINED_TAG: "{{ .Values.containerEnv.targetEnableKeyDefinedTag }}"
+  TARGET_KEY_DEFINED_TAG_VALUE: "{{ .Values.containerEnv.targetKeyDefinedTagValue }}"
+  TARGET_SECRET_NAME: "{{ .Values.containerEnv.targetSecretName }}"
+  TARGET_VAULT_ID: "{{ .Values.containerEnv.targetVaultId }}"
+  TARGET_VAULT_PREFIX: "{{ .Values.containerEnv.targetVaultPrefix }}"
+  TARGET_KMS_CRYPTO_ENDPOINT: "{{ .Values.containerEnv.targetKmsCryptoEndpoint }}"
+  TARGET_KMS_MANAGEMENT_ENDPOINT: "{{ .Values.containerEnv.targetKmsManagementEndpoint }}"
+  REGION: "{{ .Values.containerEnv.region }}"

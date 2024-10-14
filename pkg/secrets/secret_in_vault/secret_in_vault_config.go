@@ -6,13 +6,24 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"errors"
 	"fmt"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
+)
+
+/*
+ * These Viper key name suffix have to be consistent with mapstructure tags in the struct definition
+ */
+const (
+	NameViperKeyNameSuffix     = "name"
+	RegionViperKeyNameSuffix   = "region_override"
+	AuthTypeViperKeyNameSuffix = "auth_type"
 )
 
 type SecretInVaultConfig struct {
 	AnotherLogger logging.Interface
-	AuthType      *principals.AuthenticationType `mapstructure:"auth_type"`
-	Region        string                         `mapstructure:"region"`
+	Name          string                         `mapstructure:"name"`
+	Region        string                         `mapstructure:"region_override"`
+	AuthType      *principals.AuthenticationType `mapstructure:"auth_type" validate:"required"`
 }
 
 // Option represents a server configuration option.
@@ -45,7 +56,14 @@ func NewSecretInVaultConfig(opts ...Option) (*SecretInVaultConfig, error) {
 // WithViper attempts to resolve the configuration using Viper.
 func WithViper(v *viper.Viper) Option {
 	return func(c *SecretInVaultConfig) error {
-		if err := v.UnmarshalKey("auth_type", &c.AuthType); err != nil {
+		prefix := v.GetString("viper_prefix")
+		if prefix != "" {
+			prefix = prefix + "."
+		}
+
+		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyNameSuffix))
+		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyNameSuffix))
+		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyNameSuffix), &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
 		return nil
@@ -72,8 +90,7 @@ func WithAnotherLog(logger logging.Interface) Option {
 }
 
 func (c *SecretInVaultConfig) Validate() error {
-	if c.AuthType == nil {
-		return errors.New("missing config variable - no auth_type in SecretInVaultConfig struct")
-	}
-	return nil
+	// Validate by using package validator
+	validate := validator.New()
+	return validate.Struct(c)
 }

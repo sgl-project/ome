@@ -13,7 +13,7 @@ import (
 type KmsManagement struct {
 	logger              logging.Interface
 	KmsManagementClient *keymanagement.KmsManagementClient
-	KmsManagementConfig *KmsConfig
+	Config              *KmsConfig
 }
 
 func NewKmsManagement(config *KmsConfig, e *env.Environment) (*KmsManagement, error) {
@@ -36,7 +36,7 @@ func NewKmsManagement(config *KmsConfig, e *env.Environment) (*KmsManagement, er
 
 	return &KmsManagement{
 		logger:              config.AnotherLogger,
-		KmsManagementConfig: config,
+		Config:              config,
 		KmsManagementClient: client,
 	}, nil
 }

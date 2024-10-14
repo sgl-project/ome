@@ -8,9 +8,9 @@ import (
 	"go.uber.org/fx"
 )
 
-func ProvideSecretRetrievalConfig(v *viper.Viper, e *env.Environment, logger logging.Interface, viperKeyNames []string) (*SecretRetrievalConfig, error) {
+func ProvideSecretRetrievalConfig(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretRetrievalConfig, error) {
 	secretRetrievalConfig, err := NewSecretRetrievalConfig(
-		WithViper(v, viperKeyNames),
+		WithViper(v),
 		WithEnv(e),
 		WithAnotherLog(logger),
 	)
@@ -20,8 +20,8 @@ func ProvideSecretRetrievalConfig(v *viper.Viper, e *env.Environment, logger log
 	return secretRetrievalConfig, nil
 }
 
-func ProvideSecretRetrieval(v *viper.Viper, e *env.Environment, logger logging.Interface, viperKeyNames []string) (*SecretRetrieval, error) {
-	secretRetrievalConfig, err := ProvideSecretRetrievalConfig(v, e, logger, viperKeyNames)
+func ProvideSecretRetrieval(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretRetrieval, error) {
+	secretRetrievalConfig, err := ProvideSecretRetrievalConfig(v, e, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing SecretRetrievalConfig: %+v", err)
 	}
@@ -36,3 +36,38 @@ func ProvideSecretRetrieval(v *viper.Viper, e *env.Environment, logger logging.I
 var SecretRetrievalModule = fx.Provide(
 	ProvideSecretRetrieval,
 )
+
+/*
+ * Below is a way to inject a list of SecretRetrieval using a list of Configs leveraging fx Value Groups feature
+ * Regarding how to use it, you can refer to the code snippet under:
+ * ome/cmd/download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
+ */
+type appParams struct {
+	fx.In
+
+	// this is an example on how to inject logger
+	// with a specified name (in case you have many).
+	// See https://uber-go.github.io/fx/get-started/another-handler.html
+	AnotherLogger logging.Interface `name:"another_log"`
+
+	/*
+	 * Use Value Groups feature from fx to inject a list of Configs
+	 * https://pkg.go.dev/go.uber.org/fx#hdr-Value_Groups
+	 */
+	Configs []*SecretRetrievalConfig `group:"secretRetrievalConfigs"`
+}
+
+func ProvideListOfSecretRetrievalWithAppParams(e *env.Environment, params appParams) ([]*SecretRetrieval, error) {
+	secretRetrievalList := make([]*SecretRetrieval, 0)
+	for _, config := range params.Configs {
+		if config == nil {
+			continue
+		}
+		secretRetrieval, err := NewSecretRetrieval(config, e)
+		if err != nil {
+			return secretRetrievalList, fmt.Errorf("error initializing a list of SecretRetrieval using Config: %+v: %+v", config, err)
+		}
+		secretRetrievalList = append(secretRetrievalList, secretRetrieval)
+	}
+	return secretRetrievalList, nil
+}

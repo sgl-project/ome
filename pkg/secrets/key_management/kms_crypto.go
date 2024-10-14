@@ -13,7 +13,7 @@ import (
 type KmsCrypto struct {
 	logger          logging.Interface
 	KmsCryptoClient *keymanagement.KmsCryptoClient
-	KmsCryptoConfig *KmsConfig
+	Config          *KmsConfig
 }
 
 func NewKmsCrypto(config *KmsConfig, e *env.Environment) (*KmsCrypto, error) {
@@ -35,7 +35,7 @@ func NewKmsCrypto(config *KmsConfig, e *env.Environment) (*KmsCrypto, error) {
 	}
 
 	return &KmsCrypto{
-		KmsCryptoConfig: config,
+		Config:          config,
 		KmsCryptoClient: client,
 	}, nil
 }
