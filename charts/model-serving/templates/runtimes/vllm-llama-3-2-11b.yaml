@@ -39,7 +39,7 @@ spec:
       image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.llama3_2_image.tag }}
       ports:
         - containerPort: 8080
-          name: http
+          name: http1
           protocol: TCP
       command:
         - /bin/bash

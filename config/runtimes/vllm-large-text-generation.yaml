@@ -50,7 +50,7 @@ spec:
       image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
       ports:
         - containerPort: 8080
-          name: http
+          name: http1
           protocol: TCP
       command:
         - /bin/bash
