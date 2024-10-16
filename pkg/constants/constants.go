@@ -441,6 +441,29 @@ var (
 	ObjectStorageUrlPrefix    = "oci://"
 )
 
+// Default training job constants
+const (
+	TrainingJobNamePrefix = "ft-"
+)
+
+type TrainingFailedReason string
+
+const (
+	TrainerReconcileFailed          TrainingFailedReason = "TrainerReconcileFailed"
+	ModelUpdateFailed               TrainingFailedReason = "ModelUpdateFailed"
+	TrainingJobStatusUpdateFailed   TrainingFailedReason = "TrainingJobStatusUpdateFailed"
+	ModelCreationOrFetchFailed      TrainingFailedReason = "ModelCreationOrFetchFailed"
+	K8SJobFetchFailed               TrainingFailedReason = "K8SJobFetchFailed"
+	K8SJobCreationTimeout           TrainingFailedReason = "K8SJobCreationTimeout"
+	K8SJobUnexpectedAdmissionError  TrainingFailedReason = "K8SJobUnexpectedAdmissionError"
+	K8SJobFailed                    TrainingFailedReason = "K8SJobFailed"
+	BadTrainingData                 TrainingFailedReason = "BadTrainingData"
+	K8SJobPodFetchFailed            TrainingFailedReason = "K8SJobPodFetchFailed"
+	K8SJobSchedulingFailed          TrainingFailedReason = "K8SJobSchedulingFailed"
+	K8SJobStartingTimeout           TrainingFailedReason = "K8SJobStartingTimeout"
+	TrainingContainerStartingFailed TrainingFailedReason = "TrainingContainerStartingFailed"
+)
+
 func (c CheckResultType) String() string {
 	switch c {
 	case CheckResultCreate:

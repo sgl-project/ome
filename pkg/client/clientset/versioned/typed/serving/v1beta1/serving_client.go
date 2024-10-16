@@ -21,6 +21,7 @@ type OmeV1beta1Interface interface {
 	FineTunedWeightsGetter
 	InferenceServicesGetter
 	ServingRuntimesGetter
+	TrainingJobsGetter
 	TrainingRuntimesGetter
 }
 
@@ -63,6 +64,10 @@ func (c *OmeV1beta1Client) InferenceServices(namespace string) InferenceServiceI
 
 func (c *OmeV1beta1Client) ServingRuntimes(namespace string) ServingRuntimeInterface {
 	return newServingRuntimes(c, namespace)
+}
+
+func (c *OmeV1beta1Client) TrainingJobs(namespace string) TrainingJobInterface {
+	return newTrainingJobs(c, namespace)
 }
 
 func (c *OmeV1beta1Client) TrainingRuntimes(namespace string) TrainingRuntimeInterface {

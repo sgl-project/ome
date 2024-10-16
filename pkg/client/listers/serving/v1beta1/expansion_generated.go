@@ -54,6 +54,14 @@ type ServingRuntimeListerExpansion interface{}
 // ServingRuntimeNamespaceLister.
 type ServingRuntimeNamespaceListerExpansion interface{}
 
+// TrainingJobListerExpansion allows custom methods to be added to
+// TrainingJobLister.
+type TrainingJobListerExpansion interface{}
+
+// TrainingJobNamespaceListerExpansion allows custom methods to be added to
+// TrainingJobNamespaceLister.
+type TrainingJobNamespaceListerExpansion interface{}
+
 // TrainingRuntimeListerExpansion allows custom methods to be added to
 // TrainingRuntimeLister.
 type TrainingRuntimeListerExpansion interface{}

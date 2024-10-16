@@ -26,6 +26,8 @@ type Interface interface {
 	InferenceServices() InferenceServiceInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
 	ServingRuntimes() ServingRuntimeInformer
+	// TrainingJobs returns a TrainingJobInformer.
+	TrainingJobs() TrainingJobInformer
 	// TrainingRuntimes returns a TrainingRuntimeInformer.
 	TrainingRuntimes() TrainingRuntimeInformer
 }
@@ -84,6 +86,11 @@ func (v *version) InferenceServices() InferenceServiceInformer {
 // ServingRuntimes returns a ServingRuntimeInformer.
 func (v *version) ServingRuntimes() ServingRuntimeInformer {
 	return &servingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// TrainingJobs returns a TrainingJobInformer.
+func (v *version) TrainingJobs() TrainingJobInformer {
+	return &trainingJobInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // TrainingRuntimes returns a TrainingRuntimeInformer.

@@ -48,6 +48,10 @@ func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntim
 	return &FakeServingRuntimes{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) TrainingJobs(namespace string) v1beta1.TrainingJobInterface {
+	return &FakeTrainingJobs{c, namespace}
+}
+
 func (c *FakeOmeV1beta1) TrainingRuntimes(namespace string) v1beta1.TrainingRuntimeInterface {
 	return &FakeTrainingRuntimes{c, namespace}
 }

@@ -358,12 +358,8 @@
           }
         },
         "hyperparameters": {
-          "description": "Hyperparameters for cohere fine-tuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.Hyperparameter"
-          }
+          "description": "Hyperparameters for training job",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "outputLocation": {
           "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
@@ -1168,7 +1164,8 @@
         },
         "storage": {
           "description": "Storage configuration for the fine-tuned weight",
-          "$ref": "#/definitions/v1beta1.StorageSpec"
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
         },
         "trainingJobRef": {
           "description": "TrainingJobID is the ID of the training job that produced this weight",
@@ -1181,23 +1178,6 @@
         },
         "version": {
           "type": "string"
-        }
-      }
-    },
-    "v1beta1.Hyperparameter": {
-      "description": "Hyperparameter struct",
-      "type": "object",
-      "required": [
-        "key",
-        "value"
-      ],
-      "properties": {
-        "key": {
-          "type": "string",
-          "default": ""
-        },
-        "value": {
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         }
       }
     },
@@ -1461,12 +1441,8 @@
           }
         },
         "hyperparameters": {
-          "description": "Hyperparameters for cohere fine-tuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.Hyperparameter"
-          }
+          "description": "Hyperparameters for training job",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "mainContainer": {
           "description": "MainContainer specifies name of the main container which executes the MPI code.",
@@ -2031,12 +2007,8 @@
           }
         },
         "hyperparameters": {
-          "description": "Hyperparameters for cohere fine-tuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.Hyperparameter"
-          }
+          "description": "Hyperparameters for training job",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "outputLocation": {
           "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
@@ -2798,12 +2770,8 @@
           "$ref": "#/definitions/v1beta1.ElasticPolicy"
         },
         "hyperparameters": {
-          "description": "Hyperparameters for cohere fine-tuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.Hyperparameter"
-          }
+          "description": "Hyperparameters for training job",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "nprocPerNode": {
           "description": "Number of workers per node; supported values: [auto, cpu, gpu, int]. For more, https://github.com/pytorch/pytorch/blob/26f7f470df64d90e092081e39507e4ac751f55d6/torch/distributed/run.py#L629-L658. Defaults to auto.",
@@ -3315,12 +3283,8 @@
           "type": "boolean"
         },
         "hyperparameters": {
-          "description": "Hyperparameters for cohere fine-tuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.Hyperparameter"
-          }
+          "description": "Hyperparameters for training job",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "outputLocation": {
           "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
@@ -3370,6 +3334,7 @@
       }
     },
     "v1beta1.TrainingJob": {
+      "description": "TrainingJob is the Schema for the TrainingJobs API",
       "type": "object",
       "properties": {
         "apiVersion": {
@@ -3394,6 +3359,34 @@
         }
       }
     },
+    "v1beta1.TrainingJobList": {
+      "description": "TrainingJobList contains a list of TrainingJob",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.TrainingJob"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
     "v1beta1.TrainingJobSpec": {
       "description": "TrainingJobSpec defines the base job spec which various training job specs implement. It defines the desired state of a training job",
       "type": "object",
@@ -3413,12 +3406,8 @@
           }
         },
         "hyperparameters": {
-          "description": "Hyperparameters for cohere fine-tuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1beta1.Hyperparameter"
-          }
+          "description": "Hyperparameters for training job",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "outputLocation": {
           "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
@@ -3445,6 +3434,11 @@
         "details": {
           "description": "Represents any details about the training job",
           "type": "string"
+        },
+        "finetunedWeightRef": {
+          "description": "FinetunedWeight reference to the finetuned model being produced",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.ObjectReference"
         },
         "jobReplicaStatus": {
           "description": "JobReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",

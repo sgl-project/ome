@@ -19,7 +19,6 @@ API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,ServingRuntimePodSpec,Tolerations
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,ServingRuntimePodSpec,Volumes
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,ServingRuntimeSpec,ProtocolVersions
-API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,TrainingJobSpec,Hyperparameters
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,TrainingJobStatus,Conditions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,TrainingRuntimeSpec,SupportedTrainingFrameworks
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,ElasticPolicy,RDZVID

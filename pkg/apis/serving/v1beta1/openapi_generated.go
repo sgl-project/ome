@@ -43,7 +43,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FineTunedWeight":                 schema_pkg_apis_serving_v1beta1_FineTunedWeight(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FineTunedWeightList":             schema_pkg_apis_serving_v1beta1_FineTunedWeightList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FineTunedWeightSpec":             schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter":                  schema_pkg_apis_serving_v1beta1_Hyperparameter(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceService":                schema_pkg_apis_serving_v1beta1_InferenceService(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceList":            schema_pkg_apis_serving_v1beta1_InferenceServiceList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceSpec":            schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref),
@@ -88,6 +87,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TensorFlowTrainingJobSpec":       schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework":               schema_pkg_apis_serving_v1beta1_TrainingFramework(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingJob":                     schema_pkg_apis_serving_v1beta1_TrainingJob(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingJobList":                 schema_pkg_apis_serving_v1beta1_TrainingJobList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingJobSpec":                 schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingJobStatus":               schema_pkg_apis_serving_v1beta1_TrainingJobStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingRuntime":                 schema_pkg_apis_serving_v1beta1_TrainingRuntime(ref),
@@ -708,16 +708,8 @@ func schema_pkg_apis_serving_v1beta1_CohereTrainingJobSpec(ref common.ReferenceC
 					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for cohere fine-tuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter"),
-									},
-								},
-							},
+							Description: "Hyperparameters for training job",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"datasetsSpecs": {
@@ -766,7 +758,7 @@ func schema_pkg_apis_serving_v1beta1_CohereTrainingJobSpec(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -2201,7 +2193,8 @@ func schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref common.ReferenceCal
 					"storage": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Storage configuration for the fine-tuned weight",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.StorageSpec"),
+							Default:     map[string]interface{}{},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
 						},
 					},
 					"trainingJobRef": {
@@ -2215,35 +2208,7 @@ func schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ObjectReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
-	}
-}
-
-func schema_pkg_apis_serving_v1beta1_Hyperparameter(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "Hyperparameter struct",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"key": {
-						SchemaProps: spec.SchemaProps{
-							Default: "",
-							Type:    []string{"string"},
-							Format:  "",
-						},
-					},
-					"value": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
-						},
-					},
-				},
-				Required: []string{"key", "value"},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ObjectReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -2691,16 +2656,8 @@ func schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref common.ReferenceCall
 					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for cohere fine-tuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter"),
-									},
-								},
-							},
+							Description: "Hyperparameters for training job",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"datasetsSpecs": {
@@ -2777,7 +2734,7 @@ func schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -2877,6 +2834,7 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3247,6 +3205,7 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -3659,16 +3618,8 @@ func schema_pkg_apis_serving_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCal
 					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for cohere fine-tuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter"),
-									},
-								},
-							},
+							Description: "Hyperparameters for training job",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"datasetsSpecs": {
@@ -3717,7 +3668,7 @@ func schema_pkg_apis_serving_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -4455,6 +4406,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5025,16 +4977,8 @@ func schema_pkg_apis_serving_v1beta1_PyTorchTrainingJobSpec(ref common.Reference
 					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for cohere fine-tuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter"),
-									},
-								},
-							},
+							Description: "Hyperparameters for training job",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"datasetsSpecs": {
@@ -5103,7 +5047,7 @@ func schema_pkg_apis_serving_v1beta1_PyTorchTrainingJobSpec(ref common.Reference
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ElasticPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ElasticPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -5924,6 +5868,7 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5973,16 +5918,8 @@ func schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref common.Refere
 					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for cohere fine-tuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter"),
-									},
-								},
-							},
+							Description: "Hyperparameters for training job",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"datasetsSpecs": {
@@ -6053,7 +5990,7 @@ func schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref common.Refere
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -6104,7 +6041,8 @@ func schema_pkg_apis_serving_v1beta1_TrainingJob(ref common.ReferenceCallback) c
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "TrainingJob is the Schema for the TrainingJobs API",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -6146,6 +6084,55 @@ func schema_pkg_apis_serving_v1beta1_TrainingJob(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_pkg_apis_serving_v1beta1_TrainingJobList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TrainingJobList contains a list of TrainingJob",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingJob"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingJob", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
 func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6161,16 +6148,8 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallbac
 					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for cohere fine-tuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter"),
-									},
-								},
-							},
+							Description: "Hyperparameters for training job",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
 					"datasetsSpecs": {
@@ -6205,7 +6184,7 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Hyperparameter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -6268,11 +6247,18 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobStatus(ref common.ReferenceCallb
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
+					"finetunedWeightRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FinetunedWeight reference to the finetuned model being produced",
+							Default:     map[string]interface{}{},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ObjectReference"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.JobCondition", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.JobCondition", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ObjectReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 

@@ -20,4 +20,6 @@ type InferenceServiceExpansion interface{}
 
 type ServingRuntimeExpansion interface{}
 
+type TrainingJobExpansion interface{}
+
 type TrainingRuntimeExpansion interface{}

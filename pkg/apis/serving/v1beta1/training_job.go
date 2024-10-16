@@ -2,9 +2,26 @@ package v1beta1
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"context"
+	goerrors "github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// TrainingJobImplementation defines common functions for all training jobs, Peft, pytorch, etc.
+// +kubebuilder:object:generate=false
+type TrainingJobImplementation interface {
+}
+
+// TrainingJob is the Schema for the TrainingJobs API
+// +k8s:openapi-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +genclient
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 type TrainingJob struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -19,8 +36,8 @@ type TrainingJobSpec struct {
 	// +required Specific ClusterBaseModel/BaseModel name to use for hosting the model.
 	BaseModel *string `json:"baseModel,omitempty"`
 
-	// Hyperparameters for cohere fine-tuning
-	Hyperparameters []Hyperparameter `json:"hyperparameters,omitempty"`
+	// Hyperparameters for training job
+	Hyperparameters runtime.RawExtension `json:"hyperparameters,omitempty"`
 
 	// Data for training and validation
 	Datasets map[constants.DatasetType]*Storage `json:"datasetsSpecs,omitempty"`
@@ -58,4 +75,47 @@ type TrainingJobStatus struct {
 	// be set in happens-before order across separate operations.
 	// It is represented in RFC3339 form and is in UTC.
 	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
+
+	// FinetunedWeight reference to the finetuned model being produced
+	FinetunedWeightRef ObjectReference `json:"finetunedWeightRef,omitempty"`
+}
+
+// TrainingJobList contains a list of TrainingJob
+// +k8s:openapi-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
+type TrainingJobList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []TrainingJob `json:"items"`
+}
+
+func (tjs *TrainingJobStatus) GetLatestTrainingJobConditionType() JobConditionType {
+	return tjs.Conditions[len(tjs.Conditions)-1].Type
+}
+
+func (tjs *TrainingJobStatus) IsTrainingJobConditionEmpty() bool {
+	return len(tjs.Conditions) == 0
+}
+
+func (tjs *TrainingJobStatus) UpdateJobStatus(conditionType JobConditionType, details string) {
+	jobCondition := JobCondition{
+		Type:   conditionType,
+		Status: v1.ConditionTrue,
+	}
+	tjs.Conditions = append(tjs.Conditions, jobCondition)
+	tjs.Details = details
+}
+
+// GetBaseModel Get the base model from the given model name.
+func (tjs *TrainingJobSpec) GetBaseModel(cl client.Client, name string, namespace string) (*BaseModelSpec, error) {
+	baseModel := &BaseModel{}
+	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
+	if err == nil {
+		return &baseModel.Spec, nil
+	} else if !errors.IsNotFound(err) {
+		return nil, err
+	}
+
+	return nil, goerrors.New("No BaseModel with the name: " + name)
 }
