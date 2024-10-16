@@ -19,7 +19,7 @@ spec:
       {{- end }}
       baseModel: llama-3-1-405b-instruct-fp8
       protocolVersion: openAI
-    minReplicas: {{ .Values.llama_3_1_405b_instruct.maxReplicas}}
+    minReplicas: {{ .Values.llama_3_1_405b_instruct.minReplicas}}
     maxReplicas: {{ .Values.llama_3_1_405b_instruct.maxReplicas}}
     {{- with .Values.llama_3_1_405b_instruct.affinity }}
     affinity: {{ toYaml . | nindent 6 }}

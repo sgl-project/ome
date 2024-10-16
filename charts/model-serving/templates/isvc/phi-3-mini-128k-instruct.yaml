@@ -13,7 +13,7 @@ spec:
       runtime: vllm-vision
       baseModel: phi-3-mini-128k-instruct
       protocolVersion: openAI
-    minReplicas: {{ .Values.phi_3_mini_128k_instruct.maxReplicas}}
+    minReplicas: {{ .Values.phi_3_mini_128k_instruct.minReplicas}}
     maxReplicas: {{ .Values.phi_3_mini_128k_instruct.maxReplicas}}
     {{- with .Values.phi_3_mini_128k_instruct.affinity }}
     affinity: {{ toYaml . | nindent 6 }}

@@ -15,7 +15,7 @@ spec:
       runtime: vllm-llama-3-2-90b-fp8-dynamic
       baseModel: llama-3-2-90b-vision-instruct-fp8-dynamic
       protocolVersion: openAI
-    minReplicas: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.maxReplicas}}
+    minReplicas: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.minReplicas}}
     maxReplicas: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.maxReplicas}}
     {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.affinity }}
     affinity: {{ toYaml . | nindent 6 }}

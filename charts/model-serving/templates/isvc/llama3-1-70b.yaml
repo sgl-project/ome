@@ -13,7 +13,7 @@ spec:
       runtime: vllm-medium-text-generation
       baseModel: llama-3-1-70b-instruct
       protocolVersion: openAI
-    minReplicas: {{ .Values.llama_3_1_70b_instruct.maxReplicas}}
+    minReplicas: {{ .Values.llama_3_1_70b_instruct.minReplicas}}
     maxReplicas: {{ .Values.llama_3_1_70b_instruct.maxReplicas}}
     {{- with .Values.llama_3_1_70b_instruct.affinity }}
     affinity: {{ toYaml . | nindent 6 }}
