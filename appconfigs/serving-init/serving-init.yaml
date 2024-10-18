@@ -1,0 +1,41 @@
+auth_type: &default_auth_type "InstancePrincipal"
+
+model_store_directory: "/mnt/model-storage"
+local_store_directory: "/tmp/model-storage"
+
+disable_model_decryption: false
+
+node_shape_mapping_path: "/tmp/configmap/node_shape_mapping.json"
+
+is_tensorrt_model: false
+
+tensorrt_config:
+  tensorrt_llm_version: "v0.0.1"
+  node_shape_short: "SPARTA-300G"
+  num_of_gpu: 16
+
+key_config:
+  key_name: "test-key"
+  compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+  key_algorithm: "AES"
+  key_length: 32
+  key_protection_mode: "HSM"
+  key_lifecycle: "ENABLED"
+  enable_key_defined_tag: false
+  key_defined_tag:
+    defined_tag_namespace: "GenaiModelCrypto"
+    defined_tag_key: "model_key_name"
+
+secret_config:
+  vault_id: "ocid1.vault.oc1.us-chicago-1.hvsmlw23aaf7a.abxxeljtqjzeo2ou7o3p5xm2brc65oms2ax5jh7udtr3n6gs6bmysbybzreq"
+  secret_version_config:
+    secret_version_stage: "CURRENT"
+
+kms_config:
+  auth_type: *default_auth_type
+  vault_prefix: ""
+  kms_crypto_endpoint: ""
+  kms_management_endpoint: ""
+
+secret_retrieval_config:
+  auth_type: *default_auth_type

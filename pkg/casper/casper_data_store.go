@@ -24,7 +24,7 @@ import (
 type CasperDataStore struct {
 	logger logging.Interface
 	Config *Config
-	Client *objectstorage.ObjectStorageClient
+	Client *objectstorage.ObjectStorageClient `validate:"required"`
 }
 
 func NewCasperDataStore(config *Config, e *env.Environment) (*CasperDataStore, error) {

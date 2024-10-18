@@ -2,7 +2,7 @@ package casper
 
 type ObjectURI struct {
 	Namespace  string `mapstructure:"namespace" json:"namespace"`
-	BucketName string `mapstructure:"bucket_name" json:"bucket_name"`
+	BucketName string `mapstructure:"bucket_name" json:"bucket_name" validate:"required"`
 	ObjectName string `mapstructure:"object_name" json:"object_name"`
 	Prefix     string `mapstructure:"prefix" json:"prefix"`
 }

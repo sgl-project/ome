@@ -13,13 +13,14 @@ require (
 	github.com/onsi/gomega v1.30.0
 	github.com/oracle/oci-go-sdk v24.3.0+incompatible
 	github.com/oracle/oci-go-sdk/v65 v65.71.0
+	github.com/otiai10/copy v1.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.17.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
 	github.com/ray-project/kuberay/ray-operator v1.1.1
 	github.com/satori/go.uuid v1.2.0
-	github.com/sirupsen/logrus v1.9.1
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5

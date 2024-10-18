@@ -1,0 +1,20 @@
+model_download_directory: "/mnt/finetuned/download"
+model_weight_directory: "/opt/ml/tfew"
+
+finetuning_strategy: "tfew"
+
+is_ft_weights_merged: false
+
+model_format: "fastertransformer"
+
+object_store_config:
+  auth_type: "InstancePrincipal"
+  enable_obo_token: false
+  obo_token: ""
+  compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+
+ft_weight_object_store_uri:
+  namespace: "idqj093njucb"
+  bucket_name: "partner-models"
+  object_name: "finetuned_weight_placeholder"
+

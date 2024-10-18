@@ -11,16 +11,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-/*
- * These Viper key name suffix have to be consistent with mapstructure tags in the struct definition
- */
 const (
-	NameViperKeyNameSuffix           = "name"
-	AuthTypeViperKeyNameSuffix       = "auth_type"
-	CompartmentIdViperKeyNameSuffix  = "compartment_id"
-	RegionViperKeyNameSuffix         = "region_override"
-	EnableOboTokenViperKeyNameSuffix = "enable_obo_token"
-	OboTokenViperKeyNameSuffix       = "obo_token"
+	CasperConfigViperKeyNameKey = "casper_config_viper_prefix"
+
+	/*
+	 * These Viper key name have to be consistent with mapstructure tags in the struct definition
+	 */
+	NameViperKeyName           = "name"
+	AuthTypeViperKeyName       = "auth_type"
+	CompartmentIdViperKeyName  = "compartment_id"
+	RegionViperKeyName         = "region_override"
+	EnableOboTokenViperKeyName = "enable_obo_token"
+	OboTokenViperKeyName       = "obo_token"
 )
 
 type Config struct {
@@ -63,18 +65,18 @@ func NewConfig(opts ...Option) (*Config, error) {
 // WithViper attempts to resolve the configuration using Viper.
 func WithViper(v *viper.Viper) Option {
 	return func(c *Config) error {
-		prefix := v.GetString("viper_prefix")
+		prefix := v.GetString(CasperConfigViperKeyNameKey)
 		if prefix != "" {
 			prefix = prefix + "."
 		}
 
-		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyNameSuffix))
-		c.CompartmentId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, CompartmentIdViperKeyNameSuffix)))
-		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyNameSuffix))
-		c.EnableOboToken = v.GetBool(fmt.Sprintf("%s%s", prefix, EnableOboTokenViperKeyNameSuffix))
-		c.OboToken = v.GetString(fmt.Sprintf("%s%s", prefix, OboTokenViperKeyNameSuffix))
+		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyName))
+		c.CompartmentId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, CompartmentIdViperKeyName)))
+		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyName))
+		c.EnableOboToken = v.GetBool(fmt.Sprintf("%s%s", prefix, EnableOboTokenViperKeyName))
+		c.OboToken = v.GetString(fmt.Sprintf("%s%s", prefix, OboTokenViperKeyName))
 
-		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyNameSuffix), &c.AuthType); err != nil {
+		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyName), &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
 		return nil

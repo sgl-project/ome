@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
+	secretinvault "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/secret_in_vault"
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -10,14 +12,19 @@ import (
 	"strings"
 )
 
+const (
+	TargetSecretInVaultConfigViperKeyName = "target_secret_in_vault_config"
+	CasperConfigViperKeyName              = "object_store_config"
+)
+
 func cohereConfigProvider(cli *cobra.Command) fx.Option {
 	return fx.Provide(func() (*viper.Viper, error) {
 		v := viper.GetViper()
 
 		v.SetDefault("app_name", appName)
-		v.SetDefault("server_name", appName)
 		v.SetDefault("vendor", "cohere")
 		v.SetDefault("temp_model_store_path", "/opt/model/store/")
+		v.SetDefault(secretinvault.SecretInVaultConfigViperKeyNameKey, TargetSecretInVaultConfigViperKeyName)
 
 		v.SetEnvPrefix(appName)
 		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -86,9 +93,8 @@ func hfConfigProvider(cli *cobra.Command) fx.Option {
 		v := viper.GetViper()
 
 		v.SetDefault("app_name", appName)
-		v.SetDefault("server_name", appName)
 		v.SetDefault("vendor", "hf")
-		v.SetDefault("viper_prefix", "object_store_config")
+		v.SetDefault(casper.CasperConfigViperKeyNameKey, CasperConfigViperKeyName)
 
 		v.SetEnvPrefix(appName)
 		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -102,9 +108,9 @@ func hfConfigProvider(cli *cobra.Command) fx.Option {
 		v.BindEnv("object_store_uri.bucket_name", "OBJECT_BUCKET_NAME")
 		v.BindEnv("object_store_uri.namespace", "OBJECT_NAMESPACE")
 
-		v.BindEnv("object_store_config.auth_type", "AUTH_TYPE")
-		v.BindEnv("object_store_config.compartment_id", "OBJECT_COMPARTMENT_ID")
-		v.BindEnv("object_store_config.region_override", "REGION_OVERRIDE")
+		v.BindEnv(fmt.Sprintf("%s.%s", CasperConfigViperKeyName, casper.AuthTypeViperKeyName), "AUTH_TYPE")
+		v.BindEnv(fmt.Sprintf("%s.%s", CasperConfigViperKeyName, casper.CompartmentIdViperKeyName), "OBJECT_COMPARTMENT_ID")
+		v.BindEnv(fmt.Sprintf("%s.%s", CasperConfigViperKeyName, casper.RegionViperKeyName), "REGION_OVERRIDE")
 
 		if err := v.BindPFlag("debug", cli.Flags().Lookup("debug")); err != nil {
 			panic(err)
@@ -127,7 +133,6 @@ func genericConfigProvider(cli *cobra.Command) fx.Option {
 		v := viper.GetViper()
 
 		v.SetDefault("app_name", appName)
-		v.SetDefault("server_name", appName)
 		v.SetDefault("vendor", "generic")
 		v.SetDefault("temp_model_store_path", "/opt/model/store/")
 		v.SetEnvPrefix(appName)

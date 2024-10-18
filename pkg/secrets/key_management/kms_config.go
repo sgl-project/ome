@@ -12,16 +12,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-/*
- * These Viper key name suffix have to be consistent with mapstructure tags in the struct definition
- */
 const (
-	NameViperKeyNameSuffix                  = "name"
-	AuthTypeViperKeyNameSuffix              = "auth_type"
-	VaultPrefixViperKeyNameSuffix           = "vault_prefix"
-	VaultIdViperKeyNameSuffix               = "vault_id"
-	KmsCryptoEndpointViperKeyNameSuffix     = "kms_crypto_endpoint"
-	KmsManagementEndpointViperKeyNameSuffix = "kms_management_endpoint"
+	KmsConfigViperKeyNameKey = "kms_config_viper_prefix"
+
+	/*
+	 * These Viper key name have to be consistent with mapstructure tags in the struct definition
+	 */
+	NameViperKeyName                  = "name"
+	AuthTypeViperKeyName              = "auth_type"
+	VaultPrefixViperKeyName           = "vault_prefix"
+	VaultIdViperKeyName               = "vault_id"
+	KmsCryptoEndpointViperKeyName     = "kms_crypto_endpoint"
+	KmsManagementEndpointViperKeyName = "kms_management_endpoint"
 )
 
 type KmsConfig struct {
@@ -64,18 +66,18 @@ func NewKmsConfig(opts ...Option) (*KmsConfig, error) {
 // WithViper attempts to resolve the configuration using Viper.
 func WithViper(v *viper.Viper) Option {
 	return func(c *KmsConfig) error {
-		prefix := v.GetString("viper_prefix")
+		prefix := v.GetString(KmsConfigViperKeyNameKey)
 		if prefix != "" {
 			prefix = prefix + "."
 		}
 
-		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyNameSuffix))
-		c.VaultId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, VaultIdViperKeyNameSuffix)))
-		c.VaultPrefix = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, VaultPrefixViperKeyNameSuffix)))
-		c.KmsCryptoEndpoint = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, KmsCryptoEndpointViperKeyNameSuffix)))
-		c.KmsManagementEndpoint = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, KmsManagementEndpointViperKeyNameSuffix)))
+		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyName))
+		c.VaultId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, VaultIdViperKeyName)))
+		c.VaultPrefix = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, VaultPrefixViperKeyName)))
+		c.KmsCryptoEndpoint = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, KmsCryptoEndpointViperKeyName)))
+		c.KmsManagementEndpoint = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, KmsManagementEndpointViperKeyName)))
 
-		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyNameSuffix), &c.AuthType); err != nil {
+		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyName), &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
 

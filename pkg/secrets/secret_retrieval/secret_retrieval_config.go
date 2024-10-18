@@ -10,13 +10,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-/*
- * These Viper key name suffix have to be consistent with mapstructure tags in the struct definition
- */
 const (
-	NameViperKeyNameSuffix     = "name"
-	RegionViperKeyNameSuffix   = "region_override"
-	AuthTypeViperKeyNameSuffix = "auth_type"
+	SecretRetrievalConfigViperKeyNameKey = "secret_retrieval_config_viper_prefix"
+
+	/*
+	 * These Viper key name have to be consistent with mapstructure tags in the struct definition
+	 */
+	NameViperKeyName     = "name"
+	RegionViperKeyName   = "region_override"
+	AuthTypeViperKeyName = "auth_type"
 )
 
 type SecretRetrievalConfig struct {
@@ -56,14 +58,14 @@ func NewSecretRetrievalConfig(opts ...Option) (*SecretRetrievalConfig, error) {
 // WithViper attempts to resolve the configuration using Viper.
 func WithViper(v *viper.Viper) Option {
 	return func(c *SecretRetrievalConfig) error {
-		prefix := v.GetString("viper_prefix")
+		prefix := v.GetString(SecretRetrievalConfigViperKeyNameKey)
 		if prefix != "" {
 			prefix = prefix + "."
 		}
 
-		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyNameSuffix))
-		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyNameSuffix))
-		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyNameSuffix), &c.AuthType); err != nil {
+		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyName))
+		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyName))
+		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyName), &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
 		return nil
