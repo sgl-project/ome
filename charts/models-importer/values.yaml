@@ -64,3 +64,6 @@ mixtral-8x7b-instruct-v0-1-chat:
 e5-mistral-7b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+deberta-v3-base-prompt-injection-v2:
+  enabled: false

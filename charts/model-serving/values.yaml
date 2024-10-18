@@ -126,3 +126,10 @@ llama_3_2_11b_vision_instruct:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag
 
+deberta_v3_base_prompt_injection_v2:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  image:
+    repository: fra.ocir.io/idqj093njucb/genai-prompt-injection-protection
+    tag: v0.1-24-release
