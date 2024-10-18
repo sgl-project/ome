@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-small-text-generation
+  name: vllm-xsmall-text-generation
 spec:
   annotations:
     prometheus.io/scrape: "true"

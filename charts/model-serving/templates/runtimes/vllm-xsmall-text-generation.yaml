@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-vision
+  name: vllm-xsmall-text-generation
 spec:
   {{with .Values.commonAnnotations}}
   annotations: {{ toYaml . | nindent 6 }}
@@ -43,7 +43,7 @@ spec:
       priority: 1
     - name: safetensors
       modelType: transformer
-      modelArchitecture: Phi3VForCausalLM
+      modelArchitecture: MistralModel
       version: "1"
       autoSelect: true
       priority: 1
@@ -64,13 +64,11 @@ spec:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
           --port={{.Values.vllm.port}} \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --model="$MODEL_PATH" \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --disable-log-requests \
           --served-model-name={{.Values.vllm.serveModelName}} \
           --tensor-parallel-size=1 \
-          --trust-remote-code \
-          --max-num-seqs=16 \
           --enable-chunked-prefill
       volumeMounts:
         - mountPath: /dev/shm

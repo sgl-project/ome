@@ -59,10 +59,10 @@ spec:
           python3 -m vllm.entrypoints.openai.api_server \
           --port={{.Values.vllm.port}} \
           --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --disable-log-requests \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --served-model-name={{.Values.vllm.serveModelName}} \
-          --tensor-parallel-size=1 \
+          --tensor-parallel-size=2 \
           --enable-chunked-prefill
       volumeMounts:
         - mountPath: /dev/shm
@@ -71,11 +71,11 @@ spec:
         requests:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
         limits:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:
