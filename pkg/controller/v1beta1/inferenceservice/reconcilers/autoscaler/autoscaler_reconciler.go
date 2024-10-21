@@ -1,20 +1,27 @@
 package autoscaler
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"context"
 	"fmt"
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	apierr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	hpa "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/hpa"
+	keda "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/keda"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Autoscaler Interface implemented by all autoscalers
 type Autoscaler interface {
-	Reconcile() (*autoscalingv2.HorizontalPodAutoscaler, error)
+	Reconcile() (runtime.Object, error)
 	SetControllerReferences(owner metav1.Object, scheme *runtime.Scheme) error
 }
 
@@ -37,11 +44,14 @@ type AutoscalerReconciler struct {
 	componentExt *v1beta1.ComponentExtensionSpec
 }
 
-func NewAutoscalerReconciler(client client.Client,
+func NewAutoscalerReconciler(
+	client client.Client,
+	clientset kubernetes.Interface,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec) (*AutoscalerReconciler, error) {
-	as, err := createAutoscaler(client, scheme, componentMeta, componentExt)
+	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
+) (*AutoscalerReconciler, error) {
+	as, err := createAutoscaler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +59,7 @@ func NewAutoscalerReconciler(client client.Client,
 		client:       client,
 		scheme:       scheme,
 		Autoscaler:   as,
-		componentExt: componentExt,
+		componentExt: &inferenceServiceSpec.Predictor.ComponentExtensionSpec,
 	}, err
 }
 
@@ -63,15 +73,67 @@ func getAutoscalerClass(metadata metav1.ObjectMeta) constants.AutoscalerClassTyp
 }
 
 func createAutoscaler(client client.Client,
+	clientset kubernetes.Interface,
 	scheme *runtime.Scheme, componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec) (Autoscaler, error) {
+	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
+) (Autoscaler, error) {
 	ac := getAutoscalerClass(componentMeta)
+
 	switch ac {
+	// HPA and KEDA can not coexist for the same deployment
 	case constants.AutoscalerClassHPA, constants.AutoscalerClassExternal:
-		return hpa.NewHPAReconciler(client, scheme, componentMeta, componentExt), nil
+		// Before creating HPA, ensure any existing ScaledObject is deleted
+		err := deleteExistingScaledObject(client, componentMeta)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete existing ScaledObject: %w", err)
+		}
+		return hpa.NewHPAReconciler(client, scheme, componentMeta, &inferenceServiceSpec.Predictor.ComponentExtensionSpec), nil
+	case constants.AutoscalerClassKEDA:
+		// Before creating ScaledObject, ensure any existing HPA is deleted
+		err := deleteExistingHPA(client, componentMeta)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete existing HPA: %w", err)
+		}
+		return keda.NewKEDAReconciler(client, scheme, componentMeta, inferenceServiceSpec)
 	default:
 		return nil, fmt.Errorf("unknown autoscaler class type: %v", ac)
 	}
+}
+
+// deleteExistingScaledObject deletes any existing ScaledObject for the Deployment
+func deleteExistingScaledObject(client client.Client, componentMeta metav1.ObjectMeta) error {
+	scaledObjectName := utils.GetScaledObjectName(componentMeta.Name)
+	scaledObject := &kedav1.ScaledObject{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: componentMeta.Namespace,
+		Name:      scaledObjectName,
+	}, scaledObject)
+	if err != nil {
+		if apierr.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	// Delete the existing ScaledObject
+	return client.Delete(context.TODO(), scaledObject)
+}
+
+// deleteExistingHPA deletes any existing HPA for the Deployment
+func deleteExistingHPA(client client.Client, componentMeta metav1.ObjectMeta) error {
+	hpaName := fmt.Sprintf("%s", componentMeta.Name)
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: componentMeta.Namespace,
+		Name:      hpaName,
+	}, hpa)
+	if err != nil {
+		if apierr.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	// Delete the existing HPA
+	return client.Delete(context.TODO(), hpa)
 }
 
 // Reconcile ...

@@ -91,6 +91,8 @@ type ComponentExtensionSpec struct {
 	// The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.
 	// +optional
 	DeploymentStrategy *appsv1.DeploymentStrategy `json:"deploymentStrategy,omitempty"`
+
+	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
 }
 
 // ScaleMetric enum
@@ -102,6 +104,7 @@ const (
 	MetricMemory      ScaleMetric = "memory"
 	MetricConcurrency ScaleMetric = "concurrency"
 	MetricRPS         ScaleMetric = "rps"
+	MetricTPS         ScaleMetric = "tps"
 )
 
 // Default the ComponentExtensionSpec

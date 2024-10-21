@@ -481,3 +481,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - keda.sh
+  resources:
+  - scaledobjects
+  verbs:
+  - create
+  - update
+  - get
+  - list
+  - watch
+  - delete

@@ -1,9 +1,12 @@
 package inferenceservice
 
 import (
-	multimodelconfig "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"context"
 	"fmt"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	"reflect"
+
+	multimodelconfig "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -20,7 +23,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"knative.dev/pkg/apis"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
-	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -31,6 +33,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices;inferenceservices/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -331,6 +334,11 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	} else {
 		r.Log.Info("The InferenceService controller won't watch networking.istio.io/v1beta1/VirtualService resources because the CRD is not available.")
 	}
+
+	// Watch both KEDA ScaledObject and Kubernetes HPA resources
+	ctrlBuilder = ctrlBuilder.
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&kedav1.ScaledObject{})
 
 	return ctrlBuilder.Complete(r)
 }

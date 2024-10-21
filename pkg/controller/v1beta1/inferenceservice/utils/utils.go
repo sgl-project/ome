@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"regexp"
 	"sort"
@@ -275,4 +276,16 @@ func ValidateStorageURI(storageURI *string, client client.Client) error {
 	//}
 	//
 	//return fmt.Errorf(v1beta1.UnsupportedStorageURIFormatError, strings.Join(SupportedStorageURIPrefixList, ", "), *storageURI)
+}
+
+// function to get generate scaledObject name
+func GetScaledObjectName(isvcName string) string {
+	const (
+		prefix     = "scaledobject-"
+		maxNameLen = 50
+	)
+	if len(isvcName) > maxNameLen {
+		isvcName = isvcName[len(isvcName)-maxNameLen:]
+	}
+	return fmt.Sprintf("%s%s", prefix, isvcName)
 }

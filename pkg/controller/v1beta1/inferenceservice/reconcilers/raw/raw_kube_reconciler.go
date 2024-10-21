@@ -33,9 +33,10 @@ func NewRawKubeReconciler(client client.Client,
 	clientset kubernetes.Interface,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	componentExt *v1beta1.ComponentExtensionSpec,
-	podSpec *corev1.PodSpec) (*RawKubeReconciler, error) {
-	as, err := autoscaler.NewAutoscalerReconciler(client, scheme, componentMeta, componentExt)
+	inferenceServiceSepc *v1beta1.InferenceServiceSpec,
+	podSpec *corev1.PodSpec,
+) (*RawKubeReconciler, error) {
+	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSepc)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +46,7 @@ func NewRawKubeReconciler(client client.Client,
 		return nil, err
 	}
 
+	componentExt := &inferenceServiceSepc.Predictor.ComponentExtensionSpec
 	return &RawKubeReconciler{
 		client:     client,
 		scheme:     scheme,

@@ -13,6 +13,9 @@ type InferenceServiceSpec struct {
 	// The compartment ID to use for the inference service
 	// +optional
 	CompartmentID string `json:"compartmentID,omitempty"`
+
+	// KedaConfig defines the autoscaling configuration for KEDA
+	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
 }
 
 // LoggerType controls the scope of log publishing

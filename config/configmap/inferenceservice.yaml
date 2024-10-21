@@ -77,6 +77,15 @@ data:
       "startupInitialDelaySeconds": 200,
       "unavailableThresholdSeconds": 600
     }
+
+  kedaConfig: |-
+    {
+      "enableKeda" : true,
+      "promServerAddress": "http://prometheus-operated.monitoring.svc.cluster.local:9090",
+      "customPromQuery": "",
+      "scalingThreshold": "10",
+      "scalingOperator": "GreaterThanOrEqual"
+    }
 ---
 apiVersion: v1
 kind: ConfigMap

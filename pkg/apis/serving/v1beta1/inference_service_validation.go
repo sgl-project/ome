@@ -127,6 +127,10 @@ func validateInferenceServiceAutoscaler(isvc *InferenceService) error {
 					} else {
 						return nil
 					}
+
+				case constants.AutoscalerClassKEDA:
+					// TODO: Add Keda Validation
+					return nil
 				case constants.AutoscalerClassExternal:
 					return nil
 				default:

@@ -160,7 +160,17 @@ var (
 // Autoscaler Class
 var (
 	AutoscalerClassHPA      AutoscalerClassType = "hpa"
+	AutoscalerClassKEDA     AutoscalerClassType = "keda"
 	AutoscalerClassExternal AutoscalerClassType = "external"
+)
+
+// Keda Autoscaler Configs
+var (
+	KedaScalingThreshold        = "autoscaling.keda.sh/threshold"
+	KedaScalingOperator         = "autoscaling.keda.sh/operator"
+	KedaPrometheusServerAddress = "autoscaling.keda.sh/prometheus.serverAddress"
+	KedaPrometheusQuery         = "autoscaling.keda.sh/prometheus.query"
+	KedaDefaultMinReplicas      = 1
 )
 
 // Autoscaler Metrics
@@ -176,6 +186,7 @@ var (
 // Autoscaler Class Allowed List
 var AutoscalerAllowedClassList = []AutoscalerClassType{
 	AutoscalerClassHPA,
+	AutoscalerClassKEDA,
 	AutoscalerClassExternal,
 }
 

@@ -188,7 +188,7 @@ func (p *Predictor) getPodLabelInfo(rawDeployment bool, objectMeta metav1.Object
 
 // createRawKubeReconciler creates a new RawKubeReconciler instance.
 func (p *Predictor) createRawKubeReconciler(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (*raw.RawKubeReconciler, error) {
-	r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, podSpec)
+	r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec, podSpec)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create RawKubeReconciler for predictor")
 	}

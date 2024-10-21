@@ -9,6 +9,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 	"flag"
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	istionetworking "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
@@ -209,6 +210,13 @@ func main() {
 				os.Exit(1)
 			}
 		}
+	}
+
+	// Register KEDA API to the scheme
+	setupLog.Info("Setting up KEDA ScaledObject scheme")
+	if err := kedav1.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "unable to add KEDA ScaledObject to scheme")
+		os.Exit(1)
 	}
 
 	setupLog.Info("Setting up core scheme")
