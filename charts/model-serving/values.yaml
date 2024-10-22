@@ -5,7 +5,13 @@ vllm:
     repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
     tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
   llama3_2_image:
-    tag: v0.6.2.e019c49f
+    tag: &llama_3_2ImageTag v0.6.2.e019c49f
+
+sglang:
+  port: 8080
+  commonImage:
+    repository: &defaultSGLangImage phx.ocir.io/idqj093njucb/sglang
+    tag: &defaultSGLangImageTag a95d558
 
 commonAnnotations:
   prometheus.io/scrape: "true"
@@ -97,7 +103,7 @@ llama_3_2_90b_vision_instruct:
   scaleMetric: {}
   image:
     repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    tag: *llama_3_2ImageTag
 
 llama_3_2_90b_vision_fp8_dynamic:
   enabled: false
@@ -111,7 +117,7 @@ llama_3_2_90b_vision_fp8_dynamic:
   scaleMetric: {}
   image:
     repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    tag: *llama_3_2ImageTag
 
 llama_3_2_11b_vision_instruct:
   enabled: false
@@ -125,7 +131,7 @@ llama_3_2_11b_vision_instruct:
   scaleMetric: {}
   image:
     repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    tag: *llama_3_2ImageTag
 
 deberta_v3_base_prompt_injection_v2:
   enabled: false

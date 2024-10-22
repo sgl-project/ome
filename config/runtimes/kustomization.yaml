@@ -7,5 +7,10 @@ resources:
   - vllm-medium-text-generation.yaml
   - vllm-pp-rdma.yaml
   - vllm-pp.yaml
+  - vllm-small-text-generation.yaml
   - vllm-xsmall-text-generation.yaml
   - vllm-vision.yaml
+  - sglang-large-text-generation.yaml
+  - sglang-medium-text-generation.yaml
+  - sglang-small-text-generation.yaml
+  - sglang-xsmall-text-generation.yaml

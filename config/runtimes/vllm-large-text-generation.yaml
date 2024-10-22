@@ -64,7 +64,7 @@ spec:
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --disable-log-requests \
           --served-model-name=vllm-model \
-          --tensor-parallel-size=1 \
+          --tensor-parallel-size=8 \
           --enable-chunked-prefill
       volumeMounts:
         - mountPath: /dev/shm
