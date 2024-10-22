@@ -36,7 +36,7 @@ func configProvider(cli *cobra.Command) fx.Option {
 		v.BindEnv("disable_model_decryption", "DISABLE_MODEL_DECRYPTION")
 		v.BindEnv("node_shape_mapping_path", "NODE_SHAPE_MAPPING_PATH")
 		v.BindEnv("is_tensorrt_model", "IS_TENSORRT_MODEL")
-		
+
 		v.BindEnv("tensorrt_config.tensorrt_llm_version", "TENSORRT_LLM_VERSION")
 		// we will not attach TENSORRT_NODE_SHAPE_SHORT to the container yet, since we will get it from IMDS,
 		// but just in case in future we'll need it

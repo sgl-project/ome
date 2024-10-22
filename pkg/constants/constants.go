@@ -141,6 +141,7 @@ var (
 	IstioInterceptionModeAnnotation = "sidecar.istio.io/interceptionMode"
 	IstioSidecarUIDAnnotationKey    = OMEAPIGroupName + "/storage-initializer-uid"
 	IstioSidecarStatusAnnotation    = "sidecar.istio.io/status"
+	IstioSidecarInjectionLabel      = "sidecar.istio.io/inject"
 )
 
 type AutoscalerClassType string

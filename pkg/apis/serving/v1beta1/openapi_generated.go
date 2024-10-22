@@ -50,6 +50,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServicesConfig":         schema_pkg_apis_serving_v1beta1_InferenceServicesConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.IngressConfig":                   schema_pkg_apis_serving_v1beta1_IngressConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.JobCondition":                    schema_pkg_apis_serving_v1beta1_JobCondition(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig":                      schema_pkg_apis_serving_v1beta1_KedaConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.LoggerSpec":                      schema_pkg_apis_serving_v1beta1_LoggerSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.MPITrainingJobSpec":              schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ModelCopies":                     schema_pkg_apis_serving_v1beta1_ModelCopies(ref),
@@ -862,11 +863,16 @@ func schema_pkg_apis_serving_v1beta1_ComponentExtensionSpec(ref common.Reference
 							Ref:         ref("k8s.io/api/apps/v1.DeploymentStrategy"),
 						},
 					},
+					"kedaConfig": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.LoggerSpec", "k8s.io/api/apps/v1.DeploymentStrategy"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.LoggerSpec", "k8s.io/api/apps/v1.DeploymentStrategy"},
 	}
 }
 
@@ -2334,12 +2340,18 @@ func schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref common.ReferenceCa
 							Format:      "",
 						},
 					},
+					"kedaConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "KedaConfig defines the autoscaling configuration for KEDA",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig"),
+						},
+					},
 				},
 				Required: []string{"predictor"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.PredictorSpec"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.PredictorSpec"},
 	}
 }
 
@@ -2611,6 +2623,54 @@ func schema_pkg_apis_serving_v1beta1_JobCondition(ref common.ReferenceCallback) 
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_KedaConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KedaConfig stores the configuration settings for KEDA autoscaling within the InferenceService. It includes fields like the Prometheus server address, custom query, scaling threshold, and operator.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enableKeda": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnableKeda determines whether KEDA autoscaling is enabled for the InferenceService. - true: KEDA will manage the autoscaling based on the provided configuration. - false: KEDA will not be used, and autoscaling will rely on other mechanisms (e.g., HPA).",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"promServerAddress": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromServerAddress specifies the address of the Prometheus server that KEDA will query to retrieve metrics for autoscaling decisions. This should be a fully qualified URL, including the protocol and port number.\n\nExample:\n  http://prometheus-operated.monitoring.svc.cluster.local:9090",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"customPromQuery": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CustomPromQuery defines a custom Prometheus query that KEDA will execute to evaluate the desired metric for scaling. This query should return a single numerical value that represents the metric to be monitored.\n\nExample:\n  avg_over_time(http_requests_total{service=\"llama\"}[5m])",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"scalingThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScalingThreshold sets the numerical threshold against which the result of the Prometheus query will be compared. Depending on the ScalingOperator, this threshold determines when to scale the number of replicas up or down.\n\nExample:\n  \"10\" - The Autoscaler will compare the metric value to 10.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"scalingOperator": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScalingOperator specifies the comparison operator used by KEDA to decide whether to scale the Deployment. Common operators include: - \"GreaterThanOrEqual\": Scale up when the metric is >= ScalingThreshold. - \"LessThanOrEqual\": Scale down when the metric is <= ScalingThreshold.\n\nThis operator defines the condition under which scaling actions are triggered based on the evaluated metric.\n\nExample:\n  \"GreaterThanOrEqual\"",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -4954,11 +5014,16 @@ func schema_pkg_apis_serving_v1beta1_PredictorSpec(ref common.ReferenceCallback)
 							Ref:         ref("k8s.io/api/apps/v1.DeploymentStrategy"),
 						},
 					},
+					"kedaConfig": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ModelSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ModelSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 

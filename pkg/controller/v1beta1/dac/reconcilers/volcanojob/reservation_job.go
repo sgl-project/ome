@@ -53,7 +53,7 @@ func NewReservationJobReconciler(client client.Client, scheme *runtime.Scheme, n
 }
 
 func createReservationJob(client client.Client, jobName string, namespace string, resources *corev1.ResourceRequirements, affinity *corev1.Affinity, count int) (*volbatchv1alpha1.Job, int, error) {
-	configMap, err := utils.GetDedicatedAIClausterConfigMap(client)
+	configMap, err := utils.GetDedicatedAIClusterConfigMap(client)
 	if err != nil {
 		return nil, 0, err
 	}

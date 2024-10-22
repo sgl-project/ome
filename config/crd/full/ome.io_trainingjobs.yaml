@@ -38,20 +38,8 @@ spec:
                   type: object
                 type: object
               hyperparameters:
-                items:
-                  properties:
-                    key:
-                      type: string
-                    value:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      x-kubernetes-int-or-string: true
-                  required:
-                  - key
-                  - value
-                  type: object
-                type: array
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               outputLocation:
                 properties:
                   storageType:
@@ -87,6 +75,13 @@ spec:
                 type: array
               details:
                 type: string
+              finetunedWeightRef:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                type: object
               jobReplicaStatus:
                 additionalProperties:
                   properties:
@@ -115,3 +110,5 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

@@ -401,6 +401,9 @@
           "description": "The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.",
           "$ref": "#/definitions/k8s.io.api.apps.v1.DeploymentStrategy"
         },
+        "kedaConfig": {
+          "$ref": "#/definitions/v1beta1.KedaConfig"
+        },
         "labels": {
           "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
@@ -1247,6 +1250,10 @@
           "description": "The compartment ID to use for the inference service",
           "type": "string"
         },
+        "kedaConfig": {
+          "description": "KedaConfig defines the autoscaling configuration for KEDA",
+          "$ref": "#/definitions/v1beta1.KedaConfig"
+        },
         "predictor": {
           "description": "Predictor defines the model serving spec",
           "default": {},
@@ -1401,6 +1408,32 @@
           "description": "Type of job condition.",
           "type": "string",
           "default": ""
+        }
+      }
+    },
+    "v1beta1.KedaConfig": {
+      "description": "KedaConfig stores the configuration settings for KEDA autoscaling within the InferenceService. It includes fields like the Prometheus server address, custom query, scaling threshold, and operator.",
+      "type": "object",
+      "properties": {
+        "customPromQuery": {
+          "description": "CustomPromQuery defines a custom Prometheus query that KEDA will execute to evaluate the desired metric for scaling. This query should return a single numerical value that represents the metric to be monitored.\n\nExample:\n  avg_over_time(http_requests_total{service=\"llama\"}[5m])",
+          "type": "string"
+        },
+        "enableKeda": {
+          "description": "EnableKeda determines whether KEDA autoscaling is enabled for the InferenceService. - true: KEDA will manage the autoscaling based on the provided configuration. - false: KEDA will not be used, and autoscaling will rely on other mechanisms (e.g., HPA).",
+          "type": "boolean"
+        },
+        "promServerAddress": {
+          "description": "PromServerAddress specifies the address of the Prometheus server that KEDA will query to retrieve metrics for autoscaling decisions. This should be a fully qualified URL, including the protocol and port number.\n\nExample:\n  http://prometheus-operated.monitoring.svc.cluster.local:9090",
+          "type": "string"
+        },
+        "scalingOperator": {
+          "description": "ScalingOperator specifies the comparison operator used by KEDA to decide whether to scale the Deployment. Common operators include: - \"GreaterThanOrEqual\": Scale up when the metric is \u003e= ScalingThreshold. - \"LessThanOrEqual\": Scale down when the metric is \u003c= ScalingThreshold.\n\nThis operator defines the condition under which scaling actions are triggered based on the evaluated metric.\n\nExample:\n  \"GreaterThanOrEqual\"",
+          "type": "string"
+        },
+        "scalingThreshold": {
+          "description": "ScalingThreshold sets the numerical threshold against which the result of the Prometheus query will be compared. Depending on the ScalingOperator, this threshold determines when to scale the number of replicas up or down.\n\nExample:\n  \"10\" - The Autoscaler will compare the metric value to 10.",
+          "type": "string"
         }
       }
     },
@@ -2554,6 +2587,9 @@
           },
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
+        },
+        "kedaConfig": {
+          "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
           "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",

@@ -7,11 +7,9 @@ spec:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
-    linkerd.io/inject: "enabled"
-    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
-    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
@@ -46,6 +44,9 @@ spec:
   containers:
     - name: ome-container
       image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
+      env:
+        - name: VLLM_PORT
+          value: "9000"
       command:
         - /bin/bash
         - '-lc'

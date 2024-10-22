@@ -1,6 +1,7 @@
 package multinodevllm
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	raycluster "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ray"
 	"fmt"
@@ -26,6 +27,7 @@ type MultiNodeVllmReconciler struct {
 	//TODO - Add other reconcilers such as ingress and autoscaling
 	RawMultiNodeService *service.RayServiceReconciler
 	MultiNodeProber     *raycluster.MultiNodeProberReconciler
+	IstioSidecar        *raycluster.IstioSidecarReconciler
 	componentExt        *v1beta1.ComponentExtensionSpec
 }
 
@@ -46,12 +48,19 @@ func NewMultiNodeVllmReconciler(client client.Client,
 		return nil, err
 	}
 
+	var enabled bool
+	istioSidecarInjection, ok := componentMeta.Labels[constants.IstioSidecarInjectionLabel]
+	if ok && istioSidecarInjection == "true" {
+		enabled = true
+	}
+
 	return &MultiNodeVllmReconciler{
 		client:              client,
 		scheme:              scheme,
 		Ray:                 raycluster.NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec, time.Duration(multinodeProberConfig.UnavailableThresholdSeconds)*time.Second),
 		MultiNodeProber:     raycluster.NewMultiNodeProberReconciler(client, scheme, componentMeta, componentExt, multinodeProberConfig),
 		RawMultiNodeService: service.NewRayServiceReconciler(client, scheme, componentMeta, podSpec),
+		IstioSidecar:        raycluster.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
 		URL:                 url,
 	}, nil
 }
@@ -91,5 +100,11 @@ func (r *MultiNodeVllmReconciler) Reconcile() ([]*ray.RayCluster, ctrl.Result, e
 	if err != nil {
 		return nil, ctrl.Result{}, err
 	}
+
+	// Reconcile Istio Sidecar Resource
+	if _, err := r.IstioSidecar.Reconcile(); err != nil {
+		return nil, ctrl.Result{}, err
+	}
+
 	return rayclusters, rayResult, nil
 }

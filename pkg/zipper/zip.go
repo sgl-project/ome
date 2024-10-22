@@ -84,7 +84,7 @@ func ZipFilesWithPrefixes(directory, outputFilename string, prefixes []string) e
 		if err != nil {
 			return err
 		}
-		
+
 		include := false
 		for _, prefix := range prefixes {
 			if strings.HasPrefix(relPath, prefix) {

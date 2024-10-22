@@ -120,6 +120,10 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	$(GO_CMD) vet ./...
 
+.PHONY: tidy
+tidy: ## Run go mod tidy.
+	$(GO_CMD) mod tidy
+
 .PHONY: ci-lint
 ci-lint: golangci-lint ## Run golangci-lint against code.
 	$(GOLANGCI_LINT) run --timeout 15m0s

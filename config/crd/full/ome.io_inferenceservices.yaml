@@ -58,6 +58,19 @@ spec:
               properties:
                 compartmentID:
                   type: string
+                kedaConfig:
+                  properties:
+                    customPromQuery:
+                      type: string
+                    enableKeda:
+                      type: boolean
+                    promServerAddress:
+                      type: string
+                    scalingOperator:
+                      type: string
+                    scalingThreshold:
+                      type: string
+                  type: object
                 predictor:
                   properties:
                     activeDeadlineSeconds:
@@ -1819,6 +1832,19 @@ spec:
                           - name
                         type: object
                       type: array
+                    kedaConfig:
+                      properties:
+                        customPromQuery:
+                          type: string
+                        enableKeda:
+                          type: boolean
+                        promServerAddress:
+                          type: string
+                        scalingOperator:
+                          type: string
+                        scalingThreshold:
+                          type: string
+                      type: object
                     labels:
                       additionalProperties:
                         type: string

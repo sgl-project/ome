@@ -185,6 +185,26 @@ rules:
   - update
   - watch
 - apiGroups:
+  - keda.sh
+  resources:
+  - scaledobjects
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - keda.sh
+  resources:
+  - scaledobjects/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - networking.istio.io
   resources:
   - virtualservices
@@ -481,14 +501,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - keda.sh
-  resources:
-  - scaledobjects
-  verbs:
-  - create
-  - update
-  - get
-  - list
-  - watch
-  - delete
