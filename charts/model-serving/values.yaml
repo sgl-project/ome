@@ -11,7 +11,6 @@ commonAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "8080"
   prometheus.io/path: "/metrics"
-  linkerd.io/inject: "enabled"
   chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
   chainsaw.k8s-integration.oracle.com/inject: "enabled"
   chainsaw.k8s-integration.oracle.com/logPath: "vllm"
@@ -44,6 +43,7 @@ llama_3_1_405b_instruct:
   enabled: false
   enableRDMA: false
   annotations:
+    linkerd.io/inject: "enabled"
     config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
     config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
   affinity: {}

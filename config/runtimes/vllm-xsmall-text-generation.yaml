@@ -7,8 +7,8 @@ spec:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
-    linkerd.io/inject: "enabled"
   labels:
+    sidecar.istio.io/inject: 'true'
     logging-forward: enabled
   tolerations:
     - key: "nvidia.com/gpu"

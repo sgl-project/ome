@@ -809,7 +809,6 @@ spec:
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
   annotations:
-    linkerd.io/inject: enabled
     prometheus.io/path: /metrics
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
@@ -874,6 +873,7 @@ spec:
       name: dshm
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   protocolVersions:
   - openAI
   supportedModelFormats:
@@ -910,7 +910,6 @@ spec:
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
   annotations:
-    linkerd.io/inject: enabled
     prometheus.io/path: /metrics
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
@@ -974,6 +973,7 @@ spec:
       name: dshm
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   protocolVersions:
   - openAI
   supportedModelFormats:
@@ -1016,7 +1016,6 @@ spec:
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
   annotations:
-    linkerd.io/inject: enabled
     prometheus.io/path: /metrics
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
@@ -1081,6 +1080,7 @@ spec:
       name: dshm
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   modelSizeRange:
     max: 60B
     min: 128B
@@ -1387,7 +1387,6 @@ spec:
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
   annotations:
-    linkerd.io/inject: enabled
     prometheus.io/path: /metrics
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
@@ -1451,6 +1450,7 @@ spec:
       name: dshm
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   protocolVersions:
   - openAI
   supportedModelFormats:
@@ -1493,7 +1493,6 @@ spec:
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
   annotations:
-    linkerd.io/inject: enabled
     prometheus.io/path: /metrics
     prometheus.io/port: "8080"
     prometheus.io/scrape: "true"
@@ -1559,6 +1558,7 @@ spec:
       name: dshm
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   protocolVersions:
   - openAI
   supportedModelFormats:

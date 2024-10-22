@@ -8,12 +8,11 @@ spec:
     chainsaw.k8s-integration.oracle.com/inject: enabled
     chainsaw.k8s-integration.oracle.com/logPath: deberta-v3-base-prompt-injection-v2
     chainsaw.k8s-integration.oracle.com/namespace: deberta-v3-base-prompt-injection-v2
-    config.linkerd.io/opaque-ports: '8081'
-    linkerd.io/inject: enabled
     prometheus.io/port: '8081'
     prometheus.io/scrape: 'true'
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   tolerations:
     - effect: NoSchedule
       key: nvidia.com/gpu
