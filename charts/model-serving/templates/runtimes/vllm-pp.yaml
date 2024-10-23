@@ -49,6 +49,9 @@ spec:
         - /bin/bash
         - '-lc'
         - --
+      env:
+        - name: VLLM_PORT
+          value: '9001'
       args:
         - |
           ulimit -n 65536;

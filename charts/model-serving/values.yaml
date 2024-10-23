@@ -24,6 +24,7 @@ commonAnnotations:
 
 commonLabels:
   logging-forward: enabled
+  sidecar.istio.io/inject: 'true'
 
 commonTolerations:
   - key: "nvidia.com/gpu"
@@ -49,9 +50,8 @@ llama_3_1_405b_instruct:
   enabled: false
   enableRDMA: false
   annotations:
-    linkerd.io/inject: "enabled"
-    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
-    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
+    traffic.sidecar.istio.io/includeInboundPorts: '8080,9001,9002'
+    traffic.sidecar.istio.io/includeOutboundPorts: '8080,9001,9002'
   affinity: {}
   tolerations: []
   topologySpreadConstraints: []
