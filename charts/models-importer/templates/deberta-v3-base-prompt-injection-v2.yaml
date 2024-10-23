@@ -7,6 +7,10 @@ metadata:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/runtime: "deberta-v3-base-prompt-injection-v2"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "deberta-v3-base-prompt-injection-v2" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "deberta-v3-base-prompt-injection-v2" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "deberta-v3-base-prompt-injection-v2" "lifecyclePhase" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
