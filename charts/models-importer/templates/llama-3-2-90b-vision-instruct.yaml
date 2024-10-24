@@ -32,7 +32,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_GENERIC_V2
+        - name: LARGE_GENERIC_2
           quotaUnit: 1
           default: true
   modelConfiguration:
