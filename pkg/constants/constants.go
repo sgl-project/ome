@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"knative.dev/serving/pkg/apis/autoscaling"
 
@@ -455,7 +456,20 @@ var (
 
 // Default training job constants
 const (
-	TrainingJobNamePrefix = "ft-"
+	TrainingJobNameLabelKey  = "job-name"
+	TrainingJobNamePrefix    = "ft-"
+	TrainingJobContainerName = "genai-container"
+
+	TrainingMaxSchedulingTimeoutDuration  = 10 * time.Minute
+	TrainingK8SJobCreationTimeoutDuration = 3 * time.Minute
+	TrainingK8SJobStartingTimeoutDuration = 10 * time.Minute
+	TrainingK8SJobRetryTimeoutDuration    = 15 * time.Minute
+	TrainingK8SJobRetryMaxAttempts        = 5
+)
+
+// Peft training Constants
+const (
+	PeftTrainingBadDataErrorMessagePrefix = "Data error"
 )
 
 type TrainingFailedReason string

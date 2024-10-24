@@ -13,10 +13,6 @@ type PeftTrainingJobSpec struct {
 	ReplicaSpecs map[ReplicaType]*ReplicaSpec `json:"peftFineTuningReplicaSpecs,omitempty"`
 }
 
-func NewPeftTrainingJobSpec(replicaSpecs map[ReplicaType]*ReplicaSpec) *PeftTrainingJobSpec {
-	return &PeftTrainingJobSpec{ReplicaSpecs: replicaSpecs}
-}
-
 func (peft *PeftTrainingJobSpec) GetLauncherReplicaSpec() *ReplicaSpec {
 	launcherSpec, exist := peft.ReplicaSpecs[PeftFinetuningReplicaTypeLauncher]
 	if !exist {

@@ -167,3 +167,7 @@ const (
 	// The training has failed its execution.
 	JobFailed JobConditionType = "Failed"
 )
+
+func IsTerminalJobCondition(conditionType JobConditionType) bool {
+	return conditionType == JobSucceeded || conditionType == JobFailed
+}

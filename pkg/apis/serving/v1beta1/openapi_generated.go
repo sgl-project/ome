@@ -707,6 +707,13 @@ func schema_pkg_apis_serving_v1beta1_CohereTrainingJobSpec(ref common.ReferenceC
 							Format: "",
 						},
 					},
+					"trainingFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specific training framework to use for the training job.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Hyperparameters for training job",
@@ -2714,6 +2721,13 @@ func schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref common.ReferenceCall
 							Format: "",
 						},
 					},
+					"trainingFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specific training framework to use for the training job.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Hyperparameters for training job",
@@ -2894,6 +2908,7 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3264,6 +3279,7 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -3672,6 +3688,13 @@ func schema_pkg_apis_serving_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCal
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
+						},
+					},
+					"trainingFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specific training framework to use for the training job.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"hyperparameters": {
@@ -4464,6 +4487,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5035,6 +5059,13 @@ func schema_pkg_apis_serving_v1beta1_PyTorchTrainingJobSpec(ref common.Reference
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
+						},
+					},
+					"trainingFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specific training framework to use for the training job.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"hyperparameters": {
@@ -5930,6 +5961,7 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5975,6 +6007,13 @@ func schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref common.Refere
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
+						},
+					},
+					"trainingFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specific training framework to use for the training job.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"hyperparameters": {
@@ -6207,6 +6246,13 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallbac
 							Format: "",
 						},
 					},
+					"trainingFramework": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specific training framework to use for the training job.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"hyperparameters": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Hyperparameters for training job",
@@ -6285,9 +6331,16 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobStatus(ref common.ReferenceCallb
 					},
 					"details": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Represents any details about the training job",
+							Description: "Details represent any information about the training job",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+					"retryCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RetryCount represents the number of retries the training job has performed",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"startTime": {

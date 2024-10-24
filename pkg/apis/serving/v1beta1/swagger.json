@@ -372,6 +372,10 @@
           "additionalProperties": {
             "$ref": "#/definitions/v1beta1.ReplicaSpec"
           }
+        },
+        "trainingFramework": {
+          "description": "Specific training framework to use for the training job.",
+          "type": "string"
         }
       }
     },
@@ -1502,6 +1506,10 @@
           "description": "Specifies the number of slots per worker used in hostfile. Defaults to 1.",
           "type": "integer",
           "format": "int32"
+        },
+        "trainingFramework": {
+          "description": "Specific training framework to use for the training job.",
+          "type": "string"
         }
       }
     },
@@ -2054,6 +2062,10 @@
           "additionalProperties": {
             "$ref": "#/definitions/v1beta1.ReplicaSpec"
           }
+        },
+        "trainingFramework": {
+          "description": "Specific training framework to use for the training job.",
+          "type": "string"
         }
       }
     },
@@ -2829,6 +2841,10 @@
           "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
           "default": {},
           "$ref": "#/definitions/v1beta1.RunPolicy"
+        },
+        "trainingFramework": {
+          "description": "Specific training framework to use for the training job.",
+          "type": "string"
         }
       }
     },
@@ -3342,6 +3358,10 @@
           "additionalProperties": {
             "$ref": "#/definitions/v1beta1.ReplicaSpec"
           }
+        },
+        "trainingFramework": {
+          "description": "Specific training framework to use for the training job.",
+          "type": "string"
         }
       }
     },
@@ -3449,6 +3469,10 @@
           "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
           "default": {},
           "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "trainingFramework": {
+          "description": "Specific training framework to use for the training job.",
+          "type": "string"
         }
       }
     },
@@ -3468,7 +3492,7 @@
           }
         },
         "details": {
-          "description": "Represents any details about the training job",
+          "description": "Details represent any information about the training job",
           "type": "string"
         },
         "finetunedWeightRef": {
@@ -3486,6 +3510,11 @@
         "lastReconcileTime": {
           "description": "Represents last time when the job was reconciled. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
           "$ref": "#/definitions/v1.Time"
+        },
+        "retryCount": {
+          "description": "RetryCount represents the number of retries the training job has performed",
+          "type": "integer",
+          "format": "int32"
         },
         "startTime": {
           "description": "Represents time when the training job is acknowledged by the controller. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",

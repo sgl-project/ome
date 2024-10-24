@@ -36,6 +36,9 @@ type TrainingJobSpec struct {
 	// +required Specific ClusterBaseModel/BaseModel name to use for hosting the model.
 	BaseModel *string `json:"baseModel,omitempty"`
 
+	// Specific training framework to use for the training job.
+	TrainingFrameworkType string `json:"trainingFramework,omitempty"`
+
 	// Hyperparameters for training job
 	Hyperparameters runtime.RawExtension `json:"hyperparameters,omitempty"`
 
@@ -58,8 +61,11 @@ type TrainingJobStatus struct {
 	// Conditions is an array of current observed job conditions.
 	Conditions []JobCondition `json:"conditions,omitempty"`
 
-	// Represents any details about the training job
+	// Details represent any information about the training job
 	Details string `json:"details,omitempty"`
+
+	// RetryCount represents the number of retries the training job has performed
+	RetryCount int `json:"retryCount,omitempty"`
 
 	// Represents time when the training job is acknowledged by the controller.
 	// It is not guaranteed to be set in happens-before order across separate operations.
@@ -98,6 +104,10 @@ func (tjs *TrainingJobStatus) IsTrainingJobConditionEmpty() bool {
 	return len(tjs.Conditions) == 0
 }
 
+func (tjs *TrainingJobStatus) IncrementRetry() {
+	tjs.RetryCount = tjs.RetryCount + 1
+}
+
 func (tjs *TrainingJobStatus) UpdateJobStatus(conditionType JobConditionType, details string) {
 	jobCondition := JobCondition{
 		Type:   conditionType,
@@ -116,6 +126,5 @@ func (tjs *TrainingJobSpec) GetBaseModel(cl client.Client, name string, namespac
 	} else if !errors.IsNotFound(err) {
 		return nil, err
 	}
-
 	return nil, goerrors.New("No BaseModel with the name: " + name)
 }
