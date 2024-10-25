@@ -41,6 +41,11 @@ spec:
         - containerPort: 8080
           name: http1
           protocol: TCP
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: "30000"
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: "120"
       command:
         - /bin/bash
         - '-lc'
@@ -57,7 +62,7 @@ spec:
           --enforce-eager \
           --limit-mm-per-prompt="image=1" \
           --max-model-len=131072 \
-          --gpu-memory-utilization=0.9 \
+          --gpu-memory-utilization=0.95 \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header
       volumeMounts:
         - mountPath: /dev/shm

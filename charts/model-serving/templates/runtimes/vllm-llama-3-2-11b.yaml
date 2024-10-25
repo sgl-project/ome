@@ -41,6 +41,11 @@ spec:
         - containerPort: 8080
           name: http1
           protocol: TCP
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: "30000"
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: "120"
       command:
         - /bin/bash
         - '-lc'
