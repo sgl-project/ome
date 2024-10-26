@@ -1,0 +1,59 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: gliner-large-v2-1
+spec:
+  annotations:
+    chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
+    chainsaw.k8s-integration.oracle.com/inject: enabled
+    chainsaw.k8s-integration.oracle.com/logPath: gliner-large-v2-1
+    chainsaw.k8s-integration.oracle.com/namespace: gliner-large-v2-1
+    prometheus.io/port: '8081'
+    prometheus.io/scrape: 'true'
+  labels:
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
+  tolerations:
+    - effect: NoSchedule
+      key: nvidia.com/gpu
+      operator: Exists
+  supportedModelFormats:
+    - autoSelect: true
+      name: pytorch
+      version: '1'
+  containers:
+    - name: ome-container
+      image: {{ .Values.gliner_large_v2_1.image.repository }}:{{ .Values.gliner_large_v2_1.image.tag }}
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: 16
+          memory: 60Gi
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

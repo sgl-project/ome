@@ -67,3 +67,6 @@ e5-mistral-7b-instruct:
 
 deberta-v3-base-prompt-injection-v2:
   enabled: false
+
+gliner-large-v2-1:
+  enabled: false

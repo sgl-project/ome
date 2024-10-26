@@ -28,6 +28,7 @@ spec:
   modelParameterSize: 184M
   modelCapabilities:
     - "PROMPT_INJECTION_PROTECTION"
+    - "TEXT_CLASSIFICATION"
   maxTokens: 512
   modelConfiguration:
     {
