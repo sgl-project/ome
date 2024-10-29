@@ -16,7 +16,7 @@ spec:
   displayName: microsoft.phi-3-vision-128k-instruct
   storage:
     path: oci://n/idlsnvn0f2is/b/model-store/o/microsoft/phi-3-vision-128k-instruct
-    storageUri: /mnt/data/models/microsoft/phi-3-vision-128k-instruct
+    storageUri: /raid/models/microsoft/phi-3-vision-128k-instruct
   vendor: microsoft
   version: "0.1"
   modelFormat:
