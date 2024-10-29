@@ -15,7 +15,7 @@ spec:
   disabled: false
   displayName: meta.llama-3.2-90b-vision-instruct-fp8-dynamic
   storage:
-    path: oci://n/namespace/b/model-store/o/meta/llama-3-2-90b-vision-instruct-fp8-dynamic
+    path: oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-2-90b-vision-instruct-fp8-dynamic
     storageUri: /mnt/data/models/meta/llama-3-2-90b-vision-instruct-fp8-dynamic
   vendor: meta
   version: "1.0.0"

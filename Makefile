@@ -153,21 +153,45 @@ helm-docs: helm-document ## Generate Helm chart documentation via helm-docs
 ome-manager: ## Build ome-manager binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" build -o bin/manager ./cmd/manager
 
-.PHONY: run-ome-manager
-run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
-	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/manager/main.go
+.PHONY: model-controller
+model-controller: ## Build model-controller binary.
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-controller ./cmd/model-controller
 
-.PHONY: ome-image
-ome-image: fmt vet ## Build ome-manager image.
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
+.PHONE: model-agent
+model-agent: ## Build model-agent binary.
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-agent ./cmd/model-agent
 
 .PHONE: multinode-prober
 multinode-prober: ## Build multinode-prober binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/multinode-prober ./cmd/multinode-prober
 
+.PHONY: run-ome-manager
+run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/manager/main.go
+
+.PHONY: run-model-controller
+run-model-controller: fmt vet ## Run model-controller binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/model-controller/main.go
+
+.PHONE: run-model-agent
+run-model-agent: fmt vet ## Run model-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/model-agent/main.go
+
 .PHONY: run-multinode-prober
 run-multinode-prober: manifests generate fmt vet ## Run multinode-prober binary from local host against the configured vLLM endpoint.
 	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/multinode-prober/main.go
+
+.PHONY: ome-image
+ome-image: fmt vet ## Build ome-manager image.
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
+
+.PHONY: model-controller-image
+model-controller-image: fmt vet ## Build model-controller image.
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/model-controller.Dockerfile -t $(REGISTRY)/model-controller:$(TAG)
+
+.PHONE: model-agent-image
+model-agent-image: fmt vet ## Build model-agent image.
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG)
 
 .PHONY: multinode-prober-image
 multinode-prober-image: fmt vet ## Build multinode-prober image.
@@ -205,14 +229,32 @@ uninstall: kuztomize ## Uninstall controller from the configured Kubernetes clus
 push-manager-image: ome-image ## Push manager image to registry.
 	$(DOCKER_BUILD_CMD) push $(MANAGER_IMG)
 
-.PHONY: deploy-manager-dev
-deploy-manager-dev: push-manager-image ## Deploy manager image to dev cluster.
-	echo "Deploying manager image to dev: $(MANAGER_IMG)"
-	./hack/image_patch_dev.sh $(MANAGER_IMG)
+.PHONY: push-model-controller-image
+push-model-controller-image: model-controller-image ## Push model-controller image to registry.
+	$(DOCKER_BUILD_CMD) push $(REGISTRY)/model-controller:$(TAG)
+
+.PHONE: push-model-agent-image
+push-model-agent-image: model-agent-image ## Push model-agent image to registry.
+	$(DOCKER_BUILD_CMD) push $(REGISTRY)/model-agent:$(TAG)
 
 .PHONY: push-multinode-prober-image
 push-multinode-prober-image: multinode-prober-image ## Push multinode-prober image to registry.
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/multinode-prober:$(TAG)
+
+.PHONY: patch-manager-dev
+patch-manager-dev: push-manager-image ## Deploy manager image to dev cluster.
+	echo "Patch manager image to dev: $(MANAGER_IMG)"
+	./hack/patch_image_dev.sh $(MANAGER_IMG) manager
+
+.PHONY: patch-model-controller-dev
+patch-model-controller-dev: push-model-controller-image ## Deploy model-controller image to dev cluster.
+	echo "Patch model-controller image to dev: $(REGISTRY)/model-controller:$(TAG)"
+	./hack/patch_image_dev.sh $(REGISTRY)/model-controller:$(TAG) model_controller
+
+.PHONE: patch-model-agent-dev
+patch-model-agent-dev: push-model-agent-image ## Deploy model-agent image to dev cluster.
+	echo "Patch model-agent image to dev: $(REGISTRY)/model-agent:$(TAG)"
+	./hack/patch_image_dev.sh $(REGISTRY)/model-agent:$(TAG) model_agent
 
 
 .PHONY: deploy-helm

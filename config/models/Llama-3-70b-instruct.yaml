@@ -15,8 +15,8 @@ spec:
   disabled: false
   displayName: meta.llama-3-70b-instruct
   storage:
-    path: oci://n/namespace/b/model-store/o/meta/llama-3-70b-instruct
-    storageUri: /mnt/data/models/meta/llama-3-70b-instruct
+    path: oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-70b-instruct
+    storageUri: /raid/models/meta/llama-3-70b-instruct
   vendor: meta
   version: "1.0.0"
   modelFormat:

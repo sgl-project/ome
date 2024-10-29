@@ -15,7 +15,7 @@ spec:
   disabled: false
   displayName: microsoft.phi-3-vision-128k-instruct
   storage:
-    path: oci://n/namespace/b/model-store/o/microsoft/phi-3-vision-128k-instruct
+    path: oci://n/idlsnvn0f2is/b/model-store/o/microsoft/phi-3-vision-128k-instruct
     storageUri: /mnt/data/models/microsoft/phi-3-vision-128k-instruct
   vendor: microsoft
   version: "0.1"

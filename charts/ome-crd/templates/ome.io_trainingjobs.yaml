@@ -45,6 +45,8 @@ spec:
                   storageType:
                     type: string
                 type: object
+              trainingFramework:
+                type: string
             type: object
           status:
             properties:
@@ -103,6 +105,8 @@ spec:
               lastReconcileTime:
                 format: date-time
                 type: string
+              retryCount:
+                type: integer
               startTime:
                 format: date-time
                 type: string

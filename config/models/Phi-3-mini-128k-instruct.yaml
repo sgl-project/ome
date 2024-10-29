@@ -16,7 +16,7 @@ spec:
   modelCapabilities:
     - "VISION"
   storage:
-    path: oci://n/namespace/b/bucket/o/mnt/models/microsoft/Phi-3-vision-128k-instruct
+    path: oci://n/idlsnvn0f2is/b/model-store/o/microsoft/Phi-3-vision-128k-instruct
     storageUri: /raid/models/microsoft/Phi-3-vision-128k-instruct
   modelConfiguration:
     {

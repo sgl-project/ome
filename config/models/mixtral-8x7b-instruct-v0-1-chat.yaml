@@ -15,7 +15,7 @@ spec:
   disabled: false
   displayName: mistralai.mixtral-8x7b-instruct
   storage:
-    path: oci://n/namespace/b/model-store/o/mistralai/mixtral-8x7b-instruct-v0-1
+    path: oci://n/idlsnvn0f2is/b/model-store/o/mistralai/mixtral-8x7b-instruct-v0-1
     storageUri: /mnt/data/models/mistralai/mixtral-8x7b-instruct-v0-1
   vendor: mistralai
   version: "0.1"
