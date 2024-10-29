@@ -24,6 +24,9 @@ spec:
   containers:
     - name: ome-container
       image: {{ .Values.gliner_large_v2_1.image.repository }}:{{ .Values.gliner_large_v2_1.image.tag }}
+      env:
+        - name: HF_HOME
+          value: /model/gliner-large-v2-1
       ports:
         - containerPort: 8080
           name: http
