@@ -43,6 +43,12 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+    - name: safetensors
+      modelType: transformer
+      modelArchitecture: MixtralForCausalLM
+      version: "1"
+      autoSelect: true
+      priority: 1
   protocolVersions:
     - openAI
   containers:

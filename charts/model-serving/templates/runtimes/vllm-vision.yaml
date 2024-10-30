@@ -71,7 +71,8 @@ spec:
           --tensor-parallel-size=1 \
           --trust-remote-code \
           --max-num-seqs=16 \
-          --enable-chunked-prefill
+          --enable-chunked-prefill \
+          --disable-sliding-window
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

@@ -10,7 +10,7 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
-      runtime: vllm-embedding
+      runtime: vllm-embeddings
       baseModel: e5-mistral-7b-instruct
       protocolVersion: openAI
     minReplicas: {{ .Values.e5_mistral_7b_instruct.minReplicas}}
@@ -30,5 +30,11 @@ spec:
     {{- with .Values.e5_mistral_7b_instruct.scaleMetric }}
     scaleMetric: {{ toYaml . | nindent 6 }}
     {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e5-mistral-7b-instruct
 
 {{- end }}

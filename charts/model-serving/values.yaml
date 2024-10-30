@@ -63,7 +63,7 @@ llama_3_1_405b_instruct:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag
 
-phi_3_mini_128k_instruct:
+phi_3_vision_128k_instruct:
   enabled: false
   annotations: { }
   affinity: { }
@@ -87,6 +87,20 @@ e5_mistral_7b_instruct:
   minReplicas: 1
   maxReplicas: 1
   scaleMetric: {}
+  image:
+    repository: *defaultVLLMImage
+    tag: *defaultVLLMImageTag
+
+mixtral_8x7b_instruct_v0_1_chat:
+  enabled: false
+  annotations: { }
+  affinity: { }
+  tolerations: [ ]
+  topologySpreadConstraints: [ ]
+  volumes: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: { }
   image:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag

@@ -6,7 +6,7 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: vllm-embedding
+      runtime: vllm-embeddings
       baseModel: e5-mistral-7b-instruct
       protocolVersion: openAI
     minReplicas: 1
