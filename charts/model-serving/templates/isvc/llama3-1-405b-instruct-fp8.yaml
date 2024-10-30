@@ -6,6 +6,7 @@ metadata:
   namespace: llama-3-1-405b-instruct-fp8
   annotations:
     ome.io/deploymentMode: "MultiNodeRayVLLM"
+    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.llama_3_1_405b_instruct.annotations }}

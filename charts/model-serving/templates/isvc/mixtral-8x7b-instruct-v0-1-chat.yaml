@@ -4,6 +4,8 @@ kind: InferenceService
 metadata:
   name: mixtral-8x7b-instruct-v0-1-chat
   namespace: mixtral-8x7b-instruct-v0-1-chat
+  annotations:
+    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.annotations }}

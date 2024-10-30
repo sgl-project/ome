@@ -4,6 +4,8 @@ kind: InferenceService
 metadata:
   name: llama-3-1-70b-instruct
   namespace: llama-3-1-70b-instruct
+  annotations:
+    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.llama_3_1_70b_instruct.annotations }}
