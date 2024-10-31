@@ -70,3 +70,19 @@ deberta-v3-base-prompt-injection-v2:
 
 gliner-large-v2-1:
   enabled: false
+
+mistral-7b-v0-2-finetuned-model-action-v0-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mistral-7b-v0-2-finetuned-model-action-v0-1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mistral-7b-v0-2-finetuned-model-thought-v0-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mistral-7b-v0-2-finetuned-model-thought-v0-1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"

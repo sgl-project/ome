@@ -1,0 +1,38 @@
+{{- if index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: mistral-7b-v0-2-finetuned-model-action-v0-0
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "vllm-xsmall-text-generation"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: olm.mistral-7b-instruct-v0.2-ft-action
+  storage:
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "osBucket" }}/o/{{ index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "vendor" }}/{{ index .Values "mistral-7b-v0-2-finetuned-model-action-v0-0" "osPrefixOverride" }}"
+    storageUri: /mnt/data/models/olm/action-mistral-7b-v0.2-finetuned-model-v0.0
+  vendor: olm
+  version: "0.0"
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelType: transformer
+  modelArchitecture: MistralForCausalLM
+  modelParameterSize: 7B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 32768
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: SMALL_GENERIC_V2
+          quotaUnit: 1
+          default: true
+{{- end }}
