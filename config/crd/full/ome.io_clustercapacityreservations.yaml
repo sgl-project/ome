@@ -4,23 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: dedicatedaiclusters.ome.io
+  name: clustercapacityreservations.ome.io
 spec:
   group: ome.io
   names:
-    kind: DedicatedAICluster
-    listKind: DedicatedAIClusterList
-    plural: dedicatedaiclusters
-    singular: dedicatedaicluster
+    kind: ClusterCapacityReservation
+    listKind: ClusterCapacityReservationList
+    plural: clustercapacityreservations
+    singular: clustercapacityreservation
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.disabled
-      name: Disabled
-      type: boolean
-    - jsonPath: .spec.count
-      name: Count
-      type: integer
+    - jsonPath: .status
+      name: Status
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -441,19 +438,15 @@ spec:
                         type: array
                     type: object
                 type: object
-              capacityReservationId:
-                type: string
+              allowBorrowing:
+                type: boolean
               compartmentID:
                 type: string
-              count:
-                type: integer
               nodeSelector:
                 additionalProperties:
                   type: string
                 type: object
               priorityClassName:
-                type: string
-              profile:
                 type: string
               resources:
                 properties:
@@ -502,14 +495,60 @@ spec:
                       type: string
                   type: object
                 type: array
-                x-kubernetes-list-type: atomic
             type: object
           status:
             properties:
-              allocatedGpu:
-                type: integer
-              availableGpu:
-                type: integer
+              allocatable:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                type: object
+              associationUsages:
+                items:
+                  properties:
+                    borrowedQuota:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      type: object
+                    name:
+                      type: string
+                    usage:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      type: object
+                  required:
+                  - borrowedQuota
+                  - name
+                  - usage
+                  type: object
+                type: array
+              capacity:
+                additionalProperties:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
+                type: object
+              capacityReservationLifecycleState:
+                enum:
+                - Active
+                - Creating
+                - Deleting
+                - Failed
+                - Updating
+                type: string
               conditions:
                 items:
                   properties:
@@ -517,44 +556,26 @@ spec:
                       format: date-time
                       type: string
                     message:
-                      maxLength: 32768
                       type: string
-                    observedGeneration:
-                      format: int64
-                      minimum: 0
-                      type: integer
                     reason:
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
                       type: string
                     status:
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
                       type: string
                     type:
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      enum:
+                      - Ready
+                      - ResourcesProvisioned
+                      - DACAssociationsHealthy
+                      - WorkloadsHealthy
                       type: string
                   required:
-                  - lastTransitionTime
-                  - message
-                  - reason
                   - status
                   - type
                   type: object
                 type: array
-                x-kubernetes-list-type: atomic
-              dacLifecycleState:
-                enum:
-                - ACTIVE
-                - CREATING
-                - DELETING
-                - FAILED
-                - UPDATING
-                type: string
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               lifecycleDetail:
                 type: string
             type: object

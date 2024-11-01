@@ -54,6 +54,10 @@ type DedicatedAIClusterSpec struct {
 	// The compartment ID to use for the DAC
 	// +optional
 	CompartmentID string `json:"compartmentID,omitempty"`
+
+	// CapacityReservation ID that used to create this DedicatedAICluster.
+	// +optional
+	CapacityReservationId string `json:"capacityReservationId,omitempty"`
 }
 
 // DedicatedAIClusterStatus defines the observed state of DedicatedAICluster
