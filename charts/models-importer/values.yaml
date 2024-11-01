@@ -86,3 +86,19 @@ mistral-7b-v0-2-finetuned-model-thought-v0-0:
 mistral-7b-v0-2-finetuned-model-thought-v0-1:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+phi-3-vision-128k-instruct-ft-v1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2sql-m1-base-7b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2rqs-7b-v3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2rqs-7b-v4:
+  enabled: false
+  lifecyclePhase: "ACTIVE"

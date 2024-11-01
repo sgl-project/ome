@@ -43,6 +43,18 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+    - name: safetensors
+      modelType: transformer
+      modelArchitecture: MistralModel
+      version: "1"
+      autoSelect: true
+      priority: 1
+    - name: safetensors
+      modelType: transformer
+      modelArchitecture: Qwen2ForCausalLM
+      version: "1"
+      autoSelect: true
+      priority: 1
   protocolVersions:
     - openAI
   containers:

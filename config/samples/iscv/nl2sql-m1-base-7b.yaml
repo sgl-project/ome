@@ -1,0 +1,13 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: nl2sql-m1-base-7b
+  namespace: nl2sql-m1-base-7b
+spec:
+  predictor:
+    model:
+      runtime: vllm-xsmall-text-generation
+      baseModel: nl2sql-m1-base-7b
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1
