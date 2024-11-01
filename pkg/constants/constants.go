@@ -90,6 +90,7 @@ var (
 	VolcanoQueueName           = "volcano.sh/queue-name"
 	VolcanoScheduler           = "volcano"
 	VolcanoPreemptable         = "volcano.sh/preemptable"
+	CompartmentIDLabelKey      = "oci.oraclecloud.com/compartment"
 )
 
 // PrioriryClass
