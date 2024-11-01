@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/component: "ome-model-agent-daemonset"
+        control-plane: ome-model-agent-daemonset
         logging-forward: enabled
     spec:
       priorityClassName: system-node-critical

@@ -23,7 +23,7 @@ We include a formatting command `make fmt` to format the code.
 When submitting a pull request:
 
 1. Make sure your code has been rebased on top of the latest commit on the main branch.
-2. Ensure code is properly formatted by running `make fmt`. 
+2. Ensure code is properly formatted by running `make fmt`, `make vet`, and `make tidy`. 
 3. Add new test cases. In the case of a bug fix, the tests should fail without your code changes. For new features, try to cover as many variants as reasonably possible. 
 4. Modify the documentation as necessary. 
 5. Include a detailed description of the changes in the pull request.
@@ -114,9 +114,9 @@ To check out this repository:
 1. Clone it to your machine:
 
 ```shell
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gen
-cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gen
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/gen/ome.git
+mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
+cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
+git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/gencore/ome.git
 cd ome
 ```
 
@@ -126,6 +126,7 @@ described below.
 ## Deploy OME
 
 ### Check Knative Serving installation
+This step is optional, if you have already installed Knative Serving or if you are planning using OME without Knative, you can skip this step.
 Once you've [set up your development environment](#prerequisites), you can verify the installation with the following:
 
 
@@ -164,28 +165,76 @@ export ENABLE_SELF_SIGNED_CA=true
 
 After that you can run following command to deploy `OME`, you can skip above step if cert manager is already installed.
 ```bash
-make deploy
+make install
 ```
 
 
 Success "Expected Output"
 ```bash
 $ kubectl get pods -n ome -l control-plane=ome-controller-manager
-NAME                          READY   STATUS    RESTARTS   AGE
-ome-controller-manager-0      2/2     Running   0          13m
+NAME                                    READY   STATUS    RESTARTS   AGE
+ome-controller-manager-fdc857d9-p5znk   2/2     Running   0          16m
 ```
+
+```bash
+$ kubectl get pods -n ome -l control-plane=ome-model-controller
+NAME                                    READY   STATUS    RESTARTS   AGE
+ome-model-controller-7b5b8c9cf4-5m5zz   1/1     Running   0          3d7h
+ome-model-controller-7b5b8c9cf4-89475   1/1     Running   0          3d7h
+ome-model-controller-7b5b8c9cf4-9znbv   1/1     Running   0          3d7h
+```
+
+```bash
+$ kubectl get pods -n ome -l control-plane=ome-model-agent-daemonset
+NAME                              READY   STATUS    RESTARTS       AGE
+ome-model-agent-daemonset-67qhg   1/1     Running   0              3d6h
+ome-model-agent-daemonset-67tcv   1/1     Running   0              3d6h
+ome-model-agent-daemonset-9gv6f   1/1     Running   0              3d6h
+```
+
 **_NOTE:_**
-    By default it installs to `ome` namespace with the published controller manager image from the main branch.
+    By default it installs to `ome` namespace with the published images(controller manager, model controller, and model agent) from the main branch.
 
 ### Deploy OME with your own version
 Run the following command to deploy `OME` controller  with your local change.
 ```bash
-make deploy-dev
+make push-manager-image;
+make patch-manager-dev;
+make install
 ```
 **_NOTE:_**
-    `deploy-dev` builds the image from your local code, publishes to `REGISTRY` and deploys the `ome-controller-manager` the image digest to your cluster for testing. 
-    Please also ensure you are logged in to `REGISTRY` from your client machine.
+   `make push-manager-image`  builds the image from your local code, publishes to `REGISTRY`. `make patch-manager-dev` patches the `ome-controller-manager` the image in the deployment configuration digest to your cluster for testing. `make install` installs the `ome-controller-manager` to your cluster.
+   Please also ensure you are logged in to `REGISTRY` from your client machine.
 
+
+### Running OME Manager locally
+To run the OME manager locally, you can run the following command:
+```bash
+make run-ome-manager
+```
+
+### Running OME Manager in IDE
+Goland IDE is recommended for running the OME manager in the IDE.
+After cloning the repository, you can run the OME manager in your IDE by following the steps below:
+- Right-click on the `main.go` file in the `cmd/ome-controller-manager` directory and select `Run 'go build main.go'` from the context menu.
+- You can also create a run configuration by clicking on the `Edit Configurations` option in the top right corner of the IDE and adding a new Go configuration with the following settings:
+    - Name: `ome-controller-manager`
+    - Run Kind: `File`
+    - Files: `${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/manager/main.go`
+    - Environment Variables: `KUBECONFIG=<path to kubeconfig file>`
+    - Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8080`
+    - Module: `ome`
+This will start the OME manager in the IDE. You can also run the manager in debug mode by adding breakpoints in the code.
+
+However, because the cluster might have both mutating and validating webhooks, you might need to run the manager in the cluster to test the webhook functionality.
+
+If you want to run the manager locally, you need to remove the webhooks from the cluster. The following command can be used to remove the webhooks:
+```bash
+kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
+kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io clusterservingruntime.ome.io
+kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io servingruntime.ome.io
+kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
+```
 
 ## Iterating
 
@@ -209,5 +258,5 @@ command automatically looks up the module containing the package and adds it to 
 to the latest version, `go get golang.org/x/text@v0.3.0` to upgrade to a specific version.
 
 ```shell
-make deploy-dev
+make install
 ```
