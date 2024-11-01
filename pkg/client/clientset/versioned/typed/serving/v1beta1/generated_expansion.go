@@ -4,7 +4,11 @@ package v1beta1
 
 type BaseModelExpansion interface{}
 
+type CapacityReservationExpansion interface{}
+
 type ClusterBaseModelExpansion interface{}
+
+type ClusterCapacityReservationExpansion interface{}
 
 type ClusterServingRuntimeExpansion interface{}
 

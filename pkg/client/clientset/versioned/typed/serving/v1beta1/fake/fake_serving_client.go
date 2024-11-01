@@ -16,8 +16,16 @@ func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface
 	return &FakeBaseModels{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) CapacityReservations(namespace string) v1beta1.CapacityReservationInterface {
+	return &FakeCapacityReservations{c, namespace}
+}
+
 func (c *FakeOmeV1beta1) ClusterBaseModels() v1beta1.ClusterBaseModelInterface {
 	return &FakeClusterBaseModels{c}
+}
+
+func (c *FakeOmeV1beta1) ClusterCapacityReservations() v1beta1.ClusterCapacityReservationInterface {
+	return &FakeClusterCapacityReservations{c}
 }
 
 func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeInterface {

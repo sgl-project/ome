@@ -14,12 +14,20 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.AssociationUsage":                schema_pkg_apis_serving_v1beta1_AssociationUsage(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BaseModel":                       schema_pkg_apis_serving_v1beta1_BaseModel(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BaseModelList":                   schema_pkg_apis_serving_v1beta1_BaseModelList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BaseModelSpec":                   schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BuiltInAdapter":                  schema_pkg_apis_serving_v1beta1_BuiltInAdapter(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservation":             schema_pkg_apis_serving_v1beta1_CapacityReservation(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationCondition":    schema_pkg_apis_serving_v1beta1_CapacityReservationCondition(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationList":         schema_pkg_apis_serving_v1beta1_CapacityReservationList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationSpec":         schema_pkg_apis_serving_v1beta1_CapacityReservationSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationStatus":       schema_pkg_apis_serving_v1beta1_CapacityReservationStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterBaseModel":                schema_pkg_apis_serving_v1beta1_ClusterBaseModel(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterBaseModelList":            schema_pkg_apis_serving_v1beta1_ClusterBaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterCapacityReservation":      schema_pkg_apis_serving_v1beta1_ClusterCapacityReservation(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterCapacityReservationList":  schema_pkg_apis_serving_v1beta1_ClusterCapacityReservationList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterServingRuntime":           schema_pkg_apis_serving_v1beta1_ClusterServingRuntime(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterServingRuntimeList":       schema_pkg_apis_serving_v1beta1_ClusterServingRuntimeList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterTrainingRuntime":          schema_pkg_apis_serving_v1beta1_ClusterTrainingRuntime(ref),
@@ -95,6 +103,58 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingRuntimeList":             schema_pkg_apis_serving_v1beta1_TrainingRuntimeList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingRuntimeSpec":             schema_pkg_apis_serving_v1beta1_TrainingRuntimeSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingRuntimeStatus":           schema_pkg_apis_serving_v1beta1_TrainingRuntimeStatus(ref),
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_AssociationUsage(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AssociationUsage defines the usage of the association.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the association.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"usage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Usage of the association.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+					"borrowedQuota": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BorrowedQuota of the association.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"name", "usage", "borrowedQuota"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -406,6 +466,327 @@ func schema_pkg_apis_serving_v1beta1_BuiltInAdapter(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_serving_v1beta1_CapacityReservation(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CapacityReservation is the Schema for the capacityReservations API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_CapacityReservationCondition(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CapacityReservationCondition defines health and operational status of the capacity reservation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type of condition.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Status of the condition.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"lastTransitionTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastTransitionTime is the timestamp when the condition last changed.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason for the condition's last transition.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message is a human-readable message indicating details about the condition.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"type", "status"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_CapacityReservationList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CapacityReservationList contains a list of CapacityReservation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservation"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservation", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_CapacityReservationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CapacityReservationSpec defines the desired state of Capacity Reservation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The resource requirements of the Capacity Reservation.",
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"compartmentID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The compartment ID to use for the Capacity Reservation.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"priorityClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PriorityClassName is the priority class assigned to workloads associated to the Capacity Reservation.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"allowBorrowing": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowBorrowing defines if this capacity reservation can borrow resources from others.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Affinity defines node affinity for scheduling workloads.",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"nodeSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector defines the node labels for scheduling workloads.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"tolerations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tolerations for taints to allow workloads scheduling on specific nodes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_CapacityReservationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CapacityReservationStatus defines the observed status of CapacityReservation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"capacity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Capacity represents the total resources available in this capacity reservation.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+					"allocatable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Allocatable represents the resources that are available for scheduling.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+					"associationUsages": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Usages of associations An association can be a DAC or a Workload",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.AssociationUsage"),
+									},
+								},
+							},
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "type",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represents health and operational states.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationCondition"),
+									},
+								},
+							},
+						},
+					},
+					"capacityReservationLifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CapacityReservationLifecycleState indicates the current phase of the CapacityReservation (e.g., \"active\", \"creating\", \"Failed\" etc.).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"lifecycleDetail": {
+						SchemaProps: spec.SchemaProps{
+							Description: "A message describing the current state in more detail that can provide actionable information.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.AssociationUsage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationCondition", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
 func schema_pkg_apis_serving_v1beta1_ClusterBaseModel(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -499,6 +880,102 @@ func schema_pkg_apis_serving_v1beta1_ClusterBaseModelList(ref common.ReferenceCa
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterBaseModel", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_ClusterCapacityReservation(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterCapacityReservation is the Schema for the capacityReservations API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_ClusterCapacityReservationList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterCapacityReservationList contains a list of ClusterCapacityReservation.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterCapacityReservation"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ClusterCapacityReservation", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
 	}
 }
 
@@ -1797,6 +2274,13 @@ func schema_pkg_apis_serving_v1beta1_DedicatedAIClusterSpec(ref common.Reference
 							Format:      "",
 						},
 					},
+					"capacityReservationId": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CapacityReservation ID that used to create this DedicatedAICluster.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -2908,6 +3392,7 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3278,6 +3763,7 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4485,6 +4971,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5958,6 +6445,7 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
+				
 			},
 		},
 	}

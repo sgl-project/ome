@@ -39,8 +39,12 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	// Group=ome.io, Version=v1beta1
 	case v1beta1.SchemeGroupVersion.WithResource("basemodels"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().BaseModels().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("capacityreservations"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().CapacityReservations().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("clusterbasemodels"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().ClusterBaseModels().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("clustercapacityreservations"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().ClusterCapacityReservations().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("clusterservingruntimes"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().ClusterServingRuntimes().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("clustertrainingruntimes"):

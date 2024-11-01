@@ -10,8 +10,12 @@ import (
 type Interface interface {
 	// BaseModels returns a BaseModelInformer.
 	BaseModels() BaseModelInformer
+	// CapacityReservations returns a CapacityReservationInformer.
+	CapacityReservations() CapacityReservationInformer
 	// ClusterBaseModels returns a ClusterBaseModelInformer.
 	ClusterBaseModels() ClusterBaseModelInformer
+	// ClusterCapacityReservations returns a ClusterCapacityReservationInformer.
+	ClusterCapacityReservations() ClusterCapacityReservationInformer
 	// ClusterServingRuntimes returns a ClusterServingRuntimeInformer.
 	ClusterServingRuntimes() ClusterServingRuntimeInformer
 	// ClusterTrainingRuntimes returns a ClusterTrainingRuntimeInformer.
@@ -48,9 +52,19 @@ func (v *version) BaseModels() BaseModelInformer {
 	return &baseModelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
+// CapacityReservations returns a CapacityReservationInformer.
+func (v *version) CapacityReservations() CapacityReservationInformer {
+	return &capacityReservationInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
 // ClusterBaseModels returns a ClusterBaseModelInformer.
 func (v *version) ClusterBaseModels() ClusterBaseModelInformer {
 	return &clusterBaseModelInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// ClusterCapacityReservations returns a ClusterCapacityReservationInformer.
+func (v *version) ClusterCapacityReservations() ClusterCapacityReservationInformer {
+	return &clusterCapacityReservationInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // ClusterServingRuntimes returns a ClusterServingRuntimeInformer.

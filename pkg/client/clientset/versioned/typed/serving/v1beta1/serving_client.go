@@ -13,7 +13,9 @@ import (
 type OmeV1beta1Interface interface {
 	RESTClient() rest.Interface
 	BaseModelsGetter
+	CapacityReservationsGetter
 	ClusterBaseModelsGetter
+	ClusterCapacityReservationsGetter
 	ClusterServingRuntimesGetter
 	ClusterTrainingRuntimesGetter
 	DedicatedAIClustersGetter
@@ -34,8 +36,16 @@ func (c *OmeV1beta1Client) BaseModels(namespace string) BaseModelInterface {
 	return newBaseModels(c, namespace)
 }
 
+func (c *OmeV1beta1Client) CapacityReservations(namespace string) CapacityReservationInterface {
+	return newCapacityReservations(c, namespace)
+}
+
 func (c *OmeV1beta1Client) ClusterBaseModels() ClusterBaseModelInterface {
 	return newClusterBaseModels(c)
+}
+
+func (c *OmeV1beta1Client) ClusterCapacityReservations() ClusterCapacityReservationInterface {
+	return newClusterCapacityReservations(c)
 }
 
 func (c *OmeV1beta1Client) ClusterServingRuntimes() ClusterServingRuntimeInterface {

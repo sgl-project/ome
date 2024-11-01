@@ -19,6 +19,7 @@ resources:
 - full/ome.io_finetunedweights.yaml
 - full/ome.io_dedicatedaiclusterprofiles.yaml
 - full/ome.io_dedicatedaiclusters.yaml
+- full/ome.io_capacityreservations.yaml
 
 patches:
 # Fix for https://github.com/kubernetes/kubernetes/issues/91395

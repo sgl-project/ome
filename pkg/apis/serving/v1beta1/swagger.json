@@ -7,6 +7,36 @@
   },
   "paths": {},
   "definitions": {
+    "v1beta1.AssociationUsage": {
+      "description": "AssociationUsage defines the usage of the association.",
+      "type": "object",
+      "required": [
+        "name",
+        "usage",
+        "borrowedQuota"
+      ],
+      "properties": {
+        "borrowedQuota": {
+          "description": "BorrowedQuota of the association.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resource.Quantity"
+          }
+        },
+        "name": {
+          "description": "Name of the association.",
+          "type": "string",
+          "default": ""
+        },
+        "usage": {
+          "description": "Usage of the association.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resource.Quantity"
+          }
+        }
+      }
+    },
     "v1beta1.BaseModel": {
       "description": "BaseModel is the Schema for the basemodels API",
       "type": "object",
@@ -177,6 +207,184 @@
         }
       }
     },
+    "v1beta1.CapacityReservation": {
+      "description": "CapacityReservation is the Schema for the capacityReservations API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.CapacityReservationSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.CapacityReservationStatus"
+        }
+      }
+    },
+    "v1beta1.CapacityReservationCondition": {
+      "description": "CapacityReservationCondition defines health and operational status of the capacity reservation.",
+      "type": "object",
+      "required": [
+        "type",
+        "status"
+      ],
+      "properties": {
+        "lastTransitionTime": {
+          "description": "LastTransitionTime is the timestamp when the condition last changed.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "message": {
+          "description": "Message is a human-readable message indicating details about the condition.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason for the condition's last transition.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status of the condition.",
+          "type": "string",
+          "default": ""
+        },
+        "type": {
+          "description": "Type of condition.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.CapacityReservationList": {
+      "description": "CapacityReservationList contains a list of CapacityReservation.",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CapacityReservation"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.CapacityReservationSpec": {
+      "description": "CapacityReservationSpec defines the desired state of Capacity Reservation.",
+      "type": "object",
+      "properties": {
+        "affinity": {
+          "description": "Affinity defines node affinity for scheduling workloads.",
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "allowBorrowing": {
+          "description": "AllowBorrowing defines if this capacity reservation can borrow resources from others.",
+          "type": "boolean"
+        },
+        "compartmentID": {
+          "description": "The compartment ID to use for the Capacity Reservation.",
+          "type": "string"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector defines the node labels for scheduling workloads.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "priorityClassName": {
+          "description": "PriorityClassName is the priority class assigned to workloads associated to the Capacity Reservation.",
+          "type": "string"
+        },
+        "resources": {
+          "description": "The resource requirements of the Capacity Reservation.",
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "tolerations": {
+          "description": "Tolerations for taints to allow workloads scheduling on specific nodes.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Toleration"
+          }
+        }
+      }
+    },
+    "v1beta1.CapacityReservationStatus": {
+      "description": "CapacityReservationStatus defines the observed status of CapacityReservation.",
+      "type": "object",
+      "properties": {
+        "allocatable": {
+          "description": "Allocatable represents the resources that are available for scheduling.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resource.Quantity"
+          }
+        },
+        "associationUsages": {
+          "description": "Usages of associations An association can be a DAC or a Workload",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.AssociationUsage"
+          }
+        },
+        "capacity": {
+          "description": "Capacity represents the total resources available in this capacity reservation.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/resource.Quantity"
+          }
+        },
+        "capacityReservationLifecycleState": {
+          "description": "CapacityReservationLifecycleState indicates the current phase of the CapacityReservation (e.g., \"active\", \"creating\", \"Failed\" etc.).",
+          "type": "string"
+        },
+        "conditions": {
+          "description": "Conditions represents health and operational states.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.CapacityReservationCondition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map",
+          "x-kubernetes-patch-merge-key": "type",
+          "x-kubernetes-patch-strategy": "merge"
+        },
+        "lifecycleDetail": {
+          "description": "A message describing the current state in more detail that can provide actionable information.",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.ClusterBaseModel": {
       "description": "ClusterBaseModel is the Schema for the basemodels API",
       "type": "object",
@@ -219,6 +427,60 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1beta1.ClusterBaseModel"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.ClusterCapacityReservation": {
+      "description": "ClusterCapacityReservation is the Schema for the capacityReservations API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.CapacityReservationSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.CapacityReservationStatus"
+        }
+      }
+    },
+    "v1beta1.ClusterCapacityReservationList": {
+      "description": "ClusterCapacityReservationList contains a list of ClusterCapacityReservation.",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ClusterCapacityReservation"
           }
         },
         "kind": {
@@ -912,6 +1174,10 @@
         "affinity": {
           "description": "The GPU shape affinity of DAC, get from spec.type + spec.shape",
           "$ref": "#/definitions/v1.Affinity"
+        },
+        "capacityReservationId": {
+          "description": "CapacityReservation ID that used to create this DedicatedAICluster.",
+          "type": "string"
         },
         "compartmentID": {
           "description": "The compartment ID to use for the DAC",

@@ -10,9 +10,21 @@ type BaseModelListerExpansion interface{}
 // BaseModelNamespaceLister.
 type BaseModelNamespaceListerExpansion interface{}
 
+// CapacityReservationListerExpansion allows custom methods to be added to
+// CapacityReservationLister.
+type CapacityReservationListerExpansion interface{}
+
+// CapacityReservationNamespaceListerExpansion allows custom methods to be added to
+// CapacityReservationNamespaceLister.
+type CapacityReservationNamespaceListerExpansion interface{}
+
 // ClusterBaseModelListerExpansion allows custom methods to be added to
 // ClusterBaseModelLister.
 type ClusterBaseModelListerExpansion interface{}
+
+// ClusterCapacityReservationListerExpansion allows custom methods to be added to
+// ClusterCapacityReservationLister.
+type ClusterCapacityReservationListerExpansion interface{}
 
 // ClusterServingRuntimeListerExpansion allows custom methods to be added to
 // ClusterServingRuntimeLister.

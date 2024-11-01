@@ -67,16 +67,16 @@ type CapacityReservationSpec struct {
 type CapacityReservationStatus struct {
 	// Capacity represents the total resources available in this capacity reservation.
 	// +optional
-	Capacity corev1.ResourceList `json:"capacity,omitempty" protobuf:"bytes,2,name=capacity"`
+	Capacity corev1.ResourceList `json:"capacity,omitempty" protobuf:"bytes,2,rep,name=capacity"`
 
 	// Allocatable represents the resources that are available for scheduling.
 	// +optional
-	Allocatable corev1.ResourceList `json:"allocatable,omitempty" protobuf:"bytes,2,name=allocatable"`
+	Allocatable corev1.ResourceList `json:"allocatable,omitempty" protobuf:"bytes,2,rep,name=allocatable"`
 
 	// Usages of associations
 	// An association can be a DAC or a Workload
 	// +optional
-	AssociationUsages []AssociationUsage `json:"associationUsages,omitempty"`
+	AssociationUsages []AssociationUsage `json:"associationUsages,omitempty" protobuf:"bytes,2,rep,name=associationUsages"`
 
 	// Conditions represents health and operational states.
 	// +patchMergeKey=type
@@ -84,14 +84,14 @@ type CapacityReservationStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	// +optional
-	Conditions []CapacityReservationCondition `json:"conditions,omitempty"`
+	Conditions []CapacityReservationCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,2,rep,name=conditions"`
 
 	// CapacityReservationLifecycleState indicates the current phase of the CapacityReservation (e.g., "active", "creating", "Failed" etc.).
-	CapacityReservationLifecycleState CapacityReservationLifecycleState `json:"capacityReservationLifecycleState,omitempty"`
+	CapacityReservationLifecycleState CapacityReservationLifecycleState `json:"capacityReservationLifecycleState,omitempty" protobuf:"capacityReservationLifecycleState"`
 
 	// A message describing the current state in more detail that can provide actionable information.
 	// +optional
-	LifecycleDetail string `json:"lifecycleDetail,omitempty"`
+	LifecycleDetail string `json:"lifecycleDetail,omitempty" protobuf:"bytes,2,name=lifecycleDetail"`
 }
 
 // AssociationUsage defines the usage of the association.
