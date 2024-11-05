@@ -35,6 +35,8 @@ spec:
         - name: SMALL_GENERIC_V2
           quotaUnit: 1
           default: true
+    internalName: "e5-mistral-7b-instruct"
+    type: "Serving"
   modelConfiguration:
     {
       "_name_or_path": "mistralai/Mistral-7B-v0.1",

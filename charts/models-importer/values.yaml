@@ -9,14 +9,6 @@ llama-3-1-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-phi-3-mini-128k-instruct:
-  enabled: false
-  lifecyclePhase: "ACTIVE"
-
-phi-3-vision-128k-instruct:
-  enabled: false
-  lifecyclePhase: "ACTIVE"
-
 llama-3-2-90b-vision:
   enabled: false
   lifecyclePhase: "ACTIVE"
@@ -71,19 +63,23 @@ deberta-v3-base-prompt-injection-v2:
 gliner-large-v2-1:
   enabled: false
 
-mistral-7b-v0-2-finetuned-model-action-v0-0:
+mistral-7b-instruct-v0-2-ft-action-v0-0-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-mistral-7b-v0-2-finetuned-model-action-v0-1:
+mistral-7b-instruct-v0-2-ft-action-v0-1-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-mistral-7b-v0-2-finetuned-model-thought-v0-0:
+mistral-7b-instruct-v0-2-ft-thought-v0-0-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-mistral-7b-v0-2-finetuned-model-thought-v0-1:
+mistral-7b-instruct-v0-2-ft-thought-v0-1-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+phi-3-vision-128k-instruct-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
 

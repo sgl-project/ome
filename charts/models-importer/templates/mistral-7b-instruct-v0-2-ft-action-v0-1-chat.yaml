@@ -1,22 +1,22 @@
-{{- if index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "enabled" -}}
+{{- if index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: mistral-7b-instruct-v0-2-ft-thought-v0-1-chat
+  name: mistral-7b-instruct-v0-2-ft-action-v0-1-chat
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/runtime: "vllm-xsmall-text-generation"
     models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "isExperimental" }}"
-    models.ome.io/internal: "{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "isInternal" }}"
-    models.ome.io/lifecycle-phase: "{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "lifecyclePhase" }}"
+    models.ome.io/experimental: "{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "lifecyclePhase" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: olm.mistral-7b-instruct-v0.2-ft-thought-v0.1
+  displayName: olm.mistral-7b-instruct-v0.2-ft-action-v0.1
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "osBucket" }}/o/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-thought-v0-1-chat" "osPrefixOverride" }}"
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "osBucket" }}/o/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "osPrefixOverride" }}"
     storageUri: /mnt/data/models/olm/action-mistral-7b-v0.2-finetuned-model-v0.1
   vendor: olm
   version: "0.1"
@@ -35,11 +35,11 @@ spec:
         - name: SMALL_GENERIC_V2
           quotaUnit: 1
           default: true
-    internalName: "thought-mistral-7b-v0.2-finetuned-model-v0.1"
+    internalName: "action-mistral-7b-v0.2-finetuned-model-v0.1"
     type: "Serving"
   modelConfiguration:
     {
-      "_name_or_path": "./workspace/Base/Mistral_7B_Instruct_02",
+      "_name_or_path": "./workspace/Mistral-7B-Instruct-v0.2-dequantized",
       "architectures": [
         "MistralForCausalLM"
       ],

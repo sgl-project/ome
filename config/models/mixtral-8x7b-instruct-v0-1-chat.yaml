@@ -34,6 +34,8 @@ spec:
         - name: LLAMA2_70
           quotaUnit: 1
           default: true
+    internalName: "mixtral-8x7b-instruct-v0-1"
+    type: "Serving"
   modelConfiguration:
     {
       "architectures": [
