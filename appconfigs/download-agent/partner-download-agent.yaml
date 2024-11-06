@@ -1,6 +1,6 @@
 auth_type: &default_auth_type "OkeWorkloadIdentity"
 
-# A flag to indicate if it is a job for model replication or a job for model importing
+# A flag to indicate if it is a job for model replica or a job for model importing
 mode: "ModelImporting" # Available values: `ModelImporting`; `ModelReplication`
 
 model_name: "dummy-name"

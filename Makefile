@@ -161,6 +161,11 @@ model-controller: ## Build model-controller binary.
 model-agent: ## Build model-agent binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-agent ./cmd/model-agent
 
+
+.PHONE: ome-agent
+ome-agent: ## Build ome-agent binary.
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/ome-agent ./cmd/ome-agent
+
 .PHONE: multinode-prober
 multinode-prober: ## Build multinode-prober binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/multinode-prober ./cmd/multinode-prober
@@ -181,6 +186,18 @@ run-model-agent: fmt vet ## Run model-agent binary from local host against the c
 run-multinode-prober: manifests generate fmt vet ## Run multinode-prober binary from local host against the configured vLLM endpoint.
 	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/multinode-prober/main.go
 
+.PHONY: run-ome-agent-enigma
+run-ome-agent-enigma: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	bin/ome-agent enigma -d -c config/ome-agent/ome-agent.yaml
+
+.PHONY: run-ome-agent-hf-download
+run-ome-agent-hf-download: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	bin/ome-agent hf-download -d -c config/ome-agent/ome-agent.yaml
+
+.PHONY: run-ome-agent-os-replica
+run-ome-agent-os-replica: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	bin/ome-agent os-replica -d -c config/ome-agent/ome-agent.yaml
+
 .PHONY: ome-image
 ome-image: fmt vet ## Build ome-manager image.
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
@@ -196,6 +213,11 @@ model-agent-image: fmt vet ## Build model-agent image.
 .PHONY: multinode-prober-image
 multinode-prober-image: fmt vet ## Build multinode-prober image.
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG)
+
+.PHONY: ome-agent-image
+ome-agent-image: fmt vet ## Build ome-agent image.
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
+
 
 .PHONY: telepresence
 telepresence: ## Setup telepresence for local development.
@@ -241,6 +263,10 @@ push-model-agent-image: model-agent-image ## Push model-agent image to registry.
 push-multinode-prober-image: multinode-prober-image ## Push multinode-prober image to registry.
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/multinode-prober:$(TAG)
 
+.PHONY: push-ome-agent-image
+push-ome-agent-image: ome-agent-image ## Push ome-agent image to registry.
+	$(DOCKER_BUILD_CMD) push $(REGISTRY)/ome-agent:$(TAG)
+
 .PHONY: patch-manager-dev
 patch-manager-dev: push-manager-image ## Deploy manager image to dev cluster.
 	echo "Patch manager image to dev: $(MANAGER_IMG)"
@@ -272,7 +298,11 @@ artifacts: kustomize ## Generate artifacts for release.
 
 .PHONY: test
 test: fmt vet manifests envtest helm-lint ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/apis/serving/v1beta1/openapi_generated.go) ./cmd/... -coverprofile coverage.out -coverpkg ./pkg... ./cmd...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/apis/serving/v1beta1/openapi_generated.go) \
+		./cmd/... ./internal/... \
+		-coverprofile=coverage.out \
+		-coverpkg=./pkg,...,./cmd,...,./internal/...
 
 test-qpext:
 	cd qpext && go test -v ./... -cover

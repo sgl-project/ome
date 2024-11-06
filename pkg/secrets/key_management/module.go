@@ -20,28 +20,28 @@ func ProvideKmsConfig(v *viper.Viper, e *env.Environment, logger logging.Interfa
 	return kmsConfig, nil
 }
 
-func ProvideKmsCrypto(v *viper.Viper, e *env.Environment, logger logging.Interface) (*KmsCrypto, error) {
+func ProvideKmsCrypto(v *viper.Viper, e *env.Environment, logger logging.Interface) (*CryptoClient, error) {
 	kmsConfig, err := ProvideKmsConfig(v, e, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing KmsConfig: %+v", err)
 	}
 
-	kmsCrypto, err := NewKmsCrypto(kmsConfig, e)
+	kmsCrypto, err := NewCryptoClient(kmsConfig, e)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing KmsCrypto: %+v", err)
+		return nil, fmt.Errorf("error initializing CryptoClient: %+v", err)
 	}
 	return kmsCrypto, nil
 }
 
-func ProvideKmsManagement(v *viper.Viper, e *env.Environment, logger logging.Interface) (*KmsManagement, error) {
+func ProvideKmsManagement(v *viper.Viper, e *env.Environment, logger logging.Interface) (*KmsKeyManager, error) {
 	kmsConfig, err := ProvideKmsConfig(v, e, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing KmsConfig: %+v", err)
 	}
 
-	kmsManagement, err := NewKmsManagement(kmsConfig, e)
+	kmsManagement, err := NewKmsKeyManager(kmsConfig, e)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing KmsManagement: %+v", err)
+		return nil, fmt.Errorf("error initializing KmsKeyManager: %+v", err)
 	}
 	return kmsManagement, nil
 }
@@ -55,9 +55,9 @@ var KmsManagementModule = fx.Provide(
 )
 
 /*
- * Below is a way to inject a list of KmsCrypto and KmsManagement using a list of Configs leveraging fx Value Groups feature
+ * Below is a way to inject a list of CryptoClient and KmsKeyManager using a list of Configs leveraging fx Value Groups feature
  * Regarding how to use it, you can refer to the code snippet under:
- * ome/cmd/download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
+ * ome/cmd/hf_download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
  */
 type appParams struct {
 	fx.In
@@ -74,30 +74,30 @@ type appParams struct {
 	Configs []*KmsConfig `group:"kmsConfigs"`
 }
 
-func ProvideListOfKmsCryptoWithAppParams(e *env.Environment, params appParams) ([]*KmsCrypto, error) {
-	kmsCryptoList := make([]*KmsCrypto, 0)
+func ProvideListOfKmsCryptoWithAppParams(e *env.Environment, params appParams) ([]*CryptoClient, error) {
+	kmsCryptoList := make([]*CryptoClient, 0)
 	for _, config := range params.Configs {
 		if config == nil {
 			continue
 		}
-		kmsCrypto, err := NewKmsCrypto(config, e)
+		kmsCrypto, err := NewCryptoClient(config, e)
 		if err != nil {
-			return kmsCryptoList, fmt.Errorf("error initializing a list of KmsCrypto using KmsConfig: %+v: %+v", config, err)
+			return kmsCryptoList, fmt.Errorf("error initializing a list of CryptoClient using KmsConfig: %+v: %+v", config, err)
 		}
 		kmsCryptoList = append(kmsCryptoList, kmsCrypto)
 	}
 	return kmsCryptoList, nil
 }
 
-func ProvideListOfKmsManagementWithAppParams(e *env.Environment, params appParams) ([]*KmsManagement, error) {
-	kmsManagementList := make([]*KmsManagement, 0)
+func ProvideListOfKmsManagementWithAppParams(e *env.Environment, params appParams) ([]*KmsKeyManager, error) {
+	kmsManagementList := make([]*KmsKeyManager, 0)
 	for _, config := range params.Configs {
 		if config == nil {
 			continue
 		}
-		kmsManagement, err := NewKmsManagement(config, e)
+		kmsManagement, err := NewKmsKeyManager(config, e)
 		if err != nil {
-			return kmsManagementList, fmt.Errorf("error initializing a list of KmsManagement using KmsConfig: %+v: %+v", config, err)
+			return kmsManagementList, fmt.Errorf("error initializing a list of KmsKeyManager using KmsConfig: %+v: %+v", config, err)
 		}
 		kmsManagementList = append(kmsManagementList, kmsManagement)
 	}

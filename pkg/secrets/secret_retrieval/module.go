@@ -20,15 +20,15 @@ func ProvideSecretRetrievalConfig(v *viper.Viper, e *env.Environment, logger log
 	return secretRetrievalConfig, nil
 }
 
-func ProvideSecretRetrieval(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretRetrieval, error) {
+func ProvideSecretRetrieval(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretRetriever, error) {
 	secretRetrievalConfig, err := ProvideSecretRetrievalConfig(v, e, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing SecretRetrievalConfig: %+v", err)
 	}
 
-	secretRetrieval, err := NewSecretRetrieval(secretRetrievalConfig, e)
+	secretRetrieval, err := NewSecretRetriever(secretRetrievalConfig, e)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing SecretRetrieval: %+v", err)
+		return nil, fmt.Errorf("error initializing SecretRetriever: %+v", err)
 	}
 	return secretRetrieval, nil
 }
@@ -38,9 +38,9 @@ var SecretRetrievalModule = fx.Provide(
 )
 
 /*
- * Below is a way to inject a list of SecretRetrieval using a list of Configs leveraging fx Value Groups feature
+ * Below is a way to inject a list of SecretRetriever using a list of Configs leveraging fx Value Groups feature
  * Regarding how to use it, you can refer to the code snippet under:
- * ome/cmd/download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
+ * ome/cmd/hf_download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
  */
 type appParams struct {
 	fx.In
@@ -57,15 +57,15 @@ type appParams struct {
 	Configs []*SecretRetrievalConfig `group:"secretRetrievalConfigs"`
 }
 
-func ProvideListOfSecretRetrievalWithAppParams(e *env.Environment, params appParams) ([]*SecretRetrieval, error) {
-	secretRetrievalList := make([]*SecretRetrieval, 0)
+func ProvideListOfSecretRetrievalWithAppParams(e *env.Environment, params appParams) ([]*SecretRetriever, error) {
+	secretRetrievalList := make([]*SecretRetriever, 0)
 	for _, config := range params.Configs {
 		if config == nil {
 			continue
 		}
-		secretRetrieval, err := NewSecretRetrieval(config, e)
+		secretRetrieval, err := NewSecretRetriever(config, e)
 		if err != nil {
-			return secretRetrievalList, fmt.Errorf("error initializing a list of SecretRetrieval using Config: %+v: %+v", config, err)
+			return secretRetrievalList, fmt.Errorf("error initializing a list of SecretRetriever using Config: %+v: %+v", config, err)
 		}
 		secretRetrievalList = append(secretRetrievalList, secretRetrieval)
 	}

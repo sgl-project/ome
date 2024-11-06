@@ -62,7 +62,7 @@ func (cds *CasperDataStore) MultipartFileUpload(filePath string, target ObjectUR
 
 	callBack := func(multiPartUploadPart transfer.MultiPartUploadPart) {
 		if multiPartUploadPart.Err == nil {
-			fmt.Printf("Part: %d / %d is uploaded.\n", multiPartUploadPart.PartNum, multiPartUploadPart.TotalParts)
+			cds.logger.Infof("Part: %d / %d is uploaded for object %s.", multiPartUploadPart.PartNum, multiPartUploadPart.TotalParts, target.ObjectName)
 			// refer following fmt to get each part opc-md5 res.
 			// fmt.Printf("and this part opcMD5(64BasedEncoding) is: %s.\n", *multiPartUploadPart.OpcMD5 )
 		}

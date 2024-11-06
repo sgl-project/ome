@@ -1,0 +1,31 @@
+auth_type: &default_auth_type "UserPrincipal"
+profile: "DEFAULT"
+
+local_path: "/Users/simolin/mnt"
+model_name: "meta-llama/Meta-Llama-3-8B"
+hf_token: "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"
+skip_sha: false
+max_retries: 5
+retry_internal_in_seconds: 10
+num_connections: 20
+
+download_size_limit_gb: 650
+enable_size_limit_check: true
+
+source:
+  bucket_name: "model-store"
+  prefix: "meta/llama-3-2-1b/"
+  region: "us-chicago-1"
+  namespace: "idqj093njucb"
+
+target:
+  bucket_name: "simolin-test-bucket"
+  prefix: "meta/llama-3-2-1b/"
+  region: "eu-frankfurt-1"
+  namespace: "idqj093njucb"
+
+model_framework: tensorrtllm
+tensorrt_llm_version: "v0.0.1"
+#A10, A100-80GB, A100-40GB, A100-80GB, H100
+node_shape_alias: "H100"
+num_of_gpu: 4

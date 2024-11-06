@@ -1,25 +1,27 @@
 package key_management
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
-	"context"
-	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/keymanagement"
-	"net/http"
 )
 
-type KmsCrypto struct {
+type CryptoClient struct {
 	logger          logging.Interface
 	KmsCryptoClient *keymanagement.KmsCryptoClient
 	Config          *KmsConfig
 }
 
-func NewKmsCrypto(config *KmsConfig, e *env.Environment) (*KmsCrypto, error) {
+func NewCryptoClient(config *KmsConfig, e *env.Environment) (*CryptoClient, error) {
 	if config == nil {
 		return nil, fmt.Errorf("KmsConfig is nil")
 	}
+
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("KmsConfig is invalid: %+v", err)
 	}
@@ -31,70 +33,56 @@ func NewKmsCrypto(config *KmsConfig, e *env.Environment) (*KmsCrypto, error) {
 
 	client, err := NewKmsCryptoClient(configProvider, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create KMS client: %v", err)
 	}
 
-	return &KmsCrypto{
+	return &CryptoClient{
 		Config:          config,
 		KmsCryptoClient: client,
 	}, nil
 }
 
-func (kc *KmsCrypto) Encrypt(plaintext string, keyId string, algorithm keymanagement.EncryptDataDetailsEncryptionAlgorithmEnum) (string, error) {
-	encryptDataDetails := keymanagement.EncryptDataDetails{
-		KeyId:               &keyId,
-		Plaintext:           &plaintext,
-		EncryptionAlgorithm: algorithm,
-	}
-
+// Encrypt encrypts the given plaintext using the specified key ID and algorithm.
+func (kc *CryptoClient) Encrypt(plaintext, keyId string, algorithm keymanagement.EncryptDataDetailsEncryptionAlgorithmEnum) (string, error) {
 	encryptRequest := keymanagement.EncryptRequest{
-		EncryptDataDetails: encryptDataDetails,
+		EncryptDataDetails: keymanagement.EncryptDataDetails{
+			KeyId:               &keyId,
+			Plaintext:           &plaintext,
+			EncryptionAlgorithm: algorithm,
+		},
 	}
 
 	response, err := kc.KmsCryptoClient.Encrypt(context.Background(), encryptRequest)
 	if err != nil {
-		return "", fmt.Errorf("fail to encrypt data: %v", err)
+		return "", fmt.Errorf("failed to encrypt data: %v", err)
 	}
 	return *response.Ciphertext, nil
 }
 
-func (kc *KmsCrypto) Decrypt(ciphertext string, requireDecode bool, keyId string, algorithm keymanagement.DecryptDataDetailsEncryptionAlgorithmEnum) (string, error) {
-	decodedCipherText := ciphertext
+// Decrypt decrypts the given ciphertext using the specified key ID and algorithm. Optionally decodes the ciphertext.
+func (kc *CryptoClient) Decrypt(ciphertext string, requireDecode bool, keyId string, algorithm keymanagement.DecryptDataDetailsEncryptionAlgorithmEnum) (string, error) {
 	if requireDecode {
-		decodedCipherText = secrets.B64Decode(ciphertext)
-	}
-
-	decryptDataDetails := keymanagement.DecryptDataDetails{
-		KeyId:               &keyId,
-		Ciphertext:          &decodedCipherText,
-		EncryptionAlgorithm: algorithm,
+		ciphertext = secrets.B64Decode(ciphertext)
 	}
 
 	decryptRequest := keymanagement.DecryptRequest{
-		DecryptDataDetails: decryptDataDetails,
+		DecryptDataDetails: keymanagement.DecryptDataDetails{
+			KeyId:               &keyId,
+			Ciphertext:          &ciphertext,
+			EncryptionAlgorithm: algorithm,
+		},
 	}
+
 	response, err := kc.KmsCryptoClient.Decrypt(context.Background(), decryptRequest)
 	if err != nil {
 		return "", fmt.Errorf("cannot decrypt data: %v", err)
 	}
-
 	return *response.Plaintext, nil
 }
 
-func (kc *KmsCrypto) GenerateDEK(keyId string) (*keymanagement.GeneratedKey, error) {
-	keyShapeLength := 32
-	flagForIncludePlaintextKey := true
-	generateKeyDetails := keymanagement.GenerateKeyDetails{
-		KeyId:               &keyId,
-		IncludePlaintextKey: &flagForIncludePlaintextKey,
-		KeyShape: &keymanagement.KeyShape{
-			Algorithm: keymanagement.KeyShapeAlgorithmAes,
-			Length:    &keyShapeLength,
-		},
-	}
-	generateKeyRequest := keymanagement.GenerateDataEncryptionKeyRequest{
-		GenerateKeyDetails: generateKeyDetails,
-	}
+// GenerateDEK generates a Data Encryption Key (DEK) using the provided Master Encryption Key (MEK) ID.
+func (kc *CryptoClient) GenerateDEK(keyId string) (*keymanagement.GeneratedKey, error) {
+	generateKeyRequest := kc.newGenerateKeyRequest(keyId)
 
 	response, err := kc.KmsCryptoClient.GenerateDataEncryptionKey(context.Background(), generateKeyRequest)
 	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
@@ -102,4 +90,21 @@ func (kc *KmsCrypto) GenerateDEK(keyId string) (*keymanagement.GeneratedKey, err
 	}
 
 	return &response.GeneratedKey, nil
+}
+
+// Helper function to create a GenerateDataEncryptionKeyRequest with AES-256 algorithm.
+func (kc *CryptoClient) newGenerateKeyRequest(keyId string) keymanagement.GenerateDataEncryptionKeyRequest {
+	keyShapeLength := 32
+	includePlaintextKey := true
+
+	return keymanagement.GenerateDataEncryptionKeyRequest{
+		GenerateKeyDetails: keymanagement.GenerateKeyDetails{
+			KeyId:               &keyId,
+			IncludePlaintextKey: &includePlaintextKey,
+			KeyShape: &keymanagement.KeyShape{
+				Algorithm: keymanagement.KeyShapeAlgorithmAes,
+				Length:    &keyShapeLength,
+			},
+		},
+	}
 }

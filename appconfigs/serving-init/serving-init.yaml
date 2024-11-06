@@ -1,7 +1,5 @@
 auth_type: &default_auth_type "InstancePrincipal"
-
 model_store_directory: "/mnt/model-storage"
-local_store_directory: "/tmp/model-storage"
 
 disable_model_decryption: false
 

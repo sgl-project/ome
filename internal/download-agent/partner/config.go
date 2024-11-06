@@ -46,13 +46,13 @@ type Config struct {
 
 	// Injected client objects
 	SourceCasperDataStore *casper.CasperDataStore          `validate:"required"`
-	SourceKmsCrypto       *keymanagement.KmsCrypto         `validate:"required_if=SourceModelEncrypted true"`
-	SourceKmsManagement   *keymanagement.KmsManagement     `validate:"required_if=SourceModelEncrypted true"`
-	SourceSecretRetrieval *secretretrieval.SecretRetrieval `validate:"required_if=SourceModelEncrypted true"`
+	SourceKmsCrypto       *keymanagement.CryptoClient      `validate:"required_if=SourceModelEncrypted true"`
+	SourceKmsManagement   *keymanagement.KmsKeyManager     `validate:"required_if=SourceModelEncrypted true"`
+	SourceSecretRetrieval *secretretrieval.SecretRetriever `validate:"required_if=SourceModelEncrypted true"`
 	TargetCasperDataStore *casper.CasperDataStore          `validate:"required"`
-	TargetKmsCrypto       *keymanagement.KmsCrypto         `validate:"required"`
-	TargetKmsManagement   *keymanagement.KmsManagement     `validate:"required"`
-	TargetSecretRetrieval *secretretrieval.SecretRetrieval `validate:"required"`
+	TargetKmsCrypto       *keymanagement.CryptoClient      `validate:"required"`
+	TargetKmsManagement   *keymanagement.KmsKeyManager     `validate:"required"`
+	TargetSecretRetrieval *secretretrieval.SecretRetriever `validate:"required"`
 	SecretInVault         *secretinvault.SecretInVault     `validate:"required"`
 }
 

@@ -21,9 +21,9 @@ type appParams struct {
 	AnotherLogger logging.Interface `name:"another_log"`
 
 	CasperDataStoreList []*casper.CasperDataStore
-	KmsCryptoList       []*keymanagement.KmsCrypto
-	KmsManagementList   []*keymanagement.KmsManagement
-	SecretRetrievalList []*secretretrieval.SecretRetrieval
+	KmsCryptoList       []*keymanagement.CryptoClient
+	KmsManagementList   []*keymanagement.KmsKeyManager
+	SecretRetrievalList []*secretretrieval.SecretRetriever
 	SecretInVault       *secretinvault.SecretInVault //Ony has one instance of this type, no need to use list (value group) to inject
 }
 

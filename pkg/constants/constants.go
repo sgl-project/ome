@@ -37,6 +37,15 @@ var (
 	DedicatedAiClusterFinalizer     = "dedicatedaiclusters.ome.io/finalizer"
 )
 
+// OME Agent Constants
+var (
+	AgentName                         = "ome-agent"
+	AgentAppName                      = "OME_AGENT"
+	AgentModelNameEnvVarKey           = AgentAppName + "_" + "MODEL_NAME"
+	AgentModelStoreDirectoryEnvVarKey = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
+	AgentModelFrameworkEnvVarKey      = AgentAppName + "_" + "MODEL_FRAMEWORK"
+)
+
 // InferenceService MultiModel Constants
 var (
 	ModelConfigFileName = "models.json"

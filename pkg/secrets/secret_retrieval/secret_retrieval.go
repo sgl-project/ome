@@ -1,108 +1,131 @@
 package secret_retrieval
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	omesecrets "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
-	"context"
-	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/secrets"
-	"net/http"
 )
 
-type SecretRetrieval struct {
+type SecretRetriever struct {
 	logger        logging.Interface
 	SecretsClient *secrets.SecretsClient
 	Config        *SecretRetrievalConfig
 }
 
-func NewSecretRetrieval(config *SecretRetrievalConfig, e *env.Environment) (*SecretRetrieval, error) {
+func NewSecretRetriever(config *SecretRetrievalConfig, e *env.Environment) (*SecretRetriever, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config is nil")
 	}
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("config is invalid: %+v", err)
+		return nil, fmt.Errorf("invalid config: %v", err)
 	}
 
 	configProvider, err := getConfigProvider(config, e)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get config provider: %+v", err)
+		return nil, fmt.Errorf("failed to get config provider: %v", err)
 	}
 
 	client, err := NewSecretClient(configProvider, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create secret client: %v", err)
 	}
 
-	return &SecretRetrieval{
+	return &SecretRetriever{
 		logger:        config.AnotherLogger,
 		Config:        config,
 		SecretsClient: client,
 	}, nil
 }
 
-func (sc *SecretRetrieval) GetSecretBundleContentByNameAndVaultId(secretConfig omesecrets.SecretConfig) (*string, error) {
+func (sr *SecretRetriever) GetSecretBundleContentByNameAndVaultId(secretConfig omesecrets.SecretConfig) (*string, error) {
 	if err := secretConfig.ValidateNameAndVaultId(); err != nil {
 		return nil, fmt.Errorf("invalid secret config: %w", err)
 	}
 
-	getSecretBundleByNameRequest := secrets.GetSecretBundleByNameRequest{
+	request := secrets.GetSecretBundleByNameRequest{
 		SecretName: secretConfig.SecretName,
 		VaultId:    secretConfig.VaultId,
 	}
+	setSecretVersionConfig(secretConfig.SecretVersionConfig, &request)
 
-	if secretConfig.SecretVersionConfig != nil {
-		versionConfig := secretConfig.SecretVersionConfig
-		defaultVersionNum := int64(0)
-		if versionConfig.SecretVersionNumber != &defaultVersionNum {
-			getSecretBundleByNameRequest.VersionNumber = versionConfig.SecretVersionNumber
-		}
-		if versionConfig.SecretVersionName != nil {
-			getSecretBundleByNameRequest.SecretVersionName = versionConfig.SecretVersionName
-		}
-		if versionConfig.Stage != nil {
-			if secretVersion, ok := secrets.GetMappingGetSecretBundleByNameStageEnum(string(*versionConfig.Stage)); ok {
-				getSecretBundleByNameRequest.Stage = secretVersion
-			}
-		}
-	}
-
-	response, err := sc.SecretsClient.GetSecretBundleByName(context.Background(), getSecretBundleByNameRequest)
-	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
+	response, err := sr.SecretsClient.GetSecretBundleByName(context.Background(), request)
+	if err != nil || !isResponseStatusOK(response.RawResponse) {
 		return nil, fmt.Errorf("failed to get secret %s in vault %s: %v", *secretConfig.SecretName, *secretConfig.VaultId, err)
 	}
-	return response.SecretBundle.SecretBundleContent.(secrets.Base64SecretBundleContentDetails).Content, nil
+
+	return extractSecretContent(response.SecretBundle)
 }
 
-func (sc *SecretRetrieval) GetSecretBundleContentBySecretId(secretConfig omesecrets.SecretConfig) (*string, error) {
+func (sr *SecretRetriever) GetSecretBundleContentBySecretId(secretConfig omesecrets.SecretConfig) (*string, error) {
 	if err := secretConfig.ValidateSecretId(); err != nil {
 		return nil, fmt.Errorf("invalid secret config: %w", err)
 	}
 
-	getSecretBundleByIdRequest := secrets.GetSecretBundleRequest{
+	request := secrets.GetSecretBundleRequest{
 		SecretId: secretConfig.SecretId,
 	}
+	setSecretVersionConfig(secretConfig.SecretVersionConfig, &request)
 
-	if secretConfig.SecretVersionConfig != nil {
-		versionConfig := secretConfig.SecretVersionConfig
-		defaultVersionNum := int64(0)
-		if versionConfig.SecretVersionNumber != &defaultVersionNum {
-			getSecretBundleByIdRequest.VersionNumber = versionConfig.SecretVersionNumber
-		}
-		if versionConfig.SecretVersionName != nil {
-			getSecretBundleByIdRequest.SecretVersionName = versionConfig.SecretVersionName
-		}
-		if versionConfig.Stage != nil {
-			if secretVersion, ok := secrets.GetMappingGetSecretBundleStageEnum(string(*versionConfig.Stage)); ok {
-				getSecretBundleByIdRequest.Stage = secretVersion
-			}
-		}
-	}
-
-	response, err := sc.SecretsClient.GetSecretBundle(context.Background(), getSecretBundleByIdRequest)
-	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
+	response, err := sr.SecretsClient.GetSecretBundle(context.Background(), request)
+	if err != nil || !isResponseStatusOK(response.RawResponse) {
 		return nil, fmt.Errorf("failed to get secret %s: %v", *secretConfig.SecretId, err)
 	}
 
-	return response.SecretBundle.SecretBundleContent.(secrets.Base64SecretBundleContentDetails).Content, nil
+	return extractSecretContent(response.SecretBundle)
+}
+
+// setSecretVersionConfig applies the SecretVersionConfig settings to a request.
+func setSecretVersionConfig(versionConfig *omesecrets.SecretVersionConfig, request interface{}) {
+	if versionConfig == nil {
+		return
+	}
+
+	defaultVersionNum := int64(0)
+	if versionConfig.SecretVersionNumber != &defaultVersionNum {
+		switch req := request.(type) {
+		case *secrets.GetSecretBundleByNameRequest:
+			req.VersionNumber = versionConfig.SecretVersionNumber
+		case *secrets.GetSecretBundleRequest:
+			req.VersionNumber = versionConfig.SecretVersionNumber
+		}
+	}
+
+	if versionConfig.SecretVersionName != nil {
+		switch req := request.(type) {
+		case *secrets.GetSecretBundleByNameRequest:
+			req.SecretVersionName = versionConfig.SecretVersionName
+		case *secrets.GetSecretBundleRequest:
+			req.SecretVersionName = versionConfig.SecretVersionName
+		}
+	}
+
+	if versionConfig.Stage != nil {
+		if secretVersion, ok := secrets.GetMappingGetSecretBundleStageEnum(string(*versionConfig.Stage)); ok {
+			switch req := request.(type) {
+			case *secrets.GetSecretBundleByNameRequest:
+				req.Stage = secrets.GetSecretBundleByNameStageEnum(secretVersion)
+			case *secrets.GetSecretBundleRequest:
+				req.Stage = secretVersion
+			}
+		}
+	}
+}
+
+// isResponseStatusOK checks if the response status is HTTP 200 OK.
+func isResponseStatusOK(response *http.Response) bool {
+	return response != nil && response.StatusCode == http.StatusOK
+}
+
+// extractSecretContent extracts the content from a secret bundle.
+func extractSecretContent(bundle secrets.SecretBundle) (*string, error) {
+	content, ok := bundle.SecretBundleContent.(secrets.Base64SecretBundleContentDetails)
+	if !ok {
+		return nil, fmt.Errorf("unexpected secret bundle content format")
+	}
+	return content.Content, nil
 }

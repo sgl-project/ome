@@ -52,6 +52,11 @@ func NewCasperDataStore(config *Config, e *env.Environment) (*CasperDataStore, e
 	}, nil
 }
 
+func (cds *CasperDataStore) SetRegion(region string) {
+	cds.Config.Region = region
+	cds.Client.SetRegion(region)
+}
+
 func (cds *CasperDataStore) DownloadBasedOnObjectSize(source ObjectURI, target string, excludeBucketPath bool, sizeThresholdInMB int, downloadingChunkSize int, downloadingThread int) error {
 	source.Prefix = source.ObjectName
 
