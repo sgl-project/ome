@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/hf_download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hf_download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"context"
 	"github.com/spf13/cobra"

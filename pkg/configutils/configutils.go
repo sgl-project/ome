@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -146,4 +147,42 @@ func mergeConfigFile(v *viper.Viper, filePath string) error {
 
 	defer func() { _ = r.Close() }()
 	return v.MergeConfig(r)
+}
+
+func BindEnvsRecursive(v *viper.Viper, iface interface{}, path string) error {
+	val := reflect.ValueOf(iface).Elem()
+	typ := val.Type()
+
+	for i := 0; i < val.NumField(); i++ {
+		fieldType := typ.Field(i)
+		tag := fieldType.Tag.Get("mapstructure")
+
+		// Skip fields without a mapstructure tag
+		if tag == "" {
+			continue
+		}
+
+		// Construct the full path for the current field
+		fullPath := tag
+		if path != "" {
+			fullPath = path + "." + tag
+		}
+
+		// Get the field value, handle pointers without dereferencing nil pointers
+		field := val.Field(i)
+
+		// If the field is a struct (or pointer to a struct), recurse into it to construct nested paths
+		if field.Kind() == reflect.Struct {
+			// If it's a nil pointer, just recurse with fullPath
+			if err := BindEnvsRecursive(v, field.Addr().Interface(), fullPath); err != nil {
+				return err
+			}
+		}
+
+		if err := v.BindEnv(fullPath); err != nil {
+			return fmt.Errorf("failed to bind environment variable: %w", err)
+		}
+	}
+
+	return nil
 }

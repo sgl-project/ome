@@ -1,7 +1,7 @@
 package hf_download
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"errors"
@@ -12,17 +12,14 @@ import (
 
 type Config struct {
 	Logger                 logging.Interface
-	ModelName              string                  `mapstructure:"model_name" validate:"required"`
-	Token                  string                  `mapstructure:"hf_token"`
-	Branch                 string                  `mapstructure:"branch"`
-	LocalPath              string                  `mapstructure:"local_path"`
-	SkipSHA                bool                    `json:"skip_sha"`
-	MaxRetries             int                     `json:"max_retries"`
-	RetryInternalInSeconds int                     `json:"retry_internal_in_seconds"`
-	NumConnections         int                     `json:"num_connections"`
-	ObjectStoreURI         *casper.ObjectURI       `mapstructure:"object_store_uri"`
-	ObjectStorageDataStore *casper.CasperDataStore `mapstructure:"object_storage_data_store"`
-	SkipOriginalFolder     bool                    `mapstructure:"skip_original_folder"`
+	ModelName              string `mapstructure:"model_name" validate:"required"`
+	Token                  string `mapstructure:"hf_token"`
+	Branch                 string `mapstructure:"branch"`
+	LocalPath              string `mapstructure:"local_path"`
+	SkipSHA                bool   `mapstructure:"skip_sha"`
+	MaxRetries             int    `mapstructure:"max_retries"`
+	RetryInternalInSeconds int    `mapstructure:"retry_internal_in_seconds"`
+	NumConnections         int    `mapstructure:"num_connections"`
 }
 
 func defaultConfig() *Config {
@@ -86,22 +83,14 @@ func WithEnv(env *env.Environment) Option {
 // WithViper attempts to resolve the configuration for HF hf_download agent using Viper.
 func WithViper(v *viper.Viper) Option {
 	return func(c *Config) error {
-		// Unmarshal the viper configuration into Config struct
+		// Initialize default configuration
 		*c = *defaultConfig()
+		if err := configutils.BindEnvsRecursive(v, c, ""); err != nil {
+			return fmt.Errorf("error occurred when binding envs: %+v", err)
+		}
+
 		if err := v.Unmarshal(c); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling config: %+v", err)
-		}
-		if v.IsSet("branch") {
-			c.Branch = v.GetString("branch")
-		}
-		if v.IsSet("hf_token") {
-			c.Token = v.GetString("hf_token")
-		}
-		if v.IsSet("local_path") {
-			c.LocalPath = v.GetString("local_path")
-		}
-		if v.IsSet("skip_original_folder") {
-			c.SkipOriginalFolder = v.GetBool("skip_original_folder")
 		}
 
 		c.ModelName = v.GetString("model_name")

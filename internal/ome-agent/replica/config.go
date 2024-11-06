@@ -2,6 +2,7 @@ package replica
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"fmt"
@@ -18,8 +19,8 @@ type Config struct {
 	DownloadSizeLimitGB    int                     `mapstructure:"download_size_limit_gb"`
 	EnableSizeLimitCheck   bool                    `mapstructure:"enable_size_limit_check"`
 	NumConnections         int                     `mapstructure:"num_connections"`
-	SourceObjectStoreURI   *casper.ObjectURI       `mapstructure:"source" validate:"required"`
-	TargetObjectStoreURI   *casper.ObjectURI       `mapstructure:"target" validate:"required"`
+	SourceObjectStoreURI   casper.ObjectURI        `mapstructure:"source" validate:"required"`
+	TargetObjectStoreURI   casper.ObjectURI        `mapstructure:"target" validate:"required"`
 	ObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
 }
 
@@ -86,6 +87,9 @@ func WithViper(v *viper.Viper) Option {
 	return func(c *Config) error {
 
 		*c = *defaultConfig()
+		if err := configutils.BindEnvsRecursive(v, c, ""); err != nil {
+			return fmt.Errorf("error occurred when binding environment variables: %+v", err)
+		}
 
 		// Unmarshal the viper configuration into Config struct
 		if err := v.Unmarshal(c); err != nil {

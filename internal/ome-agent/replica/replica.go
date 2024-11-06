@@ -70,7 +70,7 @@ func (r *ReplicaAgent) Start() error {
 
 func (r *ReplicaAgent) listSourceObjects() ([]objectstorage.ObjectSummary, error) {
 	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	sourceObjs, err := r.Config.ObjectStorageDataStore.ListObjects(*r.Config.SourceObjectStoreURI)
+	sourceObjs, err := r.Config.ObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
 	if err != nil {
 		return nil, err
 	}
