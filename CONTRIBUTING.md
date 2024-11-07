@@ -114,9 +114,9 @@ To check out this repository:
 1. Clone it to your machine:
 
 ```shell
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
-cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/gencore/ome.git
+mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
+cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
+git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/genaicore/ome.git
 cd ome
 ```
 

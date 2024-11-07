@@ -1,50 +1,56 @@
 # OME-Agent
-OME-Agent is a robust, multi-functional tool designed to manage various tasks related to model inference and training in OME. OME-Agent is built as a command-line tool, implemented in Golang, and structured to handle complex model management operations such as replication, encryption, and decryption. With its modular command structure, OME-Agent consolidates critical tasks into a single, easy-to-use “Swiss Army Knife” solution for OME Operator.
+
+OME-Agent is a robust, multi-functional tool designed to manage various tasks related to model inference and training in OME. Built in Golang, this command-line tool consolidates essential model management operations, such as replication, encryption, and decryption, into a single, easy-to-use “Swiss Army Knife” solution for OME operators.
 
 ## Features
-OME-Agent provides the following capabilities:
 
-1. Model Replication from HuggingFace
-   - Nested File Handling: Downloads all files within a model, including those nested within subdirectories.
-   - Multithreaded Downloads: Accelerates large file downloads, particularly for files stored in Git LFS.
-   - Integrity Verification: Confirms successful downloads by validating SHA256 checksums.
-   - Resume Interrupted Downloads: Automatically resumes incomplete downloads.
-   - Smart Skipping: Detects and skips files that are already downloaded, saving time and bandwidth.
-   - HuggingFace Token Authentication: Supports HuggingFace Access Tokens for access-restricted models and datasets.
-   - Branch-Specific Updates: Tracks and updates files based on branch changes.
-2. Object Storage Replication Between OCI Buckets
-   - Cross-Bucket Replication: Copies models between OCI buckets to support data redundancy and facilitate multi-region deployments.
-   - Region/Tenancy Support: Provides flexibility to replicate models across OCI regions and tenancies as needed.
-   - Configurable Concurrency: Allows customization of concurrent connections for optimized upload/download speeds. 
-3. Model Weight Encryption and Decryption
-   - OCI Vault Integration: Uses OCI Vault and Key Management Service (KMS) to decrypt model weights securely.
-   - Advanced Encryption Standards: Protects model data by supporting decryption of large, sensitive files for regulated environments.
+OME-Agent offers the following capabilities:
+
+1. **Model Replication from HuggingFace**
+    - **Nested File Handling**: Downloads all files within a model, including subdirectory content.
+    - **Multithreaded Downloads**: Accelerates large file downloads, especially those stored in Git LFS.
+    - **Integrity Verification**: Confirms successful downloads by validating SHA256 checksums.
+    - **Resume Interrupted Downloads**: Automatically resumes incomplete downloads.
+    - **Smart Skipping**: Skips files that are already downloaded, saving time and bandwidth.
+    - **HuggingFace Token Authentication**: Supports HuggingFace Access Tokens for restricted models and datasets.
+    - **Branch-Specific Updates**: Tracks and updates files when switching branches.
+
+2. **Object Storage Replication Between OCI Buckets**
+    - **Cross-Bucket Replication**: Copies models between OCI buckets to support data redundancy and multi-region deployments.
+    - **Region/Tenancy Support**: Allows model replication across OCI regions and tenancies.
+    - **Configurable Concurrency**: Optimizes upload/download speeds through customizable concurrent connections.
+
+3. **Model Weight Encryption and Decryption**
+    - **OCI Vault Integration**: Uses OCI Vault and Key Management Service (KMS) for secure decryption of model weights.
+    - **Advanced Encryption Standards**: Protects sensitive model data with encryption for regulated environments.
 
 ## Getting Started
+
 ### Prerequisites
-- Go Version 1.23.0 or later.
-- OCI CLI and SDK for interacting with Oracle Cloud Infrastructure resources. (Optional if not using OCI services)
-- HuggingFace Access Token if downloading restricted models. (Optional if downloading public models)
-- OCI Vault and KMS setup for secure decryption of model weights. (Optional if not decrypting model weights)
-- `GOPATH`: If you don't have one, simply pick a directory and add
-     `export GOPATH=...`
-- `$GOPATH/bin` on `PATH`: This is so that tooling installed via `go get` will
-   work properly.
-- `GONOPROXY`: Set go proxy to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
-- `GOPRIVATE`: Set go private to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
+
+- **Go** version 1.23.0 or later.
+- **OCI CLI** and **SDK** for interacting with Oracle Cloud Infrastructure (optional if OCI services are not required).
+- **HuggingFace Access Token** if downloading restricted models (optional if downloading public models).
+- **OCI Vault and KMS** setup for model weight decryption (optional if not decrypting model weights).
+- **Environment Variables**:
+    - `GOPATH`: If not already set, select a directory and add it to the environment: `export GOPATH=...`.
+    - `$GOPATH/bin` in `PATH`: Ensures tooling installed via `go get` functions correctly.
+    - `GONOPROXY` and `GOPRIVATE`: Set to retrieve dependencies from Oracle's internal Bitbucket repository (`oracle.com/oci,bitbucket.oci.oraclecorp.com`).
 
 ### Installation
+
 Clone the repository and install the OME-Agent CLI.
+
 ```bash
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
+mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
 cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/gencore/ome.git
+git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/genaicore/ome.git
 cd ome
 make ome-agent
 ```
 
 ### Configuration
-OME-Agent supports both environment variables and configuration files for setting up the agent.
+OME-Agent supports configuration through both environment variables and configuration files.
 
 Sample configuration yaml file:
 ```yaml
