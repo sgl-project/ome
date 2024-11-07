@@ -5,12 +5,16 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	keymanagement "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/key_management"
-	secretretrieval "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/secret_retrieval"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsvault"
+	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
+	ocivault "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/vault"
 	"context"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"os"
 )
 
 var cmdEnigma = &cobra.Command{
@@ -35,9 +39,11 @@ func enigmaOpts(cli *cobra.Command) fx.Option {
 		configProvider(cli),
 
 		// Inject dependency modules
-		keymanagement.KmsCryptoModule,
-		keymanagement.KmsManagementModule,
-		secretretrieval.SecretRetrievalModule,
+		kmsvault.Module,
+		kmscrypto.Module,
+		kmsmgm.Module,
+		ocisecret.Module,
+		ocivault.Module,
 		env.Module,
 		afero.Module,
 		logging.Module,
@@ -52,10 +58,12 @@ func enigmaOpts(cli *cobra.Command) fx.Option {
 				fx.Hook{
 					OnStart: func(context.Context) error {
 						go func() {
-							a.Start()
-							err := sh.Shutdown()
-							if err != nil {
-								return
+							if err := a.Start(); err != nil {
+								l.Error("Enigma Agent encountered an error during Start", zap.Error(err))
+								os.Exit(1)
+							}
+							if err := sh.Shutdown(); err != nil {
+								l.Error("Failed to shutdown Enigma Agent", zap.Error(err))
 							}
 						}()
 						return nil

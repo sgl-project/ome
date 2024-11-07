@@ -1,15 +1,15 @@
 package enigma
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
-	keymanagement "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/key_management"
-	secretretrieval "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/secret_retrieval"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
+	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
 	"errors"
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 type ModelFramework string
@@ -22,22 +22,40 @@ const (
 
 type Config struct {
 	AnotherLogger          logging.Interface
-	ModelName              string                           `mapstructure:"model_name" validate:"required"`
-	ModelStoreDirectory    string                           `mapstructure:"model_store_directory" validate:"required"`
-	ModelFramework         ModelFramework                   `mapstructure:"model_framework" validate:"required"`
-	TensorrtLLMConfig      *TensorrtLLMConfig               `mapstructure:"tensorrtllm_config"`
-	DisableModelDecryption bool                             `mapstructure:"disable_model_decryption"`
-	KeyConfig              *secrets.KeyConfig               `mapstructure:"key_config" validate:"required_if=DisableModelDecryption false"`
-	SecretConfig           *secrets.SecretConfig            `mapstructure:"secret_config" validate:"required_if=DisableModelDecryption false"`
-	CryptoClient           *keymanagement.CryptoClient      `validate:"required_if=DisableModelDecryption false"`
-	KmsKeyManager          *keymanagement.KmsKeyManager     `validate:"required_if=DisableModelDecryption false"`
-	SecretRetriever        *secretretrieval.SecretRetriever `validate:"required_if=DisableModelDecryption false"`
+	ModelName              string             `mapstructure:"model_name"`
+	LocalPath              string             `mapstructure:"local_path"`
+	ModelFramework         ModelFramework     `mapstructure:"model_framework"`
+	TensorrtLLMConfig      *TensorrtLLMConfig `mapstructure:"tensorrtllm_config"`
+	DisableModelDecryption bool               `mapstructure:"disable_model_decryption"`
+	TempPath               string             `mapstructure:"temp_path"`
+	VaultId                string             `mapstructure:"vault_id"`
+	SecretName             string             `mapstructure:"secret_name"`
+	KeyMetadata            *kmsmgm.KeyMetadata
+	KmsCryptoClient        *kmscrypto.KmsCrypto `validate:"required_if=DisableModelDecryption false"`
+	KmsManagement          *kmsmgm.KmsMgm       `validate:"required_if=DisableModelDecryption false"`
+	OCISecret              *ocisecret.Secret    `validate:"required_if=DisableModelDecryption false"`
 }
 
 type TensorrtLLMConfig struct {
 	TensorrtLlmVersion string `mapstructure:"tensorrt_llm_version"`
 	NodeShapeAlias     string `mapstructure:"node_shape_alias"`
 	NumOfGpu           string `mapstructure:"num_of_gpu"`
+}
+
+func defaultConfig() *Config {
+	return &Config{
+		ModelFramework:         HuggingFace,
+		DisableModelDecryption: false,
+		TempPath:               "/tmp/model-storage",
+		KeyMetadata: &kmsmgm.KeyMetadata{
+			Algorithm:        "AES",
+			Length:           32,
+			ProtectionModel:  "HSM",
+			LifecycleState:   "ENABLED",
+			EnableDefinedTag: false,
+		},
+	}
+
 }
 
 // NewConfig builds and returns a new configuration from the given options.
@@ -78,16 +96,18 @@ func WithAnotherLog(logger logging.Interface) Option {
 // WithViper loads configuration using Viper.
 func WithViper(v *viper.Viper, logger logging.Interface) Option {
 	return func(c *Config) error {
-		v.AutomaticEnv()
-		v.SetEnvPrefix("OME_AGENT")
-		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+		*c = *defaultConfig()
+		if err := configutils.BindEnvsRecursive(v, c, ""); err != nil {
+			return fmt.Errorf("error binding envs: %w", err)
+		}
 
 		if err := v.Unmarshal(c); err != nil {
 			return fmt.Errorf("error unmarshalling config: %w", err)
 		}
 
-		if err := populateConfigFields(v, c, logger); err != nil {
-			return err
+		if err := v.Unmarshal(c.KeyMetadata); err != nil {
+			return fmt.Errorf("error unmarshalling key metadata: %w", err)
 		}
 
 		if c.ModelFramework == TensorRTLLM {
@@ -100,29 +120,21 @@ func WithViper(v *viper.Viper, logger logging.Interface) Option {
 	}
 }
 
-// populateConfigFields populates configuration fields directly from environment variables.
-func populateConfigFields(v *viper.Viper, c *Config, logger logging.Interface) error {
-	c.ModelName = v.GetString("model_name")
-	c.ModelStoreDirectory = v.GetString("model_store_directory")
-	c.ModelFramework = ModelFramework(v.GetString("model_framework"))
-	c.DisableModelDecryption = v.GetBool("disable_model_decryption")
-
-	if c.ModelName == "" || c.ModelStoreDirectory == "" || c.ModelFramework == "" {
-		return errors.New("missing required configuration values")
-	}
-	return nil
-}
-
 // configureTensorRTLLM configures TensorRT LLM-specific settings.
 func configureTensorRTLLM(c *Config, v *viper.Viper, logger logging.Interface) error {
-	nodeShape, err := GetOCINodeShape(logger)
-	if err != nil {
-		return fmt.Errorf("failed to get OCI node shape: %w", err)
-	}
+	var nodeShapeAlias string
+	if v.GetString("node_shape_alias") == "" {
+		nodeShape, err := GetOCINodeShape(logger)
+		if err != nil {
+			return fmt.Errorf("failed to get OCI node shape: %w", err)
+		}
 
-	nodeShapeAlias, err := GetOCINodeShortVersionShape(nodeShape)
-	if err != nil {
-		return fmt.Errorf("failed to get short version shape for node: %w", err)
+		nodeShapeAlias, err = GetOCINodeShortVersionShape(nodeShape)
+		if err != nil {
+			return fmt.Errorf("failed to get short version shape for node: %w", err)
+		}
+	} else {
+		nodeShapeAlias = v.GetString("node_shape_alias")
 	}
 
 	c.TensorrtLLMConfig = &TensorrtLLMConfig{
@@ -137,9 +149,9 @@ func configureTensorRTLLM(c *Config, v *viper.Viper, logger logging.Interface) e
 // WithAppParams applies configuration parameters from Enigma-specific params.
 func WithAppParams(params enigmaParams) Option {
 	return func(c *Config) error {
-		c.CryptoClient = params.CryptoClient
-		c.KmsKeyManager = params.KmsKeyManager
-		c.SecretRetriever = params.SecretRetriever
+		c.OCISecret = params.Secret
+		c.KmsCryptoClient = params.KmsCryptoClient
+		c.KmsManagement = params.KmsManagement
 		return nil
 	}
 }

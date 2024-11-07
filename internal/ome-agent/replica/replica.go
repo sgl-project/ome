@@ -12,7 +12,7 @@ import (
 
 const (
 	DefaultDownloadChunkSizeInMB = 20
-	DefaultDownloadThreads       = 8
+	DefaultDownloadThreads       = 20
 	DefaultUploadChunkSizeInMB   = 50
 	DefaultUploadThreads         = 10
 	GB                           = 1073741824
@@ -39,8 +39,7 @@ func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
 
 // Start initiates the replication process.
 func (r *ReplicaAgent) Start() error {
-	r.logger.Infof("Starting replication for %s", r.Config.ModelName)
-
+	r.logger.Infof("Start replication from %s to %s", r.Config.SourceObjectStoreURI, r.Config.TargetObjectStoreURI)
 	sourceObjs, err := r.listSourceObjects()
 	if err != nil {
 		return err

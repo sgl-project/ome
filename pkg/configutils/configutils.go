@@ -171,6 +171,15 @@ func BindEnvsRecursive(v *viper.Viper, iface interface{}, path string) error {
 		// Get the field value, handle pointers without dereferencing nil pointers
 		field := val.Field(i)
 
+		if field.Kind() == reflect.Ptr {
+			if field.IsNil() && field.Type().Elem().Kind() == reflect.Struct {
+				// Initialize the pointer to a new struct if it's nil
+				field.Set(reflect.New(field.Type().Elem()))
+			}
+			// Update field to the dereferenced struct (either existing or newly created)
+			field = field.Elem()
+		}
+
 		// If the field is a struct (or pointer to a struct), recurse into it to construct nested paths
 		if field.Kind() == reflect.Struct {
 			// If it's a nil pointer, just recurse with fullPath

@@ -3,8 +3,9 @@ package enigma
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	keymanagement "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/key_management"
-	secretretrieval "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/secret_retrieval"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
+	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
 	"fmt"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -14,9 +15,9 @@ type enigmaParams struct {
 	fx.In
 
 	AnotherLogger   logging.Interface `name:"another_log"`
-	CryptoClient    *keymanagement.CryptoClient
-	KmsKeyManager   *keymanagement.KmsKeyManager
-	SecretRetriever *secretretrieval.SecretRetriever
+	KmsCryptoClient *kmscrypto.KmsCrypto
+	KmsManagement   *kmsmgm.KmsMgm
+	Secret          *ocisecret.Secret
 }
 
 var Module = fx.Provide(

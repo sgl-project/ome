@@ -74,6 +74,11 @@ target:
   prefix: "meta/llama-3-2-1b/"
   region: "eu-frankfurt-1"
   namespace: "idqj093njucb"
+
+compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+vault_id: "ocid1.vault.oc1.us-chicago-1.ijsr6afaaagp2.abxxeljtatzowkwlt2iu42ndlmnmd4d4nausgoubu7uq7iro553xdj5b6weq"
+key_name: "command_r"
+secret_name: "command_r-dek"
 ```
 
 Supported environment variables:
@@ -100,6 +105,10 @@ All environment variables ***must*** start the prefix `OME_AGENT_` to be recogni
 | `target.prefix`             | `OME_AGENT_TARGET_PREFIX`           |         | no       |
 | `target.region`             | `OME_AGENT_TARGET_REGION`           |         | yes      |
 | `target.namespace`          | `OME_AGENT_TARGET_NAMESPACE`        |         | yes      |
+| `compartment_id`            | `OME_AGENT_COMPARTMENT_ID`          |         | yes      |
+| `vault_id`                  | `OME_AGENT_VAULT_ID`                |         | yes      |
+| `key_name`                  | `OME_AGENT_KEY_NAME`                |         | yes      |
+| `secret_name`               | `OME_AGENT_SECRET_NAME`             |         | yes      |
 
 ### Usage
 OME-Agent uses subcommands to run specific tasks. Use the following commands:=

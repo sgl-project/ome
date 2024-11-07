@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"os"
 )
 
 var cmdReplica = &cobra.Command{
@@ -49,13 +50,12 @@ func replicaOpts(cli *cobra.Command) fx.Option {
 				fx.Hook{
 					OnStart: func(context.Context) error {
 						go func() {
-							err := a.Start()
-							if err != nil {
-								return
+							if err := a.Start(); err != nil {
+								l.Error("Replica Agent encountered an error during Start", zap.Error(err))
+								os.Exit(1)
 							}
-							err = sh.Shutdown()
-							if err != nil {
-								return
+							if err := sh.Shutdown(); err != nil {
+								l.Error("Failed to shutdown ReplicaAgent", zap.Error(err))
 							}
 						}()
 						return nil

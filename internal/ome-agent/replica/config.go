@@ -14,7 +14,6 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	ModelName              string                  `mapstructure:"model_name" validate:"required"`
 	LocalPath              string                  `mapstructure:"local_path" validate:"required"`
 	DownloadSizeLimitGB    int                     `mapstructure:"download_size_limit_gb"`
 	EnableSizeLimitCheck   bool                    `mapstructure:"enable_size_limit_check"`
