@@ -6,7 +6,7 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: vllm-xsmall-text-generation
+      runtime: vllm-one-card-chat
       baseModel: mistral-7b-v0-2-finetuned-model-action-v0-0
       protocolVersion: openAI
     minReplicas: 1

@@ -1,19 +1,17 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: sglang-small-text-generation
+  name: vllm-two-cards-chat
 spec:
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
-    prometheus.io/path: "/metrics"
-  labels:
-    logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
-  tolerations:
-    - key: "nvidia.com/gpu"
-      operator: "Exists"
-      effect: "NoSchedule"
+  {{with .Values.commonAnnotations}}
+  annotations: {{ toYaml . | nindent 6 }}
+  {{end}}
+  {{with .Values.commonLabels}}
+  labels: {{ toYaml . | nindent 6 }}
+  {{end}}
+  {{with .Values.commonTolerations}}
+  tolerations: {{ toYaml . | nindent 6 }}
+  {{end}}
   volumes:
     - name: dshm
       emptyDir:
@@ -33,24 +31,18 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralForCausalLM
+      modelArchitecture: MixtralForCausalLM
       version: "1"
       autoSelect: true
       priority: 1
   modelSizeRange:
-    min: 60B
-    max: 128B
+    min: 25B
+    max: 53B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: phx.ocir.io/idqj093njucb/sglang:a95d558
+      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.vllm_chat_image.tag }}
       ports:
         - containerPort: 8080
           name: http1
@@ -61,10 +53,14 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
-          --port=8080 \
-          --model-path="$MODEL_PATH" \
-          --tp-size=2 \
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{.Values.vllm.port}} \
+          --model="$MODEL_PATH" \
+          --disable-log-requests \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --served-model-name={{.Values.vllm.serveModelName}} \
+          --tensor-parallel-size=2 \
+          --enable-chunked-prefill
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -80,7 +76,7 @@ spec:
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -98,7 +94,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1

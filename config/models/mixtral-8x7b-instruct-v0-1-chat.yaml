@@ -5,7 +5,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "vllm-small-text-generation"
+    models.ome.io/runtime: "vllm-two-cards-chat"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "False"
     models.ome.io/internal: "True"

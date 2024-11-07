@@ -1,17 +1,19 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-embeddings
+  name: vllm-one-card-multimodal
 spec:
-  {{with .Values.commonAnnotations}}
-  annotations: {{ toYaml . | nindent 6 }}
-  {{end}}
-  {{with .Values.commonLabels}}
-  labels: {{ toYaml . | nindent 6 }}
-  {{end}}
-  {{with .Values.commonTolerations}}
-  tolerations: {{ toYaml . | nindent 6 }}
-  {{end}}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+  labels:
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
   volumes:
     - name: dshm
       emptyDir:
@@ -31,15 +33,18 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: MistralModel
+      modelArchitecture: Phi3VForCausalLM
       version: "1"
       autoSelect: true
       priority: 1
+  modelSizeRange:
+    min: 1M
+    max: 25B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.commonImage.tag }}
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
       ports:
         - containerPort: 8080
           name: http1
@@ -51,14 +56,16 @@ spec:
       args:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
-          --port={{.Values.vllm.port}} \
+          --port=8080 \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --model="$MODEL_PATH" \
           --disable-log-requests \
-          --served-model-name={{.Values.vllm.serveModelName}} \
+          --served-model-name=vllm-model \
           --tensor-parallel-size=1 \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --enforce-eager \
-          --gpu-memory-utilization=0.8 \
+          --trust-remote-code \
+          --max-num-seqs=16 \
+          --enable-chunked-prefill \
+          --disable-sliding-window
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -97,5 +104,5 @@ spec:
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
-        initialDelaySeconds: 60
+        initialDelaySeconds: 15
         timeoutSeconds: 30

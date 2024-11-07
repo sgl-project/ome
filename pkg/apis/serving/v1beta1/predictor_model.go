@@ -137,8 +137,8 @@ func (m *ModelSpec) RuntimeSupportsModel(srSpec *ServingRuntimeSpec, modelSpec *
 	// Check if the model's size is within the runtime's supported size range.
 	if modelSpec.ModelParameterSize != nil && srSpec.ModelSizeRange != nil {
 		modelSize := parseModelSize(*modelSpec.ModelParameterSize)
-		if modelSize > parseModelSize(*srSpec.ModelSizeRange.Min) && modelSize < parseModelSize(*srSpec.ModelSizeRange.Max) {
-			return false
+		if modelSize >= parseModelSize(*srSpec.ModelSizeRange.Min) && modelSize <= parseModelSize(*srSpec.ModelSizeRange.Max) {
+			return true
 		}
 	}
 

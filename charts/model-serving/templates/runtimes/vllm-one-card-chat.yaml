@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-xsmall-text-generation
+  name: vllm-one-card-chat
 spec:
   {{with .Values.commonAnnotations}}
   annotations: {{ toYaml . | nindent 6 }}
@@ -31,19 +31,7 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
       modelArchitecture: MistralForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralModel
       version: "1"
       autoSelect: true
       priority: 1
@@ -53,11 +41,20 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+    - name: safetensors
+      modelType: transformer
+      modelArchitecture: LlamaForCausalLM
+      version: "1"
+      autoSelect: true
+      priority: 1
+  modelSizeRange:
+    min: 1M
+    max: 25B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.commonImage.tag }}
+      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.vllm_chat_image.tag }}
       ports:
         - containerPort: 8080
           name: http1
@@ -71,8 +68,8 @@ spec:
           python3 -m vllm.entrypoints.openai.api_server \
           --port={{.Values.vllm.port}} \
           --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --disable-log-requests \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --served-model-name={{.Values.vllm.serveModelName}} \
           --tensor-parallel-size=1 \
           --enable-chunked-prefill
@@ -83,11 +80,11 @@ spec:
         requests:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
         limits:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:
@@ -114,5 +111,5 @@ spec:
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
-        initialDelaySeconds: 60
+        initialDelaySeconds: 15
         timeoutSeconds: 30

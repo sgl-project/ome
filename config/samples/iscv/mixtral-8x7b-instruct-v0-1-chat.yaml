@@ -6,7 +6,6 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: vllm-small-text-generation
       baseModel: mixtral-8x7b-instruct-v0-1-chat
       protocolVersion: openAI
     minReplicas: 1

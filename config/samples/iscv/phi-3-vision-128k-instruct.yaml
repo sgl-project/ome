@@ -6,7 +6,6 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: vllm-vision
       baseModel: phi-3-vision-128k-instruct
       protocolVersion: openAI
     minReplicas: 1

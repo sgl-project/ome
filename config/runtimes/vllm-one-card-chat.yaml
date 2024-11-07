@@ -1,15 +1,15 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-xsmall-text-generation
+  name: vllm-one-card-chat
 spec:
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
   labels:
-    sidecar.istio.io/inject: 'true'
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
@@ -33,19 +33,7 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
       modelArchitecture: MistralForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralModel
       version: "1"
       autoSelect: true
       priority: 1
@@ -55,6 +43,15 @@ spec:
       version: "1"
       autoSelect: true
       priority: 1
+    - name: safetensors
+      modelType: transformer
+      modelArchitecture: LlamaForCausalLM
+      version: "1"
+      autoSelect: true
+      priority: 1
+  modelSizeRange:
+    min: 1M
+    max: 25B
   protocolVersions:
     - openAI
   containers:
@@ -75,7 +72,7 @@ spec:
           --model="$MODEL_PATH" \
           --disable-log-requests \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --served-model-name=vllm-model \
+          --served-model-name=vllm-mode\
           --tensor-parallel-size=1 \
           --enable-chunked-prefill
       volumeMounts:
@@ -116,5 +113,5 @@ spec:
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
-        initialDelaySeconds: 60
+        initialDelaySeconds: 15
         timeoutSeconds: 30

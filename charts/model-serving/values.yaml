@@ -6,6 +6,12 @@ vllm:
     tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
   llama3_2_image:
     tag: &llama_3_2ImageTag v0.6.2.e019c49f
+  vllm_embeding_image:
+    tag : &vllm_embedingImageTag 0.3.3-hotfix-embedding-fix.28d8b56bb1a
+  vllm_chat_image:
+    tag: &vllm_chatImageTag 0.4.0.post1.d7823e5e491
+  vllm_multimodal_image:
+    tag: &vllm_multimodelImageTag 0.5.1.a24e62ea0ad
 
 sglang:
   port: 8080

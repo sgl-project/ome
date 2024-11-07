@@ -33,13 +33,13 @@ spec:
       modelType: transformer
       modelArchitecture: LlamaForCausalLM
       version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
     - name: safetensors
       modelType: transformer
       modelArchitecture: MistralForCausalLM
       version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
   protocolVersions:
     - openAI

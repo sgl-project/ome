@@ -2,13 +2,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - vllm-embeddings.yaml
+  - vllm-one-card-embeding.yaml
   - vllm-large-text-generation.yaml
   - vllm-medium-text-generation.yaml
   - vllm-pp-rdma.yaml
   - vllm-pp.yaml
   - vllm-small-text-generation.yaml
-  - vllm-xsmall-text-generation.yaml
   - vllm-vision.yaml
   - sglang-large-text-generation.yaml
   - sglang-medium-text-generation.yaml

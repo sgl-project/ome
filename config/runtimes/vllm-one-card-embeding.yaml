@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: sglang-small-text-generation
+  name: vllm-one-card-embeding
 spec:
   annotations:
     prometheus.io/scrape: "true"
@@ -26,31 +26,22 @@ spec:
               - key: node.kubernetes.io/instance-type
                 operator: In
                 values:
-                  - BM.GPU.B4.8
-                  - BM.GPU4.8
-                  - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralForCausalLM
+      modelArchitecture: MistralModel
       version: "1"
       autoSelect: true
       priority: 1
   modelSizeRange:
-    min: 60B
-    max: 128B
+    min: 1M
+    max: 25B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: phx.ocir.io/idqj093njucb/sglang:a95d558
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
       ports:
         - containerPort: 8080
           name: http1
@@ -61,10 +52,15 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
+          python3 -m vllm.entrypoints.openai.api_server \
           --port=8080 \
-          --model-path="$MODEL_PATH" \
-          --tp-size=2 \
+          --model="$MODEL_PATH" \
+          --disable-log-requests \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --served-model-name=vllm-model \
+          --tensor-parallel-size=1 \
+          --enforce-eager \
+          --gpu-memory-utilization=0.8 \
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -72,15 +68,15 @@ spec:
         requests:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 2
+          nvidia.com/gpu: 1
         limits:
           cpu: 10
           memory: 160Gi
-          nvidia.com/gpu: 2
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -98,10 +94,10 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
-        initialDelaySeconds: 60
+        initialDelaySeconds: 15
         timeoutSeconds: 30

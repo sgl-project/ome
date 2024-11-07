@@ -6,7 +6,6 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: vllm-xsmall-text-generation
       baseModel: nl2rqs-7b-v3
       protocolVersion: openAI
     minReplicas: 1
