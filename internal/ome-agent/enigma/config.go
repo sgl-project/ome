@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
+	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 )
 
 type ModelFramework string
@@ -124,12 +125,12 @@ func WithViper(v *viper.Viper, logger logging.Interface) Option {
 func configureTensorRTLLM(c *Config, v *viper.Viper, logger logging.Interface) error {
 	var nodeShapeAlias string
 	if v.GetString("node_shape_alias") == "" {
-		nodeShape, err := GetOCINodeShape(logger)
+		nodeShape, err := utils.GetOCINodeShape(logger)
 		if err != nil {
 			return fmt.Errorf("failed to get OCI node shape: %w", err)
 		}
 
-		nodeShapeAlias, err = GetOCINodeShortVersionShape(nodeShape)
+		nodeShapeAlias, err = utils.GetOCINodeShortVersionShape(nodeShape)
 		if err != nil {
 			return fmt.Errorf("failed to get short version shape for node: %w", err)
 		}

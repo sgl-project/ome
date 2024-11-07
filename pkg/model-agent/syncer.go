@@ -35,9 +35,10 @@ const (
 )
 
 type SyncerTask struct {
-	TaskType         SyncerTaskType
-	BaseModel        *v1beta1.BaseModel
-	ClusterBaseModel *v1beta1.ClusterBaseModel
+	TaskType               SyncerTaskType
+	BaseModel              *v1beta1.BaseModel
+	ClusterBaseModel       *v1beta1.ClusterBaseModel
+	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
 }
 
 type Syncer struct {
@@ -123,7 +124,7 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		fallthrough
 	case DownloadOverride:
 		err := utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-			return s.downloadModel(casperUri, destPath)
+			return s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter)
 		})
 		if err != nil {
 			s.markModelOnNodeFailed(task)
@@ -222,7 +223,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 	return osUri, destPath, nil
 }
 
-func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string) error {
+func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter) error {
 	s.logger.Infof("Making call to object storage with endpoint %s", s.casperDataStore.CasperClient.Endpoint())
 	objects, err := s.casperDataStore.ListObjects(*uri)
 	if err != nil {
@@ -234,6 +235,19 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string) error {
 	}
 
 	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
+
+	if shapeFilter.IsTensorrtLLMModel {
+		s.logger.Infof("Tensorrt_llm Model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
+		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
+		for _, object := range objects {
+			if object.Name != nil {
+				if strings.Contains(*object.Name, fmt.Sprintf("/%s/", shapeFilter.ShapeAlias)) {
+					shapeFilteredObjects = append(shapeFilteredObjects, object)
+				}
+			}
+		}
+		objects = shapeFilteredObjects
+	}
 
 	objectsChannel := prepareObjectsChannel(objects)
 

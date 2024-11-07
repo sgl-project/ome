@@ -1,4 +1,4 @@
-package enigma
+package utils
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/imds"

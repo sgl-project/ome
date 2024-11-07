@@ -10,6 +10,7 @@ import (
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/serving/v1beta1"
 	omev1beta1lister "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,9 +29,15 @@ type Watcher struct {
 	syncerChan             chan<- *SyncerTask
 	nodeName               string
 	nodeShape              string
+	nodeShapeAlias         string
 	kubeClient             *kubernetes.Clientset
 	nodeLabeler            *NodeLabeler
 	logger                 *zap.SugaredLogger
+}
+
+type TensorRTLLMShapeFilter struct {
+	IsTensorrtLLMModel bool
+	ShapeAlias         string
 }
 
 func NewWatcher(nodeShape string,
@@ -42,8 +49,15 @@ func NewWatcher(nodeShape string,
 	kubeClient *kubernetes.Clientset,
 	nodeLabeler *NodeLabeler,
 	logger *zap.SugaredLogger) (*Watcher, error) {
+
+	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(nodeShape)
+	if err != nil {
+		return nil, err
+	}
+
 	watcher := &Watcher{
 		nodeShape:              nodeShape,
+		nodeShapeAlias:         nodeShapeAlias,
 		baseModelLister:        baseModelInformer.Lister(),
 		baseModelSynced:        baseModelInformer.Informer().HasSynced,
 		clusterBaseModelLister: clusterBaseModelInformer.Lister(),
@@ -147,10 +161,19 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 			}
 		}
 
+		IsTensorrtLLMModel := false
+		if baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
+			IsTensorrtLLMModel = true
+		}
+
 		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 		syncerTask := &SyncerTask{
 			TaskType:  Download,
 			BaseModel: baseModel,
+			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
+				IsTensorrtLLMModel: IsTensorrtLLMModel,
+				ShapeAlias:         w.nodeShapeAlias,
+			},
 		}
 
 		w.syncerChan <- syncerTask
@@ -184,9 +207,18 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 
 		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
 
+		IsTensorrtLLMModel := false
+		if clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
+			IsTensorrtLLMModel = true
+		}
+
 		syncerTask := &SyncerTask{
 			TaskType:         Download,
 			ClusterBaseModel: clusterBaseModel,
+			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
+				IsTensorrtLLMModel: IsTensorrtLLMModel,
+				ShapeAlias:         w.nodeShapeAlias,
+			},
 		}
 
 		w.syncerChan <- syncerTask
@@ -244,9 +276,18 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 			return
 		}
 
+		IsTensorrtLLMModel := false
+		if newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
+			IsTensorrtLLMModel = true
+		}
+
 		syncerTask := &SyncerTask{
 			TaskType:  DownloadOverride,
 			BaseModel: newBaseModel,
+			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
+				IsTensorrtLLMModel: IsTensorrtLLMModel,
+				ShapeAlias:         w.nodeShapeAlias,
+			},
 		}
 
 		w.syncerChan <- syncerTask
@@ -305,9 +346,18 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 			return
 		}
 
+		IsTensorrtLLMModel := false
+		if newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
+			IsTensorrtLLMModel = true
+		}
+
 		syncerTask := &SyncerTask{
 			TaskType:         DownloadOverride,
 			ClusterBaseModel: newClusterBaseModel,
+			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
+				IsTensorrtLLMModel: IsTensorrtLLMModel,
+				ShapeAlias:         w.nodeShapeAlias,
+			},
 		}
 
 		w.syncerChan <- syncerTask

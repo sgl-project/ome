@@ -58,6 +58,7 @@ const (
 	AgentEnableFlag       = "--enable-puller"
 	AgentConfigDirArgName = "--config-dir"
 	AgentModelDirArgName  = "--model-dir"
+	TensorRTLLM           = "tensorrt_llm"
 )
 
 // InferenceService Annotations
