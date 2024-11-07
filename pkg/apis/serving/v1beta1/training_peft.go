@@ -1,7 +1,7 @@
 package v1beta1
 
-var (
-	_ TrainingJobImplementation = &PeftTrainingJobSpec{}
+import (
+	v1 "k8s.io/api/core/v1"
 )
 
 type PeftTrainingJobSpec struct {
@@ -19,4 +19,12 @@ func (peft *PeftTrainingJobSpec) GetLauncherReplicaSpec() *ReplicaSpec {
 		return nil
 	}
 	return launcherSpec
+}
+
+func (peft *PeftTrainingJobSpec) GetLauncherContainer() *v1.Container {
+	launcherSpec := peft.GetLauncherReplicaSpec()
+	if launcherSpec == nil || len(launcherSpec.Template.Spec.Containers) == 0 {
+		return nil
+	}
+	return &launcherSpec.Template.Spec.Containers[0]
 }

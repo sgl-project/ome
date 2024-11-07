@@ -4,6 +4,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/reconcilers"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/singlenode/cohere"
 	trainingJobUtils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"context"
@@ -129,14 +130,18 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		// Todo: Implement reconciliation logic for other training framework
 		var err error
-		switch v1beta1.TrainingFrameworkType(trainingJob.Spec.TrainingFrameworkType) {
+		switch trainingJob.Spec.TrainingFramework.FrameworkType {
 		case v1beta1.Peft:
 			reconciler := reconcilers.NewPeftTrainingReconciler(r.Client, r.Scheme)
-			peftJobSpec := &v1beta1.PeftTrainingJobSpec{
-				TrainingJobSpec: trainingJob.Spec,
-				ReplicaSpecs:    nil,
-			}
-			_, err = reconciler.Reconcile(peftJobSpec)
+			_, err = reconciler.Reconcile(trainingJob)
+			break
+		case v1beta1.CohereCommandRFinetune, v1beta1.CohereFinetune:
+			reconciler := cohere.NewCohereTrainingReconciler(r.Client, r.Scheme)
+			_, err = reconciler.Reconcile(trainingJob)
+			break
+		default:
+			r.Log.Error(err, "invalid training framework specified", "trainingJob", trainingJob.Name, "framework", trainingJob.Spec.TrainingFramework.FrameworkType)
+			return ctrl.Result{}, nil
 		}
 
 		if err != nil {

@@ -464,22 +464,191 @@ var (
 	ObjectStorageUrlPrefix    = "oci://"
 )
 
+type TrainingStrategy string
+
+const (
+	UnknownTraningStrategy  TrainingStrategy = ""
+	TFewTrainingStrategy    TrainingStrategy = "tfew"
+	VanillaTrainingStrategy TrainingStrategy = "vanilla"
+	LoraTrainingStrategy    TrainingStrategy = "lora"
+)
+
+type ServingStrategy string
+
+const (
+	VanillaServingStrategy ServingStrategy = "vanilla" // Fine-tuned weights are merged back into the model and served in same way as baseline model
+	LoraServingStrategy    ServingStrategy = "lora"    // Stacked multi lora serving
+)
+
 // Default training job constants
 const (
-	TrainingJobNameLabelKey  = "job-name"
-	TrainingJobNamePrefix    = "ft-"
-	TrainingJobContainerName = "genai-container"
+	TrainingJobName                         = "trainingjob"
+	TrainingJobNameLabelKey                 = "job-name"
+	TrainingJobNamePrefix                   = "ft-"
+	TrainingJobContainerName                = "genai-container"
+	TrainingInitContainerName               = "training-init"
+	TrainingSidecarContainerName            = "training-sidecar"
+	TrainingInitAuthtypeOKEWorkloadIdentity = "OkeWorkloadIdentity"
+	RegionEnvVarKey                         = "REGION"
+	TrainingJobConfigMapName                = "trainingjob-config"
+	TrainingInitConfigMapKeyName            = "trainingInit"
+	TrainingSidecarConfigMapKeyName         = "trainingSidecar"
+	TrainingFineTunedModelLabelKey          = "finetunedmodel-name"
+	TrainingReplicaTypeLabelKey             = "replica-type"
+	TrainingReplicaNumLabelKey              = "replica-num"
+	TrainingBaseModelNameLabelKey           = "base-model-name"
+	TrainingBaseModelSizeLabelKey           = "base-model-size"
+	TrainingMaxSchedulingTimeoutDuration    = 10 * time.Minute
+	TrainingK8SJobCreationTimeoutDuration   = 3 * time.Minute
+	TrainingK8SJobStartingTimeoutDuration   = 10 * time.Minute
+	TrainingK8SJobRetryTimeoutDuration      = 15 * time.Minute
+	TrainingK8SJobRetryMaxAttempts          = 5
+	DefaultTrainingLauncherReplicas         = 1
+)
 
-	TrainingMaxSchedulingTimeoutDuration  = 10 * time.Minute
-	TrainingK8SJobCreationTimeoutDuration = 3 * time.Minute
-	TrainingK8SJobStartingTimeoutDuration = 10 * time.Minute
-	TrainingK8SJobRetryTimeoutDuration    = 15 * time.Minute
-	TrainingK8SJobRetryMaxAttempts        = 5
+type TrainingSidecarRuntime string
+
+const (
+	PeftTrainingSidecar           TrainingSidecarRuntime = "peft"
+	CohereCommand1TrainingSidecar TrainingSidecarRuntime = "cohere"
+	CohereCommandRTrainingSidecar TrainingSidecarRuntime = "cohere-commandr"
+)
+
+// Training init env variable key names
+const (
+	ModelNameEnvVarKey        = "MODEL_NAME"
+	ModelStorePathEnvVarKey   = "MODEL_STORE_PATH"
+	CompartmentIdEnvVarKey    = "COMPARTMENT_ID"
+	VaultIdEnvVarKey          = "VAULT_ID"
+	ModelServingPathEnvVarKey = "MODEL_SERVING_PATH"
+
+	TrainingDataPathEnvVarKey              = "TRAINING_DATA_PATH"
+	DisableModelDecryptionEnvVarKey        = "DISABLE_MODEL_DECRYPTION"
+	EnableOboTokenEnvVarKey                = "ENABLE_OBO_TOKEN"
+	OboTokenEnvVarKey                      = "OBO_TOKEN"
+	TrainingDataBucketNameEnvVarKey        = "TRAINING_DATA_BUCKET_NAME"
+	TrainingDataObjectNameEnvVarKey        = "TRAINING_DATA_OBJECT_NAME"
+	TrainingDataObjectNamespaceEnvVarKey   = "TRAINING_DATA_OBJECT_NAMESPACE"
+	EvaluationDataBucketNameEnvVarKey      = "EVALUATION_DATA_BUCKET_NAME"
+	EvaluationDataObjectNameEnvVarKey      = "EVALUATION_DATA_OBJECT_NAME"
+	EvaluationDataObjectNamespaceEnvVarKey = "EVALUATION_DATA_OBJECT_NAMESPACE"
+	KeyNameEnvVarKey                       = "KEY_NAME"
+)
+
+var (
+	TrainingJobPodLabelKey = OMEAPIGroupName + "/" + TrainingJobName
 )
 
 // Peft training Constants
 const (
+	PeftTrainingModelStorePVCMountPath    = "/mnt/models"
+	PeftTrainingDataEmptyDirMountPath     = "/mnt/data"
+	PeftTrainingOutputModelDirectoryName  = "output"
+	PeftTrainingMergedModelWeightSuffix   = "-merged-weight"
 	PeftTrainingBadDataErrorMessagePrefix = "Data error"
+	PeftTrainingPathPrefixEnvVarKey       = "PATH_PREFIX"
+	PeftTrainingBaselineModelEnvVarKey    = "BASELINE_MODEL"
+)
+
+// Cohere training constants
+const (
+	CohereTrainingRuntimePrefix                             = "cohere-finetuning"
+	CohereStorePathPrefix                                   = "/mnt/cohere/"
+	CohereTrainingInitModelStorePVCMountPath                = "/mnt/models"
+	CohereTrainingInitModelEmptyDirMountPathFastTransformer = "/model/fastertransformer"
+	CohereTrainingInitModelEmptyDirMountPathTensorRT        = "/model/tensorrt_llm"
+	CohereTrainingInitDataEmptyDirMountPath                 = "/input"
+	CohereTrainingLargeGpuRequest                           = "8"
+	CohereTrainingBadDataErrorMessagePrefix                 = "please check dataset"
+	CohereCommandRFTMergedModelWeightSuffix                 = "-merged-weight"
+	CohereCommandRV1Version                                 = "v19.0.0"
+	CohereCommandRV2Version                                 = "v20.1.0"
+	CohereCommandRLoraTrainingModelDirectory                = "output"
+	CohereTrainingPathPrefixEnvVarKey                       = "PATH_PREFIX"
+	CohereTrainingBaselineModelEnvVarKey                    = "BASELINE_MODEL"
+	CohereMultiLoraBaseModelNameKeyword                     = "multi_lora"
+	CohereCommandRFTRuntimePrefix                           = "cohere-commandr"
+)
+
+// constants for cohere training NLastLayers Hyperparameter possible values
+const (
+	Max52BVanillaFineTunedLayers = 15
+	Max6BVanillaFineTunedLayers  = 14
+)
+
+// Training pod volume name constants
+const (
+	ModelStorePVCSourceName = "model-storage"
+	ModelEmptyDirName       = "model"
+	DataEmptyDirName        = "data"
+)
+
+// Training sidecar env variable key names and config key names
+const (
+	NamespaceEnvVarKey               = "NAMESPACE"
+	BucketNameEnvVarKey              = "BUCKET_NAME"
+	TrainingMetricsBucketEnvVarKey   = "TRAINING_METRICS_BUCKET_NAME"
+	BatchSizeEnvVarKey               = "BATCH_SIZE"
+	BatchSizeConfigKey               = "trainingBatchSize"
+	EarlyStoppingPatienceEnvVarKey   = "EARLY_STOPPING_PATIENCE"
+	EarlyStoppingPatienceConfigKey   = "earlyStoppingPatience"
+	EarlyStoppingThresholdEnvVarKey  = "EARLY_STOPPING_THRESHOLD"
+	EarlyStoppingThresholdConfigKey  = "earlyStoppingThreshold"
+	EpochsEnvVarKey                  = "EPOCHS"
+	EpochsConfigKey                  = "totalTrainingEpochs"
+	LearningRateEnvVarKey            = "LEARNING_RATE"
+	LearningRateConfigKey            = "learningRate"
+	LogTrainStatusEveryStepEnvVarKey = "LOG_TRAIN_STATUS_EVERY_STEPS"
+	LogTrainStatusEveryStepConfigKey = "logModelMetricsIntervalInSteps"
+	TrainNameEnvVarKey               = "TRAIN_NAME"
+	ModelDirectoryEnvVarKey          = "MODEL_DIRECTORY"
+	ZippedModelPathEnvVarKey         = "ZIPPED_MODEL_PATH"
+	ZippedMergedModelPathEnvVarKey   = "ZIPPED_MERGED_MODEL_PATH"
+)
+
+// Peft Training sidecar env variable key names and config key names
+const (
+	RuntimeEnvVarKey                   = "RUNTIME"
+	LogMetricsIntervalInStepsEnvVarKey = "LOG_METRICS_INTERVAL_IN_STEPS"
+	LoraREnvVarKey                     = "LORA_R"
+	LoraRConfigKey                     = "loraR"
+	LoraAlphaEnvVarKey                 = "LORA_ALPHA"
+	LoraAlphaConfigKey                 = "loraAlpha"
+	LoraDropoutEnvVarKey               = "LORA_DROPOUT"
+	LoraDropoutConfigKey               = "loraDropout"
+	TrainingDataFileNameEnvVarKey      = "TRAINING_DATA_FILE_NAME"
+)
+
+// Cohere Training sidecar env variable key names and config key names
+const (
+	TrainingConfigTypeConfigKey = "trainingConfigType"
+	NLastLayersEnvVarKey        = "N_LAST_LAYERS"
+	NLastLayersConfigKey        = "nLastLayers"
+	ModelSizeEnvVarKey          = "SIZE"
+	StrategyEnvVarKey           = "STRATEGY"
+)
+
+/*
+ * Constants specific to cohere command R training sidecar
+ */
+const (
+	TensorParallelEnvVarKey  = "TENSOR_PARALLEL_SIZE"
+	BaseModelEnvVarKey       = "BASE_MODEL"
+	ServingStrategyEnvVarKey = "SERVING_STRATEGY"
+)
+
+type CommandRTensorParallelSize string
+
+const (
+	CommandR16KFTTensorParallelSize  CommandRTensorParallelSize = "1"
+	CommandR128KFTTensorParallelSize CommandRTensorParallelSize = "4"
+)
+
+type CommandRBaseModelVersion string
+
+const (
+	CommandRBaseModelV1 CommandRBaseModelVersion = "command_r"
+	CommandRBaseModelV2 CommandRBaseModelVersion = "command_r_v2"
 )
 
 type TrainingFailedReason string
@@ -663,4 +832,8 @@ func optional(regexp string) string {
 
 func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
+}
+
+func GetPvcName(baseName string) string {
+	return "pvc-" + baseName
 }

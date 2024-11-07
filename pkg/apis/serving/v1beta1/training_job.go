@@ -3,6 +3,7 @@ package v1beta1
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
+	"encoding/json"
 	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -10,11 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// TrainingJobImplementation defines common functions for all training jobs, Peft, pytorch, etc.
-// +kubebuilder:object:generate=false
-type TrainingJobImplementation interface {
-}
 
 // TrainingJob is the Schema for the TrainingJobs API
 // +k8s:openapi-gen=true
@@ -37,7 +33,7 @@ type TrainingJobSpec struct {
 	BaseModel *string `json:"baseModel,omitempty"`
 
 	// Specific training framework to use for the training job.
-	TrainingFrameworkType string `json:"trainingFramework,omitempty"`
+	TrainingFramework *TrainingFramework `json:"trainingFramework,omitempty"`
 
 	// Hyperparameters for training job
 	Hyperparameters runtime.RawExtension `json:"hyperparameters,omitempty"`
@@ -118,13 +114,51 @@ func (tjs *TrainingJobStatus) UpdateJobStatus(conditionType JobConditionType, de
 }
 
 // GetBaseModel Get the base model from the given model name.
-func (tjs *TrainingJobSpec) GetBaseModel(cl client.Client, name string, namespace string) (*BaseModelSpec, error) {
+func (tjs *TrainingJobSpec) GetBaseModel(cl client.Client, name string, namespace string) (*BaseModel, error) {
 	baseModel := &BaseModel{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
 	if err == nil {
-		return &baseModel.Spec, nil
+		return baseModel, nil
 	} else if !errors.IsNotFound(err) {
 		return nil, err
 	}
 	return nil, goerrors.New("No BaseModel with the name: " + name)
+}
+
+func (tjs *TrainingJobSpec) GetDatasets() *map[constants.DatasetType]*Storage {
+	return &tjs.Datasets
+}
+
+func (tjs *TrainingJobSpec) GetModelStorage() *Storage {
+	return &tjs.OutputLocation
+}
+
+func (tjs *TrainingJobSpec) GetHyperparameters() *runtime.RawExtension {
+	return &tjs.Hyperparameters
+}
+
+func GetHyperparameterValueByKey(hyperparameters *runtime.RawExtension, targetKey string) string {
+	data, err := json.Marshal(hyperparameters)
+	if err != nil {
+		return ""
+	}
+
+	kvmap := make(map[string]json.RawMessage)
+
+	e := json.Unmarshal(data, &kvmap)
+	if e != nil {
+		return ""
+	}
+
+	val, ok := kvmap[targetKey]
+	if !ok {
+		return ""
+	}
+
+	valStr, err := json.Marshal(&val)
+	if err != nil {
+		return ""
+	}
+
+	return string(valStr)
 }

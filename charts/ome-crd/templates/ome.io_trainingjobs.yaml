@@ -33,6 +33,29 @@ spec:
               datasetsSpecs:
                 additionalProperties:
                   properties:
+                    oSStorageSpec:
+                      properties:
+                        bucketName:
+                          type: string
+                        namespace:
+                          type: string
+                        objectName:
+                          type: string
+                        oboToken:
+                          type: string
+                        prefix:
+                          type: string
+                      required:
+                      - bucketName
+                      - namespace
+                      type: object
+                    pVCStorageSpec:
+                      properties:
+                        path:
+                          type: string
+                      required:
+                      - path
+                      type: object
                     storageType:
                       type: string
                   type: object
@@ -42,11 +65,45 @@ spec:
                 x-kubernetes-preserve-unknown-fields: true
               outputLocation:
                 properties:
+                  oSStorageSpec:
+                    properties:
+                      bucketName:
+                        type: string
+                      namespace:
+                        type: string
+                      objectName:
+                        type: string
+                      oboToken:
+                        type: string
+                      prefix:
+                        type: string
+                    required:
+                    - bucketName
+                    - namespace
+                    type: object
+                  pVCStorageSpec:
+                    properties:
+                      path:
+                        type: string
+                    required:
+                    - path
+                    type: object
                   storageType:
                     type: string
                 type: object
               trainingFramework:
-                type: string
+                properties:
+                  framework:
+                    type: string
+                  runtimes:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  version:
+                    type: string
+                required:
+                - framework
+                type: object
             type: object
           status:
             properties:

@@ -18,12 +18,17 @@ const (
 // The fields follow a "1-of" semantic. Users must specify exactly one URL based on given source.
 type Storage struct {
 	// Represents the type of the storage
-	StorageType string `json:"storageType,omitempty"`
+	StorageType StorageSource `json:"storageType,omitempty"`
+
+	// ObjectStorageSpec for data/model stored in ObjectStorage
+	OSStorageSpec *OSStorage `json:"oSStorageSpec,omitempty"`
+
+	// PVCStorageSpec for data/model stored as PVC
+	PVCStorageSpec *PVCStorage `json:"pVCStorageSpec,omitempty"`
 }
 
 // OSStorage defines the arguments for object storage
 type OSStorage struct {
-	Storage    `json:",inline"`
 	BucketName string `json:"bucketName"`
 	Namespace  string `json:"namespace"`
 	ObjectName string `json:"objectName,omitempty"`
@@ -33,7 +38,6 @@ type OSStorage struct {
 
 // PVCStorage defines the arguments for pvc storage
 type PVCStorage struct {
-	Storage `json:",inline"`
 	// This field points to the location of the data/model which is mounted onto the pod.
 	Path string `json:"path"`
 }

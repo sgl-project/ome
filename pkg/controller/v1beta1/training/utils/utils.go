@@ -4,6 +4,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/go-logr/logr"
 	goerrors "github.com/pkg/errors"
@@ -11,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"time"
@@ -177,4 +180,116 @@ func checkPodScheduleFailure(tjob *v1beta1.TrainingJob, pod v1.Pod, logger logr.
 		}
 	}
 	return nil, ""
+}
+
+// MergeRuntimeContainers Merge the trainer Container struct with the runtime Container struct, allowing users
+// to override runtime container settings from the trainer spec.
+func MergeRuntimeContainers(runtimeContainer *v1.Container, trainerContainer *v1.Container) (*v1.Container, error) {
+	// Save runtime container name, as the name can be overridden as empty string during the Unmarshal below
+	// since the Name field does not have the 'omitempty' struct tag.
+	runtimeContainerName := runtimeContainer.Name
+
+	// Use JSON Marshal/Unmarshal to merge Container structs using strategic merge patch
+	runtimeContainerJson, err := json.Marshal(runtimeContainer)
+	if err != nil {
+		return nil, err
+	}
+
+	overrides, err := json.Marshal(trainerContainer)
+	if err != nil {
+		return nil, err
+	}
+
+	mergedContainer := v1.Container{}
+	jsonResult, err := strategicpatch.StrategicMergePatch(runtimeContainerJson, overrides, mergedContainer)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(jsonResult, &mergedContainer); err != nil {
+		return nil, err
+	}
+
+	if mergedContainer.Name == "" {
+		mergedContainer.Name = runtimeContainerName
+	}
+	// Strategic merge patch will replace args but more useful behaviour here is to concatenate
+	mergedContainer.Args = append(append([]string{}, runtimeContainer.Args...), trainerContainer.Args...)
+
+	return &mergedContainer, nil
+}
+
+// MergePodSpec Merge the trainer PodSpec struct with the runtime PodSpec struct, allowing users
+// to override runtime PodSpec settings from the trainer spec.
+func MergePodSpec(runtimePodSpec *v1.PodSpec, trainerPodSpec *v1.PodSpec) (*v1.PodSpec, error) {
+	runtimePodSpecJson, err := json.Marshal(v1.PodSpec{
+		NodeSelector:     runtimePodSpec.NodeSelector,
+		Affinity:         runtimePodSpec.Affinity,
+		Tolerations:      runtimePodSpec.Tolerations,
+		Volumes:          runtimePodSpec.Volumes,
+		ImagePullSecrets: runtimePodSpec.ImagePullSecrets,
+		SchedulerName:    runtimePodSpec.SchedulerName,
+		HostNetwork:      runtimePodSpec.HostNetwork,
+		HostIPC:          runtimePodSpec.HostIPC,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Use JSON Marshal/Unmarshal to merge PodSpec structs.
+	overrides, err := json.Marshal(trainerPodSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	mergedPodSpec := v1.PodSpec{}
+	jsonResult, err := strategicpatch.StrategicMergePatch(runtimePodSpecJson, overrides, mergedPodSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(jsonResult, &mergedPodSpec); err != nil {
+		return nil, err
+	}
+
+	return &mergedPodSpec, nil
+}
+
+func GetContainerIndex(containerName string, containers []v1.Container) int {
+	for i := range containers {
+		if containers[i].Name == containerName {
+			return i
+		}
+	}
+	return -1
+}
+
+// Get a DedicatedAICluster by a reference.
+func GetDedicatedAIClusterResource(cl client.Client, dedicatedAIClusterRef *v1.ObjectReference) (*v1beta1.DedicatedAICluster, error) {
+	if dedicatedAIClusterRef == nil {
+		return nil, nil
+	}
+
+	dedicatedAiCluster := &v1beta1.DedicatedAICluster{}
+	err := cl.Get(context.TODO(), types.NamespacedName{
+		Name: dedicatedAIClusterRef.Name,
+	}, dedicatedAiCluster)
+	if err != nil {
+		return nil, err
+	}
+
+	if dedicatedAiCluster.Status.DacLifecycleState != v1beta1.ACTIVE {
+		return nil, fmt.Errorf("dedicatedAiCluster %s is not in a Active life cycle state", dedicatedAIClusterRef.Name)
+	}
+
+	return dedicatedAiCluster, nil
+}
+
+func ExtractPureObjectName(objectPath string) string {
+	if !strings.Contains(objectPath, "/") {
+		return objectPath
+	}
+
+	values := strings.Split(objectPath, "/")
+	return values[len(values)-1]
 }

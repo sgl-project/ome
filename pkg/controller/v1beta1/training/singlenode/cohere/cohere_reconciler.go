@@ -1,10 +1,9 @@
-package reconcilers
+package cohere
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/peft"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/pod_configs"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/singlenode"
 	trainingJobUtils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"fmt"
@@ -19,20 +18,20 @@ import (
 )
 
 var (
-	_ SinglePodTrainingReconciler = &PeftTrainingReconciler{}
+	_ singlenode.SinglePodTrainingReconciler = &CohereTrainingReconciler{}
 )
 
-// PeftTrainingReconciler reconciles a PeftTrainingJob object
-type PeftTrainingReconciler struct {
+// CohereTrainingReconciler reconciles a PeftTrainingJob object
+type CohereTrainingReconciler struct {
 	client client.Client
 	log    logr.Logger
 	scheme *runtime.Scheme
 }
 
-func NewPeftTrainingReconciler(
+func NewCohereTrainingReconciler(
 	client client.Client,
-	scheme *runtime.Scheme) *PeftTrainingReconciler {
-	return &PeftTrainingReconciler{
+	scheme *runtime.Scheme) *CohereTrainingReconciler {
+	return &CohereTrainingReconciler{
 		client: client,
 		scheme: scheme,
 		log:    ctrl.Log.WithName("PeftTrainingReconciler"),
@@ -46,7 +45,7 @@ func NewPeftTrainingReconciler(
 //		perform operations to make the cluster state reflect the state specified by
 //		the user.
 //	 Currently, we only support single pod training job (only launcher job). We may support multi-pod training (launcher-worker) in the future.
-func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ctrl.Result, error) {
+func (r *CohereTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ctrl.Result, error) {
 	var launcherRuntimeName = ""
 	var launcherPodSpec *v1.PodSpec
 	var launcherRuntime *v1beta1.TrainingRuntimeSpec = nil
@@ -54,13 +53,13 @@ func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ct
 	var launcherRuntimeAnnotations map[string]string
 	var err error
 
-	peftJobSpec := &v1beta1.PeftTrainingJobSpec{
+	cohereJobSpec := &v1beta1.CohereTrainingJobSpec{
 		TrainingJobSpec: trainingJob.Spec,
 		ReplicaSpecs:    nil,
 	}
 
 	if trainingJob.Spec.TrainingFramework.IsRuntimeSpecified() {
-		launcherRuntimeName = *peftJobSpec.TrainingFramework.Runtimes[v1beta1.PeftFinetuningReplicaTypeLauncher]
+		launcherRuntimeName = *cohereJobSpec.TrainingFramework.Runtimes[v1beta1.CohereLauncher]
 		launcherRuntime, err = trainingJobUtils.GetTrainingRuntime(r.client, launcherRuntimeName, trainingJob.ObjectMeta.Namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error getting launcher runtime %s, error: %s", launcherRuntimeName, err)
@@ -69,17 +68,17 @@ func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ct
 			return ctrl.Result{}, fmt.Errorf("specified launcher runtime %s is disabled", launcherRuntimeName)
 		}
 		// Verify if given runtime supports the given framework
-		if launcherRuntime.IsTrainingFrameworkSupported(*peftJobSpec.TrainingFramework) {
-			return ctrl.Result{}, fmt.Errorf("specified launcher runtime %s does not support specified framework/version %+v", launcherRuntimeName, peftJobSpec.TrainingFramework)
+		if launcherRuntime.IsTrainingFrameworkSupported(*cohereJobSpec.TrainingFramework) {
+			return ctrl.Result{}, fmt.Errorf("specified launcher runtime %s does not support specified framework/version %+v", launcherRuntimeName, cohereJobSpec.TrainingFramework)
 		}
 	} else {
 		// Default to get the most recently created runtime that supports the training framework
-		launcherRuntime, err := peftJobSpec.TrainingFramework.GetMostRecentSupportedRuntime(r.client, trainingJob.ObjectMeta.Namespace)
+		launcherRuntime, err := cohereJobSpec.TrainingFramework.GetMostRecentSupportedRuntime(r.client, trainingJob.ObjectMeta.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if launcherRuntime == nil {
-			return ctrl.Result{}, fmt.Errorf("no launcher runtime found for trainer with framework: %s", peftJobSpec.TrainingFramework.FrameworkType)
+			return ctrl.Result{}, fmt.Errorf("no launcher runtime found for trainer with framework: %s", cohereJobSpec.TrainingFramework.FrameworkType)
 		}
 	}
 
@@ -92,11 +91,11 @@ func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ct
 		return ctrl.Result{}, fmt.Errorf("failed to find genai-container in TrainingRuntime")
 	}
 
-	launcherContainer, err := trainingJobUtils.MergeRuntimeContainers(&launcherRuntime.ReplicaSpec.Template.Spec.Containers[genaiContainerIdx], peftJobSpec.GetLauncherContainer())
+	launcherContainer, err := trainingJobUtils.MergeRuntimeContainers(&launcherRuntime.ReplicaSpec.Template.Spec.Containers[genaiContainerIdx], cohereJobSpec.GetLauncherContainer())
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to get launcher container")
 	}
-	launcherPodSpec, err = trainingJobUtils.MergePodSpec(&launcherRuntime.Template.Spec, &peftJobSpec.GetLauncherReplicaSpec().Template.Spec)
+	launcherPodSpec, err = trainingJobUtils.MergePodSpec(&launcherRuntime.Template.Spec, &cohereJobSpec.GetLauncherReplicaSpec().Template.Spec)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to get launcher pod spec")
 	}
@@ -107,11 +106,11 @@ func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ct
 	launcherRuntimeLabels = launcherRuntime.Labels
 	launcherRuntimeAnnotations = launcherRuntime.Annotations
 
-	launcherPodSpec.RestartPolicy = r.resolveLauncherRestartPolicy(peftJobSpec, launcherRuntime)
-	launcherReplicas := r.resolveLauncherReplicas(peftJobSpec, launcherRuntime)
+	launcherPodSpec.RestartPolicy = r.resolveLauncherRestartPolicy(cohereJobSpec, launcherRuntime)
+	launcherReplicas := r.resolveLauncherReplicas(cohereJobSpec, launcherRuntime)
 
-	result, err := r.reconcileLauncher(trainingJob, peftJobSpec, trainingJob.ObjectMeta, launcherRuntimeName, launcherReplicas, launcherPodSpec, launcherRuntimeLabels,
-		launcherRuntimeAnnotations, peftJobSpec.GetDatasets(), peftJobSpec.GetModelStorage())
+	result, err := r.reconcileLauncher(trainingJob, cohereJobSpec, trainingJob.ObjectMeta, launcherRuntimeName, launcherReplicas, launcherPodSpec, launcherRuntimeLabels,
+		launcherRuntimeAnnotations, cohereJobSpec.GetDatasets(), cohereJobSpec.GetModelStorage())
 	if err != nil {
 		return result, err
 	}
@@ -119,9 +118,9 @@ func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ct
 	return result, nil
 }
 
-func (r *PeftTrainingReconciler) reconcileLauncher(
+func (r *CohereTrainingReconciler) reconcileLauncher(
 	trainingJob *v1beta1.TrainingJob,
-	jobSpec *v1beta1.PeftTrainingJobSpec,
+	jobSpec *v1beta1.CohereTrainingJobSpec,
 	tjobObjectMeta metav1.ObjectMeta,
 	launcherRuntimeName string,
 	launcherReplicas int32,
@@ -131,7 +130,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 	datasets *map[constants.DatasetType]*v1beta1.Storage,
 	modelStorage *v1beta1.Storage) (ctrl.Result, error) {
 
-	launcherPodConfig := &pod_configs.LauncherPodConfig{
+	launcherPodConfig := &singlenode.LauncherPodConfig{
 		Namespace:           tjobObjectMeta.Namespace,
 		LauncherRuntimeName: launcherRuntimeName,
 		TrainingJobName:     tjobObjectMeta.Name,
@@ -148,7 +147,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 
 	hyperparameters := jobSpec.GetHyperparameters()
 
-	err = peft.NewPeftLauncherPodConfig(launcherPodConfig, r.client, launcherPodSpec, baseModel, hyperparameters)
+	err = NewCohereLauncherPodConfig(launcherPodConfig, r.client, launcherPodSpec, baseModel, hyperparameters)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -176,7 +175,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 		),
 	}
 
-	res, err := reconcileK8sJob(trainingJob, r.client, r.scheme, launcherPodSpec, launcherReplicas, launcherMeta)
+	res, err := singlenode.ReconcileJob(trainingJob, r.client, r.scheme, launcherPodSpec, launcherReplicas, launcherMeta)
 	if err != nil {
 		return res, err
 	}
@@ -184,7 +183,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 	return ctrl.Result{}, nil
 }
 
-func (r *PeftTrainingReconciler) resolveLauncherRestartPolicy(jobSpec *v1beta1.PeftTrainingJobSpec, runtimeSpec *v1beta1.TrainingRuntimeSpec) v1.RestartPolicy {
+func (r *CohereTrainingReconciler) resolveLauncherRestartPolicy(jobSpec *v1beta1.CohereTrainingJobSpec, runtimeSpec *v1beta1.TrainingRuntimeSpec) v1.RestartPolicy {
 	// RestartPolicy priority: training job > runtime > default
 	if jobSpec.GetLauncherReplicaSpec().RestartPolicy != "" {
 		return jobSpec.GetLauncherReplicaSpec().RestartPolicy
@@ -196,7 +195,7 @@ func (r *PeftTrainingReconciler) resolveLauncherRestartPolicy(jobSpec *v1beta1.P
 }
 
 // Replicas priority: training job > runtime > default
-func (r *PeftTrainingReconciler) resolveLauncherReplicas(jobSpec *v1beta1.PeftTrainingJobSpec, runtimeSpec *v1beta1.TrainingRuntimeSpec) int32 {
+func (r *CohereTrainingReconciler) resolveLauncherReplicas(jobSpec *v1beta1.CohereTrainingJobSpec, runtimeSpec *v1beta1.TrainingRuntimeSpec) int32 {
 	if jobSpec.GetLauncherReplicaSpec().ReplicaCount != nil {
 		return *jobSpec.GetLauncherReplicaSpec().ReplicaCount
 	}

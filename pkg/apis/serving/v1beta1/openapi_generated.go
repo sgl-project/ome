@@ -1187,8 +1187,7 @@ func schema_pkg_apis_serving_v1beta1_CohereTrainingJobSpec(ref common.ReferenceC
 					"trainingFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Specific training framework to use for the training job.",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework"),
 						},
 					},
 					"hyperparameters": {
@@ -1243,7 +1242,7 @@ func schema_pkg_apis_serving_v1beta1_CohereTrainingJobSpec(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -3208,8 +3207,7 @@ func schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref common.ReferenceCall
 					"trainingFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Specific training framework to use for the training job.",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework"),
 						},
 					},
 					"hyperparameters": {
@@ -3292,7 +3290,7 @@ func schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -3392,6 +3390,7 @@ func schema_pkg_apis_serving_v1beta1_ModelFormat(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3762,6 +3761,7 @@ func schema_pkg_apis_serving_v1beta1_ModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4058,13 +4058,6 @@ func schema_pkg_apis_serving_v1beta1_OSStorage(ref common.ReferenceCallback) com
 				Description: "OSStorage defines the arguments for object storage",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"storageType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Represents the type of the storage",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"bucketName": {
 						SchemaProps: spec.SchemaProps{
 							Default: "",
@@ -4138,13 +4131,6 @@ func schema_pkg_apis_serving_v1beta1_PVCStorage(ref common.ReferenceCallback) co
 				Description: "PVCStorage defines the arguments for pvc storage",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"storageType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Represents the type of the storage",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"path": {
 						SchemaProps: spec.SchemaProps{
 							Description: "This field points to the location of the data/model which is mounted onto the pod.",
@@ -4175,8 +4161,7 @@ func schema_pkg_apis_serving_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCal
 					"trainingFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Specific training framework to use for the training job.",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework"),
 						},
 					},
 					"hyperparameters": {
@@ -4231,7 +4216,7 @@ func schema_pkg_apis_serving_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -4969,6 +4954,7 @@ func schema_pkg_apis_serving_v1beta1_PredictorExtensionSpec(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5545,8 +5531,7 @@ func schema_pkg_apis_serving_v1beta1_PyTorchTrainingJobSpec(ref common.Reference
 					"trainingFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Specific training framework to use for the training job.",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework"),
 						},
 					},
 					"hyperparameters": {
@@ -5621,7 +5606,7 @@ func schema_pkg_apis_serving_v1beta1_PyTorchTrainingJobSpec(ref common.Reference
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ElasticPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ElasticPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -6330,9 +6315,23 @@ func schema_pkg_apis_serving_v1beta1_Storage(ref common.ReferenceCallback) commo
 							Format:      "",
 						},
 					},
+					"oSStorageSpec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObjectStorageSpec for data/model stored in ObjectStorage",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.OSStorage"),
+						},
+					},
+					"pVCStorageSpec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PVCStorageSpec for data/model stored as PVC",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.PVCStorage"),
+						},
+					},
 				},
 			},
 		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.OSStorage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.PVCStorage"},
 	}
 }
 
@@ -6442,6 +6441,7 @@ func schema_pkg_apis_serving_v1beta1_SupportedModelFormat(ref common.ReferenceCa
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -6492,8 +6492,7 @@ func schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref common.Refere
 					"trainingFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Specific training framework to use for the training job.",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework"),
 						},
 					},
 					"hyperparameters": {
@@ -6570,7 +6569,7 @@ func schema_pkg_apis_serving_v1beta1_TensorFlowTrainingJobSpec(ref common.Refere
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -6729,8 +6728,7 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallbac
 					"trainingFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Specific training framework to use for the training job.",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework"),
 						},
 					},
 					"hyperparameters": {
@@ -6771,7 +6769,7 @@ func schema_pkg_apis_serving_v1beta1_TrainingJobSpec(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 

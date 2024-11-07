@@ -637,7 +637,7 @@
         },
         "trainingFramework": {
           "description": "Specific training framework to use for the training job.",
-          "type": "string"
+          "$ref": "#/definitions/v1beta1.TrainingFramework"
         }
       }
     },
@@ -1775,7 +1775,7 @@
         },
         "trainingFramework": {
           "description": "Specific training framework to use for the training job.",
-          "type": "string"
+          "$ref": "#/definitions/v1beta1.TrainingFramework"
         }
       }
     },
@@ -2257,10 +2257,6 @@
         },
         "prefix": {
           "type": "string"
-        },
-        "storageType": {
-          "description": "Represents the type of the storage",
-          "type": "string"
         }
       }
     },
@@ -2289,10 +2285,6 @@
           "description": "This field points to the location of the data/model which is mounted onto the pod.",
           "type": "string",
           "default": ""
-        },
-        "storageType": {
-          "description": "Represents the type of the storage",
-          "type": "string"
         }
       }
     },
@@ -2331,7 +2323,7 @@
         },
         "trainingFramework": {
           "description": "Specific training framework to use for the training job.",
-          "type": "string"
+          "$ref": "#/definitions/v1beta1.TrainingFramework"
         }
       }
     },
@@ -3110,7 +3102,7 @@
         },
         "trainingFramework": {
           "description": "Specific training framework to use for the training job.",
-          "type": "string"
+          "$ref": "#/definitions/v1beta1.TrainingFramework"
         }
       }
     },
@@ -3490,6 +3482,14 @@
       "description": "Storage defines the storage source/location of the data/model The fields follow a \"1-of\" semantic. Users must specify exactly one URL based on given source.",
       "type": "object",
       "properties": {
+        "oSStorageSpec": {
+          "description": "ObjectStorageSpec for data/model stored in ObjectStorage",
+          "$ref": "#/definitions/v1beta1.OSStorage"
+        },
+        "pVCStorageSpec": {
+          "description": "PVCStorageSpec for data/model stored as PVC",
+          "$ref": "#/definitions/v1beta1.PVCStorage"
+        },
         "storageType": {
           "description": "Represents the type of the storage",
           "type": "string"
@@ -3627,7 +3627,7 @@
         },
         "trainingFramework": {
           "description": "Specific training framework to use for the training job.",
-          "type": "string"
+          "$ref": "#/definitions/v1beta1.TrainingFramework"
         }
       }
     },
@@ -3738,7 +3738,7 @@
         },
         "trainingFramework": {
           "description": "Specific training framework to use for the training job.",
-          "type": "string"
+          "$ref": "#/definitions/v1beta1.TrainingFramework"
         }
       }
     },

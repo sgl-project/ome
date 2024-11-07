@@ -1,10 +1,9 @@
-package reconcilers
+package peft
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/peft"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/pod_configs"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/singlenode"
 	trainingJobUtils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"fmt"
@@ -19,13 +18,13 @@ import (
 )
 
 var (
-	_ SinglePodTrainingReconciler = &PeftTrainingReconciler{}
+	_ singlenode.SinglePodTrainingReconciler = &PeftTrainingReconciler{}
 )
 
 // PeftTrainingReconciler reconciles a PeftTrainingJob object
 type PeftTrainingReconciler struct {
 	client client.Client
-	log    logr.Logger
+	Log    logr.Logger
 	scheme *runtime.Scheme
 }
 
@@ -35,16 +34,16 @@ func NewPeftTrainingReconciler(
 	return &PeftTrainingReconciler{
 		client: client,
 		scheme: scheme,
-		log:    ctrl.Log.WithName("PeftTrainingReconciler"),
+		Log:    ctrl.Log.WithName("TrainerReconciler"),
 	}
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 //
-//		the TrainingJob object against the actual cluster state, and then
-//		perform operations to make the cluster state reflect the state specified by
-//		the user.
+//	the TrainingJob object against the actual cluster state, and then
+//	perform operations to make the cluster state reflect the state specified by
+//	the user.
 //	 Currently, we only support single pod training job (only launcher job). We may support multi-pod training (launcher-worker) in the future.
 func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ctrl.Result, error) {
 	var launcherRuntimeName = ""
@@ -74,7 +73,7 @@ func (r *PeftTrainingReconciler) Reconcile(trainingJob *v1beta1.TrainingJob) (ct
 		}
 	} else {
 		// Default to get the most recently created runtime that supports the training framework
-		launcherRuntime, err := peftJobSpec.TrainingFramework.GetMostRecentSupportedRuntime(r.client, trainingJob.ObjectMeta.Namespace)
+		launcherRuntime, err = peftJobSpec.TrainingFramework.GetMostRecentSupportedRuntime(r.client, trainingJob.ObjectMeta.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -131,7 +130,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 	datasets *map[constants.DatasetType]*v1beta1.Storage,
 	modelStorage *v1beta1.Storage) (ctrl.Result, error) {
 
-	launcherPodConfig := &pod_configs.LauncherPodConfig{
+	launcherPodConfig := &singlenode.LauncherPodConfig{
 		Namespace:           tjobObjectMeta.Namespace,
 		LauncherRuntimeName: launcherRuntimeName,
 		TrainingJobName:     tjobObjectMeta.Name,
@@ -148,7 +147,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 
 	hyperparameters := jobSpec.GetHyperparameters()
 
-	err = peft.NewPeftLauncherPodConfig(launcherPodConfig, r.client, launcherPodSpec, baseModel, hyperparameters)
+	err = NewPeftLauncherPodConfig(launcherPodConfig, r.client, launcherPodSpec, baseModel, hyperparameters)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -176,7 +175,7 @@ func (r *PeftTrainingReconciler) reconcileLauncher(
 		),
 	}
 
-	res, err := reconcileK8sJob(trainingJob, r.client, r.scheme, launcherPodSpec, launcherReplicas, launcherMeta)
+	res, err := singlenode.ReconcileJob(trainingJob, r.client, r.scheme, launcherPodSpec, launcherReplicas, launcherMeta)
 	if err != nil {
 		return res, err
 	}

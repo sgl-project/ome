@@ -1,6 +1,9 @@
 package v1beta1
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sort"
+)
 
 // TrainingRuntime is the Schema for the TrainingRuntimes API
 // +k8s:openapi-gen=true
@@ -64,6 +67,19 @@ type TrainingRuntimeStatus struct {
 	Details string `json:"details,omitempty"`
 }
 
+func (trSpec *TrainingRuntimeSpec) IsDisabled() bool {
+	return trSpec.Disabled != nil && *trSpec.Disabled
+}
+
+func (trSpec *TrainingRuntimeSpec) IsTrainingFrameworkSupported(framework TrainingFramework) bool {
+	for _, supportedFramework := range trSpec.SupportedTrainingFrameworks {
+		if supportedFramework.FrameworkType == framework.FrameworkType {
+			return true
+		}
+	}
+	return false
+}
+
 // TrainingRuntimeList contains a list of TrainingRuntime
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -102,4 +118,28 @@ type ClusterTrainingRuntimeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterTrainingRuntime `json:"items"`
+}
+
+func sortTrainingRuntimeList(runtimes *TrainingRuntimeList) {
+	sort.Slice(runtimes.Items, func(i, j int) bool {
+		if runtimes.Items[i].CreationTimestamp.Before(&runtimes.Items[j].CreationTimestamp) {
+			return false
+		}
+		if runtimes.Items[j].CreationTimestamp.Before(&runtimes.Items[i].CreationTimestamp) {
+			return true
+		}
+		return runtimes.Items[i].Name < runtimes.Items[j].Name
+	})
+}
+
+func sortClusterTrainingRuntimeList(runtimes *ClusterTrainingRuntimeList) {
+	sort.Slice(runtimes.Items, func(i, j int) bool {
+		if runtimes.Items[i].CreationTimestamp.Before(&runtimes.Items[j].CreationTimestamp) {
+			return false
+		}
+		if runtimes.Items[j].CreationTimestamp.Before(&runtimes.Items[i].CreationTimestamp) {
+			return true
+		}
+		return runtimes.Items[i].Name < runtimes.Items[j].Name
+	})
 }

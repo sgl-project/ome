@@ -87,3 +87,8 @@ type ReplicaStatus struct {
 	// Selector matches no objects.
 	Selector string `json:"selector,omitempty"`
 }
+
+// Currently we only check Cohere and Peft type.
+func isLauncherType(replicaType ReplicaType) bool {
+	return replicaType == CohereLauncher || replicaType == PeftFinetuningReplicaTypeLauncher
+}
