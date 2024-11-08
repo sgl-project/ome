@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "description": "Python SDK for KServe",
-    "title": "KServe",
+    "title": "OME",
     "version": "v0.1"
   },
   "paths": {},
