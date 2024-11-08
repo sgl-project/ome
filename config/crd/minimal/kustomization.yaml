@@ -9,3 +9,6 @@ resources:
   - ome.io_clusterbasemodels.yaml
   - ome.io_dedicatedaiclusters.yaml
   - ome.io_dedicatedaiclusterprofiles.yaml
+  - ome.io_clustertrainingruntimes.yaml
+  - ome.io_trainingruntimes.yaml
+  - ome.io_trainingjobs.yaml
