@@ -30,14 +30,14 @@ const (
 
 type ClusterServingRuntimeValidator struct {
 	Client  client.Client
-	Decoder *admission.Decoder
+	Decoder admission.Decoder
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-servingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=servingruntimes,versions=v1beta1,name=servingruntime.ome-webhook-server.validator
 
 type ServingRuntimeValidator struct {
 	Client  client.Client
-	Decoder *admission.Decoder
+	Decoder admission.Decoder
 }
 
 func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Request) admission.Response {

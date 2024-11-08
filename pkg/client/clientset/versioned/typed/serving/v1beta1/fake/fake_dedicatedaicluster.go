@@ -24,20 +24,22 @@ var dedicatedaiclustersKind = v1beta1.SchemeGroupVersion.WithKind("DedicatedAICl
 
 // Get takes name of the dedicatedAICluster, and returns the corresponding dedicatedAICluster object, and an error if there is any.
 func (c *FakeDedicatedAIClusters) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.DedicatedAICluster, err error) {
+	emptyResult := &v1beta1.DedicatedAICluster{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(dedicatedaiclustersResource, name), &v1beta1.DedicatedAICluster{})
+		Invokes(testing.NewRootGetActionWithOptions(dedicatedaiclustersResource, name, options), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAICluster), err
 }
 
 // List takes label and field selectors, and returns the list of DedicatedAIClusters that match those selectors.
 func (c *FakeDedicatedAIClusters) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.DedicatedAIClusterList, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(dedicatedaiclustersResource, dedicatedaiclustersKind, opts), &v1beta1.DedicatedAIClusterList{})
+		Invokes(testing.NewRootListActionWithOptions(dedicatedaiclustersResource, dedicatedaiclustersKind, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -56,36 +58,39 @@ func (c *FakeDedicatedAIClusters) List(ctx context.Context, opts v1.ListOptions)
 // Watch returns a watch.Interface that watches the requested dedicatedAIClusters.
 func (c *FakeDedicatedAIClusters) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(dedicatedaiclustersResource, opts))
+		InvokesWatch(testing.NewRootWatchActionWithOptions(dedicatedaiclustersResource, opts))
 }
 
 // Create takes the representation of a dedicatedAICluster and creates it.  Returns the server's representation of the dedicatedAICluster, and an error, if there is any.
 func (c *FakeDedicatedAIClusters) Create(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.CreateOptions) (result *v1beta1.DedicatedAICluster, err error) {
+	emptyResult := &v1beta1.DedicatedAICluster{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(dedicatedaiclustersResource, dedicatedAICluster), &v1beta1.DedicatedAICluster{})
+		Invokes(testing.NewRootCreateActionWithOptions(dedicatedaiclustersResource, dedicatedAICluster, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAICluster), err
 }
 
 // Update takes the representation of a dedicatedAICluster and updates it. Returns the server's representation of the dedicatedAICluster, and an error, if there is any.
 func (c *FakeDedicatedAIClusters) Update(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.UpdateOptions) (result *v1beta1.DedicatedAICluster, err error) {
+	emptyResult := &v1beta1.DedicatedAICluster{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(dedicatedaiclustersResource, dedicatedAICluster), &v1beta1.DedicatedAICluster{})
+		Invokes(testing.NewRootUpdateActionWithOptions(dedicatedaiclustersResource, dedicatedAICluster, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAICluster), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeDedicatedAIClusters) UpdateStatus(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.UpdateOptions) (*v1beta1.DedicatedAICluster, error) {
+func (c *FakeDedicatedAIClusters) UpdateStatus(ctx context.Context, dedicatedAICluster *v1beta1.DedicatedAICluster, opts v1.UpdateOptions) (result *v1beta1.DedicatedAICluster, err error) {
+	emptyResult := &v1beta1.DedicatedAICluster{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(dedicatedaiclustersResource, "status", dedicatedAICluster), &v1beta1.DedicatedAICluster{})
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(dedicatedaiclustersResource, "status", dedicatedAICluster, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAICluster), err
 }
@@ -99,7 +104,7 @@ func (c *FakeDedicatedAIClusters) Delete(ctx context.Context, name string, opts 
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeDedicatedAIClusters) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(dedicatedaiclustersResource, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(dedicatedaiclustersResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.DedicatedAIClusterList{})
 	return err
@@ -107,10 +112,11 @@ func (c *FakeDedicatedAIClusters) DeleteCollection(ctx context.Context, opts v1.
 
 // Patch applies the patch and returns the patched dedicatedAICluster.
 func (c *FakeDedicatedAIClusters) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.DedicatedAICluster, err error) {
+	emptyResult := &v1beta1.DedicatedAICluster{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(dedicatedaiclustersResource, name, pt, data, subresources...), &v1beta1.DedicatedAICluster{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(dedicatedaiclustersResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAICluster), err
 }

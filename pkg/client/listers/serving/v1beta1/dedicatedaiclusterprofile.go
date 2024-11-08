@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -23,30 +23,10 @@ type DedicatedAIClusterProfileLister interface {
 
 // dedicatedAIClusterProfileLister implements the DedicatedAIClusterProfileLister interface.
 type dedicatedAIClusterProfileLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.DedicatedAIClusterProfile]
 }
 
 // NewDedicatedAIClusterProfileLister returns a new DedicatedAIClusterProfileLister.
 func NewDedicatedAIClusterProfileLister(indexer cache.Indexer) DedicatedAIClusterProfileLister {
-	return &dedicatedAIClusterProfileLister{indexer: indexer}
-}
-
-// List lists all DedicatedAIClusterProfiles in the indexer.
-func (s *dedicatedAIClusterProfileLister) List(selector labels.Selector) (ret []*v1beta1.DedicatedAIClusterProfile, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.DedicatedAIClusterProfile))
-	})
-	return ret, err
-}
-
-// Get retrieves the DedicatedAIClusterProfile from the index for a given name.
-func (s *dedicatedAIClusterProfileLister) Get(name string) (*v1beta1.DedicatedAIClusterProfile, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("dedicatedaiclusterprofile"), name)
-	}
-	return obj.(*v1beta1.DedicatedAIClusterProfile), nil
+	return &dedicatedAIClusterProfileLister{listers.New[*v1beta1.DedicatedAIClusterProfile](indexer, v1beta1.Resource("dedicatedaiclusterprofile"))}
 }

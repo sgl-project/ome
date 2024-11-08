@@ -25,22 +25,24 @@ var capacityreservationsKind = v1beta1.SchemeGroupVersion.WithKind("CapacityRese
 
 // Get takes name of the capacityReservation, and returns the corresponding capacityReservation object, and an error if there is any.
 func (c *FakeCapacityReservations) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.CapacityReservation, err error) {
+	emptyResult := &v1beta1.CapacityReservation{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(capacityreservationsResource, c.ns, name), &v1beta1.CapacityReservation{})
+		Invokes(testing.NewGetActionWithOptions(capacityreservationsResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.CapacityReservation), err
 }
 
 // List takes label and field selectors, and returns the list of CapacityReservations that match those selectors.
 func (c *FakeCapacityReservations) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.CapacityReservationList, err error) {
+	emptyResult := &v1beta1.CapacityReservationList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(capacityreservationsResource, capacityreservationsKind, c.ns, opts), &v1beta1.CapacityReservationList{})
+		Invokes(testing.NewListActionWithOptions(capacityreservationsResource, capacityreservationsKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -59,40 +61,43 @@ func (c *FakeCapacityReservations) List(ctx context.Context, opts v1.ListOptions
 // Watch returns a watch.Interface that watches the requested capacityReservations.
 func (c *FakeCapacityReservations) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(capacityreservationsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(capacityreservationsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a capacityReservation and creates it.  Returns the server's representation of the capacityReservation, and an error, if there is any.
 func (c *FakeCapacityReservations) Create(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.CreateOptions) (result *v1beta1.CapacityReservation, err error) {
+	emptyResult := &v1beta1.CapacityReservation{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(capacityreservationsResource, c.ns, capacityReservation), &v1beta1.CapacityReservation{})
+		Invokes(testing.NewCreateActionWithOptions(capacityreservationsResource, c.ns, capacityReservation, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.CapacityReservation), err
 }
 
 // Update takes the representation of a capacityReservation and updates it. Returns the server's representation of the capacityReservation, and an error, if there is any.
 func (c *FakeCapacityReservations) Update(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (result *v1beta1.CapacityReservation, err error) {
+	emptyResult := &v1beta1.CapacityReservation{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(capacityreservationsResource, c.ns, capacityReservation), &v1beta1.CapacityReservation{})
+		Invokes(testing.NewUpdateActionWithOptions(capacityreservationsResource, c.ns, capacityReservation, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.CapacityReservation), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeCapacityReservations) UpdateStatus(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (*v1beta1.CapacityReservation, error) {
+func (c *FakeCapacityReservations) UpdateStatus(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (result *v1beta1.CapacityReservation, err error) {
+	emptyResult := &v1beta1.CapacityReservation{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(capacityreservationsResource, "status", c.ns, capacityReservation), &v1beta1.CapacityReservation{})
+		Invokes(testing.NewUpdateSubresourceActionWithOptions(capacityreservationsResource, "status", c.ns, capacityReservation, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.CapacityReservation), err
 }
@@ -107,7 +112,7 @@ func (c *FakeCapacityReservations) Delete(ctx context.Context, name string, opts
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeCapacityReservations) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(capacityreservationsResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(capacityreservationsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.CapacityReservationList{})
 	return err
@@ -115,11 +120,12 @@ func (c *FakeCapacityReservations) DeleteCollection(ctx context.Context, opts v1
 
 // Patch applies the patch and returns the patched capacityReservation.
 func (c *FakeCapacityReservations) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.CapacityReservation, err error) {
+	emptyResult := &v1beta1.CapacityReservation{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(capacityreservationsResource, c.ns, name, pt, data, subresources...), &v1beta1.CapacityReservation{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(capacityreservationsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.CapacityReservation), err
 }

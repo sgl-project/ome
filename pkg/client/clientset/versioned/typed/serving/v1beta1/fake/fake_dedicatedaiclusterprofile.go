@@ -24,20 +24,22 @@ var dedicatedaiclusterprofilesKind = v1beta1.SchemeGroupVersion.WithKind("Dedica
 
 // Get takes name of the dedicatedAIClusterProfile, and returns the corresponding dedicatedAIClusterProfile object, and an error if there is any.
 func (c *FakeDedicatedAIClusterProfiles) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(dedicatedaiclusterprofilesResource, name), &v1beta1.DedicatedAIClusterProfile{})
+		Invokes(testing.NewRootGetActionWithOptions(dedicatedaiclusterprofilesResource, name, options), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAIClusterProfile), err
 }
 
 // List takes label and field selectors, and returns the list of DedicatedAIClusterProfiles that match those selectors.
 func (c *FakeDedicatedAIClusterProfiles) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.DedicatedAIClusterProfileList, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterProfileList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(dedicatedaiclusterprofilesResource, dedicatedaiclusterprofilesKind, opts), &v1beta1.DedicatedAIClusterProfileList{})
+		Invokes(testing.NewRootListActionWithOptions(dedicatedaiclusterprofilesResource, dedicatedaiclusterprofilesKind, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -56,36 +58,39 @@ func (c *FakeDedicatedAIClusterProfiles) List(ctx context.Context, opts v1.ListO
 // Watch returns a watch.Interface that watches the requested dedicatedAIClusterProfiles.
 func (c *FakeDedicatedAIClusterProfiles) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(dedicatedaiclusterprofilesResource, opts))
+		InvokesWatch(testing.NewRootWatchActionWithOptions(dedicatedaiclusterprofilesResource, opts))
 }
 
 // Create takes the representation of a dedicatedAIClusterProfile and creates it.  Returns the server's representation of the dedicatedAIClusterProfile, and an error, if there is any.
 func (c *FakeDedicatedAIClusterProfiles) Create(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.CreateOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(dedicatedaiclusterprofilesResource, dedicatedAIClusterProfile), &v1beta1.DedicatedAIClusterProfile{})
+		Invokes(testing.NewRootCreateActionWithOptions(dedicatedaiclusterprofilesResource, dedicatedAIClusterProfile, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAIClusterProfile), err
 }
 
 // Update takes the representation of a dedicatedAIClusterProfile and updates it. Returns the server's representation of the dedicatedAIClusterProfile, and an error, if there is any.
 func (c *FakeDedicatedAIClusterProfiles) Update(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.UpdateOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(dedicatedaiclusterprofilesResource, dedicatedAIClusterProfile), &v1beta1.DedicatedAIClusterProfile{})
+		Invokes(testing.NewRootUpdateActionWithOptions(dedicatedaiclusterprofilesResource, dedicatedAIClusterProfile, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAIClusterProfile), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeDedicatedAIClusterProfiles) UpdateStatus(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.UpdateOptions) (*v1beta1.DedicatedAIClusterProfile, error) {
+func (c *FakeDedicatedAIClusterProfiles) UpdateStatus(ctx context.Context, dedicatedAIClusterProfile *v1beta1.DedicatedAIClusterProfile, opts v1.UpdateOptions) (result *v1beta1.DedicatedAIClusterProfile, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(dedicatedaiclusterprofilesResource, "status", dedicatedAIClusterProfile), &v1beta1.DedicatedAIClusterProfile{})
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(dedicatedaiclusterprofilesResource, "status", dedicatedAIClusterProfile, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAIClusterProfile), err
 }
@@ -99,7 +104,7 @@ func (c *FakeDedicatedAIClusterProfiles) Delete(ctx context.Context, name string
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeDedicatedAIClusterProfiles) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(dedicatedaiclusterprofilesResource, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(dedicatedaiclusterprofilesResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.DedicatedAIClusterProfileList{})
 	return err
@@ -107,10 +112,11 @@ func (c *FakeDedicatedAIClusterProfiles) DeleteCollection(ctx context.Context, o
 
 // Patch applies the patch and returns the patched dedicatedAIClusterProfile.
 func (c *FakeDedicatedAIClusterProfiles) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.DedicatedAIClusterProfile, err error) {
+	emptyResult := &v1beta1.DedicatedAIClusterProfile{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(dedicatedaiclusterprofilesResource, name, pt, data, subresources...), &v1beta1.DedicatedAIClusterProfile{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(dedicatedaiclusterprofilesResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.DedicatedAIClusterProfile), err
 }

@@ -24,20 +24,22 @@ var clustertrainingruntimesKind = v1beta1.SchemeGroupVersion.WithKind("ClusterTr
 
 // Get takes name of the clusterTrainingRuntime, and returns the corresponding clusterTrainingRuntime object, and an error if there is any.
 func (c *FakeClusterTrainingRuntimes) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ClusterTrainingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterTrainingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(clustertrainingruntimesResource, name), &v1beta1.ClusterTrainingRuntime{})
+		Invokes(testing.NewRootGetActionWithOptions(clustertrainingruntimesResource, name, options), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterTrainingRuntime), err
 }
 
 // List takes label and field selectors, and returns the list of ClusterTrainingRuntimes that match those selectors.
 func (c *FakeClusterTrainingRuntimes) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.ClusterTrainingRuntimeList, err error) {
+	emptyResult := &v1beta1.ClusterTrainingRuntimeList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(clustertrainingruntimesResource, clustertrainingruntimesKind, opts), &v1beta1.ClusterTrainingRuntimeList{})
+		Invokes(testing.NewRootListActionWithOptions(clustertrainingruntimesResource, clustertrainingruntimesKind, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -56,36 +58,39 @@ func (c *FakeClusterTrainingRuntimes) List(ctx context.Context, opts v1.ListOpti
 // Watch returns a watch.Interface that watches the requested clusterTrainingRuntimes.
 func (c *FakeClusterTrainingRuntimes) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(clustertrainingruntimesResource, opts))
+		InvokesWatch(testing.NewRootWatchActionWithOptions(clustertrainingruntimesResource, opts))
 }
 
 // Create takes the representation of a clusterTrainingRuntime and creates it.  Returns the server's representation of the clusterTrainingRuntime, and an error, if there is any.
 func (c *FakeClusterTrainingRuntimes) Create(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.CreateOptions) (result *v1beta1.ClusterTrainingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterTrainingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(clustertrainingruntimesResource, clusterTrainingRuntime), &v1beta1.ClusterTrainingRuntime{})
+		Invokes(testing.NewRootCreateActionWithOptions(clustertrainingruntimesResource, clusterTrainingRuntime, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterTrainingRuntime), err
 }
 
 // Update takes the representation of a clusterTrainingRuntime and updates it. Returns the server's representation of the clusterTrainingRuntime, and an error, if there is any.
 func (c *FakeClusterTrainingRuntimes) Update(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterTrainingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterTrainingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(clustertrainingruntimesResource, clusterTrainingRuntime), &v1beta1.ClusterTrainingRuntime{})
+		Invokes(testing.NewRootUpdateActionWithOptions(clustertrainingruntimesResource, clusterTrainingRuntime, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterTrainingRuntime), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeClusterTrainingRuntimes) UpdateStatus(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.UpdateOptions) (*v1beta1.ClusterTrainingRuntime, error) {
+func (c *FakeClusterTrainingRuntimes) UpdateStatus(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterTrainingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterTrainingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(clustertrainingruntimesResource, "status", clusterTrainingRuntime), &v1beta1.ClusterTrainingRuntime{})
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(clustertrainingruntimesResource, "status", clusterTrainingRuntime, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterTrainingRuntime), err
 }
@@ -99,7 +104,7 @@ func (c *FakeClusterTrainingRuntimes) Delete(ctx context.Context, name string, o
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeClusterTrainingRuntimes) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(clustertrainingruntimesResource, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(clustertrainingruntimesResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.ClusterTrainingRuntimeList{})
 	return err
@@ -107,10 +112,11 @@ func (c *FakeClusterTrainingRuntimes) DeleteCollection(ctx context.Context, opts
 
 // Patch applies the patch and returns the patched clusterTrainingRuntime.
 func (c *FakeClusterTrainingRuntimes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterTrainingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterTrainingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(clustertrainingruntimesResource, name, pt, data, subresources...), &v1beta1.ClusterTrainingRuntime{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(clustertrainingruntimesResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterTrainingRuntime), err
 }

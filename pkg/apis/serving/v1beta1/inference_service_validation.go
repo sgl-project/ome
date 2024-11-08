@@ -1,11 +1,12 @@
 package v1beta1
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
-
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"strconv"
 
 	"regexp"
 
@@ -26,16 +27,64 @@ const (
 var (
 	// logger for the validation webhook.
 	validatorLogger = logf.Log.WithName("inferenceservice-v1beta1-validation-webhook")
-	// regular expressions for validation of isvc name
+	// IsvcRegexp regular expressions for validation of isvc name
 	IsvcRegexp = regexp.MustCompile("^" + IsvcNameFmt + "$")
 )
 
+// InferenceServiceValidator is responsible for validating the InferenceService resource
+// when it is created, updated, or deleted.
+//
+// NOTE: The +kubebuilder:object:generate=false and +k8s:deepcopy-gen=false marker prevents controller-gen from generating DeepCopy methods,
+// as this struct is used only for temporary operations and does not need to be deeply copied.
+// +kubebuilder:object:generate=false
+// +k8s:deepcopy-gen=false
+// +k8s:openapi-gen=false
+type InferenceServiceValidator struct{}
+
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
-var _ webhook.Validator = &InferenceService{}
+var _ webhook.CustomValidator = &InferenceServiceValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (isvc *InferenceService) ValidateCreate() (admission.Warnings, error) {
+func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	isvc, err := convertToInferenceService(obj)
+	if err != nil {
+		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		return nil, err
+	}
 	validatorLogger.Info("validate create", "name", isvc.Name)
+	return validateInferenceService(isvc)
+}
+
+// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	isvc, err := convertToInferenceService(newObj)
+	if err != nil {
+		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		return nil, err
+	}
+	validatorLogger.Info("validate update", "name", isvc.Name)
+
+	return validateInferenceService(isvc)
+}
+
+// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
+func (v *InferenceServiceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	isvc, err := convertToInferenceService(obj)
+	if err != nil {
+		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		return nil, err
+	}
+	validatorLogger.Info("validate delete", "name", isvc.Name)
+	return nil, nil
+}
+
+// GetIntReference returns the pointer for the integer input
+func GetIntReference(number int) *int {
+	num := number
+	return &num
+}
+
+func validateInferenceService(isvc *InferenceService) (admission.Warnings, error) {
 	var allWarnings admission.Warnings
 	annotations := isvc.Annotations
 
@@ -85,25 +134,6 @@ func validateAutoScalingCompExtension(annotations map[string]string, compExtSpec
 	return validateScalingKPACompExtension(compExtSpec)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (isvc *InferenceService) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
-	validatorLogger.Info("validate update", "name", isvc.Name)
-
-	return isvc.ValidateCreate()
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (isvc *InferenceService) ValidateDelete() (admission.Warnings, error) {
-	validatorLogger.Info("validate delete", "name", isvc.Name)
-	return nil, nil
-}
-
-// GetIntReference returns the pointer for the integer input
-func GetIntReference(number int) *int {
-	num := number
-	return &num
-}
-
 // Validation of isvc name
 func validateInferenceServiceName(isvc *InferenceService) error {
 	if !IsvcRegexp.MatchString(isvc.Name) {
@@ -127,10 +157,6 @@ func validateInferenceServiceAutoscaler(isvc *InferenceService) error {
 					} else {
 						return nil
 					}
-
-				case constants.AutoscalerClassKEDA:
-					// TODO: Add Keda Validation
-					return nil
 				case constants.AutoscalerClassExternal:
 					return nil
 				default:
@@ -236,11 +262,20 @@ func validateCollocationStorageURI(predictorSpec PredictorSpec) error {
 		if container.Name == constants.TransformerContainerName {
 			for _, env := range container.Env {
 				if env.Name == constants.CustomSpecStorageUriEnvVarKey {
-					return fmt.Errorf(StorageUriPresentInTransformerError)
+					return errors.New(StorageUriPresentInTransformerError)
 				}
 			}
 			break
 		}
 	}
 	return nil
+}
+
+// Convert runtime.Object into InferenceService
+func convertToInferenceService(obj runtime.Object) (*InferenceService, error) {
+	isvc, ok := obj.(*InferenceService)
+	if !ok {
+		return nil, fmt.Errorf("expected an InferenceService object but got %T", obj)
+	}
+	return isvc, nil
 }

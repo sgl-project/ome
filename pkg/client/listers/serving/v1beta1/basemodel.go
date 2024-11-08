@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -22,25 +22,17 @@ type BaseModelLister interface {
 
 // baseModelLister implements the BaseModelLister interface.
 type baseModelLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.BaseModel]
 }
 
 // NewBaseModelLister returns a new BaseModelLister.
 func NewBaseModelLister(indexer cache.Indexer) BaseModelLister {
-	return &baseModelLister{indexer: indexer}
-}
-
-// List lists all BaseModels in the indexer.
-func (s *baseModelLister) List(selector labels.Selector) (ret []*v1beta1.BaseModel, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.BaseModel))
-	})
-	return ret, err
+	return &baseModelLister{listers.New[*v1beta1.BaseModel](indexer, v1beta1.Resource("basemodel"))}
 }
 
 // BaseModels returns an object that can list and get BaseModels.
 func (s *baseModelLister) BaseModels(namespace string) BaseModelNamespaceLister {
-	return baseModelNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return baseModelNamespaceLister{listers.NewNamespaced[*v1beta1.BaseModel](s.ResourceIndexer, namespace)}
 }
 
 // BaseModelNamespaceLister helps list and get BaseModels.
@@ -58,26 +50,5 @@ type BaseModelNamespaceLister interface {
 // baseModelNamespaceLister implements the BaseModelNamespaceLister
 // interface.
 type baseModelNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all BaseModels in the indexer for a given namespace.
-func (s baseModelNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.BaseModel, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.BaseModel))
-	})
-	return ret, err
-}
-
-// Get retrieves the BaseModel from the indexer for a given namespace and name.
-func (s baseModelNamespaceLister) Get(name string) (*v1beta1.BaseModel, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("basemodel"), name)
-	}
-	return obj.(*v1beta1.BaseModel), nil
+	listers.ResourceIndexer[*v1beta1.BaseModel]
 }

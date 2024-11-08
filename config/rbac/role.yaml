@@ -5,6 +5,66 @@ metadata:
   name: ome-manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  - namespaces
+  - persistentvolumeclaims
+  - persistentvolumes
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces/finalizers
+  verbs:
+  - create
+  - delete
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+- apiGroups:
   - admissionregistration.k8s.io
   resources:
   - mutatingwebhookconfigurations
@@ -45,17 +105,6 @@ rules:
   - batch.volcano.sh
   resources:
   - jobs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - batch.volcano.sh
-  resources:
   - jobs/finalizers
   verbs:
   - create
@@ -72,117 +121,6 @@ rules:
   verbs:
   - get
   - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces/finalizers
-  verbs:
-  - create
-  - delete
-  - patch
-  - update
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumeclaims
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - keda.sh
@@ -208,29 +146,7 @@ rules:
   - networking.istio.io
   resources:
   - sidecars
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - networking.istio.io
-  resources:
   - virtualservices
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - networking.istio.io
-  resources:
   - virtualservices/finalizers
   verbs:
   - create
@@ -265,19 +181,14 @@ rules:
   resources:
   - basemodels
   - basemodels/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ome.io
-  resources:
-  - basemodels/finalizers
   - clusterbasemodels
+  - clusterservingruntimes
+  - clusterservingruntimes/finalizers
+  - dedicatedaiclusters
+  - inferenceservices
+  - inferenceservices/finalizers
+  - servingruntimes
+  - servingruntimes/finalizers
   verbs:
   - create
   - delete
@@ -290,35 +201,11 @@ rules:
   - ome.io
   resources:
   - basemodels/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ome.io
-  resources:
   - clusterbasemodels/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ome.io
-  resources:
-  - clusterservingruntimes
-  - clusterservingruntimes/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ome.io
-  resources:
   - clusterservingruntimes/status
+  - dedicatedaiclusters/status
+  - inferenceservices/status
+  - servingruntimes/status
   verbs:
   - get
   - patch
@@ -334,94 +221,13 @@ rules:
 - apiGroups:
   - ome.io
   resources:
-  - dedicatedaiclusters
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ome.io
-  resources:
   - dedicatedaiclusters/finalizers
   verbs:
-  - update
-- apiGroups:
-  - ome.io
-  resources:
-  - dedicatedaiclusters/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ome.io
-  resources:
-  - inferenceservices
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ome.io
-  resources:
-  - inferenceservices
-  - inferenceservices/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ome.io
-  resources:
-  - inferenceservices/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ome.io
-  resources:
-  - servingruntimes
-  - servingruntimes/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ome.io
-  resources:
-  - servingruntimes/status
-  verbs:
-  - get
-  - patch
   - update
 - apiGroups:
   - ray.io
   resources:
   - rayclusters
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ray.io
-  resources:
   - rayclusters/finalizers
   verbs:
   - create
@@ -443,13 +249,6 @@ rules:
   - scheduling.volcano.sh
   resources:
   - podgroups
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - scheduling.volcano.sh
-  resources:
   - podgroups/status
   verbs:
   - get
@@ -485,17 +284,6 @@ rules:
   - serving.knative.dev
   resources:
   - services
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - serving.knative.dev
-  resources:
   - services/finalizers
   verbs:
   - create

@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -23,30 +23,10 @@ type DedicatedAIClusterLister interface {
 
 // dedicatedAIClusterLister implements the DedicatedAIClusterLister interface.
 type dedicatedAIClusterLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.DedicatedAICluster]
 }
 
 // NewDedicatedAIClusterLister returns a new DedicatedAIClusterLister.
 func NewDedicatedAIClusterLister(indexer cache.Indexer) DedicatedAIClusterLister {
-	return &dedicatedAIClusterLister{indexer: indexer}
-}
-
-// List lists all DedicatedAIClusters in the indexer.
-func (s *dedicatedAIClusterLister) List(selector labels.Selector) (ret []*v1beta1.DedicatedAICluster, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.DedicatedAICluster))
-	})
-	return ret, err
-}
-
-// Get retrieves the DedicatedAICluster from the index for a given name.
-func (s *dedicatedAIClusterLister) Get(name string) (*v1beta1.DedicatedAICluster, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("dedicatedaicluster"), name)
-	}
-	return obj.(*v1beta1.DedicatedAICluster), nil
+	return &dedicatedAIClusterLister{listers.New[*v1beta1.DedicatedAICluster](indexer, v1beta1.Resource("dedicatedaicluster"))}
 }

@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -22,25 +22,17 @@ type CapacityReservationLister interface {
 
 // capacityReservationLister implements the CapacityReservationLister interface.
 type capacityReservationLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.CapacityReservation]
 }
 
 // NewCapacityReservationLister returns a new CapacityReservationLister.
 func NewCapacityReservationLister(indexer cache.Indexer) CapacityReservationLister {
-	return &capacityReservationLister{indexer: indexer}
-}
-
-// List lists all CapacityReservations in the indexer.
-func (s *capacityReservationLister) List(selector labels.Selector) (ret []*v1beta1.CapacityReservation, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.CapacityReservation))
-	})
-	return ret, err
+	return &capacityReservationLister{listers.New[*v1beta1.CapacityReservation](indexer, v1beta1.Resource("capacityreservation"))}
 }
 
 // CapacityReservations returns an object that can list and get CapacityReservations.
 func (s *capacityReservationLister) CapacityReservations(namespace string) CapacityReservationNamespaceLister {
-	return capacityReservationNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return capacityReservationNamespaceLister{listers.NewNamespaced[*v1beta1.CapacityReservation](s.ResourceIndexer, namespace)}
 }
 
 // CapacityReservationNamespaceLister helps list and get CapacityReservations.
@@ -58,26 +50,5 @@ type CapacityReservationNamespaceLister interface {
 // capacityReservationNamespaceLister implements the CapacityReservationNamespaceLister
 // interface.
 type capacityReservationNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all CapacityReservations in the indexer for a given namespace.
-func (s capacityReservationNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.CapacityReservation, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.CapacityReservation))
-	})
-	return ret, err
-}
-
-// Get retrieves the CapacityReservation from the indexer for a given namespace and name.
-func (s capacityReservationNamespaceLister) Get(name string) (*v1beta1.CapacityReservation, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("capacityreservation"), name)
-	}
-	return obj.(*v1beta1.CapacityReservation), nil
+	listers.ResourceIndexer[*v1beta1.CapacityReservation]
 }

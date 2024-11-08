@@ -95,7 +95,9 @@
       "description": "BaseModelSpec defines the desired state of BaseModel",
       "type": "object",
       "required": [
-        "modelFormat"
+        "modelFormat",
+        "modelType",
+        "storage"
       ],
       "properties": {
         "additionalMetadata": {
@@ -777,6 +779,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Container"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -799,16 +805,24 @@
             "default": {},
             "$ref": "#/definitions/v1.EphemeralContainer"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
         "hostAliases": {
-          "description": "HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified. This is only valid for non-hostNetwork pods.",
+          "description": "HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified.",
           "type": "array",
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.HostAlias"
           },
+          "x-kubernetes-list-map-keys": [
+            "ip"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "ip",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -839,6 +853,10 @@
             "default": {},
             "$ref": "#/definitions/v1.LocalObjectReference"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -849,11 +867,15 @@
             "default": {},
             "$ref": "#/definitions/v1.Container"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
         "nodeName": {
-          "description": "NodeName is a request to schedule this pod onto a specific node. If it is non-empty, the scheduler simply schedules this pod onto that node, assuming that it fits resource requirements.",
+          "description": "NodeName indicates in which node this pod is scheduled. If empty, this pod is a candidate for scheduling by the scheduler defined in schedulerName. Once this field is set, the kubelet for this node becomes responsible for the lifecycle of this pod. This field should not be used to express a desire for the pod to be scheduled on a specific node. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename",
           "type": "string"
         },
         "nodeSelector": {
@@ -866,7 +888,7 @@
           "x-kubernetes-map-type": "atomic"
         },
         "os": {
-          "description": "Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set.\n\nIf the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions\n\nIf the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.hostUsers - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup",
+          "description": "Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set.\n\nIf the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions\n\nIf the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.hostUsers - spec.securityContext.appArmorProfile - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.securityContext.supplementalGroupsPolicy - spec.containers[*].securityContext.appArmorProfile - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup",
           "$ref": "#/definitions/v1.PodOS"
         },
         "overhead": {
@@ -895,7 +917,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.PodReadinessGate"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "resourceClaims": {
           "description": "ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name.\n\nThis is an alpha field and requires enabling the DynamicResourceAllocation feature gate.\n\nThis field is immutable.",
@@ -924,7 +947,7 @@
           "type": "string"
         },
         "schedulingGates": {
-          "description": "SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.\n\nSchedulingGates can only be set at pod creation time, and be removed only afterwards.\n\nThis is a beta feature enabled by the PodSchedulingReadiness feature gate.",
+          "description": "SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.\n\nSchedulingGates can only be set at pod creation time, and be removed only afterwards.",
           "type": "array",
           "items": {
             "default": {},
@@ -942,7 +965,7 @@
           "$ref": "#/definitions/v1.PodSecurityContext"
         },
         "serviceAccount": {
-          "description": "DeprecatedServiceAccount is a depreciated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead.",
+          "description": "DeprecatedServiceAccount is a deprecated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead.",
           "type": "string"
         },
         "serviceAccountName": {
@@ -972,7 +995,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Toleration"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "topologySpreadConstraints": {
           "description": "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
@@ -996,6 +1020,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
@@ -1120,6 +1148,10 @@
     "v1beta1.DedicatedAIClusterProfileSpec": {
       "description": "DedicatedAIClusterProfileSpec defines the desired state of DedicatedAIClusterProfile",
       "type": "object",
+      "required": [
+        "resources",
+        "affinity"
+      ],
       "properties": {
         "affinity": {
           "description": "The GPU shape affinity of DAC, get from spec.type + spec.shape",
@@ -1405,6 +1437,12 @@
     "v1beta1.FineTunedWeightSpec": {
       "description": "FineTunedWeightSpec defines the desired state of FineTunedWeight",
       "type": "object",
+      "required": [
+        "baseModelRef",
+        "modelType",
+        "hyperParameters",
+        "storage"
+      ],
       "properties": {
         "baseModelRef": {
           "description": "Reference to the base model that this weight is fine-tuned from",
@@ -1824,6 +1862,9 @@
     },
     "v1beta1.ModelFormat": {
       "type": "object",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "description": "Name of the format in which the model is stored, e.g., \"ONNX\", \"TensorFlow SavedModel\", \"PyTorch\", \"SafeTensors\"",
@@ -1868,6 +1909,9 @@
     },
     "v1beta1.ModelSpec": {
       "type": "object",
+      "required": [
+        "name"
+      ],
       "properties": {
         "args": {
           "description": "Arguments to the entrypoint. The container image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
@@ -1875,7 +1919,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "baseModel": {
           "type": "string"
@@ -1886,7 +1931,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "env": {
           "description": "List of environment variables to set in the container. Cannot be updated.",
@@ -1895,6 +1941,10 @@
             "default": {},
             "$ref": "#/definitions/v1.EnvVar"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -1904,7 +1954,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.EnvFromSource"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "fineTunedWeights": {
           "type": "array",
@@ -2022,6 +2073,10 @@
             "default": {},
             "$ref": "#/definitions/v1.VolumeDevice"
           },
+          "x-kubernetes-list-map-keys": [
+            "devicePath"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "devicePath",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -2032,6 +2087,10 @@
             "default": {},
             "$ref": "#/definitions/v1.VolumeMount"
           },
+          "x-kubernetes-list-map-keys": [
+            "mountPath"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "mountPath",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -2263,6 +2322,9 @@
     "v1beta1.ObjectReference": {
       "description": "ObjectReference contains enough information to let you inspect or modify the referred object.",
       "type": "object",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "description": "Name of the referenced object",
@@ -2578,6 +2640,9 @@
     "v1beta1.PredictorExtensionSpec": {
       "description": "PredictorExtensionSpec defines configuration shared across all predictor frameworks",
       "type": "object",
+      "required": [
+        "name"
+      ],
       "properties": {
         "args": {
           "description": "Arguments to the entrypoint. The container image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
@@ -2585,7 +2650,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "command": {
           "description": "Entrypoint array. Not executed within a shell. The container image's ENTRYPOINT is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
@@ -2593,7 +2659,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "env": {
           "description": "List of environment variables to set in the container. Cannot be updated.",
@@ -2602,6 +2669,10 @@
             "default": {},
             "$ref": "#/definitions/v1.EnvVar"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -2611,7 +2682,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.EnvFromSource"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "image": {
           "description": "Container image name. More info: https://kubernetes.io/docs/concepts/containers/images This field is optional to allow higher level config management to default or override container images in workload controllers like Deployments and StatefulSets.",
@@ -2718,6 +2790,10 @@
             "default": {},
             "$ref": "#/definitions/v1.VolumeDevice"
           },
+          "x-kubernetes-list-map-keys": [
+            "devicePath"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "devicePath",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -2728,6 +2804,10 @@
             "default": {},
             "$ref": "#/definitions/v1.VolumeMount"
           },
+          "x-kubernetes-list-map-keys": [
+            "mountPath"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "mountPath",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -3498,6 +3578,9 @@
     },
     "v1beta1.StorageSpec": {
       "type": "object",
+      "required": [
+        "path"
+      ],
       "properties": {
         "key": {
           "description": "The Storage Key in the secret for this model.",
@@ -3527,6 +3610,10 @@
     },
     "v1beta1.SupportedModelFormat": {
       "type": "object",
+      "required": [
+        "name",
+        "modelType"
+      ],
       "properties": {
         "autoSelect": {
           "description": "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",

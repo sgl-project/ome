@@ -24,20 +24,22 @@ var clusterbasemodelsKind = v1beta1.SchemeGroupVersion.WithKind("ClusterBaseMode
 
 // Get takes name of the clusterBaseModel, and returns the corresponding clusterBaseModel object, and an error if there is any.
 func (c *FakeClusterBaseModels) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ClusterBaseModel, err error) {
+	emptyResult := &v1beta1.ClusterBaseModel{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(clusterbasemodelsResource, name), &v1beta1.ClusterBaseModel{})
+		Invokes(testing.NewRootGetActionWithOptions(clusterbasemodelsResource, name, options), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterBaseModel), err
 }
 
 // List takes label and field selectors, and returns the list of ClusterBaseModels that match those selectors.
 func (c *FakeClusterBaseModels) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.ClusterBaseModelList, err error) {
+	emptyResult := &v1beta1.ClusterBaseModelList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(clusterbasemodelsResource, clusterbasemodelsKind, opts), &v1beta1.ClusterBaseModelList{})
+		Invokes(testing.NewRootListActionWithOptions(clusterbasemodelsResource, clusterbasemodelsKind, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -56,36 +58,39 @@ func (c *FakeClusterBaseModels) List(ctx context.Context, opts v1.ListOptions) (
 // Watch returns a watch.Interface that watches the requested clusterBaseModels.
 func (c *FakeClusterBaseModels) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(clusterbasemodelsResource, opts))
+		InvokesWatch(testing.NewRootWatchActionWithOptions(clusterbasemodelsResource, opts))
 }
 
 // Create takes the representation of a clusterBaseModel and creates it.  Returns the server's representation of the clusterBaseModel, and an error, if there is any.
 func (c *FakeClusterBaseModels) Create(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.CreateOptions) (result *v1beta1.ClusterBaseModel, err error) {
+	emptyResult := &v1beta1.ClusterBaseModel{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(clusterbasemodelsResource, clusterBaseModel), &v1beta1.ClusterBaseModel{})
+		Invokes(testing.NewRootCreateActionWithOptions(clusterbasemodelsResource, clusterBaseModel, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterBaseModel), err
 }
 
 // Update takes the representation of a clusterBaseModel and updates it. Returns the server's representation of the clusterBaseModel, and an error, if there is any.
 func (c *FakeClusterBaseModels) Update(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (result *v1beta1.ClusterBaseModel, err error) {
+	emptyResult := &v1beta1.ClusterBaseModel{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(clusterbasemodelsResource, clusterBaseModel), &v1beta1.ClusterBaseModel{})
+		Invokes(testing.NewRootUpdateActionWithOptions(clusterbasemodelsResource, clusterBaseModel, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterBaseModel), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeClusterBaseModels) UpdateStatus(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (*v1beta1.ClusterBaseModel, error) {
+func (c *FakeClusterBaseModels) UpdateStatus(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (result *v1beta1.ClusterBaseModel, err error) {
+	emptyResult := &v1beta1.ClusterBaseModel{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(clusterbasemodelsResource, "status", clusterBaseModel), &v1beta1.ClusterBaseModel{})
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(clusterbasemodelsResource, "status", clusterBaseModel, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterBaseModel), err
 }
@@ -99,7 +104,7 @@ func (c *FakeClusterBaseModels) Delete(ctx context.Context, name string, opts v1
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeClusterBaseModels) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(clusterbasemodelsResource, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(clusterbasemodelsResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.ClusterBaseModelList{})
 	return err
@@ -107,10 +112,11 @@ func (c *FakeClusterBaseModels) DeleteCollection(ctx context.Context, opts v1.De
 
 // Patch applies the patch and returns the patched clusterBaseModel.
 func (c *FakeClusterBaseModels) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterBaseModel, err error) {
+	emptyResult := &v1beta1.ClusterBaseModel{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(clusterbasemodelsResource, name, pt, data, subresources...), &v1beta1.ClusterBaseModel{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(clusterbasemodelsResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterBaseModel), err
 }

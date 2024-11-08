@@ -4,14 +4,13 @@ package v1beta1
 
 import (
 	"context"
-	"time"
 
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
-	rest "k8s.io/client-go/rest"
+	gentype "k8s.io/client-go/gentype"
 )
 
 // CapacityReservationsGetter has a method to return a CapacityReservationInterface.
@@ -24,6 +23,7 @@ type CapacityReservationsGetter interface {
 type CapacityReservationInterface interface {
 	Create(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.CreateOptions) (*v1beta1.CapacityReservation, error)
 	Update(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (*v1beta1.CapacityReservation, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
 	UpdateStatus(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (*v1beta1.CapacityReservation, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
@@ -36,144 +36,18 @@ type CapacityReservationInterface interface {
 
 // capacityReservations implements CapacityReservationInterface
 type capacityReservations struct {
-	client rest.Interface
-	ns     string
+	*gentype.ClientWithList[*v1beta1.CapacityReservation, *v1beta1.CapacityReservationList]
 }
 
 // newCapacityReservations returns a CapacityReservations
 func newCapacityReservations(c *OmeV1beta1Client, namespace string) *capacityReservations {
 	return &capacityReservations{
-		client: c.RESTClient(),
-		ns:     namespace,
+		gentype.NewClientWithList[*v1beta1.CapacityReservation, *v1beta1.CapacityReservationList](
+			"capacityreservations",
+			c.RESTClient(),
+			scheme.ParameterCodec,
+			namespace,
+			func() *v1beta1.CapacityReservation { return &v1beta1.CapacityReservation{} },
+			func() *v1beta1.CapacityReservationList { return &v1beta1.CapacityReservationList{} }),
 	}
-}
-
-// Get takes name of the capacityReservation, and returns the corresponding capacityReservation object, and an error if there is any.
-func (c *capacityReservations) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.CapacityReservation, err error) {
-	result = &v1beta1.CapacityReservation{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		Name(name).
-		VersionedParams(&options, scheme.ParameterCodec).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// List takes label and field selectors, and returns the list of CapacityReservations that match those selectors.
-func (c *capacityReservations) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.CapacityReservationList, err error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	result = &v1beta1.CapacityReservationList{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Watch returns a watch.Interface that watches the requested capacityReservations.
-func (c *capacityReservations) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	opts.Watch = true
-	return c.client.Get().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Watch(ctx)
-}
-
-// Create takes the representation of a capacityReservation and creates it.  Returns the server's representation of the capacityReservation, and an error, if there is any.
-func (c *capacityReservations) Create(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.CreateOptions) (result *v1beta1.CapacityReservation, err error) {
-	result = &v1beta1.CapacityReservation{}
-	err = c.client.Post().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(capacityReservation).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Update takes the representation of a capacityReservation and updates it. Returns the server's representation of the capacityReservation, and an error, if there is any.
-func (c *capacityReservations) Update(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (result *v1beta1.CapacityReservation, err error) {
-	result = &v1beta1.CapacityReservation{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		Name(capacityReservation.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(capacityReservation).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *capacityReservations) UpdateStatus(ctx context.Context, capacityReservation *v1beta1.CapacityReservation, opts v1.UpdateOptions) (result *v1beta1.CapacityReservation, err error) {
-	result = &v1beta1.CapacityReservation{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		Name(capacityReservation.Name).
-		SubResource("status").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(capacityReservation).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Delete takes name of the capacityReservation and deletes it. Returns an error if one occurs.
-func (c *capacityReservations) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		Name(name).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *capacityReservations) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	var timeout time.Duration
-	if listOpts.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
-	}
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		VersionedParams(&listOpts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// Patch applies the patch and returns the patched capacityReservation.
-func (c *capacityReservations) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.CapacityReservation, err error) {
-	result = &v1beta1.CapacityReservation{}
-	err = c.client.Patch(pt).
-		Namespace(c.ns).
-		Resource("capacityreservations").
-		Name(name).
-		SubResource(subresources...).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
 }

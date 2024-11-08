@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -23,30 +23,10 @@ type ClusterBaseModelLister interface {
 
 // clusterBaseModelLister implements the ClusterBaseModelLister interface.
 type clusterBaseModelLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.ClusterBaseModel]
 }
 
 // NewClusterBaseModelLister returns a new ClusterBaseModelLister.
 func NewClusterBaseModelLister(indexer cache.Indexer) ClusterBaseModelLister {
-	return &clusterBaseModelLister{indexer: indexer}
-}
-
-// List lists all ClusterBaseModels in the indexer.
-func (s *clusterBaseModelLister) List(selector labels.Selector) (ret []*v1beta1.ClusterBaseModel, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.ClusterBaseModel))
-	})
-	return ret, err
-}
-
-// Get retrieves the ClusterBaseModel from the index for a given name.
-func (s *clusterBaseModelLister) Get(name string) (*v1beta1.ClusterBaseModel, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("clusterbasemodel"), name)
-	}
-	return obj.(*v1beta1.ClusterBaseModel), nil
+	return &clusterBaseModelLister{listers.New[*v1beta1.ClusterBaseModel](indexer, v1beta1.Resource("clusterbasemodel"))}
 }

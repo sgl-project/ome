@@ -4,14 +4,13 @@ package v1beta1
 
 import (
 	"context"
-	"time"
 
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
-	rest "k8s.io/client-go/rest"
+	gentype "k8s.io/client-go/gentype"
 )
 
 // ServingRuntimesGetter has a method to return a ServingRuntimeInterface.
@@ -24,6 +23,7 @@ type ServingRuntimesGetter interface {
 type ServingRuntimeInterface interface {
 	Create(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.CreateOptions) (*v1beta1.ServingRuntime, error)
 	Update(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.UpdateOptions) (*v1beta1.ServingRuntime, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
 	UpdateStatus(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.UpdateOptions) (*v1beta1.ServingRuntime, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
@@ -36,144 +36,18 @@ type ServingRuntimeInterface interface {
 
 // servingRuntimes implements ServingRuntimeInterface
 type servingRuntimes struct {
-	client rest.Interface
-	ns     string
+	*gentype.ClientWithList[*v1beta1.ServingRuntime, *v1beta1.ServingRuntimeList]
 }
 
 // newServingRuntimes returns a ServingRuntimes
 func newServingRuntimes(c *OmeV1beta1Client, namespace string) *servingRuntimes {
 	return &servingRuntimes{
-		client: c.RESTClient(),
-		ns:     namespace,
+		gentype.NewClientWithList[*v1beta1.ServingRuntime, *v1beta1.ServingRuntimeList](
+			"servingruntimes",
+			c.RESTClient(),
+			scheme.ParameterCodec,
+			namespace,
+			func() *v1beta1.ServingRuntime { return &v1beta1.ServingRuntime{} },
+			func() *v1beta1.ServingRuntimeList { return &v1beta1.ServingRuntimeList{} }),
 	}
-}
-
-// Get takes name of the servingRuntime, and returns the corresponding servingRuntime object, and an error if there is any.
-func (c *servingRuntimes) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ServingRuntime, err error) {
-	result = &v1beta1.ServingRuntime{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		Name(name).
-		VersionedParams(&options, scheme.ParameterCodec).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// List takes label and field selectors, and returns the list of ServingRuntimes that match those selectors.
-func (c *servingRuntimes) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.ServingRuntimeList, err error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	result = &v1beta1.ServingRuntimeList{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Watch returns a watch.Interface that watches the requested servingRuntimes.
-func (c *servingRuntimes) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	opts.Watch = true
-	return c.client.Get().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Watch(ctx)
-}
-
-// Create takes the representation of a servingRuntime and creates it.  Returns the server's representation of the servingRuntime, and an error, if there is any.
-func (c *servingRuntimes) Create(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.CreateOptions) (result *v1beta1.ServingRuntime, err error) {
-	result = &v1beta1.ServingRuntime{}
-	err = c.client.Post().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(servingRuntime).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Update takes the representation of a servingRuntime and updates it. Returns the server's representation of the servingRuntime, and an error, if there is any.
-func (c *servingRuntimes) Update(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ServingRuntime, err error) {
-	result = &v1beta1.ServingRuntime{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		Name(servingRuntime.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(servingRuntime).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *servingRuntimes) UpdateStatus(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ServingRuntime, err error) {
-	result = &v1beta1.ServingRuntime{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		Name(servingRuntime.Name).
-		SubResource("status").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(servingRuntime).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Delete takes name of the servingRuntime and deletes it. Returns an error if one occurs.
-func (c *servingRuntimes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		Name(name).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *servingRuntimes) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	var timeout time.Duration
-	if listOpts.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
-	}
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		VersionedParams(&listOpts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// Patch applies the patch and returns the patched servingRuntime.
-func (c *servingRuntimes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ServingRuntime, err error) {
-	result = &v1beta1.ServingRuntime{}
-	err = c.client.Patch(pt).
-		Namespace(c.ns).
-		Resource("servingruntimes").
-		Name(name).
-		SubResource(subresources...).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
 }

@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -23,30 +23,10 @@ type ClusterServingRuntimeLister interface {
 
 // clusterServingRuntimeLister implements the ClusterServingRuntimeLister interface.
 type clusterServingRuntimeLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.ClusterServingRuntime]
 }
 
 // NewClusterServingRuntimeLister returns a new ClusterServingRuntimeLister.
 func NewClusterServingRuntimeLister(indexer cache.Indexer) ClusterServingRuntimeLister {
-	return &clusterServingRuntimeLister{indexer: indexer}
-}
-
-// List lists all ClusterServingRuntimes in the indexer.
-func (s *clusterServingRuntimeLister) List(selector labels.Selector) (ret []*v1beta1.ClusterServingRuntime, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.ClusterServingRuntime))
-	})
-	return ret, err
-}
-
-// Get retrieves the ClusterServingRuntime from the index for a given name.
-func (s *clusterServingRuntimeLister) Get(name string) (*v1beta1.ClusterServingRuntime, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("clusterservingruntime"), name)
-	}
-	return obj.(*v1beta1.ClusterServingRuntime), nil
+	return &clusterServingRuntimeLister{listers.New[*v1beta1.ClusterServingRuntime](indexer, v1beta1.Resource("clusterservingruntime"))}
 }

@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -23,30 +23,10 @@ type ClusterCapacityReservationLister interface {
 
 // clusterCapacityReservationLister implements the ClusterCapacityReservationLister interface.
 type clusterCapacityReservationLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.ClusterCapacityReservation]
 }
 
 // NewClusterCapacityReservationLister returns a new ClusterCapacityReservationLister.
 func NewClusterCapacityReservationLister(indexer cache.Indexer) ClusterCapacityReservationLister {
-	return &clusterCapacityReservationLister{indexer: indexer}
-}
-
-// List lists all ClusterCapacityReservations in the indexer.
-func (s *clusterCapacityReservationLister) List(selector labels.Selector) (ret []*v1beta1.ClusterCapacityReservation, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.ClusterCapacityReservation))
-	})
-	return ret, err
-}
-
-// Get retrieves the ClusterCapacityReservation from the index for a given name.
-func (s *clusterCapacityReservationLister) Get(name string) (*v1beta1.ClusterCapacityReservation, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("clustercapacityreservation"), name)
-	}
-	return obj.(*v1beta1.ClusterCapacityReservation), nil
+	return &clusterCapacityReservationLister{listers.New[*v1beta1.ClusterCapacityReservation](indexer, v1beta1.Resource("clustercapacityreservation"))}
 }

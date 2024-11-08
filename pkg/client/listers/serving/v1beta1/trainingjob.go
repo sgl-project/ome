@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -22,25 +22,17 @@ type TrainingJobLister interface {
 
 // trainingJobLister implements the TrainingJobLister interface.
 type trainingJobLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.TrainingJob]
 }
 
 // NewTrainingJobLister returns a new TrainingJobLister.
 func NewTrainingJobLister(indexer cache.Indexer) TrainingJobLister {
-	return &trainingJobLister{indexer: indexer}
-}
-
-// List lists all TrainingJobs in the indexer.
-func (s *trainingJobLister) List(selector labels.Selector) (ret []*v1beta1.TrainingJob, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.TrainingJob))
-	})
-	return ret, err
+	return &trainingJobLister{listers.New[*v1beta1.TrainingJob](indexer, v1beta1.Resource("trainingjob"))}
 }
 
 // TrainingJobs returns an object that can list and get TrainingJobs.
 func (s *trainingJobLister) TrainingJobs(namespace string) TrainingJobNamespaceLister {
-	return trainingJobNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return trainingJobNamespaceLister{listers.NewNamespaced[*v1beta1.TrainingJob](s.ResourceIndexer, namespace)}
 }
 
 // TrainingJobNamespaceLister helps list and get TrainingJobs.
@@ -58,26 +50,5 @@ type TrainingJobNamespaceLister interface {
 // trainingJobNamespaceLister implements the TrainingJobNamespaceLister
 // interface.
 type trainingJobNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all TrainingJobs in the indexer for a given namespace.
-func (s trainingJobNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.TrainingJob, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.TrainingJob))
-	})
-	return ret, err
-}
-
-// Get retrieves the TrainingJob from the indexer for a given namespace and name.
-func (s trainingJobNamespaceLister) Get(name string) (*v1beta1.TrainingJob, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("trainingjob"), name)
-	}
-	return obj.(*v1beta1.TrainingJob), nil
+	listers.ResourceIndexer[*v1beta1.TrainingJob]
 }

@@ -4,14 +4,13 @@ package v1beta1
 
 import (
 	"context"
-	"time"
 
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	scheme "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
-	rest "k8s.io/client-go/rest"
+	gentype "k8s.io/client-go/gentype"
 )
 
 // FineTunedWeightsGetter has a method to return a FineTunedWeightInterface.
@@ -24,6 +23,7 @@ type FineTunedWeightsGetter interface {
 type FineTunedWeightInterface interface {
 	Create(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.CreateOptions) (*v1beta1.FineTunedWeight, error)
 	Update(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (*v1beta1.FineTunedWeight, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
 	UpdateStatus(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (*v1beta1.FineTunedWeight, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
@@ -36,144 +36,18 @@ type FineTunedWeightInterface interface {
 
 // fineTunedWeights implements FineTunedWeightInterface
 type fineTunedWeights struct {
-	client rest.Interface
-	ns     string
+	*gentype.ClientWithList[*v1beta1.FineTunedWeight, *v1beta1.FineTunedWeightList]
 }
 
 // newFineTunedWeights returns a FineTunedWeights
 func newFineTunedWeights(c *OmeV1beta1Client, namespace string) *fineTunedWeights {
 	return &fineTunedWeights{
-		client: c.RESTClient(),
-		ns:     namespace,
+		gentype.NewClientWithList[*v1beta1.FineTunedWeight, *v1beta1.FineTunedWeightList](
+			"finetunedweights",
+			c.RESTClient(),
+			scheme.ParameterCodec,
+			namespace,
+			func() *v1beta1.FineTunedWeight { return &v1beta1.FineTunedWeight{} },
+			func() *v1beta1.FineTunedWeightList { return &v1beta1.FineTunedWeightList{} }),
 	}
-}
-
-// Get takes name of the fineTunedWeight, and returns the corresponding fineTunedWeight object, and an error if there is any.
-func (c *fineTunedWeights) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.FineTunedWeight, err error) {
-	result = &v1beta1.FineTunedWeight{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		Name(name).
-		VersionedParams(&options, scheme.ParameterCodec).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// List takes label and field selectors, and returns the list of FineTunedWeights that match those selectors.
-func (c *fineTunedWeights) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.FineTunedWeightList, err error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	result = &v1beta1.FineTunedWeightList{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Watch returns a watch.Interface that watches the requested fineTunedWeights.
-func (c *fineTunedWeights) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	opts.Watch = true
-	return c.client.Get().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Watch(ctx)
-}
-
-// Create takes the representation of a fineTunedWeight and creates it.  Returns the server's representation of the fineTunedWeight, and an error, if there is any.
-func (c *fineTunedWeights) Create(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.CreateOptions) (result *v1beta1.FineTunedWeight, err error) {
-	result = &v1beta1.FineTunedWeight{}
-	err = c.client.Post().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(fineTunedWeight).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Update takes the representation of a fineTunedWeight and updates it. Returns the server's representation of the fineTunedWeight, and an error, if there is any.
-func (c *fineTunedWeights) Update(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (result *v1beta1.FineTunedWeight, err error) {
-	result = &v1beta1.FineTunedWeight{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		Name(fineTunedWeight.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(fineTunedWeight).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *fineTunedWeights) UpdateStatus(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (result *v1beta1.FineTunedWeight, err error) {
-	result = &v1beta1.FineTunedWeight{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		Name(fineTunedWeight.Name).
-		SubResource("status").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(fineTunedWeight).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Delete takes name of the fineTunedWeight and deletes it. Returns an error if one occurs.
-func (c *fineTunedWeights) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		Name(name).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *fineTunedWeights) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	var timeout time.Duration
-	if listOpts.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
-	}
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		VersionedParams(&listOpts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// Patch applies the patch and returns the patched fineTunedWeight.
-func (c *fineTunedWeights) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.FineTunedWeight, err error) {
-	result = &v1beta1.FineTunedWeight{}
-	err = c.client.Patch(pt).
-		Namespace(c.ns).
-		Resource("finetunedweights").
-		Name(name).
-		SubResource(subresources...).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
 }

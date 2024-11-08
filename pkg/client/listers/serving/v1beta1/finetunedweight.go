@@ -4,8 +4,8 @@ package v1beta1
 
 import (
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -22,25 +22,17 @@ type FineTunedWeightLister interface {
 
 // fineTunedWeightLister implements the FineTunedWeightLister interface.
 type fineTunedWeightLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1beta1.FineTunedWeight]
 }
 
 // NewFineTunedWeightLister returns a new FineTunedWeightLister.
 func NewFineTunedWeightLister(indexer cache.Indexer) FineTunedWeightLister {
-	return &fineTunedWeightLister{indexer: indexer}
-}
-
-// List lists all FineTunedWeights in the indexer.
-func (s *fineTunedWeightLister) List(selector labels.Selector) (ret []*v1beta1.FineTunedWeight, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.FineTunedWeight))
-	})
-	return ret, err
+	return &fineTunedWeightLister{listers.New[*v1beta1.FineTunedWeight](indexer, v1beta1.Resource("finetunedweight"))}
 }
 
 // FineTunedWeights returns an object that can list and get FineTunedWeights.
 func (s *fineTunedWeightLister) FineTunedWeights(namespace string) FineTunedWeightNamespaceLister {
-	return fineTunedWeightNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return fineTunedWeightNamespaceLister{listers.NewNamespaced[*v1beta1.FineTunedWeight](s.ResourceIndexer, namespace)}
 }
 
 // FineTunedWeightNamespaceLister helps list and get FineTunedWeights.
@@ -58,26 +50,5 @@ type FineTunedWeightNamespaceLister interface {
 // fineTunedWeightNamespaceLister implements the FineTunedWeightNamespaceLister
 // interface.
 type fineTunedWeightNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all FineTunedWeights in the indexer for a given namespace.
-func (s fineTunedWeightNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.FineTunedWeight, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1beta1.FineTunedWeight))
-	})
-	return ret, err
-}
-
-// Get retrieves the FineTunedWeight from the indexer for a given namespace and name.
-func (s fineTunedWeightNamespaceLister) Get(name string) (*v1beta1.FineTunedWeight, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1beta1.Resource("finetunedweight"), name)
-	}
-	return obj.(*v1beta1.FineTunedWeight), nil
+	listers.ResourceIndexer[*v1beta1.FineTunedWeight]
 }

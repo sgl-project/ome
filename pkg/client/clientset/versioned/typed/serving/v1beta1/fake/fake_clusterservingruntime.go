@@ -24,20 +24,22 @@ var clusterservingruntimesKind = v1beta1.SchemeGroupVersion.WithKind("ClusterSer
 
 // Get takes name of the clusterServingRuntime, and returns the corresponding clusterServingRuntime object, and an error if there is any.
 func (c *FakeClusterServingRuntimes) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ClusterServingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterServingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(clusterservingruntimesResource, name), &v1beta1.ClusterServingRuntime{})
+		Invokes(testing.NewRootGetActionWithOptions(clusterservingruntimesResource, name, options), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterServingRuntime), err
 }
 
 // List takes label and field selectors, and returns the list of ClusterServingRuntimes that match those selectors.
 func (c *FakeClusterServingRuntimes) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.ClusterServingRuntimeList, err error) {
+	emptyResult := &v1beta1.ClusterServingRuntimeList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(clusterservingruntimesResource, clusterservingruntimesKind, opts), &v1beta1.ClusterServingRuntimeList{})
+		Invokes(testing.NewRootListActionWithOptions(clusterservingruntimesResource, clusterservingruntimesKind, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -56,36 +58,39 @@ func (c *FakeClusterServingRuntimes) List(ctx context.Context, opts v1.ListOptio
 // Watch returns a watch.Interface that watches the requested clusterServingRuntimes.
 func (c *FakeClusterServingRuntimes) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(clusterservingruntimesResource, opts))
+		InvokesWatch(testing.NewRootWatchActionWithOptions(clusterservingruntimesResource, opts))
 }
 
 // Create takes the representation of a clusterServingRuntime and creates it.  Returns the server's representation of the clusterServingRuntime, and an error, if there is any.
 func (c *FakeClusterServingRuntimes) Create(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.CreateOptions) (result *v1beta1.ClusterServingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterServingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(clusterservingruntimesResource, clusterServingRuntime), &v1beta1.ClusterServingRuntime{})
+		Invokes(testing.NewRootCreateActionWithOptions(clusterservingruntimesResource, clusterServingRuntime, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterServingRuntime), err
 }
 
 // Update takes the representation of a clusterServingRuntime and updates it. Returns the server's representation of the clusterServingRuntime, and an error, if there is any.
 func (c *FakeClusterServingRuntimes) Update(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterServingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterServingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(clusterservingruntimesResource, clusterServingRuntime), &v1beta1.ClusterServingRuntime{})
+		Invokes(testing.NewRootUpdateActionWithOptions(clusterservingruntimesResource, clusterServingRuntime, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterServingRuntime), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeClusterServingRuntimes) UpdateStatus(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.UpdateOptions) (*v1beta1.ClusterServingRuntime, error) {
+func (c *FakeClusterServingRuntimes) UpdateStatus(ctx context.Context, clusterServingRuntime *v1beta1.ClusterServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterServingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterServingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(clusterservingruntimesResource, "status", clusterServingRuntime), &v1beta1.ClusterServingRuntime{})
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(clusterservingruntimesResource, "status", clusterServingRuntime, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterServingRuntime), err
 }
@@ -99,7 +104,7 @@ func (c *FakeClusterServingRuntimes) Delete(ctx context.Context, name string, op
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeClusterServingRuntimes) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(clusterservingruntimesResource, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(clusterservingruntimesResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.ClusterServingRuntimeList{})
 	return err
@@ -107,10 +112,11 @@ func (c *FakeClusterServingRuntimes) DeleteCollection(ctx context.Context, opts 
 
 // Patch applies the patch and returns the patched clusterServingRuntime.
 func (c *FakeClusterServingRuntimes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterServingRuntime, err error) {
+	emptyResult := &v1beta1.ClusterServingRuntime{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(clusterservingruntimesResource, name, pt, data, subresources...), &v1beta1.ClusterServingRuntime{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(clusterservingruntimesResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1beta1.ClusterServingRuntime), err
 }
