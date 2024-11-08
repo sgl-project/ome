@@ -3,6 +3,7 @@ package enigma
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
 	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
@@ -10,7 +11,6 @@ import (
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
-	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 )
 
 type ModelFramework string

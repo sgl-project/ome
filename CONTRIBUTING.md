@@ -222,7 +222,7 @@ After cloning the repository, you can run the OME manager in your IDE by followi
     - Run Kind: `File`
     - Files: `${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/manager/main.go`
     - Environment Variables: `KUBECONFIG=<path to kubeconfig file>`
-    - Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8080`
+    - Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8080 --leader-elect`
     - Module: `ome`
 This will start the OME manager in the IDE. You can also run the manager in debug mode by adding breakpoints in the code.
 
@@ -231,8 +231,8 @@ However, because the cluster might have both mutating and validating webhooks, y
 If you want to run the manager locally, you need to remove the webhooks from the cluster. The following command can be used to remove the webhooks:
 ```bash
 kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
-kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io clusterservingruntime.ome.io
-kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io servingruntime.ome.io
+kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io clusterservingruntime.ome.io
+kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io servingruntime.ome.io
 kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
 ```
 

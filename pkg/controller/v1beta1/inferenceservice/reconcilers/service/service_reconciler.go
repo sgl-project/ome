@@ -119,7 +119,7 @@ func semanticServiceEquals(desired, existing *corev1.Service) bool {
 func (r *ServiceReconciler) Reconcile() (*corev1.Service, error) {
 	// reconcile Service
 	checkResult, existingService, err := r.checkServiceExist(r.client)
-	log.Info("service reconcile", "checkResult", checkResult, "err", err)
+	log.Info("Reconcile service", "namespace", r.Service.Namespace, "name", r.Service.Name, "checkResult", checkResult)
 	if err != nil {
 		return nil, err
 	}

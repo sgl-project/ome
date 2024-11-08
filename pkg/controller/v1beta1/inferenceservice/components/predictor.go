@@ -81,15 +81,14 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	container, podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime)
+	podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime)
 	if err != nil {
 		return result, err
 	}
 
-	p.Log.Info("Resolved container and podSpec for inference service",
+	p.Log.Info("Resolved podSpec for inference service",
 		"inferenceServiceName", isvc.Name,
 		"namespace", isvc.Namespace,
-		"container", container,
 		"podSpec", podSpec)
 
 	// Reconcile deployment based on the deployment mode
@@ -323,25 +322,25 @@ func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1b
 }
 
 // reconcilePodSpec reconciles the pod spec.
-func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (*v1.Container, v1.PodSpec, ctrl.Result, error) {
+func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (v1.PodSpec, ctrl.Result, error) {
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
 	omeContainerIdx := p.getOmeContainerIndex(sRuntime.Containers)
 	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
 	if err != nil {
-		return nil, v1.PodSpec{}, ctrl.Result{}, err
+		return v1.PodSpec{}, ctrl.Result{}, err
 	}
 
 	podSpec, err := p.createMergedPodSpec(isvc, sRuntime)
 	if err != nil {
-		return nil, v1.PodSpec{}, ctrl.Result{}, err
+		return v1.PodSpec{}, ctrl.Result{}, err
 	}
 
 	p.updateVolumeMounts(isvc, container)
 	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec)
 
-	return container, podSpec, ctrl.Result{}, nil
+	return podSpec, ctrl.Result{}, nil
 }
 
 // createMergedContainer merges the runtime and model containers.

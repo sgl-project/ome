@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	secretinvault "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets/secret_in_vault"
 	"errors"
@@ -14,7 +13,6 @@ import (
 
 const (
 	TargetSecretInVaultConfigViperKeyName = "target_secret_in_vault_config"
-	CasperConfigViperKeyName              = "object_store_config"
 )
 
 func cohereConfigProvider(cli *cobra.Command) fx.Option {
@@ -71,93 +69,6 @@ func cohereConfigProvider(cli *cobra.Command) fx.Option {
 		v.BindEnv("target_kms_config.vault_prefix", "TARGET_VAULT_PREFIX")
 		v.BindEnv("target_kms_config.kms_crypto_endpoint", "TARGET_KMS_CRYPTO_ENDPOINT")
 		v.BindEnv("target_kms_config.kms_management_endpoint", "TARGET_KMS_MANAGEMENT_ENDPOINT")
-
-		if err := v.BindPFlag("debug", cli.Flags().Lookup("debug")); err != nil {
-			panic(err)
-		}
-
-		if configFilePath == "" {
-			return nil, errors.New("no config file provided")
-		}
-
-		if err := configutils.ResolveAndMergeFile(v, configFilePath); err != nil {
-			return nil, fmt.Errorf("cannot read config file: %w", err)
-		}
-
-		return v, nil
-	})
-}
-
-func hfConfigProvider(cli *cobra.Command) fx.Option {
-	return fx.Provide(func() (*viper.Viper, error) {
-		v := viper.GetViper()
-
-		v.SetDefault("app_name", appName)
-		v.SetDefault("vendor", "hf")
-		v.SetDefault(casper.CasperConfigViperKeyNameKey, CasperConfigViperKeyName)
-
-		v.SetEnvPrefix(appName)
-		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-		v.AutomaticEnv()
-
-		v.BindEnv("model_name", "MODEL_NAME")
-		v.BindEnv("download_commit", "DOWNLOAD_COMMIT") // use `main` for latest commit
-		v.BindEnv("hf_token", "HF_TOKEN")
-		v.BindEnv("internal_model_name", "INTERNAL_MODEL_NAME")
-
-		v.BindEnv("object_store_uri.bucket_name", "OBJECT_BUCKET_NAME")
-		v.BindEnv("object_store_uri.namespace", "OBJECT_NAMESPACE")
-
-		v.BindEnv(fmt.Sprintf("%s.%s", CasperConfigViperKeyName, casper.AuthTypeViperKeyName), "AUTH_TYPE")
-		v.BindEnv(fmt.Sprintf("%s.%s", CasperConfigViperKeyName, casper.CompartmentIdViperKeyName), "OBJECT_COMPARTMENT_ID")
-		v.BindEnv(fmt.Sprintf("%s.%s", CasperConfigViperKeyName, casper.RegionViperKeyName), "REGION_OVERRIDE")
-
-		if err := v.BindPFlag("debug", cli.Flags().Lookup("debug")); err != nil {
-			panic(err)
-		}
-
-		if configFilePath == "" {
-			return nil, errors.New("no config file provided")
-		}
-
-		if err := configutils.ResolveAndMergeFile(v, configFilePath); err != nil {
-			return nil, fmt.Errorf("cannot read config file: %w", err)
-		}
-
-		return v, nil
-	})
-}
-
-func genericConfigProvider(cli *cobra.Command) fx.Option {
-	return fx.Provide(func() (*viper.Viper, error) {
-		v := viper.GetViper()
-
-		v.SetDefault("app_name", appName)
-		v.SetDefault("vendor", "generic")
-		v.SetDefault("temp_model_store_path", "/opt/model/store/")
-		v.SetEnvPrefix(appName)
-		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-		v.AutomaticEnv()
-
-		v.BindEnv("model_name", "MODEL_NAME")
-		v.BindEnv("auth_type", "AUTH_TYPE")
-		v.BindEnv("enable_size_limit_check", "ENABLE_SIZE_LIMIT_CHECK")
-		v.BindEnv("download_size_limit_gb", "DOWNLOAD_SIZE_LIMIT_GB")
-		v.BindEnv("number_of_threads_for_replication", "NUM_OF_THREADS_FOR_REPLICATION")
-
-		v.BindEnv("source_object_store_uri.bucket_name", "SOURCE_OBJECT_BUCKET_NAME")
-		v.BindEnv("source_object_store_uri.prefix", "SOURCE_OBJECT_PREFIX")
-		v.BindEnv("source_object_store_uri.namespace", "SOURCE_OBJECT_NAMESPACE")
-		v.BindEnv("source_object_store_config.compartment_id", "SOURCE_OBJECT_COMPARTMENT_ID")
-		v.BindEnv("source_object_store_config.region_override", "SOURCE_REGION_OVERRIDE")
-		v.BindEnv("source_object_store_config.enable_obo_token", "SOURCE_ENABLE_OBO_TOKEN")
-		v.BindEnv("source_object_store_config.obo_token", "SOURCE_OBO_TOKEN")
-
-		v.BindEnv("target_object_store_uri.bucket_name", "TARGET_OBJECT_BUCKET_NAME")
-		v.BindEnv("target_object_store_uri.prefix", "TARGET_OBJECT_PREFIX")
-		v.BindEnv("target_object_store_uri.namespace", "TARGET_OBJECT_NAMESPACE")
-		v.BindEnv("target_object_store_config.compartment_id", "TARGET_OBJECT_COMPARTMENT_ID")
-		v.BindEnv("target_object_store_config.region_override", "TARGET_REGION_OVERRIDE")
 
 		if err := v.BindPFlag("debug", cli.Flags().Lookup("debug")); err != nil {
 			panic(err)
