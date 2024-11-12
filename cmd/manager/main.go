@@ -40,28 +40,31 @@ var (
 )
 
 const (
-	LeaderLockName = "ome-controller-manager-leader-lock"
+	LeaderLockName          = "ome-controller-manager-leader-lock"
+	LeaderElectionNamespace = "ome"
 )
 
 // Options defines the program-configurable options that may be passed on the command line.
 type Options struct {
-	metricsAddr          string
-	webhookPort          int
-	enableLeaderElection bool
-	enableWebhook        bool
-	probeAddr            string
-	zapOpts              zap.Options
+	metricsAddr             string
+	webhookPort             int
+	enableLeaderElection    bool
+	enableWebhook           bool
+	probeAddr               string
+	leaderElectionNamespace string
+	zapOpts                 zap.Options
 }
 
 // DefaultOptions returns the default values for the program options.
 func DefaultOptions() Options {
 	return Options{
-		metricsAddr:          ":8080",
-		webhookPort:          9443,
-		enableLeaderElection: false,
-		enableWebhook:        false,
-		probeAddr:            ":8081",
-		zapOpts:              zap.Options{},
+		metricsAddr:             ":8080",
+		webhookPort:             9443,
+		enableLeaderElection:    false,
+		enableWebhook:           false,
+		probeAddr:               ":8081",
+		leaderElectionNamespace: LeaderElectionNamespace,
+		zapOpts:                 zap.Options{},
 	}
 }
 
@@ -73,6 +76,7 @@ func GetOptions() Options {
 	flag.BoolVar(&opts.enableLeaderElection, "leader-elect", opts.enableLeaderElection,
 		"Enable leader election for ome controller manager. "+
 			"Enabling this will ensure there is only one active ome controller manager.")
+	flag.StringVar(&opts.leaderElectionNamespace, "leader-election-namespace", opts.leaderElectionNamespace, "The namespace in which the leader election configmap will be created.")
 	flag.BoolVar(&opts.enableWebhook, "webhook", opts.enableWebhook, "Enable the webhook server.")
 	flag.StringVar(&opts.probeAddr, "health-probe-addr", opts.probeAddr, "The address the probe endpoint binds to.")
 	opts.zapOpts.BindFlags(flag.CommandLine)
@@ -112,9 +116,10 @@ func main() {
 			BindAddress: options.metricsAddr},
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: options.webhookPort}),
-		LeaderElection:         options.enableLeaderElection,
-		LeaderElectionID:       LeaderLockName,
-		HealthProbeBindAddress: options.probeAddr,
+		LeaderElection:          options.enableLeaderElection,
+		LeaderElectionID:        LeaderLockName,
+		LeaderElectionNamespace: options.leaderElectionNamespace,
+		HealthProbeBindAddress:  options.probeAddr,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to set up overall controller manager")
