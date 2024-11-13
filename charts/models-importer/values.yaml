@@ -98,3 +98,7 @@ nl2rqs-7b-v3:
 nl2rqs-7b-v4:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+cohere-command-r-082024-v1-6-tp4-128k:
+  enabled: false 
+  lifecyclePhase: "ACTIVE"

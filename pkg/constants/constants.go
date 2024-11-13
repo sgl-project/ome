@@ -77,6 +77,13 @@ var (
 	DedicatedAICluster                       = OMEAPIGroupName + "/dedicated-ai-cluster"
 	VolcanoQueue                             = OMEAPIGroupName + "/volcano-queue"
 	Scheduler                                = OMEAPIGroupName + "/scheduler"
+	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
+	SevingInitInjectionKey                   = OMEAPIGroupName + "/inject-serving-init"
+	BaseModelDecryptionKeyName               = OMEAPIGroupName + "/base-model-decryption-key"
+	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
+	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
+    BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
+	BaseModelFormatVersion                   = OMEAPIGroupName + "/base-model-format-version"
 	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
 	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
 	PrometheusPortAnnotationKey              = "prometheus.io/port"
@@ -312,10 +319,33 @@ const (
 	InferenceServiceContainerName   = "ome-container"
 	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
+	ServingInitContainerName        = "serving-init"
 	MultiNodeProberContainerPort    = 8080
 
 	// TransformerContainerName transformer container name in collocation
 	TransformerContainerName = "transformer-container"
+)
+
+// Model Agents Constants
+const (
+	AuthtypeOKEWorkloadIdentity = "OkeWorkloadIdentity"
+)
+
+// Serving Container Block Lists
+const (
+	BlocklistConfigMapVolumeName = "configmap-blocklist-volume"
+	InputBlocklistSubPath        = "input.txt"
+	OutputBlocklistSubPath       = "output.txt"
+	InputBlocklistMountPath      = "/usr/bin/input.txt"
+	OutputBlocklistMountPath     = "/usr/bin/output.txt"
+)
+
+// Cohere volumn mount paths
+const (
+	EmptyDirVolumeSourceName             = "model-empty-dir"
+	InitContainerModelSourceDefaultPath  = "/mnt/model"
+	InitContainerModelFinalDefaultPath   = "/opt/ml/model"
+	ContainerModelFinalDefaultSubPath    = "base"
 )
 
 // DefaultModelLocalMountPath is where models will be mounted by the storage-initializer

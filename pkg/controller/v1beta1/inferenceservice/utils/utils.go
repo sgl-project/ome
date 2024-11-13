@@ -49,6 +49,11 @@ func IsChainsawInjectEnabled(annotations map[string]string) bool {
 	return ok && chainsawInject == "enabled"
 }
 
+func IsBlockListInjectionDisabled(annotations map[string]string) bool {
+	inject, ok := annotations[constants.BlockListDisableInjection]
+	return ok && inject == "true"
+}
+
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	// Check if the VolcanoQueue annotation exists and set the label if it does.
 	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {
@@ -166,22 +171,22 @@ func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta
 }
 
 // GetBaseModel Get the base model name from the given model name.
-func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, error) {
+func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
 	baseModel := &v1beta1.BaseModel{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
 	if err == nil {
-		return &baseModel.Spec, nil
+		return &baseModel.Spec, &baseModel.ObjectMeta, nil
 	} else if !errors.IsNotFound(err) {
-		return nil, err
+		return nil, nil, err
 	}
 	clusterBaseModel := &v1beta1.ClusterBaseModel{}
 	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterBaseModel)
 	if err == nil {
-		return &clusterBaseModel.Spec, nil
+		return &clusterBaseModel.Spec, &clusterBaseModel.ObjectMeta, nil
 	} else if !errors.IsNotFound(err) {
-		return nil, err
+		return nil, nil, err
 	}
-	return nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
+	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
 }
 
 // ReplacePlaceholders Replace placeholders in runtime container by values from inferenceservice metadata
@@ -296,4 +301,14 @@ func GetScaledObjectName(isvcName string) string {
 		isvcName = isvcName[len(isvcName)-maxNameLen:]
 	}
 	return fmt.Sprintf("%s%s", prefix, isvcName)
+}
+
+// getOmeContainerIndex returns the index of the OME container in the runtime containers.
+func GetOmeContainerIndex(containers []v1.Container) int {
+	for i, container := range containers {
+		if container.Name == constants.InferenceServiceContainerName {
+			return i
+		}
+	}
+	return -1
 }

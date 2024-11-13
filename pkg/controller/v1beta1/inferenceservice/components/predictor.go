@@ -55,7 +55,7 @@ func NewPredictor(client client.Client, clientset kubernetes.Interface, scheme *
 // Reconcile observes the predictor and attempts to drive the status towards the desired state.
 func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 	// Reconcile the base model
-	baseModel, result, err := p.reconcileBaseModel(isvc)
+	baseModel, baseModelMeta, result, err := p.reconcileBaseModel(isvc)
 	if err != nil {
 		return result, err
 	}
@@ -66,7 +66,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	}
 
 	// Reconcile and validate runtime
-	sRuntime, result, err := p.getRuntime(isvc, baseModel)
+	sRuntime, runtimeName, result, err := p.getRuntime(isvc, baseModel)
 	if err != nil {
 		return result, err
 	}
@@ -76,7 +76,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	}
 
 	// Reconcile object metadata and pod spec
-	objectMeta, result, err := p.reconcileObjectMeta(isvc, sRuntime)
+	objectMeta, result, err := p.reconcileObjectMeta(isvc, sRuntime, runtimeName, baseModel, baseModelMeta)
 	if err != nil {
 		return result, err
 	}
@@ -233,8 +233,8 @@ func (p *Predictor) setMultiNodeReferences(isvc *v1beta1.InferenceService, r *mu
 }
 
 // reconcileObjectMeta reconciles the object metadata.
-func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (metav1.ObjectMeta, ctrl.Result, error) {
-	annotations, err := p.processAnnotations(isvc, sRuntime)
+func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta) (metav1.ObjectMeta, ctrl.Result, error) {
+	annotations, err := p.processAnnotations(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta)
 	if err != nil {
 		return metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
@@ -249,7 +249,7 @@ func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime
 }
 
 // processAnnotations processes the annotations for the predictor.
-func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (map[string]string, error) {
+func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
@@ -262,7 +262,22 @@ func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime 
 		return nil, err
 	}
 
+	p.processServingAnnotations(annotations, isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta)
+
 	return utils.Union(sRuntimeAnnotations, annotations, isvc.Spec.Predictor.Annotations), nil
+}
+
+// processServingAnnotations processes the annotations for the predictor.
+func (p *Predictor) processServingAnnotations(annotations map[string]string, isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta) {
+	baseModelDecryptionKeyName, ok := baseModelMeta.Annotations[constants.BaseModelDecryptionKeyName]
+	if ok {
+		annotations[constants.BaseModelDecryptionKeyName] = baseModelDecryptionKeyName
+	}
+
+	annotations[constants.BaseModelName] = baseModelMeta.Name
+	annotations[constants.ServingRuntimeKeyName] = runtimeName
+	annotations[constants.BaseModelFormat] = baseModelSpec.ModelFormat.Name
+	annotations[constants.BaseModelFormatVersion] = *baseModelSpec.ModelFormat.Version
 }
 
 // handleStorageURI handles the storage URI for the predictor.
@@ -326,7 +341,7 @@ func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
-	omeContainerIdx := p.getOmeContainerIndex(sRuntime.Containers)
+	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
 	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
 	if err != nil {
 		return v1.PodSpec{}, ctrl.Result{}, err
@@ -383,6 +398,23 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
 		{Name: "MODEL_PATH", Value: modelMountPath},
 	})
+
+	if isvcutils.IsBlockListInjectionDisabled(isvc.Annotations) {
+		inputBlocklistVolumeMount := v1.VolumeMount{
+			Name:      constants.BlocklistConfigMapVolumeName,
+			MountPath: constants.InputBlocklistMountPath,
+			ReadOnly:  true,
+			SubPath:   constants.InputBlocklistSubPath,
+		}
+		container.VolumeMounts = append(container.VolumeMounts, inputBlocklistVolumeMount)
+		outputBlocklistVolumeMount := v1.VolumeMount{
+			Name:      constants.BlocklistConfigMapVolumeName,
+			MountPath: constants.OutputBlocklistMountPath,
+			ReadOnly:  true,
+			SubPath:   constants.OutputBlocklistSubPath,
+		}
+		container.VolumeMounts = append(container.VolumeMounts, outputBlocklistVolumeMount)
+	}
 }
 
 // updatePodSpec updates the pod spec for the predictor.
@@ -401,6 +433,20 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 				},
 			},
 		},
+	}
+
+	if isvcutils.IsBlockListInjectionDisabled(isvc.Annotations) {
+		blockListConfigMapVolume := v1.Volume{
+			Name: constants.BlocklistConfigMapVolumeName,
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: isvc.Name,
+					},
+				},
+			},
+		}
+		volumes = append(volumes, blockListConfigMapVolume)
 	}
 
 	// Add additional volumes if Chainsaw injection is enabled
@@ -430,27 +476,18 @@ func (p *Predictor) validateRuntime(isvc *v1beta1.InferenceService, sRuntime v1b
 		return ctrl.Result{}, errors.New("no container configuration found in selected serving runtime")
 	}
 
-	omeContainerIdx := p.getOmeContainerIndex(sRuntime.Containers)
+	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
 	if omeContainerIdx == -1 {
 		return ctrl.Result{}, errors.New("failed to find ome-container in ServingRuntime containers")
 	}
 	return ctrl.Result{}, nil
 }
 
-// getOmeContainerIndex returns the index of the OME container in the runtime containers.
-func (p *Predictor) getOmeContainerIndex(containers []v1.Container) int {
-	for i, container := range containers {
-		if container.Name == constants.InferenceServiceContainerName {
-			return i
-		}
-	}
-	return -1
-}
-
 // getRuntime retrieves the serving runtime for the predictor.
-func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
+func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.Runtime != nil {
-		return p.getSpecifiedRuntime(isvc, baseModel)
+		runtimeSpec, result, err := p.getSpecifiedRuntime(isvc, baseModel)
+		return runtimeSpec, *isvc.Spec.Predictor.Model.Runtime, result, err
 	}
 	return p.getSupportingRuntime(isvc, baseModel)
 }
@@ -484,15 +521,15 @@ func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseMode
 }
 
 // getSupportingRuntime retrieves the supporting runtime for the predictor.
-func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
+func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
 	runtimes, err := isvc.Spec.Predictor.Model.GetSupportingRuntimes(p.client, isvc.Namespace)
 	if err != nil {
-		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, err
+		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, err
 	}
 
 	if len(runtimes) == 0 {
 		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "No runtime found to support specified framework/version")
-		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("no runtime found to support specified predictor with model type: %v", baseModel.ModelFormat.Name)
+		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, fmt.Errorf("no runtime found to support specified predictor with model type: %v", baseModel.ModelFormat.Name)
 	}
 
 	// Use the first supporting runtime.
@@ -500,7 +537,7 @@ func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseMod
 	p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime, "inference service", isvc.Name, "namespace", isvc.Namespace)
 	isvc.SetRuntimeDefaults()
 
-	return runtimes[0].Spec, ctrl.Result{}, nil
+	return runtimes[0].Spec, runtimes[0].Name, ctrl.Result{}, nil
 }
 
 // isProtocolVersionSupported checks if the protocol version is supported by the runtime.
@@ -527,32 +564,32 @@ func (p *Predictor) reconcilePVPVC(isvc *v1beta1.InferenceService, baseModel v1b
 }
 
 // reconcileBaseModel reconciles the base model for the predictor.
-func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, ctrl.Result, error) {
+func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, metav1.ObjectMeta, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.BaseModel == nil {
-		return v1beta1.BaseModelSpec{}, ctrl.Result{}, nil
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, nil
 	}
 
-	baseModel, err := p.getBaseModelSpec(isvc)
+	baseModel, baseModelMeta, err := p.getBaseModelSpec(isvc)
 	if err != nil {
-		return v1beta1.BaseModelSpec{}, ctrl.Result{}, err
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
 
 	if *baseModel.Disabled {
 		p.updateModelTransitionStatus(isvc, v1beta1.BaseModelDisabled, "Specified base model is disabled")
-		return v1beta1.BaseModelSpec{}, ctrl.Result{}, fmt.Errorf("specified base model %s is disabled", *isvc.Spec.Predictor.Model.BaseModel)
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, fmt.Errorf("specified base model %s is disabled", *isvc.Spec.Predictor.Model.BaseModel)
 	}
 
-	return baseModel, ctrl.Result{}, nil
+	return baseModel, baseModelMeta, ctrl.Result{}, nil
 }
 
 // getBaseModelSpec retrieves the base model spec.
-func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, error) {
-	bm, err := isvcutils.GetBaseModel(p.client, *isvc.Spec.Predictor.Model.BaseModel, isvc.Namespace)
+func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, metav1.ObjectMeta, error) {
+	bm, bmMeta, err := isvcutils.GetBaseModel(p.client, *isvc.Spec.Predictor.Model.BaseModel, isvc.Namespace)
 	if err != nil {
 		p.updateModelTransitionStatus(isvc, v1beta1.BaseModelNotFound, "Waiting for base model to become available")
-		return v1beta1.BaseModelSpec{}, err
+		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, err
 	}
-	return *bm, nil
+	return *bm, *bmMeta, nil
 }
 
 // updateModelTransitionStatus updates the model transition status for the predictor.

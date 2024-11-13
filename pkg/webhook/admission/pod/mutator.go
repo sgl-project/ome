@@ -80,17 +80,19 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 	}
 
 	metricsAggregator, err := newMetricsAggregator(configMap)
-
-	dedicatedAIClusterSchedulingInjector := NewDedicatedAIClusterSchedulingInjector(mutator.Client)
-
 	if err != nil {
 		return err
 	}
+
+	dedicatedAIClusterSchedulingInjector := NewDedicatedAIClusterSchedulingInjector(mutator.Client)
+
+	servingInitInjector := newServingInitInjector(configMap)
 
 	mutators := []func(pod *v1.Pod) error{
 		agentInjector.InjectAgent,
 		metricsAggregator.InjectMetricsAggregator,
 		dedicatedAIClusterSchedulingInjector.InjectAffinity,
+		servingInitInjector.InjectServingInit,
 	}
 
 	for _, mutator := range mutators {

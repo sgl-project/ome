@@ -75,6 +75,20 @@ data:
       "enableMetricAggregation": "{{ .Values.ome.metricsaggregator.enableMetricAggregation }}",
       "enablePrometheusScraping" : "{{ .Values.ome.metricsaggregator.enablePrometheusScraping }}"
     }
+  servingInit: |-
+    {
+        "image" : "{{ .Values.ome.servingInit.servingInitImage.repository }}:{{ .Values.ome.servingInit.servingInitImage.tag }}",
+        "memoryRequest": "320Gi",
+        "memoryLimit": "320Gi",
+        "cpuRequest": "15",
+        "cpuLimit": "15",
+        "compartmentId": "{{ .Values.ome.servingInit.compartmentId }}",
+        "authType" : "{{ .Values.ome.servingInit.authType }}",
+        "vaultId": "{{ .Values.ome.servingInit.vaultId }}",
+        "region": "{{ .Values.ome.servingInit.region }}",
+        "kmsCryptoEndpoint": "{{ .Values.ome.servingInit.kmsCryptoEndpoint }}",
+        "kmsManagementEndpoint": "{{ .Values.ome.servingInit.kmsManagementEndpoint }}"
+    }
 
 ---
 apiVersion: v1
