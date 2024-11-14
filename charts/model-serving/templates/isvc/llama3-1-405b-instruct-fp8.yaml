@@ -5,7 +5,11 @@ metadata:
   name: llama-3-1-405b-instruct-fp8
   namespace: llama-3-1-405b-instruct-fp8
   annotations:
+    {{- if and .Values.llama_3_1_405b_instruct.singleNode }}
+    ome.io/deploymentMode: "RawDeployment"
+    {{- else }}
     ome.io/deploymentMode: "MultiNodeRayVLLM"
+    {{- end }}
     chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
@@ -13,8 +17,10 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
-      {{- if .Values.llama_3_1_405b_instruct.enableRDMA }}
+      {{- if and .Values.llama_3_1_405b_instruct.enableRDMA (not .Values.llama_3_1_405b_instruct.singleNode) }}
       runtime: vllm-pp-rdma
+      {{- else if and .Values.llama_3_1_405b_instruct.singleNode (not .Values.llama_3_1_405b_instruct.enableRDMA) }}
+      runtime: vllm-eight-card-chat
       {{- else }}
       runtime: vllm-pp
       {{- end }}
