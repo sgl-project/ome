@@ -43,8 +43,8 @@ func CreateEmptyModelConfig(isvc *v1beta1.InferenceService) (*v1.ConfigMap, erro
 			Labels:    isvc.Labels,
 		},
 		Data: map[string]string{
-			constants.ModelConfigFileName: "[]",
-			constants.InputBlocklistSubPath: "",
+			constants.ModelConfigFileName:    "[]",
+			constants.InputBlocklistSubPath:  "",
 			constants.OutputBlocklistSubPath: "",
 		},
 	}

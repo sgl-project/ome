@@ -39,11 +39,50 @@ var (
 
 // OME Agent Constants
 var (
-	AgentName                         = "ome-agent"
-	AgentAppName                      = "OME_AGENT"
-	AgentModelNameEnvVarKey           = AgentAppName + "_" + "MODEL_NAME"
-	AgentModelStoreDirectoryEnvVarKey = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
-	AgentModelFrameworkEnvVarKey      = AgentAppName + "_" + "MODEL_FRAMEWORK"
+	AgentName                           = "ome-agent"
+	AgentAppName                        = "OME_AGENT"
+	AgentModelNameEnvVarKey             = AgentAppName + "_" + "MODEL_NAME"
+	AgentModelStoreDirectoryEnvVarKey   = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
+	AgentModelFrameworkEnvVarKey        = AgentAppName + "_" + "MODEL_FRAMEWORK"
+	AgentTensorRTLLMVersionsEnvVarKey   = AgentAppName + "_" + "TENSORRT_LLM_VERSION"
+	AgentModelFrameworkVersionEnvVarKey = AgentAppName + "_" + "MODEL_FRAMEWORK_VERSION"
+
+	// General Configuration
+	AgentLocalPathEnvVarKey      = AgentAppName + "_" + "LOCAL_PATH"
+	AgentHFTokenEnvVarKey        = AgentAppName + "_" + "HF_TOKEN"
+	AgentSkipSHAEnvVarKey        = AgentAppName + "_" + "SKIP_SHA"
+	AgentMaxRetriesEnvVarKey     = AgentAppName + "_" + "MAX_RETRIES"
+	AgentRetryIntervalEnvVarKey  = AgentAppName + "_" + "RETRY_INTERVAL_IN_SECONDS"
+	AgentNumConnectionsEnvVarKey = AgentAppName + "_" + "NUM_CONNECTIONS"
+
+	// Size Limit Configuration
+	AgentDownloadSizeLimitEnvVarKey    = AgentAppName + "_" + "DOWNLOAD_SIZE_LIMIT_GB"
+	AgentEnableSizeLimitCheckEnvVarKey = AgentAppName + "_" + "ENABLE_SIZE_LIMIT_CHECK"
+
+	// Source Configuration
+	AgentSourceBucketNameEnvVarKey = AgentAppName + "_" + "SOURCE_BUCKET_NAME"
+	AgentSourcePrefixEnvVarKey     = AgentAppName + "_" + "SOURCE_PREFIX"
+	AgentSourceRegionEnvVarKey     = AgentAppName + "_" + "SOURCE_REGION"
+	AgentSourceNamespaceEnvVarKey  = AgentAppName + "_" + "SOURCE_NAMESPACE"
+
+	// Target Configuration
+	AgentTargetBucketNameEnvVarKey = AgentAppName + "_" + "TARGET_BUCKET_NAME"
+	AgentTargetPrefixEnvVarKey     = AgentAppName + "_" + "TARGET_PREFIX"
+	AgentTargetRegionEnvVarKey     = AgentAppName + "_" + "TARGET_REGION"
+	AgentTargetNamespaceEnvVarKey  = AgentAppName + "_" + "TARGET_NAMESPACE"
+
+	// Model Configuration
+	AgentNodeShapeAliasEnvVarKey         = AgentAppName + "_" + "NODE_SHAPE_ALIAS"
+	AgentNumOfGPUEnvVarKey               = AgentAppName + "_" + "NUM_OF_GPU"
+	AgentDisableModelDecryptionEnvVarKey = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
+
+	// OCI Vault and Security
+	AgentCompartmentIDEnvVarKey = AgentAppName + "_" + "COMPARTMENT_ID"
+	AgentAuthTypeEnvVarKey      = AgentAppName + "_" + "AUTH_TYPE"
+	AgentRegionEnvVarKey        = AgentAppName + "_" + "REGION"
+	AgentVaultIDEnvVarKey       = AgentAppName + "_" + "VAULT_ID"
+	AgentKeyNameEnvVarKey       = AgentAppName + "_" + "KEY_NAME"
+	AgentSecretNameEnvVarKey    = AgentAppName + "_" + "SECRET_NAME"
 )
 
 // InferenceService MultiModel Constants
@@ -79,10 +118,9 @@ var (
 	Scheduler                                = OMEAPIGroupName + "/scheduler"
 	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
 	SevingInitInjectionKey                   = OMEAPIGroupName + "/inject-serving-init"
-	BaseModelDecryptionKeyName               = OMEAPIGroupName + "/base-model-decryption-key"
 	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
 	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
-    BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
+	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
 	BaseModelFormatVersion                   = OMEAPIGroupName + "/base-model-format-version"
 	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
 	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
@@ -95,6 +133,16 @@ var (
 	ChainsawLogPath                          = ChainsawAPIGroupName + "/logPath"
 	ChainsawNamespace                        = ChainsawAPIGroupName + "/namespace"
 	ChainsawCompartmentID                    = ChainsawAPIGroupName + "/compartmentId"
+)
+
+// InferenceService Annotations for model encryption and decryption
+var (
+	BaseModelDecryptionKeyName       = OMEAPIGroupName + "/base-model-decryption-key-name"
+	BaseModelDecryptionVaultID       = OMEAPIGroupName + "/base-model-decryption-vault-id"
+	BaseModelDecryptionSecretName    = OMEAPIGroupName + "/base-model-decryption-secret-name"
+	BaseModelDecryptionCompartmentID = OMEAPIGroupName + "/base-model-decryption-compartment-id"
+	EncryptionAuthType               = OMEAPIGroupName + "/base-model-decryption-auth-type"
+	DisableModelDecryption           = OMEAPIGroupName + "/disable-model-decryption"
 )
 
 // Label Constants
@@ -342,10 +390,10 @@ const (
 
 // Cohere volumn mount paths
 const (
-	EmptyDirVolumeSourceName             = "model-empty-dir"
-	InitContainerModelSourceDefaultPath  = "/mnt/model"
-	InitContainerModelFinalDefaultPath   = "/opt/ml/model"
-	ContainerModelFinalDefaultSubPath    = "base"
+	EmptyDirVolumeSourceName            = "model-empty-dir"
+	InitContainerModelSourceDefaultPath = "/mnt/model"
+	InitContainerModelFinalDefaultPath  = "/opt/ml/model"
+	ContainerModelFinalDefaultSubPath   = "base"
 )
 
 // DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
