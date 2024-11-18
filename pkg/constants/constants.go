@@ -133,6 +133,7 @@ var (
 	ChainsawLogPath                          = ChainsawAPIGroupName + "/logPath"
 	ChainsawNamespace                        = ChainsawAPIGroupName + "/namespace"
 	ChainsawCompartmentID                    = ChainsawAPIGroupName + "/compartmentId"
+	ModelCategoryAnnotation                  = "models.ome.io/category"
 )
 
 // InferenceService Annotations for model encryption and decryption
@@ -147,15 +148,17 @@ var (
 
 // Label Constants
 var (
-	RayClusterLabel            = "ray.io/cluster"
-	RayScheduler               = "ray.io/scheduler-name"
-	RayPrioriyClass            = "ray.io/priority-class-name"
-	RayClusterStartTime        = "raycluster/start-time"
-	RayClusterUnavailableSince = "raycluster/unavailable-since"
-	VolcanoQueueName           = "volcano.sh/queue-name"
-	VolcanoScheduler           = "volcano"
-	VolcanoPreemptable         = "volcano.sh/preemptable"
-	CompartmentIDLabelKey      = "oci.oraclecloud.com/compartment"
+	RayClusterLabel                       = "ray.io/cluster"
+	RayScheduler                          = "ray.io/scheduler-name"
+	RayPrioriyClass                       = "ray.io/priority-class-name"
+	RayClusterStartTime                   = "raycluster/start-time"
+	RayClusterUnavailableSince            = "raycluster/unavailable-since"
+	VolcanoQueueName                      = "volcano.sh/queue-name"
+	VolcanoScheduler                      = "volcano"
+	VolcanoPreemptable                    = "volcano.sh/preemptable"
+	CompartmentIDLabelKey                 = "oci.oraclecloud.com/compartment"
+	InferenceServiceBaseModelNameLabelKey = "base-model-name"
+	InferenceServiceBaseModelSizeLabelKey = "base-model-size"
 )
 
 // PrioriryClass

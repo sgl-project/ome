@@ -239,12 +239,17 @@ func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime
 		return metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
 
+	labels, err := p.processLabels(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta)
+	if err != nil {
+		return metav1.ObjectMeta{}, ctrl.Result{}, err
+	}
+
 	predictorName, err := p.determinePredictorName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
 
-	objectMeta := p.buildObjectMeta(isvc, sRuntime, predictorName, annotations)
+	objectMeta := p.buildObjectMeta(isvc, sRuntime, predictorName, annotations, labels)
 	return objectMeta, ctrl.Result{}, nil
 }
 
@@ -278,6 +283,31 @@ func (p *Predictor) processServingAnnotations(annotations map[string]string, isv
 	annotations[constants.ServingRuntimeKeyName] = runtimeName
 	annotations[constants.BaseModelFormat] = baseModelSpec.ModelFormat.Name
 	annotations[constants.BaseModelFormatVersion] = *baseModelSpec.ModelFormat.Version
+}
+
+// processlabels processes the label for the predictor.
+func (p *Predictor) processLabels(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta) (map[string]string, error) {
+	predictorLabels := isvc.Spec.Predictor.Labels
+	sRuntimeLabels := sRuntime.ServingRuntimePodSpec.Labels
+
+	baseModelCategory, ok := baseModelMeta.Annotations[constants.ModelCategoryAnnotation]
+	if !ok {
+		baseModelCategory = "SMALL"
+	}
+
+	labels := utils.Union(
+		sRuntimeLabels,
+		isvc.Labels,
+		predictorLabels,
+		map[string]string{
+			constants.InferenceServicePodLabelKey:           isvc.Name,
+			constants.KServiceComponentLabel:                string(v1beta1.PredictorComponent),
+			constants.InferenceServiceBaseModelNameLabelKey: baseModelMeta.Name,
+			constants.InferenceServiceBaseModelSizeLabelKey: baseModelCategory,
+		},
+	)
+
+	return labels, nil
 }
 
 // handleStorageURI handles the storage URI for the predictor.
@@ -316,22 +346,11 @@ func (p *Predictor) determinePredictorName(isvc *v1beta1.InferenceService) (stri
 }
 
 // buildObjectMeta builds the object metadata.
-func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, predictorName string, annotations map[string]string) metav1.ObjectMeta {
-	predictorLabels := isvc.Spec.Predictor.Labels
-	sRuntimeLabels := sRuntime.ServingRuntimePodSpec.Labels
-
+func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, predictorName string, annotations, labels map[string]string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
-		Name:      predictorName,
-		Namespace: isvc.Namespace,
-		Labels: utils.Union(
-			sRuntimeLabels,
-			isvc.Labels,
-			predictorLabels,
-			map[string]string{
-				constants.InferenceServicePodLabelKey: isvc.Name,
-				constants.KServiceComponentLabel:      string(v1beta1.PredictorComponent),
-			},
-		),
+		Name:        predictorName,
+		Namespace:   isvc.Namespace,
+		Labels:      labels,
 		Annotations: annotations,
 	}
 }
