@@ -13,3 +13,4 @@ resources:
   - ome.io_clustertrainingruntimes.yaml
   - ome.io_trainingruntimes.yaml
   - ome.io_trainingjobs.yaml
+  - ome.io_benchmarkjobs.yaml

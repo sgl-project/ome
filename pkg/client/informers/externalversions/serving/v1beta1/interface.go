@@ -10,6 +10,8 @@ import (
 type Interface interface {
 	// BaseModels returns a BaseModelInformer.
 	BaseModels() BaseModelInformer
+	// BenchmarkJobs returns a BenchmarkJobInformer.
+	BenchmarkJobs() BenchmarkJobInformer
 	// CapacityReservations returns a CapacityReservationInformer.
 	CapacityReservations() CapacityReservationInformer
 	// ClusterBaseModels returns a ClusterBaseModelInformer.
@@ -50,6 +52,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // BaseModels returns a BaseModelInformer.
 func (v *version) BaseModels() BaseModelInformer {
 	return &baseModelInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// BenchmarkJobs returns a BenchmarkJobInformer.
+func (v *version) BenchmarkJobs() BenchmarkJobInformer {
+	return &benchmarkJobInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // CapacityReservations returns a CapacityReservationInformer.

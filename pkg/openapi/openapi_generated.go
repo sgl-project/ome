@@ -16,6 +16,10 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BaseModel":                       schema_pkg_apis_serving_v1beta1_BaseModel(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BaseModelList":                   schema_pkg_apis_serving_v1beta1_BaseModelList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BaseModelSpec":                   schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJob":                    schema_pkg_apis_serving_v1beta1_BenchmarkJob(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobList":                schema_pkg_apis_serving_v1beta1_BenchmarkJobList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobSpec":                schema_pkg_apis_serving_v1beta1_BenchmarkJobSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobStatus":              schema_pkg_apis_serving_v1beta1_BenchmarkJobStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BuiltInAdapter":                  schema_pkg_apis_serving_v1beta1_BuiltInAdapter(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservation":             schema_pkg_apis_serving_v1beta1_CapacityReservation(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.CapacityReservationCondition":    schema_pkg_apis_serving_v1beta1_CapacityReservationCondition(ref),
@@ -45,17 +49,20 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.DedicatedAIClusterStatus":        schema_pkg_apis_serving_v1beta1_DedicatedAIClusterStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.DeployConfig":                    schema_pkg_apis_serving_v1beta1_DeployConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ElasticPolicy":                   schema_pkg_apis_serving_v1beta1_ElasticPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Endpoint":                        schema_pkg_apis_serving_v1beta1_Endpoint(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FailureInfo":                     schema_pkg_apis_serving_v1beta1_FailureInfo(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FineTunedWeight":                 schema_pkg_apis_serving_v1beta1_FineTunedWeight(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FineTunedWeightList":             schema_pkg_apis_serving_v1beta1_FineTunedWeightList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.FineTunedWeightSpec":             schema_pkg_apis_serving_v1beta1_FineTunedWeightSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceService":                schema_pkg_apis_serving_v1beta1_InferenceService(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceList":            schema_pkg_apis_serving_v1beta1_InferenceServiceList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceReference":       schema_pkg_apis_serving_v1beta1_InferenceServiceReference(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceSpec":            schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceStatus":          schema_pkg_apis_serving_v1beta1_InferenceServiceStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServicesConfig":         schema_pkg_apis_serving_v1beta1_InferenceServicesConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.IngressConfig":                   schema_pkg_apis_serving_v1beta1_IngressConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.JobCondition":                    schema_pkg_apis_serving_v1beta1_JobCondition(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.K8sInferenceServiceReference":    schema_pkg_apis_serving_v1beta1_K8sInferenceServiceReference(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.KedaConfig":                      schema_pkg_apis_serving_v1beta1_KedaConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.LoggerSpec":                      schema_pkg_apis_serving_v1beta1_LoggerSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.MPITrainingJobSpec":              schema_pkg_apis_serving_v1beta1_MPITrainingJobSpec(ref),
@@ -82,6 +89,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ReplicaStatus":                   schema_pkg_apis_serving_v1beta1_ReplicaStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.RunPolicy":                       schema_pkg_apis_serving_v1beta1_RunPolicy(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.SchedulingPolicy":                schema_pkg_apis_serving_v1beta1_SchedulingPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ServiceMetadata":                 schema_pkg_apis_serving_v1beta1_ServiceMetadata(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ServingRuntime":                  schema_pkg_apis_serving_v1beta1_ServingRuntime(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ServingRuntimeList":              schema_pkg_apis_serving_v1beta1_ServingRuntimeList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ServingRuntimePodSpec":           schema_pkg_apis_serving_v1beta1_ServingRuntimePodSpec(ref),
@@ -419,6 +427,286 @@ func schema_pkg_apis_serving_v1beta1_BaseModelSpec(ref common.ReferenceCallback)
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_BenchmarkJob(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BenchmarkJob is the schema for the BenchmarkJobs API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJobStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_BenchmarkJobList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BenchmarkJobList contains a list of BenchmarkJob",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJob"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.BenchmarkJob", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_BenchmarkJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BenchmarkJobSpec defines the specification for a benchmark job. All fields within this specification collectively represent the desired state and configuration of a BenchmarkJob.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"huggingFaceAPIKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HuggingFaceAPIKey is the API key required for Hugging Face authentication.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"inferenceServiceReference": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InferenceServiceReference is the reference to the inference service to benchmark.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceReference"),
+						},
+					},
+					"serviceMetadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceMetadata records metadata about the backend model server or service being benchmarked. This includes details such as server engine, version, and GPU configuration for filtering experiments.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ServiceMetadata"),
+						},
+					},
+					"task": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Task specifies the task to benchmark (e.g., \"chat\", \"vision\", \"embeddings\").",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"trafficScenarios": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TrafficScenarios contains a list of traffic scenarios to simulate during the benchmark. If not provided, defaults will be assigned via genai-bench.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"numConcurrency": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NumConcurrency defines a list of concurrency levels to test during the benchmark. If not provided, defaults will be assigned via genai-bench.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int32",
+									},
+								},
+							},
+						},
+					},
+					"maxTimePerIteration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxTimePerIteration specifies the maximum time (in minutes) for a single iteration. Each iteration runs for a specific combination of TrafficScenario and NumConcurrency.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxRequestsPerIteration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxRequestsPerIteration specifies the maximum number of requests for a single iteration. Each iteration runs for a specific combination of TrafficScenario and NumConcurrency.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"additionalRequestParams": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AdditionalRequestParams contains additional request parameters as a map.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"dataset": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"chat\".",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
+						},
+					},
+					"outputLocation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OutputLocation specifies where the benchmark results will be stored (e.g., object storage).",
+							Default:     map[string]interface{}{},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"),
+						},
+					},
+				},
+				Required: []string{"huggingFaceAPIKey", "inferenceServiceReference", "task", "maxTimePerIteration", "maxRequestsPerIteration", "outputLocation"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.InferenceServiceReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.ServiceMetadata", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Storage"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_BenchmarkJobStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BenchmarkJobStatus reflects the state and results of the benchmark job. It will be set and updated by the controller.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State represents the current state of the benchmark job: \"Pending\", \"Running\", \"Completed\", \"Failed\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"startTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartTime is the timestamp for when the benchmark job started.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"completionTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CompletionTime is the timestamp for when the benchmark job completed, either successfully or unsuccessfully.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"lastReconcileTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastReconcileTime is the timestamp for the last time the job was reconciled by the controller.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"failureMessage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FailureMessage contains any error messages if the benchmark job failed.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"details": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Details provide additional information or metadata about the benchmark job.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"state"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 
@@ -2501,6 +2789,43 @@ func schema_pkg_apis_serving_v1beta1_ElasticPolicy(ref common.ReferenceCallback)
 	}
 }
 
+func schema_pkg_apis_serving_v1beta1_Endpoint(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Endpoint defines a direct URL-based inference service with additional API configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL represents the endpoint URL for the inference service.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiFormat": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIFormat specifies the type of API, such as \"openai\" or \"genai\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"modelName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ModelName specifies the name of the model being served at the endpoint. Useful for endpoints that require model-specific configuration. For instance, for openai API, this is a required field in the payload",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"url", "apiFormat"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_serving_v1beta1_FailureInfo(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2843,6 +3168,33 @@ func schema_pkg_apis_serving_v1beta1_InferenceServiceList(ref common.ReferenceCa
 	}
 }
 
+func schema_pkg_apis_serving_v1beta1_InferenceServiceReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceServiceReference defines a reference to an inference service. It supports either a Kubernetes-style reference (K8sInferenceService) or an Endpoint struct for a direct URL.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"k8sInferenceService": {
+						SchemaProps: spec.SchemaProps{
+							Description: "K8sInferenceService holds a Kubernetes reference to an internal inference service.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.K8sInferenceServiceReference"),
+						},
+					},
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Endpoint holds the details of a direct endpoint for an external inference service, including URL and API details.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Endpoint"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.Endpoint", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1.K8sInferenceServiceReference"},
+	}
+}
+
 func schema_pkg_apis_serving_v1beta1_InferenceServiceSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3147,6 +3499,36 @@ func schema_pkg_apis_serving_v1beta1_JobCondition(ref common.ReferenceCallback) 
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_K8sInferenceServiceReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "K8sInferenceServiceReference defines the reference to a Kubernetes inference service.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name specifies the name of the inference service to benchmark.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace specifies the Kubernetes namespace where the inference service is deployed.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "namespace"},
+			},
+		},
 	}
 }
 
@@ -5912,6 +6294,52 @@ func schema_pkg_apis_serving_v1beta1_SchedulingPolicy(ref common.ReferenceCallba
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_serving_v1beta1_ServiceMetadata(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ServiceMetadata contains metadata fields for recording the backend model server's configuration and version details. This information helps track experiment context, enabling users to filter and query experiments based on server properties.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"engine": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Engine specifies the backend model server engine. Supported values: \"vLLM\", \"SGLang\", \"TGI\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Version specifies the version of the model server (e.g., \"0.5.3\").",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"gpuType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GpuType specifies the type of GPU used by the model server. Supported values: \"H100\", \"A100\", \"MI300\", \"A10\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"gpuCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GpuCount indicates the number of GPU cards available on the model server.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"engine", "version", "gpuType", "gpuCount"},
+			},
+		},
 	}
 }
 

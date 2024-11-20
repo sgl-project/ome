@@ -16,6 +16,10 @@ func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface
 	return &FakeBaseModels{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) BenchmarkJobs(namespace string) v1beta1.BenchmarkJobInterface {
+	return &FakeBenchmarkJobs{c, namespace}
+}
+
 func (c *FakeOmeV1beta1) CapacityReservations(namespace string) v1beta1.CapacityReservationInterface {
 	return &FakeCapacityReservations{c, namespace}
 }

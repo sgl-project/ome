@@ -23,6 +23,7 @@ resources:
 - full/ome.io_clustertrainingruntimes.yaml
 - full/ome.io_trainingruntimes.yaml
 - full/ome.io_trainingjobs.yaml
+- full/ome.io_benchmarkjobs.yaml
 
 patches:
 # Fix for https://github.com/kubernetes/kubernetes/issues/91395

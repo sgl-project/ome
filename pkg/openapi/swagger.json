@@ -187,6 +187,173 @@
         }
       }
     },
+    "v1beta1.BenchmarkJob": {
+      "description": "BenchmarkJob is the schema for the BenchmarkJobs API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.BenchmarkJobSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.BenchmarkJobStatus"
+        }
+      }
+    },
+    "v1beta1.BenchmarkJobList": {
+      "description": "BenchmarkJobList contains a list of BenchmarkJob",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.BenchmarkJob"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.BenchmarkJobSpec": {
+      "description": "BenchmarkJobSpec defines the specification for a benchmark job. All fields within this specification collectively represent the desired state and configuration of a BenchmarkJob.",
+      "type": "object",
+      "required": [
+        "huggingFaceAPIKey",
+        "inferenceServiceReference",
+        "task",
+        "maxTimePerIteration",
+        "maxRequestsPerIteration",
+        "outputLocation"
+      ],
+      "properties": {
+        "additionalRequestParams": {
+          "description": "AdditionalRequestParams contains additional request parameters as a map.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "dataset": {
+          "description": "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"chat\".",
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "huggingFaceAPIKey": {
+          "description": "HuggingFaceAPIKey is the API key required for Hugging Face authentication.",
+          "type": "string",
+          "default": ""
+        },
+        "inferenceServiceReference": {
+          "description": "InferenceServiceReference is the reference to the inference service to benchmark.",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.InferenceServiceReference"
+        },
+        "maxRequestsPerIteration": {
+          "description": "MaxRequestsPerIteration specifies the maximum number of requests for a single iteration. Each iteration runs for a specific combination of TrafficScenario and NumConcurrency.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "maxTimePerIteration": {
+          "description": "MaxTimePerIteration specifies the maximum time (in minutes) for a single iteration. Each iteration runs for a specific combination of TrafficScenario and NumConcurrency.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "numConcurrency": {
+          "description": "NumConcurrency defines a list of concurrency levels to test during the benchmark. If not provided, defaults will be assigned via genai-bench.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "outputLocation": {
+          "description": "OutputLocation specifies where the benchmark results will be stored (e.g., object storage).",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.Storage"
+        },
+        "serviceMetadata": {
+          "description": "ServiceMetadata records metadata about the backend model server or service being benchmarked. This includes details such as server engine, version, and GPU configuration for filtering experiments.",
+          "$ref": "#/definitions/v1beta1.ServiceMetadata"
+        },
+        "task": {
+          "description": "Task specifies the task to benchmark (e.g., \"chat\", \"vision\", \"embeddings\").",
+          "type": "string",
+          "default": ""
+        },
+        "trafficScenarios": {
+          "description": "TrafficScenarios contains a list of traffic scenarios to simulate during the benchmark. If not provided, defaults will be assigned via genai-bench.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        }
+      }
+    },
+    "v1beta1.BenchmarkJobStatus": {
+      "description": "BenchmarkJobStatus reflects the state and results of the benchmark job. It will be set and updated by the controller.",
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "completionTime": {
+          "description": "CompletionTime is the timestamp for when the benchmark job completed, either successfully or unsuccessfully.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "details": {
+          "description": "Details provide additional information or metadata about the benchmark job.",
+          "type": "string"
+        },
+        "failureMessage": {
+          "description": "FailureMessage contains any error messages if the benchmark job failed.",
+          "type": "string"
+        },
+        "lastReconcileTime": {
+          "description": "LastReconcileTime is the timestamp for the last time the job was reconciled by the controller.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "startTime": {
+          "description": "StartTime is the timestamp for when the benchmark job started.",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "state": {
+          "description": "State represents the current state of the benchmark job: \"Pending\", \"Running\", \"Completed\", \"Failed\".",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.BuiltInAdapter": {
       "type": "object",
       "properties": {
@@ -1350,6 +1517,30 @@
         }
       }
     },
+    "v1beta1.Endpoint": {
+      "description": "Endpoint defines a direct URL-based inference service with additional API configuration.",
+      "type": "object",
+      "required": [
+        "url",
+        "apiFormat"
+      ],
+      "properties": {
+        "apiFormat": {
+          "description": "APIFormat specifies the type of API, such as \"openai\" or \"genai\".",
+          "type": "string",
+          "default": ""
+        },
+        "modelName": {
+          "description": "ModelName specifies the name of the model being served at the endpoint. Useful for endpoints that require model-specific configuration. For instance, for openai API, this is a required field in the payload",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL represents the endpoint URL for the inference service.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.FailureInfo": {
       "type": "object",
       "properties": {
@@ -1547,6 +1738,20 @@
         }
       }
     },
+    "v1beta1.InferenceServiceReference": {
+      "description": "InferenceServiceReference defines a reference to an inference service. It supports either a Kubernetes-style reference (K8sInferenceService) or an Endpoint struct for a direct URL.",
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "description": "Endpoint holds the details of a direct endpoint for an external inference service, including URL and API details.",
+          "$ref": "#/definitions/v1beta1.Endpoint"
+        },
+        "k8sInferenceService": {
+          "description": "K8sInferenceService holds a Kubernetes reference to an internal inference service.",
+          "$ref": "#/definitions/v1beta1.K8sInferenceServiceReference"
+        }
+      }
+    },
     "v1beta1.InferenceServiceSpec": {
       "description": "InferenceServiceSpec is the top level type for this resource",
       "type": "object",
@@ -1714,6 +1919,26 @@
         },
         "type": {
           "description": "Type of job condition.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.K8sInferenceServiceReference": {
+      "description": "K8sInferenceServiceReference defines the reference to a Kubernetes inference service.",
+      "type": "object",
+      "required": [
+        "name",
+        "namespace"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name specifies the name of the inference service to benchmark.",
+          "type": "string",
+          "default": ""
+        },
+        "namespace": {
+          "description": "Namespace specifies the Kubernetes namespace where the inference service is deployed.",
           "type": "string",
           "default": ""
         }
@@ -3302,6 +3527,39 @@
         "scheduleTimeoutSeconds": {
           "type": "integer",
           "format": "int32"
+        }
+      }
+    },
+    "v1beta1.ServiceMetadata": {
+      "description": "ServiceMetadata contains metadata fields for recording the backend model server's configuration and version details. This information helps track experiment context, enabling users to filter and query experiments based on server properties.",
+      "type": "object",
+      "required": [
+        "engine",
+        "version",
+        "gpuType",
+        "gpuCount"
+      ],
+      "properties": {
+        "engine": {
+          "description": "Engine specifies the backend model server engine. Supported values: \"vLLM\", \"SGLang\", \"TGI\".",
+          "type": "string",
+          "default": ""
+        },
+        "gpuCount": {
+          "description": "GpuCount indicates the number of GPU cards available on the model server.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "gpuType": {
+          "description": "GpuType specifies the type of GPU used by the model server. Supported values: \"H100\", \"A100\", \"MI300\", \"A10\".",
+          "type": "string",
+          "default": ""
+        },
+        "version": {
+          "description": "Version specifies the version of the model server (e.g., \"0.5.3\").",
+          "type": "string",
+          "default": ""
         }
       }
     },

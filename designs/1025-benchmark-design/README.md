@@ -136,7 +136,7 @@ type Endpoint struct {
     
     // APIFormat specifies the type of API, such as "openai" or "genai".
     // +kubebuilder:validation:Enum=openai;genai
-    APIFormat string `json:"apiType"`
+    APIFormat string `json:"apiFormat"`
     
     // ModelName specifies the name of the model being served at the endpoint.
     // Useful for endpoints that require model-specific configuration. For instance,
