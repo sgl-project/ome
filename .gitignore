@@ -66,3 +66,8 @@ istio-*
 
 java-client/target
 java-client/crd
+# Debug binaries from Go debugging
+**/__debug_bin*
+
+
+

@@ -236,6 +236,53 @@ kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io serv
 kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
 ```
 
+### Running OME Manager in VSCode or Cursor
+For VSCode or Cursor, follow these steps to set up the development environment:
+
+1. Install the Go extension for VSCode/Cursor
+   - Open VSCode/Cursor
+   - Go to Extensions (Ctrl+Shift+X)
+   - Search for "Go" and install the official Go extension
+
+2. Install Go tools when prompted, or run the command:
+   - Open Command Palette (Ctrl+Shift+P)
+   - Type "Go: Install/Update Tools"
+   - Select all tools and click OK
+
+3. Configure launch configuration:
+   - Create or open `.vscode/launch.json`
+   - Add the following configuration:
+   ```json
+   {
+       "name": "OME Manager",
+       "type": "go",
+       "request": "launch", 
+       "mode": "debug",
+       "program": "${workspaceFolder}/cmd/manager/main.go",
+       "env": {
+           "KUBECONFIG": "<path-to-your-kubeconfig>"
+       },
+       "args": [
+           "--zap-encoder", "console",
+           "--health-probe-addr", "127.0.0.1:8081",
+           "--metrics-addr", "127.0.0.1:8080",
+           "--leader-elect",
+           "--enable-webhook",
+           "--webhook-port", "9443",
+           "--zap-devel"
+       ]
+   }
+   ```
+
+4. Run/Debug the application:
+   - Open the Run and Debug view (Ctrl+Shift+D)
+   - Select "OME Manager" from the dropdown
+   - Click the Play button or press F5 to start debugging
+   - Use F9 to set breakpoints in the code
+
+**Note:** Make sure to replace `<path-to-your-kubeconfig>` with the actual path to your kubeconfig file.
+
+
 ## Iterating
 
 As you make changes to the code-base, there are two special cases to be aware
