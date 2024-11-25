@@ -60,7 +60,7 @@ all: test
 
 # The help target prints out all targets with their descriptions organized
 # beneath their categories. The categories are represented by '##@' and the
-# target descriptions by '##'. The awk commands is responsible for reading the
+# target descriptions by '##'. The awk command is responsible for reading the
 # entire set of makefiles included in this invocation, looking for lines of the
 # file as xyz: ## something, and then pretty-format the target and help. Then,
 # if there's a line with ##@ something, that gets pretty-printed as a category.
@@ -77,7 +77,7 @@ include Makefile-deps.mk
 
 ##@ Development
 
-.PhONY: manifests
+.PHONY: manifests
 manifests: controller-gen yq ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/serving/... output:crd:dir=config/crd/full
 	$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
@@ -106,7 +106,6 @@ manifests: controller-gen yq ## Generate WebhookConfiguration, ClusterRole and C
 	./hack/minimal-crdgen.sh
 	cp config/crd/full/ome* charts/ome-crd/templates/ && cp config/rbac/role.yaml charts/ome-resources/templates/ome-controller/rbac/role.yaml
 
-
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations and client-go libraries.
 	go env -w GOFLAGS=-mod=mod
@@ -133,8 +132,7 @@ ci-lint: golangci-lint ## Run golangci-lint against code.
 lint-fix: golangci-lint ## Run golangci-lint against code and fix linting issues.
 	$(GOLANGCI_LINT) run --fix --timeout 15m0s
 
-
-.PhONY: helm-lint
+.PHONY: helm-lint
 helm-lint: ## Lint all charts
 	@for chart in $(CHARTS_DIR)/*/; do \
 	  echo "Linting $$chart..."; \
@@ -152,22 +150,21 @@ helm-docs: helm-document ## Generate Helm chart documentation via helm-docs
 
 .PHONY: ome-manager
 ome-manager: ## Build ome-manager binary.
-	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" build -o bin/manager ./cmd/manager
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/manager ./cmd/manager
 
 .PHONY: model-controller
 model-controller: ## Build model-controller binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-controller ./cmd/model-controller
 
-.PHONE: model-agent
+.PHONY: model-agent
 model-agent: ## Build model-agent binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-agent ./cmd/model-agent
 
-
-.PHONE: ome-agent
+.PHONY: ome-agent
 ome-agent: ## Build ome-agent binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/ome-agent ./cmd/ome-agent
 
-.PHONE: multinode-prober
+.PHONY: multinode-prober
 multinode-prober: ## Build multinode-prober binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/multinode-prober ./cmd/multinode-prober
 
@@ -179,7 +176,7 @@ run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local
 run-model-controller: fmt vet ## Run model-controller binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/model-controller/main.go
 
-.PHONE: run-model-agent
+.PHONY: run-model-agent
 run-model-agent: fmt vet ## Run model-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/model-agent/main.go
 
@@ -207,7 +204,7 @@ ome-image: fmt vet ## Build ome-manager image.
 model-controller-image: fmt vet ## Build model-controller image.
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/model-controller.Dockerfile -t $(REGISTRY)/model-controller:$(TAG)
 
-.PHONE: model-agent-image
+.PHONY: model-agent-image
 model-agent-image: fmt vet ## Build model-agent image.
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG)
 
@@ -218,7 +215,6 @@ multinode-prober-image: fmt vet ## Build multinode-prober image.
 .PHONY: ome-agent-image
 ome-agent-image: fmt vet ## Build ome-agent image.
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
-
 
 .PHONY: telepresence
 telepresence: ## Setup telepresence for local development.
@@ -243,10 +239,9 @@ install: kustomize ## Deploy controller in the configured Kubernetes cluster in 
 	git checkout HEAD -- config/certmanager/certificate.yaml
 
 .PHONY: uninstall
-uninstall: kuztomize ## Uninstall controller from the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+uninstall: kustomize ## Uninstall controller from the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	kubectl delete --ignore-not-found=$(ignore-not-found) -k config/default
 	kubectl delete --ignore-not-found=$(ignore-not-found) -k config/clusterresources
-
 
 .PHONY: push-manager-image
 push-manager-image: ome-image ## Push manager image to registry.
@@ -256,7 +251,7 @@ push-manager-image: ome-image ## Push manager image to registry.
 push-model-controller-image: model-controller-image ## Push model-controller image to registry.
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/model-controller:$(TAG)
 
-.PHONE: push-model-agent-image
+.PHONY: push-model-agent-image
 push-model-agent-image: model-agent-image ## Push model-agent image to registry.
 	$(DOCKER_BUILD_CMD) push $(REGISTRY)/model-agent:$(TAG)
 
@@ -278,11 +273,10 @@ patch-model-controller-dev: push-model-controller-image ## Deploy model-controll
 	echo "Patch model-controller image to dev: $(REGISTRY)/model-controller:$(TAG)"
 	./hack/patch_image_dev.sh $(REGISTRY)/model-controller:$(TAG) model_controller
 
-.PHONE: patch-model-agent-dev
+.PHONY: patch-model-agent-dev
 patch-model-agent-dev: push-model-agent-image ## Deploy model-agent image to dev cluster.
 	echo "Patch model-agent image to dev: $(REGISTRY)/model-agent:$(TAG)"
 	./hack/patch_image_dev.sh $(REGISTRY)/model-agent:$(TAG) model_agent
-
 
 .PHONY: deploy-helm
 deploy-helm: manifests helm ## Deploy OME using Helm
@@ -294,7 +288,6 @@ artifacts: kustomize ## Generate artifacts for release.
 	$(KUSTOMIZE) build config/default -o artifacts/manifests.yaml
 	$(KUSTOMIZE) build config/clusterresources -o artifacts/clusterresources.yaml
 
-
 ##@ Test
 
 .PHONY: test
@@ -305,5 +298,6 @@ test: fmt vet manifests envtest helm-lint ## Run tests.
 		-coverprofile=coverage.out \
 		-coverpkg=./pkg,...,./cmd,...,./internal/...
 
-test-qpext:
+.PHONY: test-qpext
+test-qpext: ## Run qpext tests.
 	cd qpext && go test -v ./... -cover

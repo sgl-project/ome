@@ -122,7 +122,12 @@ type ServingRuntimeSpec struct {
 	// +optional
 	ProtocolVersions []constants.InferenceServiceProtocol `json:"protocolVersions,omitempty"`
 
+	// PodSpec for the serving runtime
 	ServingRuntimePodSpec `json:",inline"`
+
+	// WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster
+	// +optional
+	WorkerPodSpec *WorkerPodSpec `json:"workers,omitempty"`
 
 	// HTTP endpoint for inferencing
 	// +optional
@@ -151,6 +156,16 @@ type ServingRuntimeSpec struct {
 	// The compartment ID to use for the serving runtime
 	// +optional
 	CompartmentID string `json:"compartmentID,omitempty"`
+}
+
+type WorkerPodSpec struct {
+	// World size of the worker, this is the number of pods in the worker.
+	// +optional
+	WorldSize int `json:"worldSize,omitempty"`
+
+	// PodSpec for the worker
+	// +optional
+	ServingRuntimePodSpec `json:",inline"`
 }
 
 // ModelSizeRangeSpec defines the range of model sizes supported by this runtime

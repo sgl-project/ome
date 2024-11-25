@@ -2,11 +2,12 @@ package constants
 
 import (
 	"fmt"
-	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 
 	"knative.dev/serving/pkg/apis/autoscaling"
 
@@ -441,6 +442,7 @@ const (
 	Serverless       DeploymentModeType = "Serverless"
 	RawDeployment    DeploymentModeType = "RawDeployment"
 	MultiNodeRayVLLM DeploymentModeType = "MultiNodeRayVLLM"
+	MultiNode        DeploymentModeType = "MultiNode"
 )
 
 const (

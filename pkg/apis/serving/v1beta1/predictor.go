@@ -27,6 +27,21 @@ type PredictorSpec struct {
 	PodSpec `json:",inline"`
 	// Component extension defines the deployment configurations for a predictor
 	ComponentExtensionSpec `json:",inline"`
+
+	// WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster
+	// +optional
+	WorkerSpec `json:"workerSpec,omitempty"`
+}
+
+// WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster
+type WorkerSpec struct {
+	// PodSpec for the worker
+	// +optional
+	PodSpec `json:",inline"`
+
+	// World size of the worker, this is the number of pods in the worker.
+	// +optional
+	WorldSize int `json:"worldSize,omitempty"`
 }
 
 var _ Component = &PredictorSpec{}

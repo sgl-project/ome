@@ -35,6 +35,7 @@ API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/a
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,PredictorExtensionSpec,StorageURI
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,PyTorchTrainingJobSpec,ReplicaSpecs
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,ReplicaStatus,StatusType
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,ServingRuntimeSpec,WorkerPodSpec
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,StorageSpec,StorageKey
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,SupportedRuntime,Name
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1,SupportedRuntime,Spec
