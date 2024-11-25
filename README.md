@@ -27,7 +27,7 @@ It is designed to be a generic operator
 that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes cluster running on OCI.
 
 ## Architecture
-<p align="center"><img src="site/static/images/architecture.svg" alt="Logo" width="" height=""></p>
+<p align="center"><img src="site/static/images/architecture.drawio.svg" alt="Logo" width="" height=""></p>
 
 1. **Compute Layer**: Includes OC Cluster Network, GPU, and compute images that will be used to launch individual nodes forming a larger cluster.
 2. **Kubernetes Cluster**: Sits on top of compute nodes to manage workload and scheduling. This is fully managed by OKE.

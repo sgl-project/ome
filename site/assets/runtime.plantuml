@@ -18,24 +18,26 @@ package "Serving Runtime" {
     + ServingRuntimePodSpec servingRuntimePodSpec
     + string httpDataEndpoint
     + uint16 replicas
-    + BuiltInAgent BuildInAdapter
+    + BuiltInAdapter builtInAdapter
+    + string compartmentID
   }
 
-  enum InferenceServiceProtocol{
+  enum InferenceServiceProtocol {
+    + openInference-v1
+    + openInference-v2
     + openAI
     + cohere
-    + openInferenceProtocolV1
-    + openInferenceProtocolV2
   }
 
-  object SupportedModels {
-    + string modelFormat
+  object SupportedModelFormat {
+    + string name
     + string version
     + string modelArchitecture
     + string modelType
     + bool autoSelect
     + int32 priority
   }
+
   object ServingRuntimePodSpec {
     + Container[] containers
     + Volume[] volumes
@@ -46,14 +48,15 @@ package "Serving Runtime" {
     + Annotations annotations
     + ImagePullSecrets[] imagePullSecrets
   }
-  object BuildInAdapter {
+
+  object BuiltInAdapter {
     + ServerType serverType
     + int modelLoadingTimeoutMillis
     + EnvVar[] env
   }
 
   enum ServerType {
-    + trinton
+    + triton
     + vllm
     + tgi
     + cohere
@@ -62,17 +65,25 @@ package "Serving Runtime" {
 
   object ServingRuntimeStatus {
     + string status
+    + LifecycleState state
   }
 
-  ClusterServingRuntime -> ServingRuntimeSpec
+  enum LifecycleState {
+    + Creating
+    + Ready
+    + Failed
+  }
+
+  ClusterServingRuntime --> ServingRuntimeSpec
   ServingRuntime --> ServingRuntimeSpec
   ClusterServingRuntime --> ServingRuntimeStatus
   ServingRuntime --> ServingRuntimeStatus
   ServingRuntimeSpec --> InferenceServiceProtocol
-  ServingRuntimeSpec --> SupportedModels
+  ServingRuntimeSpec --> SupportedModelFormat
   ServingRuntimeSpec --> ServingRuntimePodSpec
-  ServingRuntimeSpec --> BuildInAdapter
-  BuildInAdapter --> ServerType
+  ServingRuntimeSpec --> BuiltInAdapter
+  BuiltInAdapter --> ServerType
+  ServingRuntimeStatus --> LifecycleState
 }
 
 @enduml

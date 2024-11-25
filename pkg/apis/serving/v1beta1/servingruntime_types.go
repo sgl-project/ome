@@ -118,7 +118,7 @@ type ServingRuntimeSpec struct {
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
 
-	// Supported protocol versions (i.e. v1 or v2 or grpc-v1 or grpc-v2)
+	// Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)
 	// +optional
 	ProtocolVersions []constants.InferenceServiceProtocol `json:"protocolVersions,omitempty"`
 

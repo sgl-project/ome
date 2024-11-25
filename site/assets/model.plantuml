@@ -1,7 +1,7 @@
 @startuml
 package "Base Model" {
   object ClusterBaseModel {
-    + BaseModelSpec baseModel
+    + BaseModelSpec spec
     + ModelStatus status
   }
   object BaseModel {
@@ -14,7 +14,7 @@ package "Base Model" {
     + string modelType
     + string modelArchitecture
     + string modelParameterSize
-    + modelCapabilities[] modelCapabilities
+    + ModelCapabilities[] modelCapabilities
     + json modelConfiguration
     + json tensorRTLLMConfiguration
     + Storage storage
@@ -23,7 +23,7 @@ package "Base Model" {
   }
 
   enum ServingMode {
-    + On-Demand
+    + OnDemand
     + Dedicated
   }
 
@@ -32,32 +32,31 @@ package "Base Model" {
     + string version
   }
 
-  enum modelCapabilities {
-    + TEXT_GENERATION
-    + TEXT_SUMMARIZATION
-    + TEXT_EMBEDDING
-    + TEXT_RERANK
-    + CHAT
-    + VISION
-    + UNKNOWN
+  enum ModelCapabilities {
+    + TextGeneration
+    + TextSummarization
+    + TextEmbedding
+    + TextRerank
+    + Chat
+    + Vision
+    + Unknown
   }
 
-  enum LifeCycleState {
+  enum LifecycleState {
     + Creating
     + Importing
-    + In_Transit
-    + In_Training
+    + InTransit
+    + InTraining
     + Ready
     + Failed
   }
 
-  enum LifeCycle {
+  enum Lifecycle {
     + Deprecated
     + Experimental
     + Public
     + Internal
   }
-
 
   object Storage {
     + string path
@@ -65,6 +64,7 @@ package "Base Model" {
     + map<string, string> parameters
     + string storageKey
   }
+
   object ModelExtension {
     + string version
     + bool disabled
@@ -73,21 +73,21 @@ package "Base Model" {
   }
 
   object ModelStatus {
-    + LifeCycle lifecycle
-    + LifeCycleState state
+    + Lifecycle lifecycle
+    + LifecycleState state
   }
 
-  ClusterBaseModel -> BaseModelSpec
+  ClusterBaseModel --> BaseModelSpec
   BaseModel --> BaseModelSpec
   BaseModelSpec --> ModelFormat
-  BaseModelSpec --> modelCapabilities
+  BaseModelSpec --> ModelCapabilities
   BaseModelSpec --> ServingMode
   BaseModelSpec --> Storage
   BaseModelSpec --> ModelExtension
   ClusterBaseModel --> ModelStatus
   BaseModel --> ModelStatus
-  ModelStatus --> LifeCycle
-  ModelStatus --> LifeCycleState
+  ModelStatus --> Lifecycle
+  ModelStatus --> LifecycleState
 }
 
 package "Fine-Tuned Weight" {
@@ -96,9 +96,10 @@ package "Fine-Tuned Weight" {
     + string modelType
     + json hyperParameters
     + ModelExtension modelExtension
-    + StorageSpec storage
+    + Storage storage
     + ModelStatus status
   }
+
   object ObjectReference {
     + string name
     + string namespace

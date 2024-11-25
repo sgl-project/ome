@@ -2,14 +2,42 @@
 
 package "Inference Service" {
   object InferenceService {
-    + PredictorSpec predictor
+    + InferenceServiceSpec spec
     + InferenceServiceStatus status
   }
+
+  object InferenceServiceSpec {
+    + PredictorSpec predictor
+    + string compartmentID
+    + KedaConfig kedaConfig
+  }
+
   object PredictorSpec {
     + ModelSpec model
     + PodSpec podSpec
     + ComponentExtensionSpec componentExtension
+    + WorkerSpec workerSpec
   }
+
+  object WorkerSpec {
+    + PodSpec podSpec
+    + int worldSize
+  }
+
+  object ModelSpec {
+    + string runtime
+    + PredictorExtensionSpec predictorExtension
+    + string baseModel
+    + string[] fineTunedWeights
+  }
+
+  object PredictorExtensionSpec {
+    + string storageUri
+    + string runtimeVersion
+    + InferenceServiceProtocol protocolVersion
+    + Container container
+  }
+
   object PodSpec {
     + Container[] containers
     + Volume[] volumes
@@ -20,8 +48,9 @@ package "Inference Service" {
     + Annotations annotations
     + ImagePullSecrets[] imagePullSecrets
   }
+
   object ComponentExtensionSpec {
-    + int  minReplica
+    + int minReplica
     + int maxReplica
     + int scalerTarget
     + ScalerMetrics scalerMetrics
@@ -45,21 +74,7 @@ package "Inference Service" {
     + response
   }
 
-  object ModelSpec {
-    + string runtime
-    + predictorExtension predictorExtension
-    + string baseModel
-    + string[] fineTunedWeights
-  }
-
-  object predictorExtension {
-    + string storageUri
-    + string runtimeVersion
-    + InferenceServiceProtocol protocolVersion
-    + Container container
-  }
-
-  enum InferenceServiceProtocol{
+  enum InferenceServiceProtocol {
     + openAI
     + cohere
     + openInferenceProtocolV1
@@ -73,15 +88,17 @@ package "Inference Service" {
     + string concurrency
   }
 
-  InferenceService --> PredictorSpec
+  InferenceService --> InferenceServiceSpec
+  InferenceServiceSpec --> PredictorSpec
   PredictorSpec --> ModelSpec
   PredictorSpec --> PodSpec
   PredictorSpec --> ComponentExtensionSpec
-  predictorExtension --> InferenceServiceProtocol
+  PredictorSpec --> WorkerSpec
+  ModelSpec --> PredictorExtensionSpec
+  PredictorExtensionSpec --> InferenceServiceProtocol
   ComponentExtensionSpec --> ScalerMetrics
   ComponentExtensionSpec --> LoggerSpec
   LoggerSpec --> LoggerType
-  ModelSpec --> predictorExtension
 }
 
 package InferenceServiceStatus {
@@ -89,16 +106,8 @@ package InferenceServiceStatus {
     + duckv1.Status status
     + duckv1.Addressable address
     + apis.URL url
-    + map[ComponentType]ComponentStatusSpec ComponentStatus
-    + ModelStatus ModelStatus
-  }
-
-  object ConditionType {
-    + apis.ConditionType PredictorRouteReady
-    + apis.ConditionType PredictorConfigurationReady
-    + apis.ConditionType PredictorReady
-    + apis.ConditionType IngressReady
-    + apis.ConditionType LatestDeploymentReady
+    + map[ComponentType]ComponentStatusSpec components
+    + ModelStatus modelStatus
   }
 
   object ComponentStatusSpec {
@@ -170,13 +179,11 @@ package InferenceServiceStatus {
 
   InferenceServiceStatus --> ComponentStatusSpec
   InferenceServiceStatus --> ModelStatus
-  InferenceServiceStatus --> ConditionType
   ModelStatus --> ModelRevisionStates
   ModelStatus --> FailureInfo
   ModelStatus --> TransitionStatus
   ModelStatus --> ModelCopies
-  FailureInfo --> FailureReason 
+  FailureInfo --> FailureReason
   ModelRevisionStates --> ModelState
 }
 @enduml
-

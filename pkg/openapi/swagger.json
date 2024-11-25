@@ -3788,7 +3788,7 @@
           "type": "boolean"
         },
         "protocolVersions": {
-          "description": "Supported protocol versions (i.e. v1 or v2 or grpc-v1 or grpc-v2)",
+          "description": "Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)",
           "type": "array",
           "items": {
             "type": "string",

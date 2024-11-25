@@ -6646,7 +6646,7 @@ func schema_pkg_apis_serving_v1beta1_ServingRuntimeSpec(ref common.ReferenceCall
 					},
 					"protocolVersions": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Supported protocol versions (i.e. v1 or v2 or grpc-v1 or grpc-v2)",
+							Description: "Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
