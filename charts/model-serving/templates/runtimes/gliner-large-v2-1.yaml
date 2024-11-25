@@ -20,6 +20,7 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       name: pytorch
+      modelType: transformer
       version: '1'
   containers:
     - name: ome-container
