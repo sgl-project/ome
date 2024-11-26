@@ -59,6 +59,9 @@ OME_CONTROLLER_MEMORY_LIMIT ?= 300Mi
 $(shell perl -pi -e 's/cpu:.*/cpu: $(OME_CONTROLLER_CPU_LIMIT)/' config/default/manager_resources_patch.yaml)
 $(shell perl -pi -e 's/memory:.*/memory: $(OME_CONTROLLER_MEMORY_LIMIT)/' config/default/manager_resources_patch.yaml)
 
+OLD_IMAGE=odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:1.23.3-30 AS builder
+NEW_IMAGE=odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:go1.23.3-30 AS builder
+
 .PHONY: all
 all: test
 
@@ -328,3 +331,7 @@ coverage: ## Show coverage details for all components
 	go tool cover -func=coverage-cmd.out | grep -v "100.0%"
 	go tool cover -func=coverage-pkg.out | grep -v "100.0%"
 	go tool cover -func=coverage-internal.out | grep -v "100.0%"
+
+.PHONY: update-go-base-image
+update-go-base-image: ## Update the go base image in all dockerfiles
+	@find . -type f -name "*Dockerfile" | xargs sed -i '' "s|${OLD_IMAGE}|${NEW_IMAGE}|g"
