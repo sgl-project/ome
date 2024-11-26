@@ -263,14 +263,11 @@ For VSCode or Cursor, follow these steps to set up the development environment:
            "KUBECONFIG": "<path-to-your-kubeconfig>"
        },
        "args": [
-           "--zap-encoder", "console",
-           "--health-probe-addr", "127.0.0.1:8081",
-           "--metrics-addr", "127.0.0.1:8080",
-           "--leader-elect",
-           "--enable-webhook",
-           "--webhook-port", "9443",
-           "--zap-devel"
-       ]
+                "--zap-encoder", "console",
+                "--health-probe-addr", "127.0.0.1:8081",
+                "--metrics-addr", "127.0.0.1:8080",
+                "--leader-elect"
+      ]
    }
    ```
 

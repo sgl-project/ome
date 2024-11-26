@@ -1,3 +1,9 @@
+# Check Go version and set environment at the start
+ifeq ($(shell which go),/opt/go-1.19.13/bin/go)
+    export GOROOT=/opt/go-1.23.0
+    export PATH:=$(GOROOT)/bin:$(PATH)
+endif
+
 # Define the directory containing the charts
 CHARTS_DIR := ./charts
 
@@ -133,10 +139,10 @@ lint-fix: golangci-lint ## Run golangci-lint against code and fix linting issues
 	$(GOLANGCI_LINT) run --fix --timeout 15m0s
 
 .PHONY: helm-lint
-helm-lint: ## Lint all charts
+helm-lint: helm ## Lint all charts
 	@for chart in $(CHARTS_DIR)/*/; do \
 	  echo "Linting $$chart..."; \
-	  if ! helm lint $$chart; then \
+	  if ! $(HELM) lint $$chart; then \
 	    echo "Error: Linting failed for $$chart" >&2; \
 	    exit 1; \
 	  fi \
@@ -289,15 +295,36 @@ artifacts: kustomize ## Generate artifacts for release.
 	$(KUSTOMIZE) build config/clusterresources -o artifacts/clusterresources.yaml
 
 ##@ Test
-
 .PHONY: test
-test: fmt vet manifests envtest helm-lint ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/apis/serving/v1beta1/openapi_generated.go) \
-		./cmd/... ./internal/... \
-		-coverprofile=coverage.out \
-		-coverpkg=./pkg,...,./cmd,...,./internal/...
+test: test-cmd test-pkg test-internal ## Run all tests
 
-.PHONY: test-qpext
-test-qpext: ## Run qpext tests.
-	cd qpext && go test -v ./... -cover
+.PHONY: test-cmd
+test-cmd: fmt vet manifests envtest ## Run cmd tests with coverage
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		./cmd/... \
+		-coverprofile=coverage-cmd.out \
+		-coverpkg=./cmd/... \
+		-covermode=atomic
+
+.PHONY: test-pkg
+test-pkg: fmt vet manifests envtest ## Run pkg tests with coverage
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/serving/v1beta1/zz_generated.deepcopy.go) \
+		-coverprofile=coverage-pkg.out \
+		-coverpkg=./pkg/... \
+		-covermode=atomic
+
+
+.PHONY: test-internal
+test-internal: fmt vet manifests envtest ## Run internal tests with coverage
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		./internal/... \
+		-coverprofile=coverage-internal.out \
+		-coverpkg=./internal/... \
+		-covermode=atomic
+
+.PHONY: coverage
+coverage: ## Show coverage details for all components
+	go tool cover -func=coverage-cmd.out | grep -v "100.0%"
+	go tool cover -func=coverage-pkg.out | grep -v "100.0%"
+	go tool cover -func=coverage-internal.out | grep -v "100.0%"
