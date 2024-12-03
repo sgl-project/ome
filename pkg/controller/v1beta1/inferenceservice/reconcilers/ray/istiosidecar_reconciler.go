@@ -1,7 +1,7 @@
 package raycluster
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
 	istiov1beta1 "istio.io/api/networking/v1beta1"

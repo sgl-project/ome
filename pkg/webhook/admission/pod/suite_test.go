@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"os"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	pkgtest "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 )
 

@@ -1,9 +1,9 @@
 package ingress
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"github.com/google/go-cmp/cmp"
 )
 

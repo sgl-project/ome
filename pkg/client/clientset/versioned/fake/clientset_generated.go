@@ -4,8 +4,8 @@ package fake
 
 import (
 	clientset "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/serving/v1beta1"
-	fakeomev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/serving/v1beta1/fake"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	fakeomev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned/typed/ome/v1beta1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

@@ -1,6 +1,7 @@
 package servingruntime
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"context"
 	"fmt"
 	"net/http"
@@ -9,8 +10,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )

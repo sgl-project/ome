@@ -6,7 +6,7 @@ set -o pipefail
 
 KNOWN_VIOLATION_EXCEPTIONS=hack/violation_exceptions.list
 CURRENT_VIOLATION_EXCEPTIONS=hack/current_violation_exceptions.list
-OPENAPI_SPEC_FILE=pkg/apis/serving/v1beta1/openapi_generated.go
+OPENAPI_SPEC_FILE=pkg/openapi/openapi_generated.go
 
 GOPATH=$(go env GOPATH)
 if [[ -z $GOPATH ]]
@@ -43,7 +43,7 @@ go run k8s.io/kube-openapi/cmd/openapi-gen \
     -r $CURRENT_VIOLATION_EXCEPTIONS \
     "knative.dev/pkg/apis" \
     "knative.dev/pkg/apis/duck/v1" \
-    "./pkg/apis/serving/v1beta1"
+    "./pkg/apis/ome/v1beta1"
 
 
 # Hack, the name is required in openAPI specification even if set "+optional" for v1.Container in PredictorExtensionSpec.

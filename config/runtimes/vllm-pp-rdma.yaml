@@ -53,6 +53,8 @@ spec:
       env:
         - name: NCCL_NET_PLUGIN
           value: none
+        - name: NCCL_DEBUG
+          value: INFO
         - name: NCCL_CROSS_NIC
           value: '2'
         - name: NCCL_SOCKET_NTHREADS

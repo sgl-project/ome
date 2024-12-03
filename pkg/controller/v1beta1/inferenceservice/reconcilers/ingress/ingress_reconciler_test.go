@@ -1,11 +1,11 @@
 package ingress
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"fmt"
 	"net/url"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"

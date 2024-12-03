@@ -3,7 +3,7 @@
 package scheme
 
 import (
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

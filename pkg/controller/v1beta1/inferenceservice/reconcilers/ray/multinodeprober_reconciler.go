@@ -1,12 +1,12 @@
 package raycluster
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"context"
 	"fmt"
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/google/go-cmp/cmp/cmpopts"

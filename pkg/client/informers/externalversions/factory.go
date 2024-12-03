@@ -9,7 +9,7 @@ import (
 
 	versioned "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	internalinterfaces "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/internalinterfaces"
-	serving "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/serving"
+	ome "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/ome"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -238,9 +238,9 @@ type SharedInformerFactory interface {
 	// client.
 	InformerFor(obj runtime.Object, newFunc internalinterfaces.NewInformerFunc) cache.SharedIndexInformer
 
-	Ome() serving.Interface
+	Ome() ome.Interface
 }
 
-func (f *sharedInformerFactory) Ome() serving.Interface {
-	return serving.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) Ome() ome.Interface {
+	return ome.New(f, f.namespace, f.tweakListOptions)
 }

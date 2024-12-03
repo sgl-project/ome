@@ -5,7 +5,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )

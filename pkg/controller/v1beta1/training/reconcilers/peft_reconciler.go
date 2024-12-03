@@ -1,7 +1,7 @@
 package reconcilers
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/peft"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/pod_configs"

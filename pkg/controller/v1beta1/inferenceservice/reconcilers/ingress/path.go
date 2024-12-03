@@ -1,13 +1,12 @@
 package ingress
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bytes"
 	"fmt"
 	"text/template"
 
 	"net/url"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/v1beta1"
 )
 
 type PathTemplateValues struct {

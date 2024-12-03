@@ -88,10 +88,10 @@ include Makefile-deps.mk
 
 .PHONY: manifests
 manifests: controller-gen yq ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/serving/... output:crd:dir=config/crd/full
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/ome/... output:crd:dir=config/crd/full
 	$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
 
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/serving/v1beta1
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/ome/v1beta1
 
 	#TODO Remove this until new controller-tools is released
 	perl -pi -e 's/storedVersions: null/storedVersions: []/g' config/crd/full/ome.io_inferenceservices.yaml
@@ -312,7 +312,7 @@ test-cmd: fmt vet manifests envtest ## Run cmd tests with coverage
 .PHONY: test-pkg
 test-pkg: fmt vet manifests envtest ## Run pkg tests with coverage
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/serving/v1beta1/zz_generated.deepcopy.go) \
+		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go) \
 		-coverprofile=coverage-pkg.out \
 		-coverpkg=./pkg/... \
 		-covermode=atomic
