@@ -123,6 +123,7 @@ var (
 	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
 	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
 	BaseModelFormatVersion                   = OMEAPIGroupName + "/base-model-format-version"
+	ServiceType                              = OMEAPIGroupName + "/service-type"
 	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
 	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
 	PrometheusPortAnnotationKey              = "prometheus.io/port"

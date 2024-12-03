@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
@@ -15,13 +14,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// RayServiceReconciler is the struct of Raw K8S Object
+// RayServiceReconciler reconciles Ray head Service objects
 type RayServiceReconciler struct {
 	client  client.Client
 	scheme  *runtime.Scheme
 	Service *corev1.Service
 }
 
+// NewRayServiceReconciler creates a new RayServiceReconciler instance
 func NewRayServiceReconciler(client client.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
@@ -29,127 +29,109 @@ func NewRayServiceReconciler(client client.Client,
 	return &RayServiceReconciler{
 		client:  client,
 		scheme:  scheme,
-		Service: createRayHeadService(componentMeta, podSpec),
+		Service: buildRayHeadService(componentMeta, podSpec),
 	}
 }
 
-func createRayHeadService(componentMeta metav1.ObjectMeta, podSpec *corev1.PodSpec) *corev1.Service {
-	servicePorts := createServicePorts(podSpec, componentMeta.Name)
-	addDefaultServicePorts(&servicePorts)
+// buildRayHeadService constructs a Ray head Service object from the given specifications
+func buildRayHeadService(componentMeta metav1.ObjectMeta, podSpec *corev1.PodSpec) *corev1.Service {
+	servicePorts := buildRayServicePorts(podSpec, componentMeta.Name)
+	serviceType := determineServiceType(componentMeta)
 
-	service := &corev1.Service{
+	return &corev1.Service{
 		ObjectMeta: componentMeta,
 		Spec: corev1.ServiceSpec{
-			Selector: getRayHeadSelectorLabels(componentMeta),
+			Selector: buildRayHeadSelectorLabels(componentMeta),
 			Ports:    servicePorts,
-			Type:     corev1.ServiceTypeClusterIP,
+			Type:     serviceType,
 		},
 	}
-
-	return service
 }
 
-func createServicePorts(podSpec *corev1.PodSpec, componentName string) []corev1.ServicePort {
+// buildRayServicePorts creates service ports configuration for Ray head service
+func buildRayServicePorts(podSpec *corev1.PodSpec, componentName string) []corev1.ServicePort {
 	var servicePorts []corev1.ServicePort
 
-	if len(podSpec.Containers) == 0 {
-		return servicePorts
-	}
-
-	container := podSpec.Containers[0]
-	if len(container.Ports) > 0 {
-		for _, port := range container.Ports {
-			servicePort := corev1.ServicePort{
-				Name: port.Name,
-				Port: port.ContainerPort,
-				TargetPort: intstr.IntOrString{
-					Type:   intstr.Int,
-					IntVal: port.ContainerPort,
-				},
-				Protocol: getProtocol(port.Protocol),
+	if len(podSpec.Containers) > 0 {
+		container := podSpec.Containers[0]
+		if len(container.Ports) > 0 {
+			for _, port := range container.Ports {
+				servicePorts = append(servicePorts, buildServicePort(port))
 			}
-			servicePorts = append(servicePorts, servicePort)
+		} else {
+			servicePorts = append(servicePorts, buildDefaultServicePort(componentName))
 		}
-	} else {
-		defaultPort := createDefaultServicePort(componentName)
-		servicePorts = append(servicePorts, defaultPort)
 	}
 
+	// Add Ray-specific default ports
+	servicePorts = append(servicePorts, buildRayDefaultPorts()...)
 	return servicePorts
 }
 
-func getProtocol(protocol corev1.Protocol) corev1.Protocol {
-	if protocol == "" {
-		return corev1.ProtocolTCP
-	}
-	return protocol
-}
-
-func createDefaultServicePort(name string) corev1.ServicePort {
-	port, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
-	return corev1.ServicePort{
-		Name: name,
-		Port: 8080,
-		TargetPort: intstr.IntOrString{
-			Type:   intstr.Int,
-			IntVal: int32(port), // #nosec G109
-		},
-		Protocol: corev1.ProtocolTCP,
-	}
-}
-
-func addDefaultServicePorts(servicePorts *[]corev1.ServicePort) {
-	defaultPorts := []corev1.ServicePort{
+// buildRayDefaultPorts creates default ports required for Ray head service
+func buildRayDefaultPorts() []corev1.ServicePort {
+	return []corev1.ServicePort{
 		{
-			Name: "dashboard", Port: 8265,
+			Name: "dashboard",
+			Port: 8265,
 			TargetPort: intstr.IntOrString{
 				Type:   intstr.Int,
 				IntVal: 8265,
 			},
 		},
 		{
-			Name: "metrics", Port: 8000,
+			Name: "metrics",
+			Port: 8000,
 			TargetPort: intstr.IntOrString{
 				Type:   intstr.Int,
 				IntVal: 8000,
 			},
 		},
 		{
-			Name: "redis", Port: 6379,
+			Name: "redis",
+			Port: 6379,
 			TargetPort: intstr.IntOrString{
 				Type:   intstr.Int,
 				IntVal: 6379,
 			},
 		},
 	}
-
-	*servicePorts = append(*servicePorts, defaultPorts...)
 }
 
-func getRayHeadSelectorLabels(componentMeta metav1.ObjectMeta) map[string]string {
+// buildRayHeadSelectorLabels creates selector labels for Ray head service
+func buildRayHeadSelectorLabels(componentMeta metav1.ObjectMeta) map[string]string {
 	headLabel := fmt.Sprintf("%s-head", componentMeta.Name)
 	if len(headLabel) > 63 {
 		headLabel = headLabel[len(headLabel)-63:]
 	}
 
-	labels := map[string]string{
+	return map[string]string{
 		"app.kubernetes.io/created-by":  "kuberay-operator",
 		"app.kubernetes.io/name":        "kuberay",
 		"ray.io/node-type":              "head",
 		constants.InferenceServiceLabel: componentMeta.Name,
 	}
-
-	return labels
 }
 
-// checkServiceExist checks if the service exists?
-func (r *RayServiceReconciler) checkServiceExist(client client.Client) (constants.CheckResultType, *corev1.Service, error) {
-	// get service
+// Reconcile ensures the Ray head Service matches the desired state
+func (r *RayServiceReconciler) Reconcile() (*corev1.Service, error) {
+	checkResult, existingService, err := r.checkServiceState()
+	log.Info("Reconcile ray service", "namespace", r.Service.Namespace, "name", r.Service.Name, "checkResult", checkResult)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.handleReconcileAction(checkResult, existingService)
+}
+
+// checkServiceState checks the current state of the service
+func (r *RayServiceReconciler) checkServiceState() (constants.CheckResultType, *corev1.Service, error) {
 	existingService := &corev1.Service{}
-	err := client.Get(context.TODO(), types.NamespacedName{
+	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Namespace: r.Service.Namespace,
 		Name:      r.Service.Name,
 	}, existingService)
+
 	if err != nil {
 		if apierr.IsNotFound(err) {
 			return constants.CheckResultCreate, nil, nil
@@ -157,35 +139,28 @@ func (r *RayServiceReconciler) checkServiceExist(client client.Client) (constant
 		return constants.CheckResultUnknown, nil, err
 	}
 
-	// existed, check equivalent
 	if semanticServiceEquals(r.Service, existingService) {
 		return constants.CheckResultExisted, existingService, nil
 	}
 	return constants.CheckResultUpdate, existingService, nil
 }
 
-// Reconcile ...
-func (r *RayServiceReconciler) Reconcile() (*corev1.Service, error) {
-	// reconcile Service
-	checkResult, existingService, err := r.checkServiceExist(r.client)
-	log.Info("service reconcile", "checkResult", checkResult, "err", err)
-	if err != nil {
-		return nil, err
-	}
+// handleReconcileAction performs the appropriate action based on the reconcile check result
+func (r *RayServiceReconciler) handleReconcileAction(checkResult constants.CheckResultType, existingService *corev1.Service) (*corev1.Service, error) {
+	ctx := context.TODO()
 
-	var opErr error
 	switch checkResult {
 	case constants.CheckResultCreate:
-		opErr = r.client.Create(context.TODO(), r.Service)
+		if err := r.client.Create(ctx, r.Service); err != nil {
+			return nil, err
+		}
+		return r.Service, nil
 	case constants.CheckResultUpdate:
-		opErr = r.client.Update(context.TODO(), r.Service)
+		if err := r.client.Update(ctx, r.Service); err != nil {
+			return nil, err
+		}
+		return r.Service, nil
 	default:
 		return existingService, nil
 	}
-
-	if opErr != nil {
-		return nil, opErr
-	}
-
-	return r.Service, nil
 }

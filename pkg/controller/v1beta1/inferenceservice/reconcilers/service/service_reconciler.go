@@ -19,7 +19,7 @@ import (
 
 var log = logf.Log.WithName("ServiceReconciler")
 
-// ServiceReconciler is the struct of Raw K8S Object
+// ServiceReconciler reconciles Service objects
 type ServiceReconciler struct {
 	client       client.Client
 	scheme       *runtime.Scheme
@@ -27,6 +27,7 @@ type ServiceReconciler struct {
 	componentExt *v1beta1.ComponentExtensionSpec
 }
 
+// NewServiceReconciler creates a new ServiceReconciler instance
 func NewServiceReconciler(client client.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
@@ -35,67 +36,113 @@ func NewServiceReconciler(client client.Client,
 	return &ServiceReconciler{
 		client:       client,
 		scheme:       scheme,
-		Service:      createService(componentMeta, componentExt, podSpec),
+		Service:      buildService(componentMeta, componentExt, podSpec),
 		componentExt: componentExt,
 	}
 }
 
-func createService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
+// buildService constructs a Service object from the given specifications
+func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec) *corev1.Service {
-	var servicePorts []corev1.ServicePort
-	if len(podSpec.Containers) != 0 {
-		container := podSpec.Containers[0]
-		if len(container.Ports) > 0 {
-			for _, port := range container.Ports {
-				var servicePort corev1.ServicePort
-				if port.Protocol == "" {
-					port.Protocol = corev1.ProtocolTCP
-				}
-				servicePort = corev1.ServicePort{
-					Name: port.Name,
-					Port: port.ContainerPort,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: port.ContainerPort,
-					},
-					Protocol: corev1.ProtocolTCP,
-				}
-				servicePorts = append(servicePorts, servicePort)
-			}
-		} else {
-			port, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
-			servicePorts = append(servicePorts, corev1.ServicePort{
-				Name: componentMeta.Name,
-				Port: constants.CommonDefaultHttpPort,
-				TargetPort: intstr.IntOrString{
-					Type:   intstr.Int,
-					IntVal: int32(port), // #nosec G109
-				},
-				Protocol: corev1.ProtocolTCP,
-			})
-		}
-	}
 
-	service := &corev1.Service{
+	servicePorts := buildServicePorts(podSpec)
+	serviceType := determineServiceType(componentMeta)
+
+	return &corev1.Service{
 		ObjectMeta: componentMeta,
 		Spec: corev1.ServiceSpec{
+			Type: serviceType,
 			Selector: map[string]string{
 				"app": constants.GetRawServiceLabel(componentMeta.Name),
 			},
 			Ports: servicePorts,
 		},
 	}
-	return service
 }
 
-// checkServiceExist checks if the service exists?
-func (r *ServiceReconciler) checkServiceExist(client client.Client) (constants.CheckResultType, *corev1.Service, error) {
-	// get service
+// buildServicePorts creates service ports configuration from pod spec
+func buildServicePorts(podSpec *corev1.PodSpec) []corev1.ServicePort {
+	if len(podSpec.Containers) == 0 {
+		return nil
+	}
+
+	container := podSpec.Containers[0]
+	if len(container.Ports) == 0 {
+		return []corev1.ServicePort{buildDefaultServicePort(container.Name)}
+	}
+
+	servicePorts := make([]corev1.ServicePort, 0, len(container.Ports))
+	for _, port := range container.Ports {
+		servicePorts = append(servicePorts, buildServicePort(port))
+	}
+	return servicePorts
+}
+
+// buildServicePort creates a ServicePort from a ContainerPort
+func buildServicePort(containerPort corev1.ContainerPort) corev1.ServicePort {
+	protocol := containerPort.Protocol
+	if protocol == "" {
+		protocol = corev1.ProtocolTCP
+	}
+
+	return corev1.ServicePort{
+		Name: containerPort.Name,
+		Port: containerPort.ContainerPort,
+		TargetPort: intstr.IntOrString{
+			Type:   intstr.Int,
+			IntVal: containerPort.ContainerPort,
+		},
+		Protocol: protocol,
+	}
+}
+
+// buildDefaultServicePort creates a default ServicePort
+func buildDefaultServicePort(name string) corev1.ServicePort {
+	port, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
+	return corev1.ServicePort{
+		Name: name,
+		Port: constants.CommonDefaultHttpPort,
+		TargetPort: intstr.IntOrString{
+			Type:   intstr.Int,
+			IntVal: int32(port),
+		},
+		Protocol: corev1.ProtocolTCP,
+	}
+}
+
+// determineServiceType determines the service type based on annotations
+func determineServiceType(meta metav1.ObjectMeta) corev1.ServiceType {
+	serviceType := corev1.ServiceTypeClusterIP
+	if serviceTypeAnnotation, ok := meta.Annotations[constants.ServiceType]; ok {
+		switch serviceTypeAnnotation {
+		case "LoadBalancer":
+			serviceType = corev1.ServiceTypeLoadBalancer
+		case "NodePort":
+			serviceType = corev1.ServiceTypeNodePort
+		}
+	}
+	return serviceType
+}
+
+// Reconcile ensures the Service matches the desired state
+func (r *ServiceReconciler) Reconcile() (*corev1.Service, error) {
+	checkResult, existingService, err := r.checkServiceState()
+	log.Info("Reconcile service", "namespace", r.Service.Namespace, "name", r.Service.Name, "checkResult", checkResult)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.handleReconcileAction(checkResult, existingService)
+}
+
+// checkServiceState checks the current state of the service
+func (r *ServiceReconciler) checkServiceState() (constants.CheckResultType, *corev1.Service, error) {
 	existingService := &corev1.Service{}
-	err := client.Get(context.TODO(), types.NamespacedName{
+	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Namespace: r.Service.Namespace,
 		Name:      r.Service.Name,
 	}, existingService)
+
 	if err != nil {
 		if apierr.IsNotFound(err) {
 			return constants.CheckResultCreate, nil, nil
@@ -115,28 +162,22 @@ func semanticServiceEquals(desired, existing *corev1.Service) bool {
 		equality.Semantic.DeepEqual(desired.Spec.Selector, existing.Spec.Selector)
 }
 
-// Reconcile ...
-func (r *ServiceReconciler) Reconcile() (*corev1.Service, error) {
-	// reconcile Service
-	checkResult, existingService, err := r.checkServiceExist(r.client)
-	log.Info("Reconcile service", "namespace", r.Service.Namespace, "name", r.Service.Name, "checkResult", checkResult)
-	if err != nil {
-		return nil, err
-	}
+// handleReconcileAction performs the appropriate action based on the reconcile check result
+func (r *ServiceReconciler) handleReconcileAction(checkResult constants.CheckResultType, existingService *corev1.Service) (*corev1.Service, error) {
+	ctx := context.TODO()
 
-	var opErr error
 	switch checkResult {
 	case constants.CheckResultCreate:
-		opErr = r.client.Create(context.TODO(), r.Service)
+		if err := r.client.Create(ctx, r.Service); err != nil {
+			return nil, err
+		}
+		return r.Service, nil
 	case constants.CheckResultUpdate:
-		opErr = r.client.Update(context.TODO(), r.Service)
+		if err := r.client.Update(ctx, r.Service); err != nil {
+			return nil, err
+		}
+		return r.Service, nil
 	default:
 		return existingService, nil
 	}
-
-	if opErr != nil {
-		return nil, opErr
-	}
-
-	return r.Service, nil
 }

@@ -7,6 +7,7 @@ spec:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
+    ome.io/service-type: "LoadBalancer"
   labels:
     logging-forward: enabled
     sidecar.istio.io/inject: 'true'
@@ -48,7 +49,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.3.post1.a2c71c54
       env:
         - name: NCCL_NET_PLUGIN
           value: none
