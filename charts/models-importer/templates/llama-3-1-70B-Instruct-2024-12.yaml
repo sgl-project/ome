@@ -1,23 +1,23 @@
-{{- if index .Values "llama-3-1-70b-instruct" "enabled" -}}
+{{- if index .Values "llama-3-1-70b-instruct-2024-12" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: llama-3-1-70b-instruct
+  name: llama-3-1-70b-instruct-2024-12
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/runtime: "vllm-medium-text-generation"
     models.ome.io/category: "LARGE"
-    models.ome.io/experimental: "{{ index .Values "llama-3-1-70b-instruct" "isExperimental" }}"
-    models.ome.io/internal: "{{ index .Values "llama-3-1-70b-instruct" "isInternal" }}"
-    models.ome.io/lifecycle-phase: "{{ index .Values "llama-3-1-70b-instruct" "lifecyclePhase" }}"
+    models.ome.io/experimental: "{{ index .Values "llama-3-1-70b-instruct-2024-12" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "llama-3-1-70b-instruct-2024-12" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "llama-3-1-70b-instruct-2024-12" "lifecyclePhase" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: meta.llama-3.1-70b-instruct
+  displayName: meta.llama-3.1-70b-instruct-2024-12
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-1-70b-instruct" "osBucket" }}/o/{{ index .Values "llama-3-1-70b-instruct" "vendor" }}/{{ index .Values "llama-3-1-70b-instruct" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-1-70b-instruct
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-1-70b-instruct-2024-12" "osBucket" }}/o/{{ index .Values "llama-3-1-70b-instruct-2024-12" "vendor" }}/{{ index .Values "llama-3-1-70b-instruct-2024-12" "osPrefixOverride" }}"
+    storageUri: /mnt/data/models/meta/llama-3-1-70b-instruct-2024-12
   vendor: meta
   version: "1.0.0"
   modelFormat:
@@ -48,6 +48,7 @@ spec:
         128008,
         128009
       ],
+      "head_dim": 128,
       "hidden_act": "silu",
       "hidden_size": 8192,
       "initializer_range": 0.02,
@@ -62,15 +63,15 @@ spec:
       "rms_norm_eps": 1e-05,
       "rope_scaling": {
         "factor": 8.0,
-        "low_freq_factor": 1.0,
         "high_freq_factor": 4.0,
+        "low_freq_factor": 1.0,
         "original_max_position_embeddings": 8192,
         "rope_type": "llama3"
       },
       "rope_theta": 500000.0,
       "tie_word_embeddings": false,
       "torch_dtype": "bfloat16",
-      "transformers_version": "4.42.3",
+      "transformers_version": "4.47.0.dev0",
       "use_cache": true,
       "vocab_size": 128256
     }

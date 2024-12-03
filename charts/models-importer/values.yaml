@@ -9,6 +9,10 @@ llama-3-1-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+llama-3-1-70b-instruct-2024-12:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 llama-3-2-90b-vision:
   enabled: false
   lifecyclePhase: "ACTIVE"

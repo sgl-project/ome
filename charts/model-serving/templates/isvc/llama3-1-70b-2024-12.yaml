@@ -1,0 +1,42 @@
+{{- if .Values.llama_3_1_70b_instruct_2024_12.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-1-70b-instruct-2024-12
+  namespace: llama-3-1-70b-instruct-2024-12
+  annotations:
+    chainsaw.k8s-integration.oracle.com/inject: "enabled"
+spec:
+  predictor:
+    {{- with .Values.llama_3_1_70b_instruct_2024_12.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      runtime: vllm-medium-text-generation
+      baseModel: llama-3-1-70b-instruct-2024-12
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_3_1_70b_instruct.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_1_70b_instruct.maxReplicas}}
+    {{- with .Values.llama_3_1_70b_instruct_2024_12.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_70b_instruct_2024_12.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_70b_instruct_2024_12.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_70b_instruct_2024_12.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_70b_instruct_2024_12.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-1-70b-instruct-2024-12
+
+{{- end }}

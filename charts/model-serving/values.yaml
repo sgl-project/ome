@@ -11,7 +11,9 @@ vllm:
   vllm_chat_image:
     tag: &vllm_chatImageTag 0.4.0.post1.d7823e5e491
   vllm_multimodal_image:
-    tag: &vllm_multimodelImageTag 0.5.1.a24e62ea0ad
+    tag: &vllm_multimodalImageTag 0.5.1.a24e62ea0ad
+  vllm_latest_image:
+    tag: &vllm_latest_image v0.6.4.post1.a6221a14
 
 sglang:
   port: 8080
@@ -82,6 +84,21 @@ llama_3_1_70b_instruct:
   image:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag
+
+llama_3_1_70b_instruct_2024_12:
+  enabled: false
+  annotations:
+    ome.io/autoscalerClass: "keda"
+  affinity: { }
+  tolerations: [ ]
+  topologySpreadConstraints: [ ]
+  volumes: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: { }
+  image:
+    repository: *defaultVLLMImage
+    tag: *vllm_latest_image
 
 llama_3_1_405b_instruct:
   enabled: false
