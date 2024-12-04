@@ -16,8 +16,9 @@ COPY pkg/    pkg/
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -a -o qpext ./cmd/qpext
 
 FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:8-slim-fips
-COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol8:1.34 / /
+COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol8:1.40 / /
 RUN microdnf install io-ol8-container-hardening && rm -rf /var/cache/yum
+RUN microdnf update -y && microdnf clean all
 
 # Copy the built binary from the builder image
 COPY --from=builder /go/src/bitbucket.oci.oraclecorp.com/genaicore/ome/qpext /

@@ -15,7 +15,8 @@ COPY pkg/    pkg/
 RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o model-controller ./cmd/model-controller
 
 FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:8-slim
-COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol8:1.34 / /
+COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol8:1.40 / /
+RUN microdnf update -y && microdnf clean all
 
 COPY --from=builder /go/src/bitbucket.oci.oraclecorp.com/genaicore/ome/model-controller /
 ENTRYPOINT ["/model-controller"]
