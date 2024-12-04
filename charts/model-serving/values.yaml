@@ -103,7 +103,7 @@ llama_3_1_70b_instruct_2024_12:
 llama_3_1_405b_instruct:
   enabled: false
   enableRDMA: false
-  singleNode: true
+  singleNode: false
   annotations:
     traffic.sidecar.istio.io/includeInboundPorts: '8080,9001,9002'
     traffic.sidecar.istio.io/includeOutboundPorts: '8080,9001,9002'

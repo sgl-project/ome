@@ -1,7 +1,6 @@
 package hf_download
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,15 +11,23 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
+// HuggingFace API endpoints
 const (
-	AgreementModelURL     = "https://huggingface.co/%s"
-	RawModelFileURL       = "https://huggingface.co/%s/raw/%s/%s"
-	LfsModelResolverURL   = "https://huggingface.co/%s/resolve/%s/%s"
-	JsonModelsFileTreeURL = "https://huggingface.co/api/models/%s/tree/%s/%s"
+	// AgreementModelURL is the base URL for model agreements
+	AgreementModelURL = "https://huggingface.co/%s"
+	// RawModelFileURL is the URL pattern for raw model files
+	RawModelFileURL = "https://huggingface.co/%s/raw/%s/%s"
+	// LfsModelResolverURL is the URL pattern for LFS model files
+	LfsModelResolverURL = "https://huggingface.co/%s/resolve/%s/%s"
+	// JSONFileListURL is the URL pattern for model file tree listings
+	JSONFileListURL = "https://huggingface.co/api/models/%s/tree/%s/%s"
 )
 
+// HFDownloadAgent handles downloading of models from HuggingFace
 type HFDownloadAgent struct {
 	logger logging.Interface
 	Config *Config
@@ -72,7 +79,7 @@ func (d *HFDownloadAgent) processHFFolderTree(ModelPath string, folderName strin
 	}
 	// updated ver: 1.2.5; I cannot clear it if I'm trying to implement resume broken downloads based on a single file
 	// defer os.RemoveAll(tempFolder) //delete tmp folder upon returning from this function
-	JsonFileListURL := fmt.Sprintf(JsonModelsFileTreeURL, d.Config.ModelName, d.Config.Branch, folderName)
+	JSONFileListURL := fmt.Sprintf(JSONFileListURL, d.Config.ModelName, d.Config.Branch, folderName)
 	var jsonFilesList []HFModel
 	for _, file := range jsonFilesList {
 		filePath := path.Join(ModelPath, file.Path)
@@ -107,9 +114,9 @@ func (d *HFDownloadAgent) processHFFolderTree(ModelPath string, folderName strin
 			}
 		}
 	}
-	d.logger.Infof("Getting File Download Files List Tree from: %s", JsonFileListURL)
+	d.logger.Infof("Getting File Download Files List Tree from: %s", JSONFileListURL)
 
-	req, err := http.NewRequest("GET", JsonFileListURL, nil)
+	req, err := http.NewRequest("GET", JSONFileListURL, nil)
 	if err != nil {
 		return err
 	}
