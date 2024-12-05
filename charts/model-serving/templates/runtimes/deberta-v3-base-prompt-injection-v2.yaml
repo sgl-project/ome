@@ -5,7 +5,6 @@ metadata:
 spec:
   annotations:
     chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
-    chainsaw.k8s-integration.oracle.com/inject: enabled
     chainsaw.k8s-integration.oracle.com/logPath: deberta-v3-base-prompt-injection-v2
     chainsaw.k8s-integration.oracle.com/namespace: deberta-v3-base-prompt-injection-v2
     prometheus.io/port: '8081'

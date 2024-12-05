@@ -17,12 +17,13 @@ import (
 var log = logf.Log.WithName(constants.ServingRuntimeValidatorWebhookName)
 
 const (
-	InvalidPriorityError                       = "Same priority assigned for the model format %s"
-	InvalidPriorityServingRuntimeError         = "%s in the servingruntimes %s and %s in namespace %s"
-	InvalidPriorityClusterServingRuntimeError  = "%s in the clusterservingruntimes %s and %s"
-	ProrityIsNotSameError                      = "Different priorities assigned for the model format %s"
-	ProrityIsNotSameServingRuntimeError        = "%s under the servingruntime %s"
-	ProrityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
+	InvalidPriorityError                        = "Same priority assigned for the model format %s"
+	InvalidPriorityServingRuntimeError          = "%s in the servingruntimes %s and %s in namespace %s"
+	InvalidPriorityClusterServingRuntimeError   = "%s in the clusterservingruntimes %s and %s"
+	PriorityIsNotSameError                      = "Different priorities assigned for the model format %s"
+	PriorityIsNotSameServingRuntimeError        = "%s under the servingruntime %s"
+	PriorityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
+	ChainsawInjectAnnotationNotAllowError       = "Chainsaw inject annotation is not allowed."
 )
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
@@ -59,7 +60,11 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 
 	for i := range ExistingRuntimes.Items {
 		if err := validateModelFormatPrioritySame(&servingRuntime.Spec); err != nil {
-			return admission.Denied(fmt.Sprintf(ProrityIsNotSameServingRuntimeError, err.Error(), servingRuntime.Name))
+			return admission.Denied(fmt.Sprintf(PriorityIsNotSameServingRuntimeError, err.Error(), servingRuntime.Name))
+		}
+
+		if err := validateServingRuntimeAnnotations(&servingRuntime.Spec); err != nil {
+			return admission.Denied(fmt.Sprintf(ChainsawInjectAnnotationNotAllowError))
 		}
 
 		if err := validateServingRuntimePriority(&servingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, servingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
@@ -90,8 +95,13 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 
 	for i := range ExistingRuntimes.Items {
 		if err := validateModelFormatPrioritySame(&clusterServingRuntime.Spec); err != nil {
-			return admission.Denied(fmt.Sprintf(ProrityIsNotSameClusterServingRuntimeError, err.Error(), clusterServingRuntime.Name))
+			return admission.Denied(fmt.Sprintf(PriorityIsNotSameClusterServingRuntimeError, err.Error(), clusterServingRuntime.Name))
 		}
+
+		if err := validateServingRuntimeAnnotations(&clusterServingRuntime.Spec); err != nil {
+			return admission.Denied(fmt.Sprintf(ChainsawInjectAnnotationNotAllowError))
+		}
+
 		if err := validateServingRuntimePriority(&clusterServingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, clusterServingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
 			return admission.Denied(fmt.Sprintf(InvalidPriorityClusterServingRuntimeError, err.Error(), ExistingRuntimes.Items[i].Name, clusterServingRuntime.Name))
 		}
@@ -107,6 +117,16 @@ func areSupportedModelFormatsEqual(m1 v1beta1.SupportedModelFormat, m2 v1beta1.S
 	return false
 }
 
+func validateServingRuntimeAnnotations(servingRuntime *v1beta1.ServingRuntimeSpec) error {
+	if servingRuntime.ServingRuntimePodSpec.Annotations == nil {
+		return nil
+	}
+	if _, ok := servingRuntime.ServingRuntimePodSpec.Annotations[constants.ChainsawInject]; ok {
+		return fmt.Errorf(ChainsawInjectAnnotationNotAllowError)
+	}
+	return nil
+}
+
 func validateModelFormatPrioritySame(newSpec *v1beta1.ServingRuntimeSpec) error {
 	nameToPriority := make(map[string]*int32)
 
@@ -117,7 +137,7 @@ func validateModelFormatPrioritySame(newSpec *v1beta1.ServingRuntimeSpec) error 
 		if newModelFormat.IsAutoSelectEnabled() {
 			if existingPriority, ok := nameToPriority[newModelFormat.Name]; ok {
 				if existingPriority != nil && newModelFormat.Priority != nil && (*existingPriority != *newModelFormat.Priority) {
-					return fmt.Errorf(ProrityIsNotSameError, newModelFormat.Name)
+					return fmt.Errorf(PriorityIsNotSameError, newModelFormat.Name)
 				}
 			} else {
 				nameToPriority[newModelFormat.Name] = newModelFormat.Priority

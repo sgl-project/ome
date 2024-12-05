@@ -1106,6 +1106,38 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 	}
 }
 
+func TestValidateServingRuntimeAnnotations(t *testing.T) {
+	scenarios := map[string]struct {
+		spec    v1beta1.ServingRuntimeSpec
+		matcher gomega.OmegaMatcher
+	}{
+		"When chainsaw inject annotation is set then it should return error": {
+			spec: v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+					Annotations: map[string]string{
+						constants.ChainsawInject: "true",
+					},
+				},
+			},
+			matcher: gomega.MatchError(fmt.Errorf(ChainsawInjectAnnotationNotAllowError)),
+		},
+		"When chainsaw inject annotation is not set then it should return nil": {
+			spec: v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{},
+			},
+			matcher: gomega.BeNil(),
+		},
+	}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			g := gomega.NewGomegaWithT(t)
+			err := validateServingRuntimeAnnotations(&scenario.spec)
+			g.Expect(err).To(scenario.matcher)
+		})
+	}
+}
+
 func TestValidateModelFormatPrioritySame(t *testing.T) {
 	scenarios := map[string]struct {
 		name              string
@@ -1152,7 +1184,7 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 					},
 				},
 			},
-			expected: gomega.Equal(fmt.Errorf(ProrityIsNotSameError, "vllm")),
+			expected: gomega.Equal(fmt.Errorf(PriorityIsNotSameError, "vllm")),
 		},
 		"When same priority assigned for the same model format in the runtime then it should return nil": {
 			newServingRuntime: &v1beta1.ServingRuntime{
