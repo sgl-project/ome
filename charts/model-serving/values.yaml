@@ -53,11 +53,11 @@ cohere:
     timeoutSeconds: 5
 
 commonAnnotations:
+  # DO NOT ADD chainsaw.k8s-integration.oracle.com/inject: "enabled" in serving runtime, this must be set in each isvc
   prometheus.io/scrape: "true"
   prometheus.io/port: "8080"
   prometheus.io/path: "/metrics"
   chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
-  chainsaw.k8s-integration.oracle.com/inject: "enabled"
   chainsaw.k8s-integration.oracle.com/logPath: "vllm"
   chainsaw.k8s-integration.oracle.com/namespace: "vllm"
 
@@ -107,6 +107,7 @@ llama_3_1_405b_instruct:
   annotations:
     traffic.sidecar.istio.io/includeInboundPorts: '8080,9001,9002'
     traffic.sidecar.istio.io/includeOutboundPorts: '8080,9001,9002'
+    ome.io/deploymentMode: MultiNodeRayVLLM
   affinity: {}
   tolerations: []
   topologySpreadConstraints: []
