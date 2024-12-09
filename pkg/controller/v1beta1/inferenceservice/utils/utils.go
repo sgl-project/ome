@@ -54,6 +54,11 @@ func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 	return ok && inject == "true"
 }
 
+func IsOriginalModelVolumnMountNecessary(annotations map[string]string) bool {
+	inject, ok := annotations[constants.SevingInitInjectionKey]
+	return !ok || inject != "true"
+}
+
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	// Check if the VolcanoQueue annotation exists and set the label if it does.
 	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {

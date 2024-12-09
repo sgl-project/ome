@@ -123,6 +123,7 @@ func (si *ServingInitInjector) createInitContainer(envs []v1.EnvVar, mounts []v1
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      envs,
 		VolumeMounts:             mounts,
+		Args:                     []string{"enigma", "--config", "/ome-agent.yaml", "--debug"},
 		Resources: v1.ResourceRequirements{
 			Limits: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceCPU:    resource.MustParse(si.CpuLimit),
@@ -142,14 +143,14 @@ func (si *ServingInitInjector) getServingInitEnvs(pod *v1.Pod) ([]v1.EnvVar, err
 	envVars := []v1.EnvVar{
 
 		{Name: constants.AgentAuthTypeEnvVarKey, Value: si.getAnnotationOrDefault(pod, constants.EncryptionAuthType, si.AuthType)},
-		{Name: constants.AgentLocalPathEnvVarKey, Value: constants.InitContainerModelFinalDefaultPath},
+		{Name: constants.AgentLocalPathEnvVarKey, Value: constants.InitContainerModelSourceDefaultPath},
 		{Name: constants.AgentModelNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelName]},
 		{Name: constants.AgentCompartmentIDEnvVarKey, Value: si.getAnnotationOrDefault(pod, constants.BaseModelDecryptionCompartmentID, si.CompartmentId)},
 		{Name: constants.AgentVaultIDEnvVarKey, Value: si.getAnnotationOrDefault(pod, constants.BaseModelDecryptionVaultID, si.VaultId)},
 		{Name: constants.AgentSecretNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelDecryptionSecretName]},
 		{Name: constants.AgentKeyNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelDecryptionKeyName]},
 		{Name: constants.AgentDisableModelDecryptionEnvVarKey, Value: si.getAnnotationOrDefault(pod, constants.DisableModelDecryption, "false")},
-		{Name: constants.AgentModelStoreDirectoryEnvVarKey, Value: constants.InitContainerModelSourceDefaultPath},
+		{Name: constants.AgentModelStoreDirectoryEnvVarKey, Value: constants.InitContainerModelFinalDefaultPath},
 		{Name: constants.AgentNumOfGPUEnvVarKey, Value: si.getGPUCount(pod)},
 	}
 

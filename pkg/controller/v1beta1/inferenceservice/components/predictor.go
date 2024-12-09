@@ -81,7 +81,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime)
+	podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime, &objectMeta)
 	if err != nil {
 		return result, err
 	}
@@ -356,7 +356,7 @@ func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1b
 }
 
 // reconcilePodSpec reconciles the pod spec.
-func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (v1.PodSpec, ctrl.Result, error) {
+func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
@@ -371,8 +371,8 @@ func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1
 		return v1.PodSpec{}, ctrl.Result{}, err
 	}
 
-	p.updateVolumeMounts(isvc, container)
-	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec)
+	p.updateVolumeMounts(isvc, container, objectMeta)
+	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec, objectMeta)
 
 	return podSpec, ctrl.Result{}, nil
 }
@@ -405,20 +405,23 @@ func (p *Predictor) createMergedPodSpec(isvc *v1beta1.InferenceService, sRuntime
 }
 
 // updateVolumeMounts updates the volume mounts for the predictor.
-func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container) {
+func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta) {
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
-	modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
-	vm := v1.VolumeMount{
-		Name:      *isvc.Spec.Predictor.Model.BaseModel,
-		MountPath: modelMountPath,
-		ReadOnly:  true,
-	}
-	isvcutils.UpdateVolumeMounts(container, &vm)
-	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-		{Name: "MODEL_PATH", Value: modelMountPath},
-	})
 
-	if isvcutils.IsBlockListInjectionDisabled(isvc.Annotations) {
+	if isvcutils.IsOriginalModelVolumnMountNecessary(objectMeta.Annotations) {
+		modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
+		vm := v1.VolumeMount{
+			Name:      *isvc.Spec.Predictor.Model.BaseModel,
+			MountPath: modelMountPath,
+			ReadOnly:  true,
+		}
+		isvcutils.UpdateVolumeMounts(container, &vm)
+		isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+			{Name: "MODEL_PATH", Value: modelMountPath},
+		})
+	}	
+
+	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
 		inputBlocklistVolumeMount := v1.VolumeMount{
 			Name:      constants.BlocklistConfigMapVolumeName,
 			MountPath: constants.InputBlocklistMountPath,
@@ -437,7 +440,7 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 }
 
 // updatePodSpec updates the pod spec for the predictor.
-func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec) {
+func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Update containers by inserting the custom container and keeping the other runtime containers
 	podSpec.Containers = append([]v1.Container{*container}, sRuntime.Containers[:omeContainerIdx]...)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[omeContainerIdx+1:]...)
@@ -454,13 +457,13 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 		},
 	}
 
-	if isvcutils.IsBlockListInjectionDisabled(isvc.Annotations) {
+	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
 		blockListConfigMapVolume := v1.Volume{
 			Name: constants.BlocklistConfigMapVolumeName,
 			VolumeSource: v1.VolumeSource{
 				ConfigMap: &v1.ConfigMapVolumeSource{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: isvc.Name,
+						Name: constants.ModelConfigName(isvc.Name),
 					},
 				},
 			},
@@ -469,7 +472,7 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 	}
 
 	// Add additional volumes if Chainsaw injection is enabled
-	if isvcutils.IsChainsawInjectEnabled(isvc.Annotations) {
+	if isvcutils.IsChainsawInjectEnabled(objectMeta.Annotations) {
 		for _, item := range constants.OCIETCHostPaths {
 			volumes = append(volumes, v1.Volume{
 				Name: item.Name,

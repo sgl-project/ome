@@ -28,7 +28,7 @@ type Config struct {
 	ModelFramework         ModelFramework     `mapstructure:"model_framework"`
 	TensorrtLLMConfig      *TensorrtLLMConfig `mapstructure:"tensorrtllm_config"`
 	DisableModelDecryption bool               `mapstructure:"disable_model_decryption"`
-	TempPath               string             `mapstructure:"temp_path"`
+	TempPath               string             `mapstructure:"model_store_directory"`
 	VaultId                string             `mapstructure:"vault_id"`
 	SecretName             string             `mapstructure:"secret_name"`
 	KeyMetadata            *kmsmgm.KeyMetadata

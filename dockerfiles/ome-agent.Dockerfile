@@ -22,4 +22,5 @@ COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-su
 RUN microdnf update -y && microdnf clean all
 
 COPY --from=builder /go/src/bitbucket.oci.oraclecorp.com/genaicore/ome/ome-agent /
+COPY config/ome-agent/ome-agent.yaml /
 ENTRYPOINT ["/ome-agent"]

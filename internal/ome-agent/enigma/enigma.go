@@ -76,7 +76,8 @@ func (e *Enigma) validateModelStore() error {
 
 // copyModelWeights copies model weights from the local path to a temporary path
 func (e *Enigma) copyModelWeights() error {
-	if err := copy.Copy(e.Config.LocalPath, e.Config.TempPath); err != nil {
+	modelStorePath := e.getModelStorePath()
+	if err := copy.Copy(modelStorePath, e.Config.TempPath); err != nil {
 		return fmt.Errorf("failed to copy model weights to temporary path: %w", err)
 	}
 	return nil
@@ -184,14 +185,6 @@ func (e *Enigma) getModelStorePath() string {
 
 // getModelTempPath constructs the path to the temporary model location for decryption
 func (e *Enigma) getModelTempPath() string {
-	if e.Config.ModelFramework == TensorRTLLM {
-		return filepath.Join(
-			e.Config.TempPath,
-			e.Config.TensorrtLLMConfig.TensorrtLlmVersion,
-			e.Config.TensorrtLLMConfig.NodeShapeAlias,
-			e.Config.TensorrtLLMConfig.NumOfGpu+"Gpu",
-		)
-	}
 	return e.Config.TempPath
 }
 
