@@ -12,105 +12,104 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage":                schema_pkg_apis_ome_v1beta1_AssociationUsage(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModel":                       schema_pkg_apis_ome_v1beta1_BaseModel(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelList":                   schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelSpec":                   schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJob":                    schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":                schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":                schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":              schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BuiltInAdapter":                  schema_pkg_apis_ome_v1beta1_BuiltInAdapter(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservation":             schema_pkg_apis_ome_v1beta1_CapacityReservation(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationCondition":    schema_pkg_apis_ome_v1beta1_CapacityReservationCondition(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationList":         schema_pkg_apis_ome_v1beta1_CapacityReservationList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationSpec":         schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationStatus":       schema_pkg_apis_ome_v1beta1_CapacityReservationStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":            schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservation":      schema_pkg_apis_ome_v1beta1_ClusterCapacityReservation(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservationList":  schema_pkg_apis_ome_v1beta1_ClusterCapacityReservationList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":           schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":       schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntime":          schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntimeList":      schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CohereTrainingJobSpec":           schema_pkg_apis_ome_v1beta1_CohereTrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":          schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":             schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CustomPredictor":                 schema_pkg_apis_ome_v1beta1_CustomPredictor(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReconcilePolicyConfig":        schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAICluster":              schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterList":          schema_pkg_apis_ome_v1beta1_DedicatedAIClusterList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfile":       schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfile(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileList":   schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileSpec":   schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileStatus": schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterSpec":          schema_pkg_apis_ome_v1beta1_DedicatedAIClusterSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterStatus":        schema_pkg_apis_ome_v1beta1_DedicatedAIClusterStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DeployConfig":                    schema_pkg_apis_ome_v1beta1_DeployConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ElasticPolicy":                   schema_pkg_apis_ome_v1beta1_ElasticPolicy(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Endpoint":                        schema_pkg_apis_ome_v1beta1_Endpoint(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FailureInfo":                     schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                 schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":             schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":             schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceService":                schema_pkg_apis_ome_v1beta1_InferenceService(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceList":            schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":       schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":            schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":          schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServicesConfig":         schema_pkg_apis_ome_v1beta1_InferenceServicesConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.IngressConfig":                   schema_pkg_apis_ome_v1beta1_IngressConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobCondition":                    schema_pkg_apis_ome_v1beta1_JobCondition(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.K8sInferenceServiceReference":    schema_pkg_apis_ome_v1beta1_K8sInferenceServiceReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                      schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec":                      schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPITrainingJobSpec":              schema_pkg_apis_ome_v1beta1_MPITrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelCopies":                     schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":              schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat":                     schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":             schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":              schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec":                       schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatus":                     schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":                 schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MultiNodeProberConfig":           schema_pkg_apis_ome_v1beta1_MultiNodeProberConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OCIConfig":                       schema_pkg_apis_ome_v1beta1_OCIConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OSStorage":                       schema_pkg_apis_ome_v1beta1_OSStorage(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference":                 schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PVCStorage":                      schema_pkg_apis_ome_v1beta1_PVCStorage(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PeftTrainingJobSpec":             schema_pkg_apis_ome_v1beta1_PeftTrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodSpec":                         schema_pkg_apis_ome_v1beta1_PodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":          schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec":                   schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PyTorchTrainingJobSpec":          schema_pkg_apis_ome_v1beta1_PyTorchTrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RDZVConf":                        schema_pkg_apis_ome_v1beta1_RDZVConf(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec":                     schema_pkg_apis_ome_v1beta1_ReplicaSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaStatus":                   schema_pkg_apis_ome_v1beta1_ReplicaStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy":                       schema_pkg_apis_ome_v1beta1_RunPolicy(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SchedulingPolicy":                schema_pkg_apis_ome_v1beta1_SchedulingPolicy(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                 schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntime":                  schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":              schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":           schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":              schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":            schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage":                         schema_pkg_apis_ome_v1beta1_Storage(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec":                     schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":            schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedRuntime":                schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TensorFlowTrainingJobSpec":       schema_pkg_apis_ome_v1beta1_TensorFlowTrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework":               schema_pkg_apis_ome_v1beta1_TrainingFramework(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJob":                     schema_pkg_apis_ome_v1beta1_TrainingJob(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobList":                 schema_pkg_apis_ome_v1beta1_TrainingJobList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobSpec":                 schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobStatus":               schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntime":                 schema_pkg_apis_ome_v1beta1_TrainingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeList":             schema_pkg_apis_ome_v1beta1_TrainingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec":             schema_pkg_apis_ome_v1beta1_TrainingRuntimeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeStatus":           schema_pkg_apis_ome_v1beta1_TrainingRuntimeStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                   schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec":                      schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage":                 schema_pkg_apis_ome_v1beta1_AssociationUsage(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModel":                        schema_pkg_apis_ome_v1beta1_BaseModel(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelList":                    schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelSpec":                    schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJob":                     schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":                 schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":                 schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":               schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BuiltInAdapter":                   schema_pkg_apis_ome_v1beta1_BuiltInAdapter(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservation":              schema_pkg_apis_ome_v1beta1_CapacityReservation(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationCondition":     schema_pkg_apis_ome_v1beta1_CapacityReservationCondition(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationList":          schema_pkg_apis_ome_v1beta1_CapacityReservationList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationSpec":          schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationStatus":        schema_pkg_apis_ome_v1beta1_CapacityReservationStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                 schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":             schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservation":       schema_pkg_apis_ome_v1beta1_ClusterCapacityReservation(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservationList":   schema_pkg_apis_ome_v1beta1_ClusterCapacityReservationList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":            schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":        schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntime":           schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntimeList":       schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":           schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":              schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CoschedulingPodGroupPolicyConfig": schema_pkg_apis_ome_v1beta1_CoschedulingPodGroupPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CustomPredictor":                  schema_pkg_apis_ome_v1beta1_CustomPredictor(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReconcilePolicyConfig":         schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAICluster":               schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterList":           schema_pkg_apis_ome_v1beta1_DedicatedAIClusterList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfile":        schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfile(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileList":    schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileSpec":    schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileStatus":  schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterSpec":           schema_pkg_apis_ome_v1beta1_DedicatedAIClusterSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterStatus":         schema_pkg_apis_ome_v1beta1_DedicatedAIClusterStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DeployConfig":                     schema_pkg_apis_ome_v1beta1_DeployConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Endpoint":                         schema_pkg_apis_ome_v1beta1_Endpoint(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FailureInfo":                      schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                  schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":              schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":              schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig":       schema_pkg_apis_ome_v1beta1_HyperparameterTuningConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceService":                 schema_pkg_apis_ome_v1beta1_InferenceService(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceList":             schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":        schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":             schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":           schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServicesConfig":          schema_pkg_apis_ome_v1beta1_InferenceServicesConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.IngressConfig":                    schema_pkg_apis_ome_v1beta1_IngressConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec":               schema_pkg_apis_ome_v1beta1_JobSetTemplateSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus":                        schema_pkg_apis_ome_v1beta1_JobStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.K8sInferenceServiceReference":     schema_pkg_apis_ome_v1beta1_K8sInferenceServiceReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                       schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec":                       schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy":                         schema_pkg_apis_ome_v1beta1_MLPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicyConfig":                   schema_pkg_apis_ome_v1beta1_MLPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig":                schema_pkg_apis_ome_v1beta1_MPIMLPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MetricConfig":                     schema_pkg_apis_ome_v1beta1_MetricConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig":                      schema_pkg_apis_ome_v1beta1_ModelConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelCopies":                      schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":               schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat":                      schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":              schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":               schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec":                        schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatus":                      schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":                  schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MultiNodeProberConfig":            schema_pkg_apis_ome_v1beta1_MultiNodeProberConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OCIConfig":                        schema_pkg_apis_ome_v1beta1_OCIConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OSStorage":                        schema_pkg_apis_ome_v1beta1_OSStorage(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference":                  schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PVCStorage":                       schema_pkg_apis_ome_v1beta1_PVCStorage(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodGroupPolicy":                   schema_pkg_apis_ome_v1beta1_PodGroupPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodSpec":                          schema_pkg_apis_ome_v1beta1_PodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":           schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec":                    schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                  schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntime":                   schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":               schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":            schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":               schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":             schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage":                          schema_pkg_apis_ome_v1beta1_Storage(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec":                      schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":             schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedRuntime":                 schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchElasticPolicy":               schema_pkg_apis_ome_v1beta1_TorchElasticPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig":              schema_pkg_apis_ome_v1beta1_TorchMLPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec":                      schema_pkg_apis_ome_v1beta1_TrainerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJob":                      schema_pkg_apis_ome_v1beta1_TrainingJob(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobList":                  schema_pkg_apis_ome_v1beta1_TrainingJobList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobSpec":                  schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobStatus":                schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntime":                  schema_pkg_apis_ome_v1beta1_TrainingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeList":              schema_pkg_apis_ome_v1beta1_TrainingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec":              schema_pkg_apis_ome_v1beta1_TrainingRuntimeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                    schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec":                       schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
 	}
 }
 
@@ -1396,17 +1395,11 @@ func schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntime(ref common.ReferenceCall
 							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec"),
 						},
 					},
-					"status": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeStatus"),
-						},
-					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -1456,81 +1449,6 @@ func schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntimeList(ref common.Reference
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntime", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_CohereTrainingJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "CohereTrainingJobSpec defines configuration shared across all cohere runtimes",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"baseModel": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"trainingFramework": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specific training framework to use for the training job.",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
-						},
-					},
-					"hyperparameters": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for training job",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
-						},
-					},
-					"datasetsSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Data for training and validation",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-									},
-								},
-							},
-						},
-					},
-					"outputLocation": {
-						SchemaProps: spec.SchemaProps{
-							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-						},
-					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the training job",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"replicaSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -1719,6 +1637,26 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "knative.dev/serving/pkg/apis/serving/v1.TrafficTarget"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CoschedulingPodGroupPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CoschedulingPodGroupPolicyConfig represents configuration for co-scheduling plugin. The number of min members in the PodGroupSpec is always equal to the number of nodes.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"scheduleTimeoutSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Time threshold to schedule PodGroup for gang-scheduling. If the scheduling timeout is equal to 0, the default value is used. Defaults to 60 seconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -2131,7 +2069,7 @@ func schema_pkg_apis_ome_v1beta1_CustomPredictor(ref common.ReferenceCallback) c
 					},
 					"setHostnameAsFQDN": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -2691,106 +2629,6 @@ func schema_pkg_apis_ome_v1beta1_DeployConfig(ref common.ReferenceCallback) comm
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_ElasticPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"minReplicas": {
-						SchemaProps: spec.SchemaProps{
-							Description: "minReplicas is the lower limit for the number of replicas to which the training job can scale down.  It defaults to null.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"maxReplicas": {
-						SchemaProps: spec.SchemaProps{
-							Description: "upper limit for the number of pods that can be set by the autoscaler; cannot be smaller than MinReplicas, defaults to null.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"rdzvBackend": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"rdzvPort": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
-						},
-					},
-					"rdzvHost": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"rdzvId": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"rdzvConf": {
-						SchemaProps: spec.SchemaProps{
-							Description: "RDZVConf contains additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RDZVConf"),
-									},
-								},
-							},
-						},
-					},
-					"standalone": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Start a local standalone rendezvous backend that is represented by a C10d TCP store on port 29400. Useful when launching single-node, multi-worker job. If specified --rdzv_backend, --rdzv_endpoint, --rdzv_id are auto-assigned; any explicitly set values are ignored.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"nProcPerNode": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Number of workers per node; supported values: [auto, cpu, gpu, int]. Deprecated: This API is deprecated in v1.7+ Use .spec.nprocPerNode instead.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"maxRestarts": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
-						},
-					},
-					"metrics": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Metrics contains the specifications which are used to calculate the desired replica count (the maximum replica count across all metrics will be used).  The desired replica count is calculated with multiplying the ratio between the target value and the current value by the current number of pods. Ergo, metrics used must decrease as the pod count is increased, and vice versa.  See the individual metric source types for more information about how each type of metric must respond. If not set, the HPA will not be created.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/autoscaling/v2.MetricSpec"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RDZVConf", "k8s.io/api/autoscaling/v2.MetricSpec"},
-	}
-}
-
 func schema_pkg_apis_ome_v1beta1_Endpoint(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3066,6 +2904,49 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HyperparameterTuningConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"method": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Method specifies the search algorithm to use (grid, random, bayes)",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metric": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Metric defines the objective metric to optimize",
+							Default:     map[string]interface{}{},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MetricConfig"),
+						},
+					},
+					"parameters": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Parameters defines the hyperparameters and their search spaces",
+							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+						},
+					},
+					"maxTrials": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxTrials specifies the maximum number of trials to run",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"method", "metric", "parameters"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MetricConfig", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -3446,61 +3327,93 @@ func schema_pkg_apis_ome_v1beta1_IngressConfig(ref common.ReferenceCallback) com
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_JobCondition(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_JobSetTemplateSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "JobCondition describes the state of the job at a certain point.",
+				Description: "JobSetTemplateSpec represents a template of the desired JobSet.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"type": {
+					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Type of job condition.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "Metadata for custom JobSet's labels and annotations. JobSet name and namespace is equal to the TrainJob's name and namespace.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
-					"status": {
+					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Status of the condition, one of True, False, Unknown.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"reason": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The reason for the condition's last transition.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"message": {
-						SchemaProps: spec.SchemaProps{
-							Description: "A human-readable message indicating details about the transition.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"lastUpdateTime": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The last time this condition was updated.",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
-					"lastTransitionTime": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Last time the condition transitioned from one status to another.",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+							Description: "Specification of the desired JobSet which will be created from TrainJob.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("sigs.k8s.io/jobset/api/jobset/v1alpha2.JobSetSpec"),
 						},
 					},
 				},
-				Required: []string{"type", "status"},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "sigs.k8s.io/jobset/api/jobset/v1alpha2.JobSetSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_JobStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the child Job.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ready": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ready is the number of child Jobs where the number of ready pods and completed pods is greater than or equal to the total expected pod count for the child Job.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"succeeded": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Succeeded is the number of successfully completed child Jobs.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"failed": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Failed is the number of failed child Jobs.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"active": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Active is the number of child Jobs with at least 1 pod in a running or pending state which are not marked for deletion.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"suspended": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Suspended is the number of child Jobs which are in a suspended state.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"name", "ready", "succeeded", "failed", "active", "suspended"},
+			},
+		},
 	}
 }
 
@@ -3609,106 +3522,162 @@ func schema_pkg_apis_ome_v1beta1_LoggerSpec(ref common.ReferenceCallback) common
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_MPITrainingJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_MLPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MPITrainingJobSpec defines arguments for configuring MPI model training",
+				Description: "MLPolicy represents configuration for the model training with ML-specific parameters.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"baseModel": {
+					"numNodes": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"trainingFramework": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specific training framework to use for the training job.",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
-						},
-					},
-					"hyperparameters": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for training job",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
-						},
-					},
-					"datasetsSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Data for training and validation",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-									},
-								},
-							},
-						},
-					},
-					"outputLocation": {
-						SchemaProps: spec.SchemaProps{
-							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-						},
-					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the training job",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"slotsPerWorker": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specifies the number of slots per worker used in hostfile. Defaults to 1.",
+							Description: "Number of training nodes. Defaults to 1.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
-					"cleanPodPolicy": {
+					"torch": {
 						SchemaProps: spec.SchemaProps{
-							Description: "CleanPodPolicy defines the policy that whether to kill pods after the job completes. Defaults to None.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "Configuration for the PyTorch runtime.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig"),
 						},
 					},
-					"mpiReplicaSpecs": {
+					"mpi": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the MPI replicas to run.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec"),
-									},
-								},
-							},
-						},
-					},
-					"mainContainer": {
-						SchemaProps: spec.SchemaProps{
-							Description: "MainContainer specifies name of the main container which executes the MPI code.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"runPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy"),
+							Description: "Configuration for the MPI Runtime.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MLPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MLPolicyConfig represents the runtime-specific configuration for various technologies. One of the following specs can be set.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"torch": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Configuration for the PyTorch runtime.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig"),
+						},
+					},
+					"mpi": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Configuration for the MPI Runtime.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MPIMLPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MPIMLPolicyConfig represents a MPI runtime configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"numProcPerNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of processes per node. This value is equal to the number of slots for each node in the hostfile.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"mpiImplementation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Implementation name for the MPI to create the appropriate hostfile. Defaults to OpenMPI.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"sshAuthMountPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Directory where SSH keys are mounted.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"runLauncherAsNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Whether to run training process on the launcher Job. Defaults to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MetricConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MetricConfig defines the metric to optimize during hyperparameter tuning",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the metric",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"goal": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Goal indicates whether to minimize or maximize the metric",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "goal"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ModelConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"inputModel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InputModel defines where the input model stores. Todo: support generic model storage",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"outputModel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OutputModel defines where the finetune weight (output model) stores.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"},
 	}
 }
 
@@ -3808,6 +3777,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4205,6 +4175,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4562,6 +4533,7 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4589,77 +4561,24 @@ func schema_pkg_apis_ome_v1beta1_PVCStorage(ref common.ReferenceCallback) common
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_PeftTrainingJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_PodGroupPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "PodGroupPolicy represents a PodGroup configuration for gang-scheduling.",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"baseModel": {
+					"coscheduling": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"trainingFramework": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specific training framework to use for the training job.",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
-						},
-					},
-					"hyperparameters": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for training job",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
-						},
-					},
-					"datasetsSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Data for training and validation",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-									},
-								},
-							},
-						},
-					},
-					"outputLocation": {
-						SchemaProps: spec.SchemaProps{
-							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-						},
-					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the training job",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"peftFineTuningReplicaSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec"),
-									},
-								},
-							},
+							Description: "Coscheduling plugin from the Kubernetes scheduler-plugins for gang-scheduling.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CoschedulingPodGroupPolicyConfig"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CoschedulingPodGroupPolicyConfig"},
 	}
 }
 
@@ -5038,7 +4957,7 @@ func schema_pkg_apis_ome_v1beta1_PodSpec(ref common.ReferenceCallback) common.Op
 					},
 					"setHostnameAsFQDN": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -5424,6 +5343,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -5812,7 +5732,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 					},
 					"setHostnameAsFQDN": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -5988,317 +5908,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_PyTorchTrainingJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "PyTorchTrainingJobSpec is a desired state description of the PyTorchJob.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"baseModel": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"trainingFramework": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specific training framework to use for the training job.",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
-						},
-					},
-					"hyperparameters": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for training job",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
-						},
-					},
-					"datasetsSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Data for training and validation",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-									},
-								},
-							},
-						},
-					},
-					"outputLocation": {
-						SchemaProps: spec.SchemaProps{
-							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-						},
-					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the training job",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"runPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy"),
-						},
-					},
-					"elasticPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ElasticPolicy"),
-						},
-					},
-					"pytorchReplicaSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "A map of PyTorchReplicaType (type) to ReplicaSpec (value). Specifies the PyTorch cluster configuration. For example,\n  {\n    \"Master\": PyTorchReplicaSpec,\n    \"Worker\": PyTorchReplicaSpec,\n  }",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec"),
-									},
-								},
-							},
-						},
-					},
-					"nprocPerNode": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Number of workers per node; supported values: [auto, cpu, gpu, int]. For more, https://github.com/pytorch/pytorch/blob/26f7f470df64d90e092081e39507e4ac751f55d6/torch/distributed/run.py#L629-L658. Defaults to auto.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-				Required: []string{"runPolicy", "pytorchReplicaSpecs"},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ElasticPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_RDZVConf(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"key": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"value": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_ReplicaSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ReplicaSpec is a description of the replica",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"replicaCount": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Replicas is the desired number of replicas of the given template. If unspecified, defaults to 1.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"template": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Template is the object that describes the pod that will be created for this replica. RestartPolicy in PodTemplateSpec will be overridden by RestartPolicy in ReplicaSpec",
-							Default:     map[string]interface{}{},
-							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
-						},
-					},
-					"restartPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Restart policy for all replicas within the job. One of Always, OnFailure, Never and ExitCode. Default to Never.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/api/core/v1.PodTemplateSpec"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_ReplicaStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ReplicaStatus represents the current observed state of the replica.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"activePodCount": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The number of actively running pods.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"succeededPodCount": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The number of pods which reached phase Succeeded.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"failedPodCount": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The number of pods which reached phase Failed.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"replicaStatusType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Represents current status state of the replica",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"selector": {
-						SchemaProps: spec.SchemaProps{
-							Description: "A Selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty Selector matches all objects. A null Selector matches no objects.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_RunPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"cleanPodPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "CleanPodPolicy defines the policy to kill pods after the job completes. Default to None.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"ttlSecondsAfterFinished": {
-						SchemaProps: spec.SchemaProps{
-							Description: "TTLSecondsAfterFinished is the TTL to clean up jobs. It may take extra ReconcilePeriod seconds for the cleanup, since reconcile gets called periodically. Default to infinite.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"activeDeadlineSeconds": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specifies the duration in seconds relative to the startTime that the job may be active before the system tries to terminate it; value must be positive integer.",
-							Type:        []string{"integer"},
-							Format:      "int64",
-						},
-					},
-					"backoffLimit": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Optional number of retries before marking this job failed.",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"schedulingPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "SchedulingPolicy defines the policy related to scheduling, e.g. gang-scheduling",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SchedulingPolicy"),
-						},
-					},
-					"suspend": {
-						SchemaProps: spec.SchemaProps{
-							Description: "suspend specifies whether the Job controller should create Pods or not. If a Job is created with suspend set to true, no Pods are created by the Job controller. If a Job is suspended after creation (i.e. the flag goes from false to true), the Job controller will delete all active Pods and PodGroups associated with this Job. Users must design their workload to gracefully handle this. Suspending a Job will reset the StartTime field of the Job.\n\nDefaults to false.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SchedulingPolicy"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_SchedulingPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "SchedulingPolicy encapsulates various scheduling policies of the distributed training job, for example `minAvailable` for gang-scheduling.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"minAvailable": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
-						},
-					},
-					"queue": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"minResources": {
-						SchemaProps: spec.SchemaProps{
-							Type: []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
-									},
-								},
-							},
-						},
-					},
-					"priorityClass": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"scheduleTimeoutSeconds": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"integer"},
-							Format: "int32",
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -7033,143 +6642,196 @@ func schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref common.ReferenceCallback) 
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_TensorFlowTrainingJobSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_TorchElasticPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "TensorFlowTrainingJobSpec is a desired state description of the TFJob.",
+				Description: "TorchElasticPolicy represents a configuration for the PyTorch elastic training. If this policy is set, the `.spec.numNodes` parameter must be omitted, since min and max node is used to configure the `torchrun` CLI argument: `--nnodes=minNodes:maxNodes`. Only `c10d` backend is supported for the Rendezvous communication.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"baseModel": {
+					"maxRestarts": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "How many times the training job can be restarted. This value is inserted into the `--max-restarts` argument of the `torchrun` CLI and the `.spec.failurePolicy.maxRestarts` parameter of the training Job.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
-					"trainingFramework": {
+					"minNodes": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specific training framework to use for the training job.",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
+							Description: "Lower limit for the number of nodes to which training job can scale down.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
-					"hyperparameters": {
+					"maxNodes": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for training job",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+							Description: "Upper limit for the number of nodes to which training job can scale up.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
-					"datasetsSpecs": {
+					"metrics": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Data for training and validation",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Description: "Specification which are used to calculate the desired number of nodes. See the individual metric source types for more information about how each type of metric must respond. The HPA will be created to perform auto-scaling.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/autoscaling/v2.MetricSpec"),
 									},
 								},
 							},
-						},
-					},
-					"outputLocation": {
-						SchemaProps: spec.SchemaProps{
-							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
-						},
-					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the training job",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"runPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy"),
-						},
-					},
-					"successPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "SuccessPolicy defines the policy to mark the TFJob as succeeded. Default to \"\", using the default rules.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"tfReplicaSpecs": {
-						SchemaProps: spec.SchemaProps{
-							Description: "A map of TFReplicaType (type) to ReplicaSpec (value). Specifies the TF cluster configuration. For example,\n  {\n    \"PS\": ReplicaSpec,\n    \"Worker\": ReplicaSpec,\n  }",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec"),
-									},
-								},
-							},
-						},
-					},
-					"enableDynamicWorker": {
-						SchemaProps: spec.SchemaProps{
-							Description: "A switch to enable dynamic worker",
-							Type:        []string{"boolean"},
-							Format:      "",
 						},
 					},
 				},
-				Required: []string{"runPolicy", "tfReplicaSpecs"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"k8s.io/api/autoscaling/v2.MetricSpec"},
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_TrainingFramework(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_TorchMLPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TorchMLPolicyConfig represents a PyTorch runtime configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"numProcPerNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of processes per node. This value is inserted into the `--nproc-per-node` argument of the `torchrun` CLI. Supported values: `auto`, `cpu`, `gpu`, or int value. Defaults to `auto`.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"elasticPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Elastic policy for the PyTorch training.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchElasticPolicy"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchElasticPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_TrainerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
-					"framework": {
+					"runtime": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name of the training framework.",
-							Default:     "",
+							Description: "Runtime defines the training runtime to use for the training job.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"version": {
+					"image": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Version of training framework. Used in validating that a trainer is supported by a runtime. Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
+							Description: "Docker image for the training container.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"runtimes": {
+					"command": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Used training runtime against `ReplicaType` of current training framework.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Description: "Entrypoint commands for the training container.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Type:   []string{"string"},
-										Format: "",
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
 									},
 								},
 							},
 						},
 					},
+					"args": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Arguments to the entrypoint for the training container.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"env": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of environment variables to set in the training container. These values will be merged with the TrainingRuntime's trainer environments.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
+									},
+								},
+							},
+						},
+					},
+					"numNodes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of training nodes.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"resourcesPerNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Compute resources for each training node.",
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"numProcPerNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of processes/workers/slots on every training node. For the Torch runtime: `auto`, `cpu`, `gpu`, or int value can be set. For the MPI runtime only int value can be set.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
-				Required: []string{"framework"},
 			},
 		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.ResourceRequirements"},
 	}
 }
 
@@ -7276,30 +6938,23 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 				Description: "TrainingJobSpec defines the base job spec which various training job specs implement. It defines the desired state of a training job",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"baseModel": {
+					"trainer": {
 						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
+							Description: "Trainer defines the trainer to use for the training job.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec"),
 						},
 					},
-					"trainingFramework": {
+					"modelConfig": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Specific training framework to use for the training job.",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
-						},
-					},
-					"hyperparameters": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Hyperparameters for training job",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
+							Description: "ModelConfig defines the model configuration for the training job.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig"),
 						},
 					},
 					"datasetsSpecs": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Data for training and validation",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Description: "Datasets defines the datasets for the training job.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
@@ -7308,11 +6963,42 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 							},
 						},
 					},
-					"outputLocation": {
+					"hyperparameterConfig": {
 						SchemaProps: spec.SchemaProps{
-							Description: "OutputLocation: define the location where training output stores. Checkpointing etc.",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
+							Description: "HyperparameterTuningConfig defines the hyperparameter configuration and tuning strategy",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig"),
+						},
+					},
+					"labels": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
 						},
 					},
 					"compartmentID": {
@@ -7323,10 +7009,11 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				Required: []string{"trainer", "modelConfig", "datasetsSpecs"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec"},
 	}
 }
 
@@ -7336,15 +7023,23 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref common.ReferenceCallback)
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
-					"jobReplicaStatus": {
+					"jobsStatus": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
-							Description: "JobReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Description: "JobsStatus tracks the child Jobs in TrainJob.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaStatus"),
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus"),
 									},
 								},
 							},
@@ -7358,17 +7053,10 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref common.ReferenceCallback)
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobCondition"),
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
 									},
 								},
 							},
-						},
-					},
-					"details": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Details represent any information about the training job",
-							Type:        []string{"string"},
-							Format:      "",
 						},
 					},
 					"retryCount": {
@@ -7380,34 +7068,27 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref common.ReferenceCallback)
 					},
 					"startTime": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Represents time when the training job is acknowledged by the controller. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+							Description: "StartTime represents time when the training job is acknowledged by the controller. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
 					"completionTime": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Represents time when the training job is completed. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+							Description: "CompletionTime represents time when the training job is completed. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
 					"lastReconcileTime": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Represents last time when the job was reconciled. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+							Description: "LastReconcileTime represents last time when the job was reconciled. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
-					"finetunedWeightRef": {
-						SchemaProps: spec.SchemaProps{
-							Description: "FinetunedWeight reference to the finetuned model being produced",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobCondition", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 
@@ -7444,17 +7125,11 @@ func schema_pkg_apis_ome_v1beta1_TrainingRuntime(ref common.ReferenceCallback) c
 							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec"),
 						},
 					},
-					"status": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeStatus"),
-						},
-					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -7514,53 +7189,23 @@ func schema_pkg_apis_ome_v1beta1_TrainingRuntimeSpec(ref common.ReferenceCallbac
 				Description: "TrainingRuntimeSpec defines the desired state of TrainingRuntime",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"supportedTrainingFrameworks": {
+					"mlPolicy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Training Framework and version supported by this runtime Example: MPI, TensorFlow, CohereFinetuning",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework"),
-									},
-								},
-							},
+							Description: "Configuration for the model training with ML-specific parameters.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy"),
 						},
 					},
-					"disabled": {
+					"podGroupPolicy": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Set to true to disable use of this runtime",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"replicaCount": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Replicas is the desired number of replicas of the given template. If unspecified, defaults to 1.",
-							Type:        []string{"integer"},
-							Format:      "int32",
+							Description: "Configuration for the PodGroup to enable gang-scheduling via supported plugins.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodGroupPolicy"),
 						},
 					},
 					"template": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Template is the object that describes the pod that will be created for this replica. RestartPolicy in PodTemplateSpec will be overridden by RestartPolicy in ReplicaSpec",
+							Description: "JobSet template which will be used by TrainJob.",
 							Default:     map[string]interface{}{},
-							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
-						},
-					},
-					"restartPolicy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Restart policy for all replicas within the job. One of Always, OnFailure, Never and ExitCode. Default to Never.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"replicaType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The target runtime ReplicaType to specify Example: Launcher, Worker",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec"),
 						},
 					},
 					"labels": {
@@ -7603,46 +7248,11 @@ func schema_pkg_apis_ome_v1beta1_TrainingRuntimeSpec(ref common.ReferenceCallbac
 						},
 					},
 				},
+				Required: []string{"template"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingFramework", "k8s.io/api/core/v1.PodTemplateSpec"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_TrainingRuntimeStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "TrainingRuntimeStatus defines the observed state of TrainingRuntime",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"runtimeReplicaStatus": {
-						SchemaProps: spec.SchemaProps{
-							Description: "RuntimeReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaStatus"),
-									},
-								},
-							},
-						},
-					},
-					"details": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Represents any details about the training runtime",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ReplicaStatus"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodGroupPolicy"},
 	}
 }
 
@@ -8185,7 +7795,7 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 					},
 					"setHostnameAsFQDN": {
 						SchemaProps: spec.SchemaProps{
-							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},

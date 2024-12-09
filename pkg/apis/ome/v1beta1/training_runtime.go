@@ -1,8 +1,9 @@
 package v1beta1
 
 import (
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sort"
+	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 )
 
 // TrainingRuntime is the Schema for the TrainingRuntimes API
@@ -19,27 +20,20 @@ type TrainingRuntime struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TrainingRuntimeSpec   `json:"spec,omitempty"`
-	Status TrainingRuntimeStatus `json:"status,omitempty"`
+	Spec TrainingRuntimeSpec `json:"spec,omitempty"`
 }
 
 // TrainingRuntimeSpec defines the desired state of TrainingRuntime
 // +k8s:openapi-gen=true
 type TrainingRuntimeSpec struct {
-	// Training Framework and version supported by this runtime
-	// Example: MPI, TensorFlow, CohereFinetuning
-	SupportedTrainingFrameworks []TrainingFramework `json:"supportedTrainingFrameworks,omitempty"`
+	// Configuration for the model training with ML-specific parameters.
+	MLPolicy *MLPolicy `json:"mlPolicy,omitempty"`
 
-	// Set to true to disable use of this runtime
-	// +optional
-	Disabled *bool `json:"disabled,omitempty"`
+	// Configuration for the PodGroup to enable gang-scheduling via supported plugins.
+	PodGroupPolicy *PodGroupPolicy `json:"podGroupPolicy,omitempty"`
 
-	// The pod replica template spec
-	*ReplicaSpec `json:",inline"`
-
-	// The target runtime ReplicaType to specify
-	// Example: Launcher, Worker
-	ReplicaType *ReplicaType `json:"replicaType,omitempty"`
+	// JobSet template which will be used by TrainJob.
+	Template JobSetTemplateSpec `json:"template"`
 
 	// Labels that will be added to the runtime spec.
 	// More info: http://kubernetes.io/docs/user-guide/labels
@@ -56,29 +50,116 @@ type TrainingRuntimeSpec struct {
 	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
-// TrainingRuntimeStatus defines the observed state of TrainingRuntime
-// +k8s:openapi-gen=true
-type TrainingRuntimeStatus struct {
-	// RuntimeReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify
-	//  the replica current status condition
-	RuntimeReplicaStatus map[ReplicaType]*ReplicaStatus `json:"runtimeReplicaStatus,omitempty"`
+// JobSetTemplateSpec represents a template of the desired JobSet.
+type JobSetTemplateSpec struct {
+	// Metadata for custom JobSet's labels and annotations.
+	// JobSet name and namespace is equal to the TrainJob's name and namespace.
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Represents any details about the training runtime
-	Details string `json:"details,omitempty"`
+	// Specification of the desired JobSet which will be created from TrainJob.
+	Spec jobsetv1alpha2.JobSetSpec `json:"spec,omitempty"`
 }
 
-func (trSpec *TrainingRuntimeSpec) IsDisabled() bool {
-	return trSpec.Disabled != nil && *trSpec.Disabled
+// PodGroupPolicy represents a PodGroup configuration for gang-scheduling.
+type PodGroupPolicy struct {
+	// Coscheduling plugin from the Kubernetes scheduler-plugins for gang-scheduling.
+	CoschedulingPodGroupPolicyConfig *CoschedulingPodGroupPolicyConfig `json:"coscheduling,omitempty"`
+
+	// Todo: Add support for Volcano gang-scheduler if necessary.
 }
 
-func (trSpec *TrainingRuntimeSpec) IsTrainingFrameworkSupported(framework TrainingFramework) bool {
-	for _, supportedFramework := range trSpec.SupportedTrainingFrameworks {
-		if supportedFramework.FrameworkType == framework.FrameworkType {
-			return true
-		}
-	}
-	return false
+// CoschedulingPodGroupPolicyConfig represents configuration for co-scheduling plugin.
+// The number of min members in the PodGroupSpec is always equal to the number of nodes.
+type CoschedulingPodGroupPolicyConfig struct {
+	// Time threshold to schedule PodGroup for gang-scheduling.
+	// If the scheduling timeout is equal to 0, the default value is used.
+	// Defaults to 60 seconds.
+	ScheduleTimeoutSeconds *int32 `json:"scheduleTimeoutSeconds,omitempty"`
 }
+
+// MLPolicy represents configuration for the model training with ML-specific parameters.
+type MLPolicy struct {
+	// Number of training nodes.
+	// Defaults to 1.
+	NumNodes *int32 `json:"numNodes,omitempty"`
+
+	// Configuration for the runtime-specific parameters, such as Torch or MPI.
+	// Only one of its members may be specified.
+	MLPolicyConfig `json:",inline"`
+}
+
+// MLPolicyConfig represents the runtime-specific configuration for various technologies.
+// One of the following specs can be set.
+type MLPolicyConfig struct {
+	// Configuration for the PyTorch runtime.
+	Torch *TorchMLPolicyConfig `json:"torch,omitempty"`
+
+	// Configuration for the MPI Runtime.
+	MPI *MPIMLPolicyConfig `json:"mpi,omitempty"`
+}
+
+// TorchMLPolicyConfig represents a PyTorch runtime configuration.
+type TorchMLPolicyConfig struct {
+	// Number of processes per node.
+	// This value is inserted into the `--nproc-per-node` argument of the `torchrun` CLI.
+	// Supported values: `auto`, `cpu`, `gpu`, or int value.
+	// TODO (andreyvelich): Add kubebuilder validation.
+	// Defaults to `auto`.
+	NumProcPerNode *string `json:"numProcPerNode,omitempty"`
+
+	// Elastic policy for the PyTorch training.
+	ElasticPolicy *TorchElasticPolicy `json:"elasticPolicy,omitempty"`
+}
+
+// TorchElasticPolicy represents a configuration for the PyTorch elastic training.
+// If this policy is set, the `.spec.numNodes` parameter must be omitted, since min and max node
+// is used to configure the `torchrun` CLI argument: `--nnodes=minNodes:maxNodes`.
+// Only `c10d` backend is supported for the Rendezvous communication.
+type TorchElasticPolicy struct {
+	// How many times the training job can be restarted.
+	// This value is inserted into the `--max-restarts` argument of the `torchrun` CLI and
+	// the `.spec.failurePolicy.maxRestarts` parameter of the training Job.
+	MaxRestarts *int32 `json:"maxRestarts,omitempty"`
+
+	// Lower limit for the number of nodes to which training job can scale down.
+	MinNodes *int32 `json:"minNodes,omitempty"`
+
+	// Upper limit for the number of nodes to which training job can scale up.
+	MaxNodes *int32 `json:"maxNodes,omitempty"`
+
+	// Specification which are used to calculate the desired number of nodes. See the individual
+	// metric source types for more information about how each type of metric must respond.
+	// The HPA will be created to perform auto-scaling.
+	// +listType=atomic
+	Metrics []autoscalingv2.MetricSpec `json:"metrics,omitempty"`
+}
+
+// MPIMLPolicyConfig represents a MPI runtime configuration.
+type MPIMLPolicyConfig struct {
+	// Number of processes per node.
+	// This value is equal to the number of slots for each node in the hostfile.
+	NumProcPerNode *int32 `json:"numProcPerNode,omitempty"`
+
+	// Implementation name for the MPI to create the appropriate hostfile.
+	// Defaults to OpenMPI.
+	MPIImplementation *MPIImplementation `json:"mpiImplementation,omitempty"`
+
+	// Directory where SSH keys are mounted.
+	SSHAuthMountPath *string `json:"sshAuthMountPath,omitempty"`
+
+	// Whether to run training process on the launcher Job.
+	// Defaults to false.
+	RunLauncherAsNode *bool `json:"runLauncherAsNode,omitempty"`
+}
+
+// MPIImplementation represents one of the supported MPI implementations.
+type MPIImplementation string
+
+const (
+	MPIImplementationOpenMPI MPIImplementation = "OpenMPI"
+	MPIImplementationIntel   MPIImplementation = "Intel"
+	MPIImplementationMPICH   MPIImplementation = "MPICH"
+)
 
 // TrainingRuntimeList contains a list of TrainingRuntime
 // +k8s:openapi-gen=true
@@ -106,8 +187,7 @@ type ClusterTrainingRuntime struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TrainingRuntimeSpec   `json:"spec,omitempty"`
-	Status TrainingRuntimeStatus `json:"status,omitempty"`
+	Spec TrainingRuntimeSpec `json:"spec,omitempty"`
 }
 
 // ClusterTrainingRuntimeList contains a list of ClusterTrainingRuntime
@@ -118,28 +198,4 @@ type ClusterTrainingRuntimeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterTrainingRuntime `json:"items"`
-}
-
-func sortTrainingRuntimeList(runtimes *TrainingRuntimeList) {
-	sort.Slice(runtimes.Items, func(i, j int) bool {
-		if runtimes.Items[i].CreationTimestamp.Before(&runtimes.Items[j].CreationTimestamp) {
-			return false
-		}
-		if runtimes.Items[j].CreationTimestamp.Before(&runtimes.Items[i].CreationTimestamp) {
-			return true
-		}
-		return runtimes.Items[i].Name < runtimes.Items[j].Name
-	})
-}
-
-func sortClusterTrainingRuntimeList(runtimes *ClusterTrainingRuntimeList) {
-	sort.Slice(runtimes.Items, func(i, j int) bool {
-		if runtimes.Items[i].CreationTimestamp.Before(&runtimes.Items[j].CreationTimestamp) {
-			return false
-		}
-		if runtimes.Items[j].CreationTimestamp.Before(&runtimes.Items[i].CreationTimestamp) {
-			return true
-		}
-		return runtimes.Items[i].Name < runtimes.Items[j].Name
-	})
 }

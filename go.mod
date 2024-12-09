@@ -1,6 +1,8 @@
 module bitbucket.oci.oraclecorp.com/genaicore/ome
 
-go 1.22.0
+go 1.23.0
+
+toolchain go1.23.4
 
 require (
 	github.com/gin-gonic/gin v1.10.0
@@ -35,15 +37,16 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	istio.io/api v1.19.4
 	istio.io/client-go v1.19.4
-	k8s.io/api v0.31.0
-	k8s.io/apimachinery v0.31.0
-	k8s.io/apiserver v0.31.0
-	k8s.io/client-go v0.31.0
+	k8s.io/api v0.31.1
+	k8s.io/apimachinery v0.31.1
+	k8s.io/apiserver v0.31.1
+	k8s.io/client-go v0.31.1
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340
+	k8s.io/kube-openapi v0.0.0-20240430033511-f0e62f92d13f
 	knative.dev/pkg v0.0.0-20231115001034-97c7258e3a98
 	knative.dev/serving v0.39.3
 	sigs.k8s.io/controller-runtime v0.19.1
+	sigs.k8s.io/jobset v0.7.1
 	sigs.k8s.io/yaml v1.4.0
 	volcano.sh/apis v1.9.0
 )
@@ -69,7 +72,7 @@ require (
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
+	github.com/emicklei/go-restful/v3 v3.12.0 // indirect
 	github.com/evanphx/json-patch v5.7.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -81,9 +84,9 @@ require (
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
-	github.com/go-openapi/jsonpointer v0.20.0 // indirect
-	github.com/go-openapi/jsonreference v0.20.2 // indirect
-	github.com/go-openapi/swag v0.22.4 // indirect
+	github.com/go-openapi/jsonpointer v0.21.0 // indirect
+	github.com/go-openapi/jsonreference v0.21.0 // indirect
+	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
@@ -152,7 +155,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect
-	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
+	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
@@ -170,7 +173,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.31.0 // indirect
-	k8s.io/component-base v0.31.0 // indirect
+	k8s.io/component-base v0.31.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8 // indirect
 	knative.dev/networking v0.0.0-20231115015815-3af9769712cd // indirect

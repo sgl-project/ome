@@ -1,15 +1,9 @@
 package v1beta1
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"context"
-	"encoding/json"
-	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // TrainingJob is the Schema for the TrainingJobs API
@@ -29,57 +23,150 @@ type TrainingJob struct {
 // TrainingJobSpec defines the base job spec which various training job specs implement.
 // It defines the desired state of a training job
 type TrainingJobSpec struct {
-	// +required Specific ClusterBaseModel/BaseModel name to use for hosting the model.
-	BaseModel *string `json:"baseModel,omitempty"`
+	// Trainer defines the trainer to use for the training job.
+	// +required
+	Trainer *TrainerSpec `json:"trainer,omitempty"`
 
-	// Specific training framework to use for the training job.
-	TrainingFramework *TrainingFramework `json:"trainingFramework,omitempty"`
+	// ModelConfig defines the model configuration for the training job.
+	// +required
+	ModelConfig *ModelConfig `json:"modelConfig,omitempty"`
 
-	// Hyperparameters for training job
-	Hyperparameters runtime.RawExtension `json:"hyperparameters,omitempty"`
+	// Datasets defines the datasets for the training job.
+	// +required
+	Datasets []*Storage `json:"datasetsSpecs,omitempty"`
 
-	// Data for training and validation
-	Datasets map[constants.DatasetType]*Storage `json:"datasetsSpecs,omitempty"`
+	// HyperparameterTuningConfig defines the hyperparameter configuration and tuning strategy
+	HyperparameterTuningConfig *HyperparameterTuningConfig `json:"hyperparameterConfig,omitempty"`
 
-	// OutputLocation: define the location where training output stores. Checkpointing etc.
-	OutputLocation Storage `json:"outputLocation,omitempty"`
+	// Labels to apply for the derivative JobSet and Jobs.
+	// They will be merged with the TrainingRuntime values.
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Annotations to apply for the derivative JobSet and Jobs.
+	// They will be merged with the TrainingRuntime values.
+	Annotations map[string]string `json:"annotations,omitempty"`
 
 	// The compartment ID to use for the training job
 	// +optional
 	CompartmentID string `json:"compartmentID,omitempty"`
 }
 
+type TrainerSpec struct {
+	// Runtime defines the training runtime to use for the training job.
+	// +optional
+	Runtime *string `json:"runtime,omitempty"`
+
+	// Docker image for the training container.
+	Image *string `json:"image,omitempty"`
+
+	// Entrypoint commands for the training container.
+	// +listType=atomic
+	Command []string `json:"command,omitempty"`
+
+	// Arguments to the entrypoint for the training container.
+	// +listType=atomic
+	Args []string `json:"args,omitempty"`
+
+	// List of environment variables to set in the training container.
+	// These values will be merged with the TrainingRuntime's trainer environments.
+	// +listType=map
+	// +listMapKey=name
+	Env []v1.EnvVar `json:"env,omitempty"`
+
+	// Number of training nodes.
+	NumNodes *int32 `json:"numNodes,omitempty"`
+
+	// Compute resources for each training node.
+	ResourcesPerNode *v1.ResourceRequirements `json:"resourcesPerNode,omitempty"`
+
+	// Number of processes/workers/slots on every training node.
+	// For the Torch runtime: `auto`, `cpu`, `gpu`, or int value can be set.
+	// For the MPI runtime only int value can be set.
+	NumProcPerNode *string `json:"numProcPerNode,omitempty"`
+}
+
+type HyperparameterTuningConfig struct {
+	// Method specifies the search algorithm to use (grid, random, bayes)
+	// +kubebuilder:validation:Enum=grid;random;bayes
+	Method string `json:"method"`
+
+	// Metric defines the objective metric to optimize
+	Metric MetricConfig `json:"metric"`
+
+	// Parameters defines the hyperparameters and their search spaces
+	Parameters runtime.RawExtension `json:"parameters"`
+
+	// MaxTrials specifies the maximum number of trials to run
+	// +optional
+	MaxTrials *int32 `json:"maxTrials,omitempty"`
+}
+
+// MetricConfig defines the metric to optimize during hyperparameter tuning
+type MetricConfig struct {
+	// Name of the metric
+	Name string `json:"name"`
+
+	// Goal indicates whether to minimize or maximize the metric
+	// +kubebuilder:validation:Enum=minimize;maximize
+	Goal string `json:"goal"`
+}
+
+type ModelConfig struct {
+	// InputModel defines where the input model stores. Todo: support generic model storage
+	InputModel *string `json:"inputModel,omitempty"`
+
+	// OutputModel defines where the finetune weight (output model) stores.
+	OutputModel *Storage `json:"outputModel,omitempty"`
+}
+
 type TrainingJobStatus struct {
-	// JobReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify
-	//  the replica current status condition
-	JobReplicaStatus map[ReplicaType]*ReplicaStatus `json:"jobReplicaStatus,omitempty"`
+	// JobsStatus tracks the child Jobs in TrainJob.
+	// +listType=map
+	// +listMapKey=name
+	JobsStatus []JobStatus `json:"jobsStatus,omitempty"`
 
 	// Conditions is an array of current observed job conditions.
-	Conditions []JobCondition `json:"conditions,omitempty"`
-
-	// Details represent any information about the training job
-	Details string `json:"details,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// RetryCount represents the number of retries the training job has performed
 	RetryCount int `json:"retryCount,omitempty"`
 
-	// Represents time when the training job is acknowledged by the controller.
+	// StartTime represents time when the training job is acknowledged by the controller.
 	// It is not guaranteed to be set in happens-before order across separate operations.
 	// It is represented in RFC3339 form and is in UTC.
 	StartTime *metav1.Time `json:"startTime,omitempty"`
 
-	// Represents time when the training job is completed. It is not guaranteed to
+	// CompletionTime represents time when the training job is completed. It is not guaranteed to
 	// be set in happens-before order across separate operations.
 	// It is represented in RFC3339 form and is in UTC.
 	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
 
-	// Represents last time when the job was reconciled. It is not guaranteed to
+	// LastReconcileTime represents last time when the job was reconciled. It is not guaranteed to
 	// be set in happens-before order across separate operations.
 	// It is represented in RFC3339 form and is in UTC.
 	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
+}
 
-	// FinetunedWeight reference to the finetuned model being produced
-	FinetunedWeightRef ObjectReference `json:"finetunedWeightRef,omitempty"`
+type JobStatus struct {
+	// Name of the child Job.
+	Name string `json:"name"`
+
+	// Ready is the number of child Jobs where the number of ready pods and completed pods
+	// is greater than or equal to the total expected pod count for the child Job.
+	Ready int32 `json:"ready"`
+
+	// Succeeded is the number of successfully completed child Jobs.
+	Succeeded int32 `json:"succeeded"`
+
+	// Failed is the number of failed child Jobs.
+	Failed int32 `json:"failed"`
+
+	// Active is the number of child Jobs with at least 1 pod in a running or pending state
+	// which are not marked for deletion.
+	Active int32 `json:"active"`
+
+	// Suspended is the number of child Jobs which are in a suspended state.
+	Suspended int32 `json:"suspended"`
 }
 
 // TrainingJobList contains a list of TrainingJob
@@ -90,75 +177,4 @@ type TrainingJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TrainingJob `json:"items"`
-}
-
-func (tjs *TrainingJobStatus) GetLatestTrainingJobConditionType() JobConditionType {
-	return tjs.Conditions[len(tjs.Conditions)-1].Type
-}
-
-func (tjs *TrainingJobStatus) IsTrainingJobConditionEmpty() bool {
-	return len(tjs.Conditions) == 0
-}
-
-func (tjs *TrainingJobStatus) IncrementRetry() {
-	tjs.RetryCount = tjs.RetryCount + 1
-}
-
-func (tjs *TrainingJobStatus) UpdateJobStatus(conditionType JobConditionType, details string) {
-	jobCondition := JobCondition{
-		Type:   conditionType,
-		Status: v1.ConditionTrue,
-	}
-	tjs.Conditions = append(tjs.Conditions, jobCondition)
-	tjs.Details = details
-}
-
-// GetBaseModel Get the base model from the given model name.
-func (tjs *TrainingJobSpec) GetBaseModel(cl client.Client, name string, namespace string) (*BaseModel, error) {
-	baseModel := &BaseModel{}
-	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
-	if err == nil {
-		return baseModel, nil
-	} else if !errors.IsNotFound(err) {
-		return nil, err
-	}
-	return nil, goerrors.New("No BaseModel with the name: " + name)
-}
-
-func (tjs *TrainingJobSpec) GetDatasets() *map[constants.DatasetType]*Storage {
-	return &tjs.Datasets
-}
-
-func (tjs *TrainingJobSpec) GetModelStorage() *Storage {
-	return &tjs.OutputLocation
-}
-
-func (tjs *TrainingJobSpec) GetHyperparameters() *runtime.RawExtension {
-	return &tjs.Hyperparameters
-}
-
-func GetHyperparameterValueByKey(hyperparameters *runtime.RawExtension, targetKey string) string {
-	data, err := json.Marshal(hyperparameters)
-	if err != nil {
-		return ""
-	}
-
-	kvmap := make(map[string]json.RawMessage)
-
-	e := json.Unmarshal(data, &kvmap)
-	if e != nil {
-		return ""
-	}
-
-	val, ok := kvmap[targetKey]
-	if !ok {
-		return ""
-	}
-
-	valStr, err := json.Marshal(&val)
-	if err != nil {
-		return ""
-	}
-
-	return string(valStr)
 }

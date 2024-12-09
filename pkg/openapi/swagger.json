@@ -735,10 +735,6 @@
         "spec": {
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeSpec"
-        },
-        "status": {
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeStatus"
         }
       }
     },
@@ -767,46 +763,6 @@
         "metadata": {
           "default": {},
           "$ref": "#/definitions/v1.ListMeta"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CohereTrainingJobSpec": {
-      "description": "CohereTrainingJobSpec defines configuration shared across all cohere runtimes",
-      "type": "object",
-      "properties": {
-        "baseModel": {
-          "type": "string"
-        },
-        "compartmentID": {
-          "description": "The compartment ID to use for the training job",
-          "type": "string"
-        },
-        "datasetsSpecs": {
-          "description": "Data for training and validation",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-          }
-        },
-        "hyperparameters": {
-          "description": "Hyperparameters for training job",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
-        },
-        "outputLocation": {
-          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-        },
-        "replicaSpecs": {
-          "description": "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaSpec"
-          }
-        },
-        "trainingFramework": {
-          "description": "Specific training framework to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
         }
       }
     },
@@ -916,6 +872,17 @@
         "url": {
           "description": "URL holds the primary url that will distribute traffic over the provided traffic targets. This will be one the REST or gRPC endpoints that are available. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
           "$ref": "#/definitions/knative.URL"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CoschedulingPodGroupPolicyConfig": {
+      "description": "CoschedulingPodGroupPolicyConfig represents configuration for co-scheduling plugin. The number of min members in the PodGroupSpec is always equal to the number of nodes.",
+      "type": "object",
+      "properties": {
+        "scheduleTimeoutSeconds": {
+          "description": "Time threshold to schedule PodGroup for gang-scheduling. If the scheduling timeout is equal to 0, the default value is used. Defaults to 60 seconds.",
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -1140,7 +1107,7 @@
           "type": "string"
         },
         "setHostnameAsFQDN": {
-          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
           "type": "boolean"
         },
         "shareProcessNamespace": {
@@ -1460,63 +1427,6 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ElasticPolicy": {
-      "type": "object",
-      "properties": {
-        "maxReplicas": {
-          "description": "upper limit for the number of pods that can be set by the autoscaler; cannot be smaller than MinReplicas, defaults to null.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "maxRestarts": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "metrics": {
-          "description": "Metrics contains the specifications which are used to calculate the desired replica count (the maximum replica count across all metrics will be used).  The desired replica count is calculated with multiplying the ratio between the target value and the current value by the current number of pods. Ergo, metrics used must decrease as the pod count is increased, and vice versa.  See the individual metric source types for more information about how each type of metric must respond. If not set, the HPA will not be created.",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/k8s.io.api.autoscaling.v2.MetricSpec"
-          }
-        },
-        "minReplicas": {
-          "description": "minReplicas is the lower limit for the number of replicas to which the training job can scale down.  It defaults to null.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "nProcPerNode": {
-          "description": "Number of workers per node; supported values: [auto, cpu, gpu, int]. Deprecated: This API is deprecated in v1.7+ Use .spec.nprocPerNode instead.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "rdzvBackend": {
-          "type": "string"
-        },
-        "rdzvConf": {
-          "description": "RDZVConf contains additional rendezvous configuration (\u003ckey1\u003e=\u003cvalue1\u003e,\u003ckey2\u003e=\u003cvalue2\u003e,...).",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RDZVConf"
-          }
-        },
-        "rdzvHost": {
-          "type": "string"
-        },
-        "rdzvId": {
-          "type": "string"
-        },
-        "rdzvPort": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "standalone": {
-          "description": "Start a local standalone rendezvous backend that is represented by a C10d TCP store on port 29400. Useful when launching single-node, multi-worker job. If specified --rdzv_backend, --rdzv_endpoint, --rdzv_id are auto-assigned; any explicitly set values are ignored.",
-          "type": "boolean"
-        }
-      }
-    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Endpoint": {
       "description": "Endpoint defines a direct URL-based inference service with additional API configuration.",
       "type": "object",
@@ -1680,6 +1590,35 @@
         },
         "version": {
           "type": "string"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HyperparameterTuningConfig": {
+      "type": "object",
+      "required": [
+        "method",
+        "metric",
+        "parameters"
+      ],
+      "properties": {
+        "maxTrials": {
+          "description": "MaxTrials specifies the maximum number of trials to run",
+          "type": "integer",
+          "format": "int32"
+        },
+        "method": {
+          "description": "Method specifies the search algorithm to use (grid, random, bayes)",
+          "type": "string",
+          "default": ""
+        },
+        "metric": {
+          "description": "Metric defines the objective metric to optimize",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MetricConfig"
+        },
+        "parameters": {
+          "description": "Parameters defines the hyperparameters and their search spaces",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         }
       }
     },
@@ -1888,39 +1827,67 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobCondition": {
-      "description": "JobCondition describes the state of the job at a certain point.",
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobSetTemplateSpec": {
+      "description": "JobSetTemplateSpec represents a template of the desired JobSet.",
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "description": "Metadata for custom JobSet's labels and annotations. JobSet name and namespace is equal to the TrainJob's name and namespace.",
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "description": "Specification of the desired JobSet which will be created from TrainJob.",
+          "default": {},
+          "$ref": "#/definitions/sigs.k8s.io.jobset.api.jobset.v1alpha2.JobSetSpec"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobStatus": {
       "type": "object",
       "required": [
-        "type",
-        "status"
+        "name",
+        "ready",
+        "succeeded",
+        "failed",
+        "active",
+        "suspended"
       ],
       "properties": {
-        "lastTransitionTime": {
-          "description": "Last time the condition transitioned from one status to another.",
-          "$ref": "#/definitions/v1.Time"
+        "active": {
+          "description": "Active is the number of child Jobs with at least 1 pod in a running or pending state which are not marked for deletion.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
         },
-        "lastUpdateTime": {
-          "description": "The last time this condition was updated.",
-          "$ref": "#/definitions/v1.Time"
+        "failed": {
+          "description": "Failed is the number of failed child Jobs.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
         },
-        "message": {
-          "description": "A human-readable message indicating details about the transition.",
-          "type": "string"
-        },
-        "reason": {
-          "description": "The reason for the condition's last transition.",
-          "type": "string"
-        },
-        "status": {
-          "description": "Status of the condition, one of True, False, Unknown.",
+        "name": {
+          "description": "Name of the child Job.",
           "type": "string",
           "default": ""
         },
-        "type": {
-          "description": "Type of job condition.",
-          "type": "string",
-          "default": ""
+        "ready": {
+          "description": "Ready is the number of child Jobs where the number of ready pods and completed pods is greater than or equal to the total expected pod count for the child Job.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "succeeded": {
+          "description": "Succeeded is the number of successfully completed child Jobs.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "suspended": {
+          "description": "Suspended is the number of child Jobs which are in a suspended state.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
         }
       }
     },
@@ -1984,61 +1951,92 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPITrainingJobSpec": {
-      "description": "MPITrainingJobSpec defines arguments for configuring MPI model training",
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MLPolicy": {
+      "description": "MLPolicy represents configuration for the model training with ML-specific parameters.",
       "type": "object",
       "properties": {
-        "baseModel": {
-          "type": "string"
+        "mpi": {
+          "description": "Configuration for the MPI Runtime.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPIMLPolicyConfig"
         },
-        "cleanPodPolicy": {
-          "description": "CleanPodPolicy defines the policy that whether to kill pods after the job completes. Defaults to None.",
-          "type": "string"
-        },
-        "compartmentID": {
-          "description": "The compartment ID to use for the training job",
-          "type": "string"
-        },
-        "datasetsSpecs": {
-          "description": "Data for training and validation",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-          }
-        },
-        "hyperparameters": {
-          "description": "Hyperparameters for training job",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
-        },
-        "mainContainer": {
-          "description": "MainContainer specifies name of the main container which executes the MPI code.",
-          "type": "string"
-        },
-        "mpiReplicaSpecs": {
-          "description": "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the MPI replicas to run.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaSpec"
-          }
-        },
-        "outputLocation": {
-          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-        },
-        "runPolicy": {
-          "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RunPolicy"
-        },
-        "slotsPerWorker": {
-          "description": "Specifies the number of slots per worker used in hostfile. Defaults to 1.",
+        "numNodes": {
+          "description": "Number of training nodes. Defaults to 1.",
           "type": "integer",
           "format": "int32"
         },
-        "trainingFramework": {
-          "description": "Specific training framework to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
+        "torch": {
+          "description": "Configuration for the PyTorch runtime.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchMLPolicyConfig"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MLPolicyConfig": {
+      "description": "MLPolicyConfig represents the runtime-specific configuration for various technologies. One of the following specs can be set.",
+      "type": "object",
+      "properties": {
+        "mpi": {
+          "description": "Configuration for the MPI Runtime.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPIMLPolicyConfig"
+        },
+        "torch": {
+          "description": "Configuration for the PyTorch runtime.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchMLPolicyConfig"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPIMLPolicyConfig": {
+      "description": "MPIMLPolicyConfig represents a MPI runtime configuration.",
+      "type": "object",
+      "properties": {
+        "mpiImplementation": {
+          "description": "Implementation name for the MPI to create the appropriate hostfile. Defaults to OpenMPI.",
+          "type": "string"
+        },
+        "numProcPerNode": {
+          "description": "Number of processes per node. This value is equal to the number of slots for each node in the hostfile.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "runLauncherAsNode": {
+          "description": "Whether to run training process on the launcher Job. Defaults to false.",
+          "type": "boolean"
+        },
+        "sshAuthMountPath": {
+          "description": "Directory where SSH keys are mounted.",
+          "type": "string"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MetricConfig": {
+      "description": "MetricConfig defines the metric to optimize during hyperparameter tuning",
+      "type": "object",
+      "required": [
+        "name",
+        "goal"
+      ],
+      "properties": {
+        "goal": {
+          "description": "Goal indicates whether to minimize or maximize the metric",
+          "type": "string",
+          "default": ""
+        },
+        "name": {
+          "description": "Name of the metric",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelConfig": {
+      "type": "object",
+      "properties": {
+        "inputModel": {
+          "description": "InputModel defines where the input model stores. Todo: support generic model storage",
+          "type": "string"
+        },
+        "outputModel": {
+          "description": "OutputModel defines where the finetune weight (output model) stores.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
         }
       }
     },
@@ -2566,42 +2564,13 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PeftTrainingJobSpec": {
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodGroupPolicy": {
+      "description": "PodGroupPolicy represents a PodGroup configuration for gang-scheduling.",
       "type": "object",
       "properties": {
-        "baseModel": {
-          "type": "string"
-        },
-        "compartmentID": {
-          "description": "The compartment ID to use for the training job",
-          "type": "string"
-        },
-        "datasetsSpecs": {
-          "description": "Data for training and validation",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-          }
-        },
-        "hyperparameters": {
-          "description": "Hyperparameters for training job",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
-        },
-        "outputLocation": {
-          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-        },
-        "peftFineTuningReplicaSpecs": {
-          "description": "ReplicaSpecs contains maps from `ReplicaType` to `ReplicaSpec` that specify the Training replicas to run.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaSpec"
-          }
-        },
-        "trainingFramework": {
-          "description": "Specific training framework to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
+        "coscheduling": {
+          "description": "Coscheduling plugin from the Kubernetes scheduler-plugins for gang-scheduling.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CoschedulingPodGroupPolicyConfig"
         }
       }
     },
@@ -2802,7 +2771,7 @@
           "type": "string"
         },
         "setHostnameAsFQDN": {
-          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
           "type": "boolean"
         },
         "shareProcessNamespace": {
@@ -3287,7 +3256,7 @@
           "type": "string"
         },
         "setHostnameAsFQDN": {
-          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
           "type": "boolean"
         },
         "shareProcessNamespace": {
@@ -3345,181 +3314,6 @@
           "description": "WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster",
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.WorkerSpec"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PyTorchTrainingJobSpec": {
-      "description": "PyTorchTrainingJobSpec is a desired state description of the PyTorchJob.",
-      "type": "object",
-      "required": [
-        "runPolicy",
-        "pytorchReplicaSpecs"
-      ],
-      "properties": {
-        "baseModel": {
-          "type": "string"
-        },
-        "compartmentID": {
-          "description": "The compartment ID to use for the training job",
-          "type": "string"
-        },
-        "datasetsSpecs": {
-          "description": "Data for training and validation",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-          }
-        },
-        "elasticPolicy": {
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ElasticPolicy"
-        },
-        "hyperparameters": {
-          "description": "Hyperparameters for training job",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
-        },
-        "nprocPerNode": {
-          "description": "Number of workers per node; supported values: [auto, cpu, gpu, int]. For more, https://github.com/pytorch/pytorch/blob/26f7f470df64d90e092081e39507e4ac751f55d6/torch/distributed/run.py#L629-L658. Defaults to auto.",
-          "type": "string"
-        },
-        "outputLocation": {
-          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-        },
-        "pytorchReplicaSpecs": {
-          "description": "A map of PyTorchReplicaType (type) to ReplicaSpec (value). Specifies the PyTorch cluster configuration. For example,\n  {\n    \"Master\": PyTorchReplicaSpec,\n    \"Worker\": PyTorchReplicaSpec,\n  }",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaSpec"
-          }
-        },
-        "runPolicy": {
-          "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RunPolicy"
-        },
-        "trainingFramework": {
-          "description": "Specific training framework to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RDZVConf": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaSpec": {
-      "description": "ReplicaSpec is a description of the replica",
-      "type": "object",
-      "properties": {
-        "replicaCount": {
-          "description": "Replicas is the desired number of replicas of the given template. If unspecified, defaults to 1.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "restartPolicy": {
-          "description": "Restart policy for all replicas within the job. One of Always, OnFailure, Never and ExitCode. Default to Never.",
-          "type": "string"
-        },
-        "template": {
-          "description": "Template is the object that describes the pod that will be created for this replica. RestartPolicy in PodTemplateSpec will be overridden by RestartPolicy in ReplicaSpec",
-          "default": {},
-          "$ref": "#/definitions/v1.PodTemplateSpec"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaStatus": {
-      "description": "ReplicaStatus represents the current observed state of the replica.",
-      "type": "object",
-      "properties": {
-        "activePodCount": {
-          "description": "The number of actively running pods.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "failedPodCount": {
-          "description": "The number of pods which reached phase Failed.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "replicaStatusType": {
-          "description": "Represents current status state of the replica",
-          "type": "string"
-        },
-        "selector": {
-          "description": "A Selector is a label query over a set of resources. The result of matchLabels and matchExpressions are ANDed. An empty Selector matches all objects. A null Selector matches no objects.",
-          "type": "string"
-        },
-        "succeededPodCount": {
-          "description": "The number of pods which reached phase Succeeded.",
-          "type": "integer",
-          "format": "int32"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RunPolicy": {
-      "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-      "type": "object",
-      "properties": {
-        "activeDeadlineSeconds": {
-          "description": "Specifies the duration in seconds relative to the startTime that the job may be active before the system tries to terminate it; value must be positive integer.",
-          "type": "integer",
-          "format": "int64"
-        },
-        "backoffLimit": {
-          "description": "Optional number of retries before marking this job failed.",
-          "type": "integer",
-          "format": "int32"
-        },
-        "cleanPodPolicy": {
-          "description": "CleanPodPolicy defines the policy to kill pods after the job completes. Default to None.",
-          "type": "string"
-        },
-        "schedulingPolicy": {
-          "description": "SchedulingPolicy defines the policy related to scheduling, e.g. gang-scheduling",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SchedulingPolicy"
-        },
-        "suspend": {
-          "description": "suspend specifies whether the Job controller should create Pods or not. If a Job is created with suspend set to true, no Pods are created by the Job controller. If a Job is suspended after creation (i.e. the flag goes from false to true), the Job controller will delete all active Pods and PodGroups associated with this Job. Users must design their workload to gracefully handle this. Suspending a Job will reset the StartTime field of the Job.\n\nDefaults to false.",
-          "type": "boolean"
-        },
-        "ttlSecondsAfterFinished": {
-          "description": "TTLSecondsAfterFinished is the TTL to clean up jobs. It may take extra ReconcilePeriod seconds for the cleanup, since reconcile gets called periodically. Default to infinite.",
-          "type": "integer",
-          "format": "int32"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SchedulingPolicy": {
-      "description": "SchedulingPolicy encapsulates various scheduling policies of the distributed training job, for example `minAvailable` for gang-scheduling.",
-      "type": "object",
-      "properties": {
-        "minAvailable": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "minResources": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/resource.Quantity"
-          }
-        },
-        "priorityClass": {
-          "type": "string"
-        },
-        "queue": {
-          "type": "string"
-        },
-        "scheduleTimeoutSeconds": {
-          "type": "integer",
-          "format": "int32"
         }
       }
     },
@@ -3932,83 +3726,102 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TensorFlowTrainingJobSpec": {
-      "description": "TensorFlowTrainingJobSpec is a desired state description of the TFJob.",
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchElasticPolicy": {
+      "description": "TorchElasticPolicy represents a configuration for the PyTorch elastic training. If this policy is set, the `.spec.numNodes` parameter must be omitted, since min and max node is used to configure the `torchrun` CLI argument: `--nnodes=minNodes:maxNodes`. Only `c10d` backend is supported for the Rendezvous communication.",
       "type": "object",
-      "required": [
-        "runPolicy",
-        "tfReplicaSpecs"
-      ],
       "properties": {
-        "baseModel": {
-          "type": "string"
+        "maxNodes": {
+          "description": "Upper limit for the number of nodes to which training job can scale up.",
+          "type": "integer",
+          "format": "int32"
         },
-        "compartmentID": {
-          "description": "The compartment ID to use for the training job",
-          "type": "string"
+        "maxRestarts": {
+          "description": "How many times the training job can be restarted. This value is inserted into the `--max-restarts` argument of the `torchrun` CLI and the `.spec.failurePolicy.maxRestarts` parameter of the training Job.",
+          "type": "integer",
+          "format": "int32"
         },
-        "datasetsSpecs": {
-          "description": "Data for training and validation",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-          }
+        "metrics": {
+          "description": "Specification which are used to calculate the desired number of nodes. See the individual metric source types for more information about how each type of metric must respond. The HPA will be created to perform auto-scaling.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/k8s.io.api.autoscaling.v2.MetricSpec"
+          },
+          "x-kubernetes-list-type": "atomic"
         },
-        "enableDynamicWorker": {
-          "description": "A switch to enable dynamic worker",
-          "type": "boolean"
-        },
-        "hyperparameters": {
-          "description": "Hyperparameters for training job",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
-        },
-        "outputLocation": {
-          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
-        },
-        "runPolicy": {
-          "description": "RunPolicy encapsulates various runtime policies of the distributed training job, for example how to clean up resources and how long the job can stay active.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RunPolicy"
-        },
-        "successPolicy": {
-          "description": "SuccessPolicy defines the policy to mark the TFJob as succeeded. Default to \"\", using the default rules.",
-          "type": "string"
-        },
-        "tfReplicaSpecs": {
-          "description": "A map of TFReplicaType (type) to ReplicaSpec (value). Specifies the TF cluster configuration. For example,\n  {\n    \"PS\": ReplicaSpec,\n    \"Worker\": ReplicaSpec,\n  }",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaSpec"
-          }
-        },
-        "trainingFramework": {
-          "description": "Specific training framework to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
+        "minNodes": {
+          "description": "Lower limit for the number of nodes to which training job can scale down.",
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework": {
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchMLPolicyConfig": {
+      "description": "TorchMLPolicyConfig represents a PyTorch runtime configuration.",
       "type": "object",
-      "required": [
-        "framework"
-      ],
       "properties": {
-        "framework": {
-          "description": "Name of the training framework.",
-          "type": "string",
-          "default": ""
+        "elasticPolicy": {
+          "description": "Elastic policy for the PyTorch training.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchElasticPolicy"
         },
-        "runtimes": {
-          "description": "Used training runtime against `ReplicaType` of current training framework.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
+        "numProcPerNode": {
+          "description": "Number of processes per node. This value is inserted into the `--nproc-per-node` argument of the `torchrun` CLI. Supported values: `auto`, `cpu`, `gpu`, or int value. Defaults to `auto`.",
+          "type": "string"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainerSpec": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments to the entrypoint for the training container.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
         },
-        "version": {
-          "description": "Version of training framework. Used in validating that a trainer is supported by a runtime. Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
+        "command": {
+          "description": "Entrypoint commands for the training container.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "env": {
+          "description": "List of environment variables to set in the training container. These values will be merged with the TrainingRuntime's trainer environments.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.EnvVar"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "image": {
+          "description": "Docker image for the training container.",
+          "type": "string"
+        },
+        "numNodes": {
+          "description": "Number of training nodes.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "numProcPerNode": {
+          "description": "Number of processes/workers/slots on every training node. For the Torch runtime: `auto`, `cpu`, `gpu`, or int value can be set. For the MPI runtime only int value can be set.",
+          "type": "string"
+        },
+        "resourcesPerNode": {
+          "description": "Compute resources for each training node.",
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "runtime": {
+          "description": "Runtime defines the training runtime to use for the training job.",
           "type": "string"
         }
       }
@@ -4070,33 +3883,50 @@
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJobSpec": {
       "description": "TrainingJobSpec defines the base job spec which various training job specs implement. It defines the desired state of a training job",
       "type": "object",
+      "required": [
+        "trainer",
+        "modelConfig",
+        "datasetsSpecs"
+      ],
       "properties": {
-        "baseModel": {
-          "type": "string"
+        "annotations": {
+          "description": "Annotations to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
         },
         "compartmentID": {
           "description": "The compartment ID to use for the training job",
           "type": "string"
         },
         "datasetsSpecs": {
-          "description": "Data for training and validation",
-          "type": "object",
-          "additionalProperties": {
+          "description": "Datasets defines the datasets for the training job.",
+          "type": "array",
+          "items": {
             "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
           }
         },
-        "hyperparameters": {
-          "description": "Hyperparameters for training job",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
+        "hyperparameterConfig": {
+          "description": "HyperparameterTuningConfig defines the hyperparameter configuration and tuning strategy",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HyperparameterTuningConfig"
         },
-        "outputLocation": {
-          "description": "OutputLocation: define the location where training output stores. Checkpointing etc.",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
+        "labels": {
+          "description": "Labels to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
         },
-        "trainingFramework": {
-          "description": "Specific training framework to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
+        "modelConfig": {
+          "description": "ModelConfig defines the model configuration for the training job.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelConfig"
+        },
+        "trainer": {
+          "description": "Trainer defines the trainer to use for the training job.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainerSpec"
         }
       }
     },
@@ -4104,7 +3934,7 @@
       "type": "object",
       "properties": {
         "completionTime": {
-          "description": "Represents time when the training job is completed. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+          "description": "CompletionTime represents time when the training job is completed. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
           "$ref": "#/definitions/v1.Time"
         },
         "conditions": {
@@ -4112,27 +3942,23 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobCondition"
+            "$ref": "#/definitions/v1.Condition"
           }
         },
-        "details": {
-          "description": "Details represent any information about the training job",
-          "type": "string"
-        },
-        "finetunedWeightRef": {
-          "description": "FinetunedWeight reference to the finetuned model being produced",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ObjectReference"
-        },
-        "jobReplicaStatus": {
-          "description": "JobReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaStatus"
-          }
+        "jobsStatus": {
+          "description": "JobsStatus tracks the child Jobs in TrainJob.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobStatus"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "lastReconcileTime": {
-          "description": "Represents last time when the job was reconciled. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+          "description": "LastReconcileTime represents last time when the job was reconciled. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
           "$ref": "#/definitions/v1.Time"
         },
         "retryCount": {
@@ -4141,7 +3967,7 @@
           "format": "int32"
         },
         "startTime": {
-          "description": "Represents time when the training job is acknowledged by the controller. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
+          "description": "StartTime represents time when the training job is acknowledged by the controller. It is not guaranteed to be set in happens-before order across separate operations. It is represented in RFC3339 form and is in UTC.",
           "$ref": "#/definitions/v1.Time"
         }
       }
@@ -4165,10 +3991,6 @@
         "spec": {
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeSpec"
-        },
-        "status": {
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeStatus"
         }
       }
     },
@@ -4203,6 +4025,9 @@
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeSpec": {
       "description": "TrainingRuntimeSpec defines the desired state of TrainingRuntime",
       "type": "object",
+      "required": [
+        "template"
+      ],
       "properties": {
         "annotations": {
           "description": "Annotations that will be added to the runtime spec. More info: http://kubernetes.io/docs/user-guide/annotations",
@@ -4216,10 +4041,6 @@
           "description": "The compartment ID to use for the training runtime",
           "type": "string"
         },
-        "disabled": {
-          "description": "Set to true to disable use of this runtime",
-          "type": "boolean"
-        },
         "labels": {
           "description": "Labels that will be added to the runtime spec. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
@@ -4228,48 +4049,18 @@
             "default": ""
           }
         },
-        "replicaCount": {
-          "description": "Replicas is the desired number of replicas of the given template. If unspecified, defaults to 1.",
-          "type": "integer",
-          "format": "int32"
+        "mlPolicy": {
+          "description": "Configuration for the model training with ML-specific parameters.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MLPolicy"
         },
-        "replicaType": {
-          "description": "The target runtime ReplicaType to specify Example: Launcher, Worker",
-          "type": "string"
-        },
-        "restartPolicy": {
-          "description": "Restart policy for all replicas within the job. One of Always, OnFailure, Never and ExitCode. Default to Never.",
-          "type": "string"
-        },
-        "supportedTrainingFrameworks": {
-          "description": "Training Framework and version supported by this runtime Example: MPI, TensorFlow, CohereFinetuning",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingFramework"
-          }
+        "podGroupPolicy": {
+          "description": "Configuration for the PodGroup to enable gang-scheduling via supported plugins.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodGroupPolicy"
         },
         "template": {
-          "description": "Template is the object that describes the pod that will be created for this replica. RestartPolicy in PodTemplateSpec will be overridden by RestartPolicy in ReplicaSpec",
+          "description": "JobSet template which will be used by TrainJob.",
           "default": {},
-          "$ref": "#/definitions/v1.PodTemplateSpec"
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeStatus": {
-      "description": "TrainingRuntimeStatus defines the observed state of TrainingRuntime",
-      "type": "object",
-      "properties": {
-        "details": {
-          "description": "Represents any details about the training runtime",
-          "type": "string"
-        },
-        "runtimeReplicaStatus": {
-          "description": "RuntimeReplicaStatus contains maps from `ReplicaType` to `ReplicaStatus` that specify\n the replica current status condition",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ReplicaStatus"
-          }
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobSetTemplateSpec"
         }
       }
     },
@@ -4557,7 +4348,7 @@
           "type": "string"
         },
         "setHostnameAsFQDN": {
-          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+          "description": "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
           "type": "boolean"
         },
         "shareProcessNamespace": {
