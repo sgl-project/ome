@@ -1,23 +1,23 @@
-{{- if index .Values "llama-3-1-70b-instruct-2024-12" "enabled" -}}
+{{- if index .Values "llama-3-3-70b-instruct" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: llama-3-1-70b-instruct-2024-12
+  name: llama-3-3-70b-instruct
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/runtime: "vllm-medium-text-generation"
     models.ome.io/category: "LARGE"
-    models.ome.io/experimental: "{{ index .Values "llama-3-1-70b-instruct-2024-12" "isExperimental" }}"
-    models.ome.io/internal: "{{ index .Values "llama-3-1-70b-instruct-2024-12" "isInternal" }}"
-    models.ome.io/lifecycle-phase: "{{ index .Values "llama-3-1-70b-instruct-2024-12" "lifecyclePhase" }}"
+    models.ome.io/experimental: "{{ index .Values "llama-3-3-70b-instruct" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "llama-3-3-70b-instruct" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "llama-3-3-70b-instruct" "lifecyclePhase" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
   displayName: meta.llama-3.1-70b-instruct-2024-12
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-1-70b-instruct-2024-12" "osBucket" }}/o/{{ index .Values "llama-3-1-70b-instruct-2024-12" "vendor" }}/{{ index .Values "llama-3-1-70b-instruct-2024-12" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-1-70b-instruct-2024-12
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-3-70b-instruct" "osBucket" }}/o/{{ index .Values "llama-3-3-70b-instruct" "vendor" }}/{{ index .Values "llama-3-3-70b-instruct" "osPrefixOverride" }}"
+    storageUri: /mnt/data/models/meta/llama-3-3-70b-instruct
   vendor: meta
   version: "1.0.0"
   modelFormat:

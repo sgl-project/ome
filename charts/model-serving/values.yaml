@@ -85,7 +85,7 @@ llama_3_1_70b_instruct:
     repository: *defaultVLLMImage
     tag: *defaultVLLMImageTag
 
-llama_3_1_70b_instruct_2024_12:
+llama_3_3_70b_instruct:
   enabled: false
   annotations:
     ome.io/autoscalerClass: "keda"
