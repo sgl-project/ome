@@ -169,6 +169,20 @@ type JobStatus struct {
 	Suspended int32 `json:"suspended"`
 }
 
+const (
+	// TrainJobSuspended means that TrainJob is suspended.
+	TrainJobSuspended string = "Suspended"
+
+	// TrainJobComplete means that the TrainJob has completed its execution.
+	TrainJobComplete string = "Complete"
+
+	// TrainJobFailed means that the actual jobs have failed its execution.
+	TrainJobFailed string = "Failed"
+
+	// TrainJobCreated means that the actual jobs creation has succeeded.
+	TrainJobCreated string = "Created"
+)
+
 // TrainingJobList contains a list of TrainingJob
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

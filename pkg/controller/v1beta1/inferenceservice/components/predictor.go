@@ -419,7 +419,7 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 		isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
 			{Name: "MODEL_PATH", Value: modelMountPath},
 		})
-	}	
+	}
 
 	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
 		inputBlocklistVolumeMount := v1.VolumeMount{
