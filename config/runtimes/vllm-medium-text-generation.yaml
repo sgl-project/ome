@@ -64,7 +64,7 @@ spec:
           python3 -m vllm.entrypoints.openai.api_server \
           --port=8080 \
           --model="$MODEL_PATH" \
-          --disable-log-requests \
+          --max-log-len=1 \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --served-model-name=vllm-model \
           --tensor-parallel-size=4 \

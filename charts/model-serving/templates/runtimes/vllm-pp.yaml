@@ -65,7 +65,7 @@ spec:
               --port={{.Values.vllm.port}} \
               --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
               --model="$MODEL_PATH" \
-              --disable-log-requests \
+              --max-log-len=1 \
               --served-model-name={{.Values.vllm.serveModelName}} \
               --tensor-parallel-size=8 \
               --pipeline-parallel-size=2 \

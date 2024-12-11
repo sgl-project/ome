@@ -55,7 +55,7 @@ spec:
           python3 -m vllm.entrypoints.openai.api_server \
           --port={{.Values.vllm.port}} \
           --model="$MODEL_PATH" \
-          --disable-log-requests \
+          --max-log-len=1 \
           --served-model-name={{.Values.vllm.serveModelName}} \
           --tensor-parallel-size=4 \
           --max-num-seqs=32 \

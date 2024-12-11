@@ -59,7 +59,7 @@ spec:
           --port=8080 \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --model="$MODEL_PATH" \
-          --disable-log-requests \
+          --max-log-len=1 \
           --served-model-name=vllm-model \
           --tensor-parallel-size=1 \
           --trust-remote-code \
