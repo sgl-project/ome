@@ -165,6 +165,7 @@ type BenchmarkJobStatus struct {
 
 // BenchmarkJobList contains a list of BenchmarkJob
 // +k8s:openapi-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 type BenchmarkJobList struct {
 	metav1.TypeMeta `json:",inline"`

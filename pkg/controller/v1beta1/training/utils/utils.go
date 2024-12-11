@@ -117,7 +117,7 @@ func isWaitingWithFailedReason(reason string) bool {
 
 func isDataIssue(terminationMessage string) bool {
 	// Todo: check other framework bad data issue
-	return strings.Contains(terminationMessage, constants.PeftTrainingBadDataErrorMessagePrefix)
+	return strings.Contains(terminationMessage, constants.PeftDataErrorMessagePrefix)
 }
 
 func GetPodsControlledByJob(cli client.Client, jobName string, namespace string) (*v1.PodList, error) {

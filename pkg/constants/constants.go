@@ -589,6 +589,8 @@ const (
 	TrainingK8SJobRetryTimeoutDuration      = 15 * time.Minute
 	TrainingK8SJobRetryMaxAttempts          = 5
 	DefaultTrainingLauncherReplicas         = 1
+	MergedModelWeightZippedFileSuffix       = "-merged-weight"
+	DefaultTrainingZippedModelDirectory     = "/mnt/ft/output"
 )
 
 type TrainingSidecarRuntime string
@@ -626,13 +628,14 @@ var (
 
 // Peft training Constants
 const (
-	PeftTrainingModelStorePVCMountPath    = "/mnt/models"
-	PeftTrainingDataEmptyDirMountPath     = "/mnt/data"
-	PeftTrainingOutputModelDirectoryName  = "output"
-	PeftTrainingMergedModelWeightSuffix   = "-merged-weight"
-	PeftTrainingBadDataErrorMessagePrefix = "Data error"
-	PeftTrainingPathPrefixEnvVarKey       = "PATH_PREFIX"
-	PeftTrainingBaselineModelEnvVarKey    = "BASELINE_MODEL"
+	PeftTrainingModelStorePVCMountPath   = "/mnt/models"
+	PeftTrainingDataEmptyDirMountPath    = "/mnt/data"
+	PeftTrainingOutputModelDirectoryName = "output"
+	PeftTrainingMergedModelWeightSuffix  = "-merged-weight"
+	PeftFineTunedWeightsDirectory        = "fine-tuned-weights"
+	PeftMergedWeightsDirectory           = "base-peft-merged"
+	PeftTrainingPathPrefixEnvVarKey      = "PATH_PREFIX"
+	PeftTrainingBaselineModelEnvVarKey   = "BASELINE_MODEL"
 )
 
 // Cohere training constants
@@ -644,7 +647,6 @@ const (
 	CohereTrainingInitModelEmptyDirMountPathTensorRT        = "/model/tensorrt_llm"
 	CohereTrainingInitDataEmptyDirMountPath                 = "/input"
 	CohereTrainingLargeGpuRequest                           = "8"
-	CohereTrainingBadDataErrorMessagePrefix                 = "please check dataset"
 	CohereCommandRFTMergedModelWeightSuffix                 = "-merged-weight"
 	CohereCommandRV1Version                                 = "v19.0.0"
 	CohereCommandRV2Version                                 = "v20.1.0"
@@ -653,6 +655,10 @@ const (
 	CohereTrainingBaselineModelEnvVarKey                    = "BASELINE_MODEL"
 	CohereMultiLoraBaseModelNameKeyword                     = "multi_lora"
 	CohereCommandRFTRuntimePrefix                           = "cohere-commandr"
+	CohereCommandRMergedWeightsDirectory                    = "model/tensorrt_llm"
+	CohereCommandRTFewFTWeightsDirectory                    = "output/tfew_weights"
+	CohereCommandRLoraFineTunedWeightsDirectory             = "output/"
+	CohereTrainingConfigPbtxt                               = "config.pbtxt"
 )
 
 // constants for cohere training NLastLayers Hyperparameter possible values
@@ -752,6 +758,21 @@ const (
 	K8SJobSchedulingFailed          TrainingFailedReason = "K8SJobSchedulingFailed"
 	K8SJobStartingTimeout           TrainingFailedReason = "K8SJobStartingTimeout"
 	TrainingContainerStartingFailed TrainingFailedReason = "TrainingContainerStartingFailed"
+)
+
+// constants related to training endpoint call
+const (
+	TrainingEndpoint = "http://localhost:5000"
+	Timeout          = 15 * time.Minute
+	RetryInterval    = 1 * time.Minute
+)
+
+// constants for training data error handling (error from training container)
+const (
+	CohereFaxFTDataErrorMessagePrefix      = "please check dataset"
+	CohereCommandRFTDataErrorMessagePrefix = "Exception during dataset conversion"
+	PeftDataErrorMessagePrefix             = "Data error"
+	TerminationLogPath                     = "/dev/termination-log"
 )
 
 func (c CheckResultType) String() string {

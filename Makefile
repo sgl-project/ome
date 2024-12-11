@@ -203,7 +203,11 @@ run-ome-agent-hf-download: fmt vet ome-agent ## Run ome-agent binary from local 
 
 .PHONY: run-ome-agent-os-replica
 run-ome-agent-os-replica: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
-	bin/ome-agent os-replica -d -c config/ome-agent/ome-agent.yaml
+	bin/ome-agent replica -d -c config/ome-agent/ome-agent.yaml
+
+.PHONY: run-ome-agent-training-agent
+run-ome-agent-training-agent: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	bin/ome-agent training-agent -d -c config/ome-agent/ome-agent.yaml
 
 .PHONY: ome-image
 ome-image: fmt vet ## Build ome-manager image.

@@ -35,3 +35,48 @@ compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rph
 vault_id: "ocid1.vault.oc1.us-chicago-1.ijsr6afaaagp2.abxxeljtatzowkwlt2iu42ndlmnmd4d4nausgoubu7uq7iro553xdj5b6weq"
 key_name: "command_r"
 secret_name: "command_r-dek"
+
+# Configs for training agent
+runtime: "cohere"
+training_name: &training_name "amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"
+model_directory: "/mnt/cohere/amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"
+model:
+  bucket_name: "fine-tuned-model-weights"
+  region: "us-chicago-1"
+  namespace: "idqj093njucb"
+  object_name: *training_name
+training_metrics:
+  bucket_name: "model-training-metrics"
+  region: "us-chicago-1"
+  namespace: "idqj093njucb"
+  object_name: *training_name
+cohere_ft:
+  name:                       *training_name
+  size:                       "6b"
+  strategy:                   "tfew"
+  serving_strategy:           ""
+  train_epochs:               3
+  learning_rate:              0.001
+  train_batch_size:           32
+  early_stopping_patience:    5
+  early_stopping_threshold:   0.001
+  log_train_status_every_steps: 10
+  n_last_layers:              14
+  tensor_parallel_size:       0
+  base_model:                 ""
+  lora_config:
+    rank: 0
+    alpha: 0
+peft_ft:
+  model_name: "Llama-2-70b-chat-hf"
+  train_dataset_file: "training_data.jsonl"
+  num_train_epochs: 3
+  learning_rate: 0.002
+  train_batch_size: 8
+  early_stopping_patience: 15
+  early_stopping_threshold: 0.0001
+  log_model_metrics_interval_in_steps: 10
+  peft_type: "lora"
+  lora_r: 8
+  lora_alpha: 8
+  lora_dropout: 0.1
