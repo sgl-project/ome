@@ -29,6 +29,28 @@ When submitting a pull request:
 5. Include a detailed description of the changes in the pull request.
    Explain why you made the changes you did.
 
+### PR Template
+
+It is required to classify your PR and make the commit message concise and useful. Prefix the PR title appropriately
+to indicate the type of change. Please use one of the following:
+
+`[Bugfix]` for bug fixes.
+
+`[Core]` for core controller changes. This includes build, version upgrade, changes across all controllers.
+
+`[API]` for all OME API changes'
+
+`[Helm]` for changes related to helm charts.
+
+`[Docs]` for changes related to documentation.
+
+`[CI/Tests]` for unittests and integration tests.
+
+`[Misc]` for PRs that do not fit the above categories. Please use this sparingly.
+
+Open source community also recommends to keep the commit message title within 52 chars and each line in message content
+within 72 chars.
+
 ### Code Reviews
 
 All submissions, including submissions by project members, require a code review.
@@ -39,6 +61,9 @@ To make the review process as smooth as possible, please:
 2. Respond to all comments within a reasonable time frame.
    If a comment isn't clear,
    or you disagree with a suggestion, feel free to ask for clarification or discuss the suggestion.
+3. Provide constructive feedback and meaningful comments. Focus on specific improvements
+   and suggestions that can enhance the code quality or functionality. Remember to
+   acknowledge and respect the work the author has already put into the submission.
 
 
 ## Prerequisites
