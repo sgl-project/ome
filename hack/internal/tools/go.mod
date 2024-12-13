@@ -2,6 +2,8 @@ module bitbucket.oci.oraclecorp.com/genaicore/ome/hack/internal/tools
 
 go 1.23
 
+
+
 require (
 	github.com/gohugoio/hugo v0.134.1
 	github.com/golangci/golangci-lint v1.60.3

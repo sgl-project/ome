@@ -28,6 +28,12 @@ var (
 	OMENamespace                     = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
 
+// Benchmark Constants
+var (
+	BenchmarjJobName          = "benchmarkjob"
+	BenchmarkJobConfigMapName = "benchmarkjob-config"
+)
+
 // InferenceService Constants
 var (
 	InferenceServiceName            = "inferenceservice"
@@ -284,6 +290,7 @@ var (
 var (
 	PodMutatorWebhookName              = OMEName + "-pod-mutator-webhook"
 	ServingRuntimeValidatorWebhookName = OMEName + "-servingRuntime-validator-webhook"
+	BenchmarkJobValidatorWebhookName   = OMEName + "-benchmark-job-validator-webhook"
 )
 
 // GPU Constants

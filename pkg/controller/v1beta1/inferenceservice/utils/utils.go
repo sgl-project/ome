@@ -175,7 +175,7 @@ func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta
 	return nil, goerrors.New("No ServingRuntimes or ClusterServingRuntimes with the name: " + name)
 }
 
-// GetBaseModel Get the base model name from the given model name.
+// GetBaseModel Get the base model from the given model name.
 func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
 	baseModel := &v1beta1.BaseModel{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)

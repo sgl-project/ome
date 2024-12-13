@@ -89,19 +89,6 @@ func (c *FakeTrainingRuntimes) Update(ctx context.Context, trainingRuntime *v1be
 	return obj.(*v1beta1.TrainingRuntime), err
 }
 
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeTrainingRuntimes) UpdateStatus(ctx context.Context, trainingRuntime *v1beta1.TrainingRuntime, opts v1.UpdateOptions) (result *v1beta1.TrainingRuntime, err error) {
-	emptyResult := &v1beta1.TrainingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(trainingruntimesResource, "status", c.ns, trainingRuntime, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.TrainingRuntime), err
-}
-
 // Delete takes name of the trainingRuntime and deletes it. Returns an error if one occurs.
 func (c *FakeTrainingRuntimes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.

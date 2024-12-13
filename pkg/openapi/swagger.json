@@ -213,6 +213,19 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobConfig": {
+      "type": "object",
+      "required": [
+        "podConfig"
+      ],
+      "properties": {
+        "podConfig": {
+          "description": "PodConfig contains all Pod Configuration",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodConfig"
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobList": {
       "description": "BenchmarkJobList contains a list of BenchmarkJob",
       "type": "object",
@@ -245,8 +258,7 @@
       "description": "BenchmarkJobSpec defines the specification for a benchmark job. All fields within this specification collectively represent the desired state and configuration of a BenchmarkJob.",
       "type": "object",
       "required": [
-        "huggingFaceAPIKey",
-        "inferenceServiceReference",
+        "endpoint",
         "task",
         "maxTimePerIteration",
         "maxRequestsPerIteration",
@@ -262,26 +274,26 @@
           }
         },
         "dataset": {
-          "description": "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"chat\".",
+          "description": "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"text-to-\u003coutput-modality\u003e\".",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
         },
-        "huggingFaceAPIKey": {
-          "description": "HuggingFaceAPIKey is the API key required for Hugging Face authentication.",
-          "type": "string",
-          "default": ""
-        },
-        "inferenceServiceReference": {
-          "description": "InferenceServiceReference is the reference to the inference service to benchmark.",
+        "endpoint": {
+          "description": "Endpoint is the reference to the inference service to benchmark.",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceReference"
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.EndpointSpec"
+        },
+        "huggingFaceSecretReference": {
+          "description": "HuggingFaceSecretReference is a reference to a Kubernetes Secret containing the Hugging Face API key. The referenced Secret must reside in the same namespace as the BenchmarkJob. This field replaces the raw HuggingFaceAPIKey field for improved security.",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HuggingFaceSecretReference"
         },
         "maxRequestsPerIteration": {
-          "description": "MaxRequestsPerIteration specifies the maximum number of requests for a single iteration. Each iteration runs for a specific combination of TrafficScenario and NumConcurrency.",
+          "description": "MaxRequestsPerIteration specifies the maximum number of requests for a single iteration. Each iteration runs for a specific combination of TrafficScenarios and NumConcurrency.",
           "type": "integer",
           "format": "int32"
         },
         "maxTimePerIteration": {
-          "description": "MaxTimePerIteration specifies the maximum time (in minutes) for a single iteration. Each iteration runs for a specific combination of TrafficScenario and NumConcurrency.",
+          "description": "MaxTimePerIteration specifies the maximum time (in minutes) for a single iteration. Each iteration runs for a specific combination of TrafficScenarios and NumConcurrency.",
           "type": "integer",
           "format": "int32"
         },
@@ -300,12 +312,16 @@
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
         },
+        "podOverride": {
+          "description": "Pod defines the pod configuration for the benchmark job. This is optional, if not provided, default values will be used.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodOverride"
+        },
         "serviceMetadata": {
           "description": "ServiceMetadata records metadata about the backend model server or service being benchmarked. This includes details such as server engine, version, and GPU configuration for filtering experiments.",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceMetadata"
         },
         "task": {
-          "description": "Task specifies the task to benchmark (e.g., \"chat\", \"vision\", \"embeddings\").",
+          "description": "Task specifies the task to benchmark, pattern: \u003cinput-modality\u003e-to-\u003coutput-modality\u003e (e.g., \"text-to-text\", \"image-to-text\").",
           "type": "string",
           "default": ""
         },
@@ -1436,7 +1452,7 @@
       ],
       "properties": {
         "apiFormat": {
-          "description": "APIFormat specifies the type of API, such as \"openai\" or \"genai\".",
+          "description": "APIFormat specifies the type of API, such as \"openai\" or \"oci-cohere\".",
           "type": "string",
           "default": ""
         },
@@ -1448,6 +1464,20 @@
           "description": "URL represents the endpoint URL for the inference service.",
           "type": "string",
           "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.EndpointSpec": {
+      "description": "EndpointSpec defines a reference to an inference service. It supports either a Kubernetes-style reference (InferenceService) or an Endpoint struct for a direct URL. Cross-namespace references are supported for InferenceService but require appropriate RBAC permissions to access resources in the target namespace.",
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "description": "Endpoint holds the details of a direct endpoint for an external inference service, including URL and API details.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Endpoint"
+        },
+        "inferenceService": {
+          "description": "InferenceService holds a Kubernetes reference to an internal inference service.",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceReference"
         }
       }
     },
@@ -1593,6 +1623,17 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HuggingFaceSecretReference": {
+      "description": "HuggingFaceSecretReference defines a reference to a Kubernetes Secret containing the Hugging Face API key. This secret must reside in the same namespace as the BenchmarkJob. Cross-namespace references are not allowed for security and simplicity.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the secret containing the Hugging Face API key. The secret must reside in the same namespace as the BenchmarkJob.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HyperparameterTuningConfig": {
       "type": "object",
       "required": [
@@ -1678,16 +1719,22 @@
       }
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceReference": {
-      "description": "InferenceServiceReference defines a reference to an inference service. It supports either a Kubernetes-style reference (K8sInferenceService) or an Endpoint struct for a direct URL.",
+      "description": "InferenceServiceReference defines the reference to a Kubernetes inference service.",
       "type": "object",
+      "required": [
+        "name",
+        "namespace"
+      ],
       "properties": {
-        "endpoint": {
-          "description": "Endpoint holds the details of a direct endpoint for an external inference service, including URL and API details.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Endpoint"
+        "name": {
+          "description": "Name specifies the name of the inference service to benchmark.",
+          "type": "string",
+          "default": ""
         },
-        "k8sInferenceService": {
-          "description": "K8sInferenceService holds a Kubernetes reference to an internal inference service.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.K8sInferenceServiceReference"
+        "namespace": {
+          "description": "Namespace specifies the Kubernetes namespace where the inference service is deployed. Cross-namespace references are allowed but require appropriate RBAC permissions.",
+          "type": "string",
+          "default": ""
         }
       }
     },
@@ -1888,26 +1935,6 @@
           "type": "integer",
           "format": "int32",
           "default": 0
-        }
-      }
-    },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.K8sInferenceServiceReference": {
-      "description": "K8sInferenceServiceReference defines the reference to a Kubernetes inference service.",
-      "type": "object",
-      "required": [
-        "name",
-        "namespace"
-      ],
-      "properties": {
-        "name": {
-          "description": "Name specifies the name of the inference service to benchmark.",
-          "type": "string",
-          "default": ""
-        },
-        "namespace": {
-          "description": "Namespace specifies the Kubernetes namespace where the inference service is deployed.",
-          "type": "string",
-          "default": ""
         }
       }
     },
@@ -2564,6 +2591,38 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodConfig": {
+      "type": "object",
+      "required": [
+        "image",
+        "cpuRequest",
+        "memoryRequest",
+        "cpuLimit",
+        "memoryLimit"
+      ],
+      "properties": {
+        "cpuLimit": {
+          "type": "string",
+          "default": ""
+        },
+        "cpuRequest": {
+          "type": "string",
+          "default": ""
+        },
+        "image": {
+          "type": "string",
+          "default": ""
+        },
+        "memoryLimit": {
+          "type": "string",
+          "default": ""
+        },
+        "memoryRequest": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodGroupPolicy": {
       "description": "PodGroupPolicy represents a PodGroup configuration for gang-scheduling.",
       "type": "object",
@@ -2571,6 +2630,88 @@
         "coscheduling": {
           "description": "Coscheduling plugin from the Kubernetes scheduler-plugins for gang-scheduling.",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CoschedulingPodGroupPolicyConfig"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodOverride": {
+      "type": "object",
+      "properties": {
+        "affinity": {
+          "description": "If specified, the pod's scheduling constraints",
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "env": {
+          "description": "List of environment variables to set in the container.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.EnvVar"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "envFrom": {
+          "description": "List of sources to populate environment variables in the container.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.EnvFromSource"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "image": {
+          "description": "Image specifies the container image to use for the benchmark job.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name for the container.",
+          "type": "string",
+          "default": ""
+        },
+        "nodeSelector": {
+          "description": "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-map-type": "atomic"
+        },
+        "resources": {
+          "description": "Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "tolerations": {
+          "description": "If specified, the pod's tolerations.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Toleration"
+          }
+        },
+        "volumeMounts": {
+          "description": "Pod volumes to mount into the container's filesystem.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.VolumeMount"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "volumes": {
+          "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Volume"
+          },
+          "x-kubernetes-patch-merge-key": "name",
+          "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
       }
     },

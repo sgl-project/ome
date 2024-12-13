@@ -1,0 +1,38 @@
+apiVersion: ome.io/v1beta1
+kind: BenchmarkJob
+metadata:
+  name: llama-3-1-70b-benchmark
+  namespace: llama-3-1-70b
+spec:
+  huggingFaceSecretReference:
+    name: huggingface-secret
+  endpoint:
+    inferenceService:
+      name: llama-3-1-70b
+      namespace: llama-3-1-70b
+  task: text-to-text
+  trafficScenarios:
+    - "N(300,150)/(480,240)"
+    - "D(100,100)"
+    - "D(100,1000)"
+    - "D(2000,200)"
+    - "D(7800,200)"
+  numConcurrency:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    - 32
+    - 64
+    - 128
+    - 256
+  maxTimePerIteration: 15
+  maxRequestsPerIteration: 100
+  additionalRequestParams:
+    temperature: "0.0"
+  outputLocation:
+    storageType: "OBJECT_STORAGE"
+    oSStorageSpec:
+      bucketName: "benchmark-results"
+      namespace: "oci-namespace"

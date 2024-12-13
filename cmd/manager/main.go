@@ -3,6 +3,7 @@ package main
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -257,6 +258,21 @@ func main() {
 		Recorder: dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, dacReconcilePolicyConfig); err != nil {
 		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "DedicatedAICluster")
+		os.Exit(1)
+	}
+
+	benchmarkJobEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up BenchmarkJob controller")
+	benchmarkJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("v1beta1Controllers").WithName("BenchmarkJob"),
+		Scheme:    mgr.GetScheme(),
+		Recorder: benchmarkJobEventBroadcaster.NewRecorder(
+			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "BenchmarkJob")
 		os.Exit(1)
 	}
 

@@ -83,18 +83,6 @@ func (c *FakeClusterTrainingRuntimes) Update(ctx context.Context, clusterTrainin
 	return obj.(*v1beta1.ClusterTrainingRuntime), err
 }
 
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeClusterTrainingRuntimes) UpdateStatus(ctx context.Context, clusterTrainingRuntime *v1beta1.ClusterTrainingRuntime, opts v1.UpdateOptions) (result *v1beta1.ClusterTrainingRuntime, err error) {
-	emptyResult := &v1beta1.ClusterTrainingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(clustertrainingruntimesResource, "status", clusterTrainingRuntime, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ClusterTrainingRuntime), err
-}
-
 // Delete takes name of the clusterTrainingRuntime and deletes it. Returns an error if one occurs.
 func (c *FakeClusterTrainingRuntimes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.

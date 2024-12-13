@@ -13,7 +13,14 @@ spec:
     singular: benchmarkjob
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.state
+      name: Status
+      type: string
+    name: v1beta1
     schema:
       openAPIV3Schema:
         properties:

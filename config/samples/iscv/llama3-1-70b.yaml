@@ -10,19 +10,11 @@ kind: InferenceService
 metadata:
   name: llama-3-1-70b
   namespace: llama-3-1-70b
-  annotations:
-    ome.io/autoscalerClass: "keda"
 spec:
   predictor:
     model:
+      runtime: vllm-medium-text-generation
       baseModel: llama-3-1-70b
       protocolVersion: openAI
     minReplicas: 1
     maxReplicas: 2
-
-  kedaConfig:
-    enableKeda: true
-    promServerAddress: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
-    customPromQuery: ""
-    scalingThreshold: "1"
-    scalingOperator: "GreaterThanOrEqual"

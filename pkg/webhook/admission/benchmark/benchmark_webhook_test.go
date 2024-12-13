@@ -1,0 +1,250 @@
+package benchmark
+
+import (
+	"context"
+	"testing"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+func TestValidateBenchmarkJob(t *testing.T) {
+	scenarios := map[string]struct {
+		benchmarkJob *v1beta1.BenchmarkJob
+		expected     gomega.OmegaMatcher
+	}{
+		"Valid OpenAI text-to-text benchmark job": {
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-benchmark",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Task: "text-to-text",
+					Endpoint: v1beta1.EndpointSpec{
+						Endpoint: &v1beta1.Endpoint{
+							URL: "https://api.openai.com/v1/chat/completions",
+						},
+					},
+					TrafficScenarios: []string{"N(10,20)/(30,40)"},
+					AdditionalRequestParams: map[string]string{
+						"temperature": "0.7",
+						"max_tokens":  "100",
+					},
+				},
+			},
+			expected: gomega.BeNil(),
+		},
+		"Missing endpoint and inference service": {
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "missing-endpoint",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Task: "text-to-text",
+				},
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Both endpoint and inference service specified": {
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "both-endpoints",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Task: "text-to-text",
+					Endpoint: v1beta1.EndpointSpec{
+						Endpoint: &v1beta1.Endpoint{
+							URL: "https://api.openai.com/v1/chat/completions",
+						},
+						InferenceService: &v1beta1.InferenceServiceReference{
+							Name: "test-service",
+						},
+					},
+				},
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Invalid traffic scenario format": {
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-scenario",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Task: "text-to-text",
+					Endpoint: v1beta1.EndpointSpec{
+						Endpoint: &v1beta1.Endpoint{
+							URL: "https://api.openai.com/v1/chat/completions",
+						},
+					},
+					TrafficScenarios: []string{"invalid-format"},
+				},
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Invalid additional request parameters": {
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-params",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BenchmarkJobSpec{
+					Task: "text-to-text",
+					Endpoint: v1beta1.EndpointSpec{
+						Endpoint: &v1beta1.Endpoint{
+							URL: "https://api.openai.com/v1/chat/completions",
+						},
+					},
+					AdditionalRequestParams: map[string]string{
+						"temperature": "invalid",
+					},
+				},
+			},
+			expected: gomega.HaveOccurred(),
+		},
+	}
+
+	g := gomega.NewGomegaWithT(t)
+	validator := &BenchmarkJobValidator{}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			err := validator.validateBenchmarkJob(context.Background(), scenario.benchmarkJob)
+			g.Expect(err).To(scenario.expected)
+		})
+	}
+}
+
+func TestValidateEndpoint(t *testing.T) {
+	scenarios := map[string]struct {
+		endpoint v1beta1.EndpointSpec
+		expected gomega.OmegaMatcher
+	}{
+		"Valid endpoint URL": {
+			endpoint: v1beta1.EndpointSpec{
+				Endpoint: &v1beta1.Endpoint{
+					URL: "https://api.openai.com/v1/chat/completions",
+				},
+			},
+			expected: gomega.BeNil(),
+		},
+		"Valid inference service": {
+			endpoint: v1beta1.EndpointSpec{
+				InferenceService: &v1beta1.InferenceServiceReference{
+					Name: "test-service",
+				},
+			},
+			expected: gomega.BeNil(),
+		},
+		"Missing both endpoint and inference service": {
+			endpoint: v1beta1.EndpointSpec{},
+			expected: gomega.HaveOccurred(),
+		},
+		"Both endpoint and inference service specified": {
+			endpoint: v1beta1.EndpointSpec{
+				Endpoint: &v1beta1.Endpoint{
+					URL: "https://api.openai.com/v1/chat/completions",
+				},
+				InferenceService: &v1beta1.InferenceServiceReference{
+					Name: "test-service",
+				},
+			},
+			expected: gomega.HaveOccurred(),
+		},
+	}
+
+	g := gomega.NewGomegaWithT(t)
+	validator := &BenchmarkJobValidator{}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			err := validator.validateEndpoint(scenario.endpoint)
+			g.Expect(err).To(scenario.expected)
+		})
+	}
+}
+
+func TestValidateTrafficScenarios(t *testing.T) {
+	scenarios := map[string]struct {
+		task      string
+		scenarios []string
+		expected  gomega.OmegaMatcher
+	}{
+		"Valid text-to-text normal scenario": {
+			task:      "text-to-text",
+			scenarios: []string{"N(10,20)/(30,40)"},
+			expected:  gomega.BeNil(),
+		},
+		"Valid text-to-text uniform scenario": {
+			task:      "text-to-text",
+			scenarios: []string{"U(10,20)"},
+			expected:  gomega.BeNil(),
+		},
+		"Valid text-to-embeddings scenario": {
+			task:      "text-to-embeddings",
+			scenarios: []string{"E(10,20)"},
+			expected:  gomega.BeNil(),
+		},
+		"Invalid scenario format": {
+			task:      "text-to-text",
+			scenarios: []string{"invalid-format"},
+			expected:  gomega.HaveOccurred(),
+		},
+		"Invalid scenario for task type": {
+			task:      "text-to-embeddings",
+			scenarios: []string{"N10,20/30,40"},
+			expected:  gomega.HaveOccurred(),
+		},
+	}
+
+	g := gomega.NewGomegaWithT(t)
+	validator := &BenchmarkJobValidator{}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			err := validator.validateTrafficScenarios(scenario.task, scenario.scenarios)
+			g.Expect(err).To(scenario.expected)
+		})
+	}
+}
+
+func TestValidateAdditionalRequestParams(t *testing.T) {
+	scenarios := map[string]struct {
+		params   map[string]string
+		expected gomega.OmegaMatcher
+	}{
+		"Valid parameters": {
+			params: map[string]string{
+				"temperature": "0.7",
+				"max_tokens":  "100",
+			},
+			expected: gomega.BeNil(),
+		},
+		"Invalid temperature value": {
+			params: map[string]string{
+				"temperature": "invalid",
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Temperature out of range": {
+			params: map[string]string{
+				"temperature": "2.0",
+			},
+			expected: gomega.BeNil(),
+		},
+	}
+
+	g := gomega.NewGomegaWithT(t)
+	validator := &BenchmarkJobValidator{}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			err := validator.validateAdditionalRequestParams(scenario.params)
+			g.Expect(err).To(scenario.expected)
+		})
+	}
+}

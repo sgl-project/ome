@@ -19,12 +19,26 @@ const (
 	DeployConfigName             = "deploy"
 	DacReconcilePolicyConfigName = "dacReconcilePolicy"
 	MultiNodeProberName          = "multinodeProber"
+	BenchmarkJobConfigName       = "benchmarkjob"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
 
 	DefaultUrlScheme = "http"
 )
+
+type BenchmarkJobConfig struct {
+	// PodConfig contains all Pod Configuration
+	PodConfig PodConfig `json:"podConfig"`
+}
+
+type PodConfig struct {
+	Image         string `json:"image"`
+	CPURequest    string `json:"cpuRequest"`
+	MemoryRequest string `json:"memoryRequest"`
+	CPULimit      string `json:"cpuLimit"`
+	MemoryLimit   string `json:"memoryLimit"`
+}
 
 // +kubebuilder:object:generate=false
 type InferenceServicesConfig struct {
@@ -242,4 +256,20 @@ func NewMultiNodeProberConfig(clientset kubernetes.Interface) (*MultiNodeProberC
 		}
 	}
 	return multiNodeProberConfig, nil
+}
+
+func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.BenchmarkJobConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	benchmarkJobConfig := &BenchmarkJobConfig{}
+	for _, err := range []error{
+		getComponentConfig(BenchmarkJobConfigName, configMap, &benchmarkJobConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return benchmarkJobConfig, nil
 }

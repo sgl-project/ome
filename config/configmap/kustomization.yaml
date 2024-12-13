@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
 - inferenceservice.yaml
+- benchmarkjob.yaml
