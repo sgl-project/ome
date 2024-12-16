@@ -53,8 +53,8 @@ spec:
       "use_rslora": false
     }
   storage:
-    path: oci://n/idlsnvn0f2is/b/fine-tuned-sample/o/genai/llama-3-1-70b-lora-adapter
-    storageUri: /raid/fine-tuned/llama-3-1-70b-lora-adapter
+    storageUri: oci://n/idlsnvn0f2is/b/fine-tuned-sample/o/genai/llama-3-1-70b-lora-adapter
+    path: /raid/fine-tuned/llama-3-1-70b-lora-adapter
   trainingJobRef:
     name: llama-3-1-70b-peft
     namespace: llama-3-1-70b

@@ -174,7 +174,7 @@ type FineTunedWeightSpec struct {
 
 	// Storage configuration for the fine-tuned weight
 	// +required
-	Storage *Storage `json:"storage,omitempty"`
+	Storage *StorageSpec `json:"storage,omitempty"`
 
 	// TrainingJobID is the ID of the training job that produced this weight
 	// +optional

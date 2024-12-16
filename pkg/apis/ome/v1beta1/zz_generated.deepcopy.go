@@ -1260,7 +1260,7 @@ func (in *FineTunedWeightSpec) DeepCopyInto(out *FineTunedWeightSpec) {
 	in.Configuration.DeepCopyInto(&out.Configuration)
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage
-		*out = new(Storage)
+		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
 	in.TrainingJobRef.DeepCopyInto(&out.TrainingJobRef)

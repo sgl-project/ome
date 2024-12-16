@@ -1606,7 +1606,7 @@
         },
         "storage": {
           "description": "Storage configuration for the fine-tuned weight",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
         },
         "trainingJobRef": {
           "description": "TrainingJobID is the ID of the training job that produced this weight",
