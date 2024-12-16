@@ -44,7 +44,7 @@ func ProvideListOfCasperDataStoreWithAppParams(e *env.Environment, params appPar
 		}
 		casperDataStore, err := NewCasperDataStore(config, e)
 		if err != nil {
-			return casperDataStoreList, fmt.Errorf("error initializing a list of CasperDataStore using CasperConfig: %+v: %+v", config, err)
+			return casperDataStoreList, fmt.Errorf("error initializing CasperDataStore using CasperConfig %+v: %+v", config, err)
 		}
 		casperDataStoreList = append(casperDataStoreList, casperDataStore)
 	}

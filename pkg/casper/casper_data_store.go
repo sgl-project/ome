@@ -83,7 +83,7 @@ func (cds *CasperDataStore) DownloadBasedOnObjectSize(source ObjectURI, target s
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to download object %s in object storage bucket: %s, in namespace: %s", source.ObjectName, source.BucketName, source.Namespace)
+		return fmt.Errorf("failed to download object %s in object storage bucket: %s, in namespace: %s: %+v", source.ObjectName, source.BucketName, source.Namespace, err)
 	}
 
 	return nil

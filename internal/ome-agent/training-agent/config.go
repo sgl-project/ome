@@ -12,6 +12,12 @@ import (
 	"path/filepath"
 )
 
+const (
+	InputCasperConfigName      = "input"
+	OutputCasperConfigName     = "output"
+	TrainingDataStoreDirectory = "/input/data/training/"
+)
+
 type Config struct {
 	AnotherLogger logging.Interface
 
@@ -20,12 +26,15 @@ type Config struct {
 	ModelDirectory                string                           `mapstructure:"model_directory" validate:"required"`
 	ZippedModelPath               string                           `validate:"required"`
 	ZippedMergedModelPath         string
+	TrainingDataStoreDirectory    string                 `validate:"required"`
+	TrainingDataObjectStoreURI    *casper.ObjectURI      `mapstructure:"training_data" validate:"required"`
 	ModelObjectStoreURI           *casper.ObjectURI      `mapstructure:"model" validate:"required"`
 	TrainingMetricsObjectStoreURI *casper.ObjectURI      `mapstructure:"training_metrics" validate:"required"`
 	CohereFineTuneDetails         *CohereFineTuneDetails `mapstructure:"cohere_ft"`
 	PeftFineTuneDetails           *PeftFineTuneDetails   `mapstructure:"peft_ft"`
 
-	ObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
+	InputObjectStorageDataStore  *casper.CasperDataStore `validate:"required"`
+	OutputObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
 }
 
 // Option represents a server configuration option.
@@ -47,7 +56,9 @@ func (c *Config) Apply(opts ...Option) error {
 
 // NewTrainingAgentConfig builds and returns a new configuration from the given options.
 func NewTrainingAgentConfig(opts ...Option) (*Config, error) {
-	c := &Config{}
+	c := &Config{
+		TrainingDataStoreDirectory: TrainingDataStoreDirectory,
+	}
 	if err := c.Apply(opts...); err != nil {
 		return nil, err
 	}
@@ -58,7 +69,14 @@ func NewTrainingAgentConfig(opts ...Option) (*Config, error) {
 // WithAppParams attempts to resolve the required client objects using injected named parameters
 func WithAppParams(params trainingAgentParams) Option {
 	return func(c *Config) error {
-		c.ObjectStorageDataStore = params.ObjectStorageDataStores
+		for _, casperDataStore := range params.CasperDataStoreList {
+			if casperDataStore.Config.Name == InputCasperConfigName {
+				c.InputObjectStorageDataStore = casperDataStore
+			}
+			if casperDataStore.Config.Name == OutputCasperConfigName {
+				c.OutputObjectStorageDataStore = casperDataStore
+			}
+		}
 		return nil
 	}
 }

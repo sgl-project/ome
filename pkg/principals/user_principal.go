@@ -2,15 +2,17 @@ package principals
 
 import (
 	"errors"
-	"fmt"
 	"github.com/oracle/oci-go-sdk/v65/common"
+	"os"
+	"strings"
 )
 
 // UserPrincipalConfig encapsulates configuration for constructing
 // user principal authentication provider.
 type UserPrincipalConfig struct {
-	ConfigPath string `mapstructure:"config_path"`
-	Profile    string `mapstructure:"profile"`
+	ConfigPath      string `mapstructure:"config_path"`
+	Profile         string `mapstructure:"profile"`
+	UseSessionToken bool   `mapstructure:"use_session_token"`
 }
 
 // Validate validates c.
@@ -26,19 +28,17 @@ func (c UserPrincipalConfig) Validate() error {
 
 // Build builds a user principal from c.
 func (c UserPrincipalConfig) Build(opts Opts) (common.ConfigurationProvider, error) {
-
-	result, err := newUserPrincipalConfigurationProvider(opts)
-	if err != nil {
-		return nil, fmt.Errorf("could not construct configuration provider: %w", err)
+	if configPath, ok := os.LookupEnv("OCI_CONFIG_PATH"); ok {
+		c.ConfigPath = configPath
+	}
+	if profile, ok := os.LookupEnv("PROFILE"); ok {
+		c.Profile = profile
+	}
+	if useSessionToken, ok := os.LookupEnv("USE_SESSION_TOKEN"); ok {
+		c.UseSessionToken = strings.ToLower(useSessionToken) == "true"
 	}
 
-	return result, nil
-}
-
-// TODO - implement this function and pass down UserPrincipalConfig from viper
-func newUserPrincipalConfigurationProvider(opts Opts) (common.ConfigurationProvider, error) {
-
-	return opts.factory().NewApiKeyUserPrincipal(
-		"", "",
+	return opts.factory().NewUserPrincipal(
+		c.ConfigPath, c.Profile, c.UseSessionToken,
 	)
 }

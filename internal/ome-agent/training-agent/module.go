@@ -12,8 +12,8 @@ import (
 type trainingAgentParams struct {
 	fx.In
 
-	AnotherLogger           logging.Interface `name:"another_log"`
-	ObjectStorageDataStores *casper.CasperDataStore
+	AnotherLogger       logging.Interface `name:"another_log"`
+	CasperDataStoreList []*casper.CasperDataStore
 }
 
 var Module = fx.Provide(

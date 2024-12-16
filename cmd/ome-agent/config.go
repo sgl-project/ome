@@ -30,6 +30,11 @@ func configProvider(cli *cobra.Command) fx.Option {
 		if err := configutils.ResolveAndMergeFile(v, configFilePath); err != nil {
 			return nil, fmt.Errorf("cannot read config file: %w", err)
 		}
+
+		// Fix the issue where viper.UnmarshalKey only uses read config, neglects environment variables
+		for _, key := range v.AllKeys() {
+			v.Set(key, v.Get(key))
+		}
 		return v, nil
 	})
 }

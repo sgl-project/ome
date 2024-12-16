@@ -16,9 +16,11 @@ import (
 
 // constants for Multipart Upload
 const (
-	BigFileSizeInMB            = 200
-	DefaultUploadChunkSizeInMB = 50
-	DefaultUploadThreads       = 10
+	BigFileSizeInMB              = 200
+	DefaultDownloadChunkSizeInMB = 20
+	DefaultUploadChunkSizeInMB   = 50
+	DefaultDownloadThreads       = 10
+	DefaultUploadThreads         = 10
 )
 
 // TrainingAgent represents a training sidecar application
@@ -48,28 +50,43 @@ func NewTrainingAgent(config *Config) (*TrainingAgent, error) {
 // Start starts the application
 func (d *TrainingAgent) Start() {
 	d.logger.Infof("Starting %s Training Agent", d.Config.Runtime)
-	d.logger.Infof("Training Endpoint: %s", constants.TrainingEndpoint)
 
-	// start training
+	d.downloadData()
+
 	d.startTraining()
 
-	// check status
 	d.monitoringTraining()
 
-	// zip model
 	d.zipTrainedModel()
 
-	// upload model to object storage
 	d.uploadModelToObjectStorage()
 
-	// upload training metrics to object storage
 	d.uploadTrainingMetricsToObjectStorage()
 
-	// terminate training instance
 	d.terminateTrainingInstance()
 }
 
+func (d *TrainingAgent) downloadData() {
+	d.logger.Infof("Start downloading data")
+	d.logger.Infof("Training data store url: %+v", *d.Config.TrainingDataObjectStoreURI)
+
+	if err := d.Config.InputObjectStorageDataStore.DownloadBasedOnObjectSize(
+		*d.Config.TrainingDataObjectStoreURI,
+		d.Config.TrainingDataStoreDirectory,
+		true,
+		BigFileSizeInMB,
+		DefaultDownloadChunkSizeInMB,
+		DefaultDownloadThreads); err != nil {
+
+		panic(fmt.Errorf("failed to download training data: %+v", err))
+	}
+
+	d.logger.Info("Done with downloading training data")
+}
+
 func (d *TrainingAgent) startTraining() {
+	d.logger.Infof("Kicking off training on endpoint: %s", constants.TrainingEndpoint)
+
 	startTime := time.Now()
 	jsonPayload := d.prepareFTDetailsPayload()
 	var response *http.Response
@@ -239,7 +256,7 @@ func (d *TrainingAgent) uploadTrainingMetricsToObjectStorage() {
 		ObjectName: d.Config.TrainingMetricsObjectStoreURI.ObjectName,
 	}
 	d.logger.Infof("Pushing metrics object %s in bucket %s under namespace %s", genaiObjectURI.ObjectName, genaiObjectURI.BucketName, genaiObjectURI.Namespace)
-	if err := d.Config.ObjectStorageDataStore.Upload(filename, genaiObjectURI); err != nil {
+	if err := d.Config.OutputObjectStorageDataStore.Upload(filename, genaiObjectURI); err != nil {
 		panic(err)
 	}
 	d.logger.Infof("Successfully uploaded metrics to object storage")
@@ -385,11 +402,11 @@ func (d *TrainingAgent) uploadModelToObjectStorageHelper(objectUrl casper.Object
 
 	d.logger.Infof("Uploading Object %s to bucket %s under namesapce %s", objectUrl.ObjectName, objectUrl.BucketName, objectUrl.Namespace)
 	if fileInfo.Size() < int64(BigFileSizeInMB)*int64(casper.MB) {
-		if err := d.Config.ObjectStorageDataStore.Upload(uploadedFilePath, objectUrl); err != nil {
+		if err := d.Config.OutputObjectStorageDataStore.Upload(uploadedFilePath, objectUrl); err != nil {
 			panic(err)
 		}
 	} else {
-		if err := d.Config.ObjectStorageDataStore.MultipartFileUpload(uploadedFilePath, objectUrl, DefaultUploadChunkSizeInMB, DefaultUploadThreads); err != nil {
+		if err := d.Config.OutputObjectStorageDataStore.MultipartFileUpload(uploadedFilePath, objectUrl, DefaultUploadChunkSizeInMB, DefaultUploadThreads); err != nil {
 			panic(err)
 		}
 	}

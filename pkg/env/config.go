@@ -115,7 +115,7 @@ func newResolverConfig(opts ...ResolverOption) (*ResolverConfig, error) {
 
 func WithResolverDefaults() ResolverOption {
 	return func(c *ResolverConfig) error {
-		c.ResolveVarsWith = []vars.ResolverKind{vars.IMDS}
+		c.ResolveVarsWith = []vars.ResolverKind{vars.Local, vars.IMDS, vars.Env}
 		c.CanonicalRegionNames = DefaultCanonicalRegionNames()
 		c.RealmConfigs = DefaultRealmConfigs()
 		c.OverlayBastionHostclassRealmPrefixes = DefaultOverlayBastionHostclassRealmPrefixes()

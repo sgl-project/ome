@@ -12,9 +12,9 @@ type Factory interface {
 	// NewInstancePrincipal returns a configuration provider for instance principals.
 	NewInstancePrincipal() (common.ConfigurationProvider, error)
 
-	// NewApiKeyUserPrincipal creates a configuration provider that using
-	// API key information to construct a user principal.
-	NewApiKeyUserPrincipal(configPath string, profile string) (common.ConfigurationProvider, error)
+	// NewUserPrincipal creates a configuration provider that using
+	// API key or security token to construct a user principal.
+	NewUserPrincipal(configPath string, profile string, useSessionToken bool) (common.ConfigurationProvider, error)
 
 	// NewResourcePrincipal returns a resource principal configuration provider using well known
 	// environment variables to look up token information. The environment variables can either paths or contain the material value
@@ -32,8 +32,12 @@ func (c commonAuthFactory) NewInstancePrincipal() (common.ConfigurationProvider,
 	return auth.InstancePrincipalConfigurationProvider()
 }
 
-func (c commonAuthFactory) NewApiKeyUserPrincipal(configPath string, profile string) (common.ConfigurationProvider, error) {
-	return common.CustomProfileConfigProvider(configPath, profile), nil
+func (c commonAuthFactory) NewUserPrincipal(configPath string, profile string, useSessionToken bool) (common.ConfigurationProvider, error) {
+	if useSessionToken {
+		return common.CustomProfileSessionTokenConfigProvider(configPath, profile), nil
+	} else {
+		return common.CustomProfileConfigProvider(configPath, profile), nil
+	}
 }
 
 func (c commonAuthFactory) NewResourcePrincipal() (common.ConfigurationProvider, error) {
