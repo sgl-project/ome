@@ -2945,7 +2945,6 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 					"storage": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Storage configuration for the fine-tuned weight",
-							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
 						},
 					},
@@ -2981,6 +2980,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}

@@ -1606,7 +1606,6 @@
         },
         "storage": {
           "description": "Storage configuration for the fine-tuned weight",
-          "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
         },
         "trainingJobRef": {

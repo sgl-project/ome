@@ -1258,7 +1258,11 @@ func (in *FineTunedWeightSpec) DeepCopyInto(out *FineTunedWeightSpec) {
 	in.HyperParameters.DeepCopyInto(&out.HyperParameters)
 	in.ModelExtension.DeepCopyInto(&out.ModelExtension)
 	in.Configuration.DeepCopyInto(&out.Configuration)
-	in.Storage.DeepCopyInto(&out.Storage)
+	if in.Storage != nil {
+		in, out := &in.Storage, &out.Storage
+		*out = new(Storage)
+		(*in).DeepCopyInto(*out)
+	}
 	in.TrainingJobRef.DeepCopyInto(&out.TrainingJobRef)
 }
 
