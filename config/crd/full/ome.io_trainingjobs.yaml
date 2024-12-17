@@ -131,6 +131,9 @@ spec:
                         type: string
                     type: object
                 type: object
+              suspend:
+                default: false
+                type: boolean
               trainer:
                 properties:
                   args:

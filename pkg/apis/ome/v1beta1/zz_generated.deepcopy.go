@@ -2770,6 +2770,11 @@ func (in *TrainingJobSpec) DeepCopyInto(out *TrainingJobSpec) {
 		*out = new(HyperparameterTuningConfig)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Suspend != nil {
+		in, out := &in.Suspend, &out.Suspend
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Labels != nil {
 		in, out := &in.Labels, &out.Labels
 		*out = make(map[string]string, len(*in))

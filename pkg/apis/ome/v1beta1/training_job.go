@@ -38,6 +38,11 @@ type TrainingJobSpec struct {
 	// HyperparameterTuningConfig defines the hyperparameter configuration and tuning strategy
 	HyperparameterTuningConfig *HyperparameterTuningConfig `json:"hyperparameterConfig,omitempty"`
 
+	// Whether the controller should suspend the running TrainJob.
+	// Defaults to false.
+	// +kubebuilder:default=false
+	Suspend *bool `json:"suspend,omitempty"`
+
 	// Labels to apply for the derivative JobSet and Jobs.
 	// They will be merged with the TrainingRuntime values.
 	Labels map[string]string `json:"labels,omitempty"`
@@ -181,6 +186,49 @@ const (
 
 	// TrainJobCreated means that the actual jobs creation has succeeded.
 	TrainJobCreated string = "Created"
+)
+
+const (
+	// TrainJobJobsCreationSucceededMessage is status condition message for the
+	// {"type": "Created", "status": "True", "reason": "JobsCreationSucceeded"} condition.
+	TrainJobJobsCreationSucceededMessage = "Succeeded to create Jobs"
+
+	// TrainJobJobsBuildFailedMessage is status condition message for the
+	// {"type": "Created", "status": "True", "reason": "JobsBuildFailed"} condition.
+	TrainJobJobsBuildFailedMessage = "Failed to build Jobs"
+
+	// TrainJobJobsCreationFailedMessage is status condition message for the
+	// {"type": "Created", "status": "True", "reason": "JobsCreationFailed"} condition.
+	TrainJobJobsCreationFailedMessage = "Failed to create Jobs"
+
+	// TrainJobSuspendedMessage is status condition message for the
+	// {"type": "Suspended", "status": "True", "reason": "Suspended"} condition.
+	TrainJobSuspendedMessage = "TrainJob is suspended"
+
+	// TrainJobResumedMessage is status condition message for the
+	// {"type": "Suspended", "status": "True", "reason": "Resumed"} condition.
+	TrainJobResumedMessage = "TrainJob is resumed"
+
+	// TrainJobSuspendedReason is the "Suspended" condition reason.
+	// When the TrainJob is suspended, this is added.
+	TrainJobSuspendedReason string = "Suspended"
+
+	// TrainJobResumedReason is the "Suspended" condition reason.
+	// When the TrainJob suspension is changed from True to False, this is added.
+	TrainJobResumedReason string = "Resumed"
+
+	// TrainJobJobsCreationSucceededReason is the "Created" condition reason.
+	// When the creating objects succeeded after building succeeded, this is added.
+	TrainJobJobsCreationSucceededReason string = "JobsCreationSucceeded"
+
+	// TrainJobJobsBuildFailedReason is the "Created" condition reason.
+	// When the building objects based on the TrainJob and the specified runtime failed,
+	// this is added.
+	TrainJobJobsBuildFailedReason string = "JobsBuildFailed"
+
+	// TrainJobJobsCreationFailedReason is the "Created" condition reason.
+	// When the creating objects failed even though building succeeded, this is added.
+	TrainJobJobsCreationFailedReason string = "JobsCreationFailed"
 )
 
 // TrainingJobList contains a list of TrainingJob
