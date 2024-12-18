@@ -2664,11 +2664,6 @@
           "description": "Image specifies the container image to use for the benchmark job.",
           "type": "string"
         },
-        "name": {
-          "description": "Name for the container.",
-          "type": "string",
-          "default": ""
-        },
         "nodeSelector": {
           "description": "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
           "type": "object",
@@ -4063,6 +4058,10 @@
         "modelConfig": {
           "description": "ModelConfig defines the model configuration for the training job.",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelConfig"
+        },
+        "suspend": {
+          "description": "Whether the controller should suspend the running TrainJob. Defaults to false.",
+          "type": "boolean"
         },
         "trainer": {
           "description": "Trainer defines the trainer to use for the training job.",

@@ -87,10 +87,6 @@ type BenchmarkJobSpec struct {
 }
 
 type PodOverride struct {
-	// Name for the container.
-	// +optional
-	Name string `json:"name"`
-
 	// Image specifies the container image to use for the benchmark job.
 	// +optional
 	Image string `json:"image,omitempty"`

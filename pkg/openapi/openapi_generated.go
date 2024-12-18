@@ -2980,7 +2980,6 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3829,7 +3828,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -4227,7 +4225,6 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -4585,7 +4582,6 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -4688,14 +4684,6 @@ func schema_pkg_apis_ome_v1beta1_PodOverride(ref common.ReferenceCallback) commo
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
-					"name": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Name for the container.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"image": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Image specifies the container image to use for the benchmark job.",
@@ -5602,7 +5590,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -7226,6 +7213,13 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 						SchemaProps: spec.SchemaProps{
 							Description: "HyperparameterTuningConfig defines the hyperparameter configuration and tuning strategy",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig"),
+						},
+					},
+					"suspend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Whether the controller should suspend the running TrainJob. Defaults to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"labels": {

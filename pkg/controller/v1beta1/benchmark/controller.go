@@ -248,6 +248,10 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 				},
 			},
 		},
+		{
+			Name:  "ENABLE_UI",
+			Value: "false",
+		},
 	}
 
 	cmd, args, err := r.buildBenchmarkCommand(benchmarkJob)
@@ -312,7 +316,7 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 	}
 
 	overrideContainer := v1.Container{
-		Name:         benchmarkJob.Spec.PodOverride.Name,
+		Name:         "genai-bench",
 		Image:        benchmarkJob.Spec.PodOverride.Image,
 		Env:          benchmarkJob.Spec.PodOverride.Env,
 		EnvFrom:      benchmarkJob.Spec.PodOverride.EnvFrom,

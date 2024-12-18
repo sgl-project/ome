@@ -677,8 +677,6 @@ spec:
                     x-kubernetes-list-type: atomic
                   image:
                     type: string
-                  name:
-                    type: string
                   nodeSelector:
                     additionalProperties:
                       type: string
