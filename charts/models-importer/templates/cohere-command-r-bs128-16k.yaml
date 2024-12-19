@@ -1,0 +1,41 @@
+{{- if index .Values "cohere-command-r-bs128-16k-chat" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-r-bs128-16k-chat
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "gais-coherecommandrsmall"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "cohere-command-r-bs128-16k-chat" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "cohere-command-r-bs128-16k-chat" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-r-bs128-16k-chat" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key: "command_r"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command-r
+  storage:
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-bs128-16k-chat" "osBucket" }}/o/{{ index .Values "cohere-command-r-bs128-16k-chat" "vendor" }}/{{ index .Values "cohere-command-r-bs128-16k-chat" "osPrefixOverride" }}"
+    storageUri: /mnt/data/models/cohere/command-r-bs128-16k
+  vendor: {{ index .Values "cohere-command-r-bs128-16k-chat" "vendor" }}
+  version: "1.0-16k"
+  modelFormat:
+    name: tensorrt_llm
+    version: 'v0.9.0'
+  modelType: tensorrtllm
+  modelArchitecture: CohereForCasualLM
+  modelParameterSize: 17.28B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 32256
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: SMALL_COHERE_V2
+          quotaUnit: 1
+          default: true
+    internalName: "command-r-bs128-16k"
+    type: "Serving"
+{{- end }}
