@@ -53,6 +53,7 @@ var (
 	AgentModelFrameworkEnvVarKey        = AgentAppName + "_" + "MODEL_FRAMEWORK"
 	AgentTensorRTLLMVersionsEnvVarKey   = AgentAppName + "_" + "TENSORRT_LLM_VERSION"
 	AgentModelFrameworkVersionEnvVarKey = AgentAppName + "_" + "MODEL_FRAMEWORK_VERSION"
+	AgentBaseModelTypeEnvVarKey         = AgentAppName + "_" + "MODEL_TYPE"
 
 	// General Configuration
 	AgentLocalPathEnvVarKey      = AgentAppName + "_" + "LOCAL_PATH"
@@ -124,7 +125,7 @@ var (
 	VolcanoQueue                             = OMEAPIGroupName + "/volcano-queue"
 	Scheduler                                = OMEAPIGroupName + "/scheduler"
 	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
-	SevingInitInjectionKey                   = OMEAPIGroupName + "/inject-serving-init"
+	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
 	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
 	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
 	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
@@ -167,6 +168,7 @@ var (
 	CompartmentIDLabelKey                 = "oci.oraclecloud.com/compartment"
 	InferenceServiceBaseModelNameLabelKey = "base-model-name"
 	InferenceServiceBaseModelSizeLabelKey = "base-model-size"
+	BaseModelTypeLabelKey                 = "base-model-type"
 )
 
 // PrioriryClass
@@ -374,12 +376,12 @@ const (
 	InferenceServiceCanary  = "canary"
 )
 
-// InferenceService container names
+// InferenceService/TrainingJob container names
 const (
-	InferenceServiceContainerName   = "ome-container"
+	MainContainerName               = "ome-container"
 	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
-	ServingInitContainerName        = "serving-init"
+	ModelInitContainerName          = "model-init"
 	MultiNodeProberContainerPort    = 8080
 
 	// TransformerContainerName transformer container name in collocation
@@ -780,6 +782,14 @@ const (
 	CohereCommandRFTDataErrorMessagePrefix = "Exception during dataset conversion"
 	PeftDataErrorMessagePrefix             = "Data error"
 	TerminationLogPath                     = "/dev/termination-log"
+)
+
+// BaseModelType enum
+type BaseModelType string
+
+const (
+	ServingBaseModel    BaseModelType = "Serving"
+	FinetuningBaseModel BaseModelType = "Finetuning"
 )
 
 func (c CheckResultType) String() string {

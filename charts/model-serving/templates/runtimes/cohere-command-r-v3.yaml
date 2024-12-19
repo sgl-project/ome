@@ -7,7 +7,7 @@ spec:
     prometheus.io/port: '8081'
     prometheus.io/scrape: 'true'
     ome.io/disable-blocklist: 'true'
-    ome.io/inject-serving-init: 'true'
+    ome.io/inject-model-init: 'true'
   labels:
     logging-forward: enabled
     sidecar.istio.io/inject: 'true'

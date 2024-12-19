@@ -567,7 +567,7 @@ func (ss *InferenceServiceStatus) PropagateModelStatus(statusSpec ComponentStatu
 	// If the ome container is terminated due to error or crashloopbackoff, update model
 	// state to 'ModelLoadFailed' with failure info.
 	for _, cs := range podList.Items[0].Status.ContainerStatuses {
-		if cs.Name == constants.InferenceServiceContainerName {
+		if cs.Name == constants.MainContainerName {
 			switch {
 			case cs.State.Terminated != nil && cs.State.Terminated.Reason == constants.StateReasonError:
 				ss.UpdateModelRevisionStates(FailedToLoad, totalCopies, &FailureInfo{

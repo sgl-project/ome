@@ -49,14 +49,14 @@ func (c *CustomPredictor) Default(config *InferenceServicesConfig) {
 	if len(c.Containers) == 0 {
 		c.Containers = append(c.Containers, v1.Container{})
 	}
-	c.Containers[0].Name = constants.InferenceServiceContainerName
+	c.Containers[0].Name = constants.MainContainerName
 	setResourceRequirementDefaults(&c.Containers[0].Resources)
 }
 
 func (c *CustomPredictor) GetStorageUri() *string {
 	// return the CustomSpecStorageUri env variable value if set on the spec
 	for _, container := range c.Containers {
-		if container.Name == constants.InferenceServiceContainerName {
+		if container.Name == constants.MainContainerName {
 			for _, envVar := range container.Env {
 				if envVar.Name == constants.CustomSpecStorageUriEnvVarKey {
 					return &envVar.Value
@@ -76,7 +76,7 @@ func (c *CustomPredictor) GetStorageSpec() *StorageSpec {
 func (c *CustomPredictor) GetContainer(metadata metav1.ObjectMeta, extensions *ComponentExtensionSpec, config *InferenceServicesConfig,
 	predictorHost ...string) *v1.Container {
 	for _, container := range c.Containers {
-		if container.Name == constants.InferenceServiceContainerName {
+		if container.Name == constants.MainContainerName {
 			return &container
 		}
 	}

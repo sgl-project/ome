@@ -144,7 +144,7 @@ func setDefaultContainerSettings(podSpec *corev1.PodSpec) {
 }
 
 func setDefaultReadinessProbe(container *corev1.Container) {
-	if container.Name == constants.InferenceServiceContainerName || container.Name == constants.TransformerContainerName {
+	if container.Name == constants.MainContainerName || container.Name == constants.TransformerContainerName {
 		if container.ReadinessProbe == nil {
 			port := int32(8080)
 			if len(container.Ports) > 0 {

@@ -212,7 +212,7 @@ func TestMutator_Handle(t *testing.T) {
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Name: constants.InferenceServiceContainerName,
+							Name: constants.MainContainerName,
 						},
 					},
 				},

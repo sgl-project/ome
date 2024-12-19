@@ -86,13 +86,13 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
 	dedicatedAIClusterSchedulingInjector := NewDedicatedAIClusterSchedulingInjector(mutator.Client)
 
-	servingInitInjector := newServingInitInjector(configMap)
+	modelInitInjector := newModelInitInjector(configMap)
 
 	mutators := []func(pod *v1.Pod) error{
 		agentInjector.InjectAgent,
 		metricsAggregator.InjectMetricsAggregator,
 		dedicatedAIClusterSchedulingInjector.InjectAffinity,
-		servingInitInjector.InjectServingInit,
+		modelInitInjector.InjectModelInit,
 	}
 
 	for _, mutator := range mutators {

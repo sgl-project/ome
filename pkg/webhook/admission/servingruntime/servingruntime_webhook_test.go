@@ -40,7 +40,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -73,7 +73,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -109,7 +109,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -142,7 +142,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -180,7 +180,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -215,7 +215,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -253,7 +253,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -288,7 +288,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -325,7 +325,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -360,7 +360,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -398,7 +398,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -433,7 +433,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -470,7 +470,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -504,7 +504,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -541,7 +541,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -575,7 +575,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -612,7 +612,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -647,7 +647,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -685,7 +685,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -719,7 +719,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -757,7 +757,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -792,7 +792,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -830,7 +830,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -865,7 +865,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -902,7 +902,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -936,7 +936,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -973,7 +973,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -1008,7 +1008,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -1046,7 +1046,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -1080,7 +1080,7 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "seldonio/mlserver:1.2.0",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -1172,7 +1172,7 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",
@@ -1214,7 +1214,7 @@ func TestValidateModelFormatPrioritySame(t *testing.T) {
 					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:  constants.InferenceServiceContainerName,
+								Name:  constants.MainContainerName,
 								Image: "ome/vllm:latest",
 								Args: []string{
 									"--model_name={{.Name}}",

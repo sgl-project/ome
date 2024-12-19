@@ -55,7 +55,7 @@ func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 }
 
 func IsOriginalModelVolumnMountNecessary(annotations map[string]string) bool {
-	inject, ok := annotations[constants.SevingInitInjectionKey]
+	inject, ok := annotations[constants.ModelInitInjectionKey]
 	return !ok || inject != "true"
 }
 
@@ -311,7 +311,7 @@ func GetScaledObjectName(isvcName string) string {
 // getOmeContainerIndex returns the index of the OME container in the runtime containers.
 func GetOmeContainerIndex(containers []v1.Container) int {
 	for i, container := range containers {
-		if container.Name == constants.InferenceServiceContainerName {
+		if container.Name == constants.MainContainerName {
 			return i
 		}
 	}

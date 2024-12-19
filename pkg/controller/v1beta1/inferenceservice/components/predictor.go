@@ -304,6 +304,7 @@ func (p *Predictor) processLabels(isvc *v1beta1.InferenceService, sRuntime v1bet
 			constants.KServiceComponentLabel:                string(v1beta1.PredictorComponent),
 			constants.InferenceServiceBaseModelNameLabelKey: baseModelMeta.Name,
 			constants.InferenceServiceBaseModelSizeLabelKey: baseModelCategory,
+			constants.BaseModelTypeLabelKey:                 string(constants.ServingBaseModel),
 		},
 	)
 

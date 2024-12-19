@@ -1,6 +1,7 @@
 package enigma
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
 	"io"
 	"io/fs"
@@ -172,7 +173,7 @@ func (e *Enigma) decryptFile(path string, info fs.FileInfo, plainDataKey string)
 
 // getModelStorePath constructs the path where the model is stored
 func (e *Enigma) getModelStorePath() string {
-	if e.Config.ModelFramework == TensorRTLLM {
+	if e.Config.ModelFramework == TensorRTLLM && e.Config.ModelType == constants.ServingBaseModel {
 		return filepath.Join(
 			e.Config.LocalPath,
 			e.Config.TensorrtLLMConfig.TensorrtLlmVersion,

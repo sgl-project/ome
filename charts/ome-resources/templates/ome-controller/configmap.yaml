@@ -75,19 +75,17 @@ data:
       "enableMetricAggregation": "{{ .Values.ome.metricsaggregator.enableMetricAggregation }}",
       "enablePrometheusScraping" : "{{ .Values.ome.metricsaggregator.enablePrometheusScraping }}"
     }
-  servingInit: |-
+  modelInit: |-
     {
-        "image" : "{{ .Values.ome.servingInit.servingInitImage.repository }}:{{ .Values.ome.servingInit.servingInitImage.tag }}",
+        "image" : "{{ .Values.ome.modelInit.modelInitImage.repository }}:{{ .Values.ome.modelInit.modelInitImage.tag }}",
         "memoryRequest": "320Gi",
         "memoryLimit": "320Gi",
         "cpuRequest": "15",
         "cpuLimit": "15",
-        "compartmentId": "{{ .Values.ome.servingInit.compartmentId }}",
-        "authType" : "{{ .Values.ome.servingInit.authType }}",
-        "vaultId": "{{ .Values.ome.servingInit.vaultId }}",
-        "region": "{{ .Values.ome.servingInit.region }}",
-        "kmsCryptoEndpoint": "{{ .Values.ome.servingInit.kmsCryptoEndpoint }}",
-        "kmsManagementEndpoint": "{{ .Values.ome.servingInit.kmsManagementEndpoint }}"
+        "compartmentId": "{{ .Values.ome.modelInit.compartmentId }}",
+        "authType" : "{{ .Values.ome.modelInit.authType }}",
+        "vaultId": "{{ .Values.ome.modelInit.vaultId }}",
+        "region": "{{ .Values.ome.modelInit.region }}"
     }
 
 ---

@@ -2,6 +2,7 @@ package enigma
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
@@ -23,14 +24,15 @@ const (
 
 type Config struct {
 	AnotherLogger          logging.Interface
-	ModelName              string             `mapstructure:"model_name"`
-	LocalPath              string             `mapstructure:"local_path"`
-	ModelFramework         ModelFramework     `mapstructure:"model_framework"`
-	TensorrtLLMConfig      *TensorrtLLMConfig `mapstructure:"tensorrtllm_config"`
-	DisableModelDecryption bool               `mapstructure:"disable_model_decryption"`
-	TempPath               string             `mapstructure:"model_store_directory"`
-	VaultId                string             `mapstructure:"vault_id"`
-	SecretName             string             `mapstructure:"secret_name"`
+	ModelName              string                  `mapstructure:"model_name"`
+	LocalPath              string                  `mapstructure:"local_path"`
+	ModelFramework         ModelFramework          `mapstructure:"model_framework"`
+	TensorrtLLMConfig      *TensorrtLLMConfig      `mapstructure:"tensorrtllm_config"`
+	DisableModelDecryption bool                    `mapstructure:"disable_model_decryption"`
+	TempPath               string                  `mapstructure:"model_store_directory"`
+	VaultId                string                  `mapstructure:"vault_id"`
+	SecretName             string                  `mapstructure:"secret_name"`
+	ModelType              constants.BaseModelType `mapstructure:"model_type"`
 	KeyMetadata            *kmsmgm.KeyMetadata
 	KmsCryptoClient        *kmscrypto.KmsCrypto `validate:"required_if=DisableModelDecryption false"`
 	KmsManagement          *kmsmgm.KmsMgm       `validate:"required_if=DisableModelDecryption false"`
@@ -111,7 +113,7 @@ func WithViper(v *viper.Viper, logger logging.Interface) Option {
 			return fmt.Errorf("error unmarshalling key metadata: %w", err)
 		}
 
-		if c.ModelFramework == TensorRTLLM {
+		if c.ModelFramework == TensorRTLLM && c.ModelType == constants.ServingBaseModel {
 			if err := configureTensorRTLLM(c, v, logger); err != nil {
 				return err
 			}
