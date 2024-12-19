@@ -39,8 +39,6 @@ var SecretInVaultModule = fx.Provide(
 
 /*
  * Below is a way to inject a list of SecretInVault using a list of Configs leveraging fx Value Groups feature
- * Regarding how to use it, you can refer to the code snippet under:
- * ome/cmd/download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
  */
 type appParamsWithConfigs struct {
 	fx.In

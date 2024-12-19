@@ -56,8 +56,6 @@ var KmsManagementModule = fx.Provide(
 
 /*
  * Below is a way to inject a list of CryptoClient and KmsKeyManager using a list of Configs leveraging fx Value Groups feature
- * Regarding how to use it, you can refer to the code snippet under:
- * ome/cmd/hf_download-agent/injection/partner-injection.go, in CasperDataStoreListProvider function
  */
 type appParams struct {
 	fx.In

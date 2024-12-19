@@ -1,7 +1,7 @@
 package main
 
 import (
-	trainingagent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/training-agent"
+	training_agent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/training-agent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
@@ -45,10 +45,10 @@ func trainingAgentOpts(cli *cobra.Command) fx.Option {
 		CasperDataStoreListProvider(),
 
 		// Inject main application module
-		trainingagent.Module,
+		training_agent.Module,
 
 		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, a *trainingagent.TrainingAgent, l *zap.Logger, sh fx.Shutdowner) {
+		fx.Invoke(func(lc fx.Lifecycle, a *training_agent.TrainingAgent, l *zap.Logger, sh fx.Shutdowner) {
 			lc.Append(
 				fx.Hook{
 					OnStart: func(context.Context) error {
@@ -108,7 +108,7 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 		panic(fmt.Errorf("error occurred when unmarshalling key input_object_store: %+v", err))
 	}
 	inputCasperConfig.AnotherLogger = logger
-	inputCasperConfig.Name = trainingagent.InputCasperConfigName
+	inputCasperConfig.Name = training_agent.InputCasperConfigName
 	inputCasperConfig.AuthType = &authType
 	return CasperConfigWrapper{
 		CasperConfig: inputCasperConfig,
@@ -118,7 +118,7 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 func provideOutputCasperConfig(logger logging.Interface, authType principals.AuthenticationType) CasperConfigWrapper {
 	outputCasperConfig := &casper.Config{
 		AnotherLogger: logger,
-		Name:          trainingagent.OutputCasperConfigName,
+		Name:          training_agent.OutputCasperConfigName,
 		AuthType:      &authType,
 	}
 	return CasperConfigWrapper{

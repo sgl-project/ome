@@ -28,7 +28,7 @@ target:
 model_framework: tensorrtllm
 tensorrt_llm_version: "v0.11.0"
 #A10, A100-80GB, A100-40GB, A100-80GB, H100
-node_shape_alias: "H100"
+node_shape_alias: ""
 num_of_gpu: 1
 disable_model_decryption: false
 
@@ -39,7 +39,7 @@ secret_name: "command_r-dek"
 model_type: "Serving"
 
 # Configs for training agent
-runtime: "cohere"
+runtime: "cohere" #cohere, cohere-commandr, peft
 training_name: &training_name "amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"
 model_directory: "/mnt/cohere/amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"
 input_object_store:
@@ -67,8 +67,8 @@ cohere_ft:
   train_batch_size:           32
   early_stopping_patience:    5
   early_stopping_threshold:   0.001
-  log_train_status_every_steps: 10
-  n_last_layers:              14
+  log_train_status_every_steps: 0
+  n_last_layers:              0
   tensor_parallel_size:       0
   base_model:                 ""
   lora_config:
