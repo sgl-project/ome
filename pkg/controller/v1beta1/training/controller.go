@@ -184,3 +184,16 @@ func isTrainJobFinished(trainJob *v1beta1.TrainingJob) bool {
 	return meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobComplete) ||
 		meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobFailed)
 }
+
+func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	b := ctrl.NewControllerManagedBy(mgr).
+		For(&v1beta1.TrainingJob{})
+	for _, runtime := range r.runtimes {
+		for _, registrar := range runtime.EventHandlerRegistrars() {
+			if registrar != nil {
+				b = registrar(b, mgr.GetClient())
+			}
+		}
+	}
+	return b.Complete(r)
+}

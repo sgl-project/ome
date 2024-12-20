@@ -6,6 +6,8 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework"
 	fwkplugins "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework/plugins"
 	"context"
+	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -18,6 +20,41 @@ type Framework struct {
 	watchExtensionPlugins        []framework.WatchExtensionPlugin
 	componentBuilderPlugins      []framework.ComponentBuilderPlugin
 	terminalConditionPlugins     []framework.TerminalConditionPlugin
+}
+
+func New(ctx context.Context, c client.Client, r fwkplugins.Registry, indexer client.FieldIndexer) (*Framework, error) {
+	f := &Framework{
+		registry: r,
+	}
+	plugins := make(map[string]framework.Plugin, len(r))
+
+	for name, factory := range r {
+		plugin, err := factory(ctx, c, indexer)
+		if err != nil {
+			return nil, err
+		}
+		plugins[name] = plugin
+		if p, ok := plugin.(framework.EnforceMLPolicyPlugin); ok {
+			f.enforceMLPlugins = append(f.enforceMLPlugins, p)
+		}
+		if p, ok := plugin.(framework.EnforcePodGroupPolicyPlugin); ok {
+			f.enforcePodGroupPolicyPlugins = append(f.enforcePodGroupPolicyPlugins, p)
+		}
+		if p, ok := plugin.(framework.CustomValidationPlugin); ok {
+			f.customValidationPlugins = append(f.customValidationPlugins, p)
+		}
+		if p, ok := plugin.(framework.WatchExtensionPlugin); ok {
+			f.watchExtensionPlugins = append(f.watchExtensionPlugins, p)
+		}
+		if p, ok := plugin.(framework.ComponentBuilderPlugin); ok {
+			f.componentBuilderPlugins = append(f.componentBuilderPlugins, p)
+		}
+		if p, ok := plugin.(framework.TerminalConditionPlugin); ok {
+			f.terminalConditionPlugins = append(f.terminalConditionPlugins, p)
+		}
+	}
+	f.plugins = plugins
+	return f, nil
 }
 
 func (f *Framework) RunEnforceMLPolicyPlugins(info *runtimeobj.Info, trainJob *v1beta1.TrainingJob) error {
@@ -50,4 +87,18 @@ func (f *Framework) RunComponentBuilderPlugins(ctx context.Context, runtimeJobTe
 		}
 	}
 	return objs, nil
+}
+
+func (f *Framework) RunTerminalConditionPlugins(ctx context.Context, trainJob *v1beta1.TrainingJob) (*metav1.Condition, error) {
+	if len(f.terminalConditionPlugins) > 1 {
+		return nil, errors.New("too many TerminalCondition plugins are registered")
+	}
+	if len(f.terminalConditionPlugins) != 0 {
+		return f.terminalConditionPlugins[0].TerminalCondition(ctx, trainJob)
+	}
+	return nil, nil
+}
+
+func (f *Framework) WatchExtensionPlugins() []framework.WatchExtensionPlugin {
+	return f.watchExtensionPlugins
 }

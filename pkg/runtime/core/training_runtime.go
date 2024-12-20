@@ -3,6 +3,10 @@ package core
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework/core"
+	frameworkcore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework/core"
+	trainingindexer "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework/indexer"
+	fwkplugins "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework/plugins"
 	"context"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -14,19 +18,33 @@ import (
 type TrainingRuntime struct {
 	client    client.Client
 	Log       logr.Logger
-	framework *Framework
-}
-
-func (r *TrainingRuntime) TerminalCondition(ctx context.Context, trainJob *v1beta1.TrainingJob) (*metav1.Condition, error) {
-	//TODO implement me
-	panic("implement me")
+	framework *core.Framework
 }
 
 var _ runtime.Runtime = (*TrainingRuntime)(nil)
 
-func NewTrainingRuntime(ctx context.Context, c client.Client, indexer client.FieldIndexer) (TrainingRuntime, error) {
-	// Todo: Construct runtime resource
-	return TrainingRuntime{}, nil
+var trainingRuntimeFactory *TrainingRuntime
+
+var TrainingRuntimeName = "TrainingRuntime"
+
+func (r *TrainingRuntime) TerminalCondition(ctx context.Context, trainJob *v1beta1.TrainingJob) (*metav1.Condition, error) {
+	return r.framework.RunTerminalConditionPlugins(ctx, trainJob)
+}
+
+func NewTrainingRuntime(ctx context.Context, c client.Client, indexer client.FieldIndexer) (runtime.Runtime, error) {
+	if err := indexer.IndexField(ctx, &v1beta1.TrainingJob{}, trainingindexer.TrainJobRuntimeRefKey, trainingindexer.IndexTrainJobTrainingRuntime); err != nil {
+		return nil, errors.Wrapf(err, "Error setting index on TrainingRuntime for TrainJob")
+	}
+
+	fwk, err := frameworkcore.New(ctx, c, fwkplugins.NewRegistry(), indexer)
+	if err != nil {
+		return nil, err
+	}
+	trainingRuntimeFactory = &TrainingRuntime{
+		framework: fwk,
+		client:    c,
+	}
+	return trainingRuntimeFactory, nil
 }
 
 func (r *TrainingRuntime) NewObjects(ctx context.Context, trainJob *v1beta1.TrainingJob) ([]client.Object, error) {
@@ -83,4 +101,12 @@ func (r *TrainingRuntime) buildObjects(ctx context.Context, trainJob *v1beta1.Tr
 	}
 
 	return r.framework.RunComponentBuilderPlugins(ctx, jobSetTemplate.DeepCopy(), info, trainJob)
+}
+
+func (r *TrainingRuntime) EventHandlerRegistrars() []runtime.ReconcilerBuilder {
+	var builders []runtime.ReconcilerBuilder
+	for _, ex := range r.framework.WatchExtensionPlugins() {
+		builders = append(builders, ex.ReconcilerBuilders()...)
+	}
+	return builders
 }

@@ -14,4 +14,5 @@ type Runtime interface {
 	NewObjects(ctx context.Context, trainJob *v1beta1.TrainingJob) ([]client.Object, error)
 
 	TerminalCondition(ctx context.Context, trainJob *v1beta1.TrainingJob) (*metav1.Condition, error)
+	EventHandlerRegistrars() []ReconcilerBuilder
 }
