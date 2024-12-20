@@ -25,6 +25,7 @@ type TrainingJobReconciler struct {
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	runtimes map[string]trainingruntimes.Runtime
 }
 
 type ObjectOperationState string
@@ -59,15 +60,14 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	// Todo: Get runtime specified in training job spec
-	var runtime trainingruntimes.Runtime
+	var trainingRuntime = r.runtimes[*trainJob.Spec.Trainer.Runtime]
 
-	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req)
+	opState, err := r.reconcileObjects(ctx, trainingRuntime, &trainJob, req)
 
 	originStatus := trainJob.Status.DeepCopy()
 	updateSuspendedCondition(&trainJob)
 	updateCreatedCondition(&trainJob, opState)
-	if terminalCondErr := updateTerminalCondition(ctx, runtime, &trainJob); terminalCondErr != nil {
+	if terminalCondErr := updateTerminalCondition(ctx, trainingRuntime, &trainJob); terminalCondErr != nil {
 		return ctrl.Result{}, errors.Join(err, terminalCondErr)
 	}
 	if !equality.Semantic.DeepEqual(&trainJob, originStatus) {
