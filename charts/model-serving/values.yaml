@@ -13,7 +13,7 @@ vllm:
   vllm_multimodal_image:
     tag: &vllm_multimodalImageTag 0.5.1.a24e62ea0ad
   vllm_latest_image:
-    tag: &vllm_latest_image v0.6.4.post1.a6221a14
+    tag: &vllm_latest_image v0.6.4.post1.0c9082a1
 
 sglang:
   port: 8080
@@ -101,9 +101,9 @@ llama_3_3_70b_instruct:
     tag: *vllm_latest_image
 
 llama_3_1_405b_instruct:
-  enabled: false
+  enabled: true
   enableRDMA: false
-  singleNode: false
+  singleNode: true
   annotations:
     traffic.sidecar.istio.io/includeInboundPorts: '8080,9001,9002'
     traffic.sidecar.istio.io/includeOutboundPorts: '8080,9001,9002'
@@ -117,7 +117,7 @@ llama_3_1_405b_instruct:
   maxReplicas: 1
   image:
     repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    tag: *vllm_latest_image
 
 phi_3_vision_128k_instruct:
   enabled: false

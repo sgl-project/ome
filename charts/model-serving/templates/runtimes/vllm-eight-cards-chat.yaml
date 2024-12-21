@@ -44,14 +44,20 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.commonImage.tag }}
+      image: {{ .Values.llama_3_1_405b_instruct.image.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag }}
       command:
         - /bin/bash
         - '-lc'
         - --
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
       env:
-        - name: VLLM_PORT
-          value: '9001'
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '120'
       args:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
@@ -62,7 +68,13 @@ spec:
           --served-model-name={{.Values.vllm.serveModelName}} \
           --tensor-parallel-size=8 \
           --enable-chunked-prefill \
-          --gpu-memory-utilization=0.95
+          --gpu-memory-utilization=0.95 \
+          --max-model-len=131072 \
+          --preemption-mode=swap \
+          --swap-space=10 \
+          --enable-auto-tool-choice \
+          --tool-call-parser llama3_json \
+          --chat-template examples/tool_chat_template_llama3.1_json.jinja
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -70,12 +82,12 @@ spec:
           name: log-volume
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
+          cpu: 120
+          memory: 1000Gi
           nvidia.com/gpu: 8
         limits:
-          cpu: 128
-          memory: 216Gi
+          cpu: 120
+          memory: 1000Gi
           nvidia.com/gpu: 8
 
       readinessProbe:

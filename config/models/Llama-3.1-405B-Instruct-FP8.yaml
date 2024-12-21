@@ -16,8 +16,8 @@ spec:
   modelCapabilities:
     - "TEXT_GENERATION"
   storage:
-    path: oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-405b-instruct-fp8
-    storageUri: /raid/models/Meta-Llama-3.1-405B-Instruct-FP8
+    path: oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-1-405b-instruct-fp8/64a54b704768dfd589a3e4ac05d546052f67f4fd
+    storageUri: /raid/models/Meta-Llama-3.1-405B-Instruct-FP8/64a54b704768dfd589a3e4ac05d546052f67f4fd
   modelConfiguration:
     {
       "_name_or_path": "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8",
@@ -41,7 +41,7 @@ spec:
       "model_type": "llama",
       "num_attention_heads": 128,
       "num_hidden_layers": 126,
-      "num_key_value_heads": 16,
+      "num_key_value_heads": 8,
       "pretraining_tp": 1,
       "quantization_config": {
         "activation_scale_ub": 1200.0,
@@ -574,6 +574,3 @@ spec:
       "use_cache": true,
       "vocab_size": 128256
     }
-
-
-
