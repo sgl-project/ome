@@ -63,7 +63,8 @@ commonAnnotations:
 
 commonLabels:
   logging-forward: enabled
-  sidecar.istio.io/inject: 'true'
+  # TODO, disable istio sidecar injection for now, re-enable after network instability is fixed
+#  sidecar.istio.io/inject: 'true'
 
 commonTolerations:
   - key: "nvidia.com/gpu"
@@ -105,8 +106,9 @@ llama_3_1_405b_instruct:
   enableRDMA: false
   singleNode: true
   annotations:
-    traffic.sidecar.istio.io/includeInboundPorts: '8080,9001,9002'
-    traffic.sidecar.istio.io/includeOutboundPorts: '8080,9001,9002'
+    linkerd.io/inject: "enabled"
+    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
+    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
     ome.io/deploymentMode: MultiNodeRayVLLM
   affinity: {}
   tolerations: []
