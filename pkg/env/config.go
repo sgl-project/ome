@@ -15,6 +15,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/imds"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vibe"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
@@ -62,6 +63,9 @@ type ResolverConfig struct {
 	// Fallback represents configuration for the fallback resolver.
 	Fallback vars.FallbackResolverConfig `mapstructure:"fallback"`
 
+	// Vibe represents configuration for the Vibe resolver.
+	Vibe vibe.Config `mapstructure:"vibe"`
+
 	// Set by WithResolverLogger
 	logger logging.Interface
 
@@ -97,7 +101,7 @@ type RealmConfig struct {
 
 type ResolverOption func(*ResolverConfig) error
 
-// newResolverConfig creates a new resolver config with the given options
+// newResolverConfig creates a new resolver config with the given options.
 func newResolverConfig(opts ...ResolverOption) (*ResolverConfig, error) {
 	c := &ResolverConfig{}
 	for _, o := range opts {
@@ -115,13 +119,14 @@ func newResolverConfig(opts ...ResolverOption) (*ResolverConfig, error) {
 
 func WithResolverDefaults() ResolverOption {
 	return func(c *ResolverConfig) error {
-		c.ResolveVarsWith = []vars.ResolverKind{vars.Local, vars.IMDS, vars.Env}
+		c.ResolveVarsWith = []vars.ResolverKind{vars.Local}
 		c.CanonicalRegionNames = DefaultCanonicalRegionNames()
 		c.RealmConfigs = DefaultRealmConfigs()
 		c.OverlayBastionHostclassRealmPrefixes = DefaultOverlayBastionHostclassRealmPrefixes()
 		c.OverlayBastionHostclasses = DefaultOverlayBastionHostclasses()
 		c.TouchEnforcedInRealms = DefaultTouchEnforcedInRealms()
 		c.IMDS = imds.DefaultConfig()
+		c.Vibe = vibe.DefaultConfig()
 		return nil
 	}
 }
@@ -133,6 +138,7 @@ func DefaultTouchEnforcedInRealms() []string {
 		"oc6",
 		"oc7",
 		"oc11",
+		"oc23",
 	}
 }
 
@@ -166,7 +172,7 @@ func WithResolverFs(fs afero.Fs) ResolverOption {
 	}
 }
 
-// WithResolverConfig sets the config directly to the given instance
+// WithResolverConfig sets the config directly to the given instance.
 func WithResolverConfig(config ResolverConfig) ResolverOption {
 	return func(c *ResolverConfig) error {
 		*c = config
@@ -241,6 +247,10 @@ func (c *ResolverConfig) validateResolvers() error {
 		case vars.IMDS:
 			if err := c.IMDS.Validate(); err != nil {
 				return fmt.Errorf("validating imds config: %w", err)
+			}
+		case vars.Vibe:
+			if err := c.Vibe.Validate(); err != nil {
+				return fmt.Errorf("validating vibe config: %w", err)
 			}
 		default:
 			return fmt.Errorf("unknown resolver kind: %s", kind)

@@ -5,9 +5,8 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 )

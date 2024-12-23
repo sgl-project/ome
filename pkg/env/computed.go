@@ -9,7 +9,7 @@ import (
 type computeVarFn func(e *Environment) (string, error)
 
 var (
-	// map of computed on-the-fly variables to the functions that are used to actually compute the results
+	// map of computed on-the-fly variables to the functions that are used to actually compute the results.
 	computedVars = map[vars.Var]computeVarFn{
 		vars.RegionSE: computeRegionSE,
 	}

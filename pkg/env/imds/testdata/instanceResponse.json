@@ -7,7 +7,8 @@
     "id" : "ocid1.instance.oc1.iad.a47c490fd1eb04eefad95beedd1953d8b",
     "image" : "ocid1.image.oc1.iad.a237f2bc965e41ca87fda983dd9f71cf",
     "metadata" : {
-      "hostclass" : "PERMISSIONS-SERVICE-UNSTABLE-OCICORP"
+      "hostclass" : "PERMISSIONS-SERVICE-UNSTABLE-OCICORP",
+      "hostsubclass" : "customer42"
     },
     "region" : "iad",
     "canonicalRegionName" : "us-ashburn-1",

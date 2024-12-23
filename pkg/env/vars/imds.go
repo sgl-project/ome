@@ -10,6 +10,7 @@ import (
 var (
 	InstanceCompartmentId = MustNewVar("instanceCompartmentID", true)
 	TenancyId             = MustNewVar("tenancyID", true)
+	HostSubclass          = MustNewVar("hostSubclass", false)
 )
 
 type imdsProvider interface {
@@ -19,9 +20,11 @@ type imdsProvider interface {
 	GetTenancyID() (string, error)
 	GetRealmTLD() (string, error)
 	GetInternalRealmTLD() (string, error)
+	GetHostclass() (string, error)
+	GetHostSubclass() (string, error)
 }
 
-// IMDSResolver represents a instance-metadata var resolver
+// IMDSResolver represents a instance-metadata var resolver.
 type IMDSResolver struct {
 	provider imdsProvider
 }
@@ -43,6 +46,8 @@ func (o IMDSResolver) CanResolve() []Var {
 		TenancyId,
 		RealmTLD,
 		InternalRealmTLD,
+		Hostclass,
+		HostSubclass,
 	}
 }
 
@@ -70,6 +75,10 @@ func (o IMDSResolver) Resolve(v Var) (string, error) {
 		return o.provider.GetRealmTLD()
 	case InternalRealmTLD:
 		return o.provider.GetInternalRealmTLD()
+	case Hostclass:
+		return o.provider.GetHostclass()
+	case HostSubclass:
+		return o.provider.GetHostSubclass()
 	}
 
 	return "", fmt.Errorf("IMDSResolver can't resolve var: %v", v)

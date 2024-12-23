@@ -20,7 +20,7 @@ func (v Var) Name() string          { return v.name }
 func (v Var) IsOcid() bool          { return v.isOcid }
 func (v Var) IsHostClassName() bool { return v == Hostclass }
 
-// String returns ${v.name}
+// String returns ${v.name}.
 func (v Var) String() string {
 	return fmt.Sprintf("%s%s%s", PlaceholderStart, v.name, PlaceholderEnd)
 }
@@ -58,14 +58,26 @@ func MustNewVar(name string, isOcid bool) Var {
 }
 
 var (
-	Ad     = MustNewVar("ad", false)
-	Realm  = MustNewVar("realm", false)
+	// Ad represents the availability domain (e.g. /etc/availability-domain).
+	//
+	// NOTE: if the value of this variable gets resolved to 'popX', the result
+	// will be 'ad1'. See https://jira.oci.oraclecorp.com/browse/SSD-11835 for details.
+	Ad = MustNewVar("ad", false)
+
+	// ActualAd is the same as Ad, but it doesn't do any conversion from POP ADs.
+	ActualAd = MustNewVar("actualAd", false)
+
+	// Realm represents the realm this application is in (e.g. /etc/identity-realm).
+	Realm = MustNewVar("realm", false)
+
+	// Region represents the region this application is in (e.g. /etc/region).
 	Region = MustNewVar("region", false)
 
-	// Resolves to the hostclass name in lower case
+	// Hostclass represents to the lowercase hostclass name (e.g. /etc/hostclass).
 	Hostclass = MustNewVar("hostclass", false)
 
-	// Resolves to .10x for gov regions and to empty string otherwise
+	// GovExtension is a deprecated variable that resolves to .10x for OC2/3/4 realms
+	// and to empty string otherwise.
 	GovExtension = MustNewVar("govExtension", false)
 
 	// RegionSE is the same as Region, but has all the hack-arounds to ensure it can be used directly to
@@ -73,11 +85,11 @@ var (
 	RegionSE = MustNewVar("regionSE", false)
 
 	// RealmTLD resolves to top-level public domain of OCI services (without preceding .)
-	// Used by external-customer facing endpoints (e.g. ObjectStorage, Identity)
+	// Used by external-customer facing endpoints (e.g. ObjectStorage, Identity).
 	RealmTLD = MustNewVar("realmTLD", false)
 
 	// InternalRealmTLD resolves to top-level public domain of OCI services (without preceding .)
-	// Used by OCI internal endpoints (e.g. SSH-CA)
+	// Used by OCI internal endpoints (e.g. SSH-CA).
 	InternalRealmTLD = MustNewVar("internalRealmTLD", false)
 )
 
@@ -88,6 +100,7 @@ const (
 	IMDS     ResolverKind = "imds"
 	Local    ResolverKind = "local"
 	Fallback ResolverKind = "fallback"
+	Vibe     ResolverKind = "vibe"
 )
 
 type Resolver interface {

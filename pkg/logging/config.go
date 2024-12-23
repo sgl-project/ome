@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/viper"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // ConfigKey is the root configuration key (in Viper) for this module.
@@ -13,37 +13,52 @@ var ConfigKey = "logging"
 
 // Config holds the configuration for logging.
 type Config struct {
-	Debug bool
+	// Debug sets the logging level to debug.
+	//
+	// If debug is true, any value in `level` is ignored and
+	// it forces the logger to use Console encoder (instead of JSON).
+	//
+	// If you want to use JSON decoder while producing debug logs, use "debug=false, level=debug" combination.
+	//
+	// This field is here for legacy reasons only, maybe at some point we'll be able to get rid of it.
+	Debug bool `mapstructure:"debug"`
+
+	// Level controls the logging level.
+	//
+	// Defaults to INFO if not set.
+	Level Level `mapstructure:"level"`
 
 	// If set, timestamps will be serialized as RFC3339Nano time format.
 	// Otherwise, default EncodeTime formatter will be used (ISO8601 if debug is set, Epoch otherwise).
 	//
 	// See getZapEncoderConfig() for details.
-	EncodeTimeAsRFC3339Nano bool
+	EncodeTimeAsRFC3339Nano bool `mapstructure:"encodeTimeAsRFC3339Nano"`
 
 	// DisableConsoleOutput disables logs to be written to the console.
 	// This will prevent ODO from copying these logs into journalctl -> syslog -> /var/log/user.log
 	// which can cause disk space usage issues.
-	DisableConsoleOutput bool
+	DisableConsoleOutput bool `mapstructure:"disableConsoleOutput"`
 
-	LumberjackLogger *lumberjack.Logger
+	// Logger contains various knobs of lumberjack logging functionality.
+	lumberjack.Logger `mapstructure:",squash"`
 }
 
 // Option is a configuration option for logging.
 type Option func(*Config) error
 
-// ensureLogger ensures that the LumberjackLogger pointer is not nil by creating
-// a logger struct if necessary.
-func (c *Config) ensureLogger() {
-	if c.LumberjackLogger == nil {
-		c.LumberjackLogger = &lumberjack.Logger{}
-	}
-}
-
 // Validate ensures the logging Config is valid.
 func (c *Config) Validate() error {
-	if c.LumberjackLogger == nil {
-		return errors.New("nil logger")
+	if c.MaxSize < 0 {
+		return fmt.Errorf("maxsize must be >= 0, not %d", c.MaxSize)
+	}
+	if c.MaxBackups < 0 {
+		return fmt.Errorf("maxbackups must be >= 0, not %d", c.MaxBackups)
+	}
+	if c.MaxAge < 0 {
+		return fmt.Errorf("maxage days must be >= 0, not %d", c.MaxAge)
+	}
+	if err := c.Level.Validate(); err != nil {
+		return fmt.Errorf("invalid level: %w", err)
 	}
 
 	return nil
@@ -69,31 +84,7 @@ func WithViperKey(v *viper.Viper, configKey string) Option {
 			return errors.New("nil Viper")
 		}
 
-		if v.GetBool("debug") {
-			if err := WithDebugging(c); err != nil {
-				return err
-			}
-		}
-
-		if v.GetBool(configKey + ".encodeTimeAsRFC3339Nano") {
-			if err := WithEncodeTimeAsRFC3339Nano(c, true); err != nil {
-				return err
-			}
-		}
-
-		if v.GetBool(configKey + ".disableConsoleOutput") {
-			if err := WithDisableConsoleOutput(c, true); err != nil {
-				return err
-			}
-		}
-
-		// just unmarshal directly to the struct
-		c.ensureLogger()
-		if err := v.UnmarshalKey(configKey, c.LumberjackLogger); err != nil {
-			return err
-		}
-
-		return nil
+		return v.UnmarshalKey(configKey, c)
 	}
 }
 
@@ -120,80 +111,4 @@ func NewConfig(opts ...Option) (*Config, error) {
 	}
 
 	return c, nil
-}
-
-// WithDebugging specifies use of debug log levels and settings.
-func WithDebugging(c *Config) error {
-	c.Debug = true
-	return nil
-}
-
-// WithEncodeTimeAsRFC3339Nano instructs the logger to serialize timestamps
-// as RFC3339Nano time format.
-func WithEncodeTimeAsRFC3339Nano(c *Config, value bool) error {
-	c.EncodeTimeAsRFC3339Nano = value
-	return nil
-}
-
-// WithDisableConsoleOutput instructs the logger to disable console emitter.
-func WithDisableConsoleOutput(c *Config, value bool) error {
-	c.DisableConsoleOutput = value
-	return nil
-}
-
-// WithLumberjackLogger specifies the lumberjack logger.
-func WithLumberjackLogger(logger *lumberjack.Logger) Option {
-	return func(c *Config) error {
-		c.LumberjackLogger = logger
-		return nil
-	}
-}
-
-// WithFilename sets the log filename.
-func WithFilename(filename string) Option {
-	return func(c *Config) error {
-		c.ensureLogger()
-		c.LumberjackLogger.Filename = filename
-		return nil
-	}
-}
-
-// WithMaxAge specifies the maximum age of log files in days.
-func WithMaxAge(days int) Option {
-	return func(c *Config) error {
-		if days < 0 {
-			return fmt.Errorf("max age days must be >= 0, not %d", days)
-		}
-
-		c.ensureLogger()
-		c.LumberjackLogger.MaxAge = days
-		return nil
-	}
-}
-
-// WithMaxBackups specifies the number of backup logs to keep.
-func WithMaxBackups(backups int) Option {
-	return func(c *Config) error {
-		if backups < 0 {
-			return fmt.Errorf("max backups must be >= 0, not %d", backups)
-		}
-
-		c.ensureLogger()
-		c.LumberjackLogger.MaxBackups = backups
-		return nil
-	}
-}
-
-// WithCompression enables log compression.
-func WithCompression(c *Config) error {
-	c.ensureLogger()
-	c.LumberjackLogger.Compress = true
-	return nil
-}
-
-// WithLocalTime uses local time instead of UTC for filenames.
-func WithLocalTime(c *Config) error {
-	c.ensureLogger()
-	c.LumberjackLogger.LocalTime = true
-	return nil
 }

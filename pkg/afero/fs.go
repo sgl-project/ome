@@ -57,7 +57,7 @@ func ReadDir(fs Fs, dirname string) ([]os.FileInfo, error) {
 	return afero.ReadDir(fs, dirname)
 }
 
-// AtomicFileUpdate automatically updates a file if file content hasn't changed
+// AtomicFileUpdate automatically updates a file if file content hasn't changed.
 func AtomicFileUpdate(
 	fs afero.Fs,
 	destDir string,
@@ -105,7 +105,7 @@ func AtomicFileUpdate(
 }
 
 // HACK(achebatu): MemMapFs has a bug when renaming files.
-// Since we're using it only for tests, it's ok not to do atomic rename
+// Since we're using it only for tests, it's ok not to do atomic rename.
 func isRenameBugged(fs afero.Fs) bool {
 	switch fs.(type) {
 	case *MemMapFs, *afero.MemMapFs:
@@ -116,7 +116,7 @@ func isRenameBugged(fs afero.Fs) bool {
 }
 
 // Exists returns true and nil error if the given path for a file or directory
-// exists
+// exists.
 func Exists(fs afero.Fs, path string) (bool, error) {
 	return afero.Exists(fs, path)
 }

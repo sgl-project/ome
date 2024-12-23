@@ -2,15 +2,10 @@ package env
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
 )
-
-// Realm is a lower-case realm name. Use MakeRealm to parse it.
-type Realm string
-
-func MakeRealm(realm string) Realm {
-	return Realm(strings.ToLower(realm))
-}
 
 const (
 	// realmTLD/internalRealmTLD templates are used for realms
@@ -24,63 +19,35 @@ const (
 )
 
 const (
-	Region1 Realm = "region1"
-	OC0     Realm = "oc0"
-	OC1     Realm = "oc1"
-	OC2     Realm = "oc2"
-	OC3     Realm = "oc3"
-	OC4     Realm = "oc4"
-	OC5     Realm = "oc5"
-	OC6     Realm = "oc6"
-	OC7     Realm = "oc7"
-	OC8     Realm = "oc8"
-	OC9     Realm = "oc9"
-	OC10    Realm = "oc10"
-	OC11    Realm = "oc11"
-	OC12    Realm = "oc12"
-	OC14    Realm = "oc14"
-	OC16    Realm = "oc16"
-	OC17    Realm = "oc17"
-	OC18    Realm = "oc18"
-	OC19    Realm = "oc19"
-	OC20    Realm = "oc20"
+	// Region1 is an alias for REGION1 (backward-compatibility).
+	//
+	// Deprecated: use REGION1 instead.
+	Region1 = REGION1
 )
 
 var (
-	// corresponds to publicDomainName
-	realmTLDs = map[Realm]string{
-		Region1: "oracleiaas.com",
-		OC1:     "oraclecloud.com",
-		OC2:     "oraclegovcloud.com",
-		OC3:     "oraclegovcloud.com",
-		OC4:     "oraclegovcloud.uk",
-		OC6:     "oraclecloud.ic.gov",
-		OC7:     "oc.ic.gov",
-		OC11:    "oraclecloud.smil.mil",
-		OC12:    "oracledodcloud.ic.gov",
-		OC19:    "oraclecloud.eu",
-	}
-
-	// corresponds to iaasDomainName
-	internalRealmTLDs = map[Realm]string{
-		Region1: "oracleiaas.com",
-		OC1:     "oracleiaas.com",
-		OC2:     "oraclegoviaas.com",
-		OC3:     "oraclegoviaas.com",
-		OC4:     "oraclegoviaas.uk",
-		OC6:     "oraclerealm.ic.gov",
-		OC7:     "oci.ic.gov",
-		OC11:    "oraclerealm.smil.mil",
-		OC12:    "oracledodrealm.ic.gov",
-		OC19:    "oraclerealm.eu",
+	// realmPrefixPrecedence allows us to apply our own custom sorting:
+	// regionX -> ocY -> rbZ.
+	realmPrefixPrecedence = map[string]int{
+		"region": 0,
+		"oc":     1,
+		"rb":     2,
 	}
 )
 
-// Name is the official (lowercase) name of the realm
+// Realm is a lower-case realm name. Use MakeRealm to parse it.
+type Realm string
+
+// MakeRealm creates a new realm.
+func MakeRealm(realm string) Realm {
+	return Realm(strings.ToLower(realm))
+}
+
+// Name is the official (lowercase) name of the realm.
 func (r Realm) Name() string { return string(r) }
 
 // TLD is the official top-level domain for customer-facing endpoints (no preceding .)
-// E.g.: ObjectStorage, Identity
+// E.g.: ObjectStorage, Identity.
 func (r Realm) TLD() string {
 	if result, ok := realmTLDs[r]; ok {
 		return result
@@ -90,7 +57,7 @@ func (r Realm) TLD() string {
 }
 
 // InternalTLD is the official top-level domain for internal OCI-facing endpoints (no preceding .)
-// E.g.: SSH-CA
+// E.g.: SSH-CA.
 func (r Realm) InternalTLD() string {
 	if result, ok := internalRealmTLDs[r]; ok {
 		return result
@@ -107,4 +74,51 @@ func tryDefaultNamingConvention(r Realm, template string) string {
 	}
 
 	return ""
+}
+
+// Less returns whether this realm should be earlier
+// in the list than the other during sorting.
+func (r Realm) Less(other Realm) bool {
+	return IsRealmLess(r.Name(), other.Name())
+}
+
+// IsRealmLess returns whether this realm should be earlier
+// in the list than the other during sorting.
+func IsRealmLess(left, right string) bool {
+	if left == right {
+		return false
+	}
+
+	leftFirstDigit := strings.IndexFunc(left, unicode.IsDigit)
+	if leftFirstDigit == -1 {
+		leftFirstDigit = len(left)
+	}
+
+	rightFirstDigit := strings.IndexFunc(right, unicode.IsDigit)
+	if rightFirstDigit == -1 {
+		rightFirstDigit = len(right)
+	}
+
+	leftPrefix := left[:leftFirstDigit]
+	rightPrefix := right[:rightFirstDigit]
+
+	leftRealmPrecedence := realmPrefixPrecedence[leftPrefix]
+	rightRealmPrecedence := realmPrefixPrecedence[rightPrefix]
+	if leftRealmPrecedence != rightRealmPrecedence {
+		return leftRealmPrecedence < rightRealmPrecedence
+	}
+
+	leftSuffix := left[leftFirstDigit:]
+	rightSuffix := right[rightFirstDigit:]
+
+	leftNum, err := strconv.Atoi(leftSuffix)
+	if err != nil {
+		return strings.Compare(leftSuffix, rightSuffix) < 0
+	}
+	rightNum, err := strconv.Atoi(rightSuffix)
+	if err != nil {
+		return strings.Compare(leftSuffix, rightSuffix) < 0
+	}
+
+	return leftNum < rightNum
 }

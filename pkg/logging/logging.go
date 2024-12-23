@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -28,9 +29,16 @@ const RequestLoggerKey = "request-logger"
 // NewLogger takes a logging config and returns a new Zap logger that writes to
 // the log file pointed to by the config with the options applied and stdout.
 func NewLogger(config *Config) (*zap.Logger, error) {
-	encoder, level := constructEncoderAndLevel(config)
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid logging config: %w", err)
+	}
 
-	logFile := zapcore.AddSync(config.LumberjackLogger)
+	encoder, level, err := constructEncoderAndLevel(config)
+	if err != nil {
+		return nil, fmt.Errorf("constructing log encoder and level: %w", err)
+	}
+
+	logFile := zapcore.AddSync(&config.Logger)
 	logCore := zapcore.NewCore(encoder, logFile, level)
 
 	var core zapcore.Core
@@ -45,7 +53,13 @@ func NewLogger(config *Config) (*zap.Logger, error) {
 	return zap.New(core), nil
 }
 
-func constructEncoderAndLevel(config *Config) (zapcore.Encoder, zapcore.Level) {
+func constructEncoderAndLevel(config *Config) (zapcore.Encoder, zapcore.Level, error) {
+	zapLevel, err := config.toZapCoreLevel()
+	if err != nil {
+		return nil, zapLevel, err
+	}
+
+	// TODO: Should this behave differently?
 	//
 	// Right now debug logs get written to the log file. That can be a bit
 	// weird, but having debug logs written to a file can be useful when sifting
@@ -58,10 +72,10 @@ func constructEncoderAndLevel(config *Config) (zapcore.Encoder, zapcore.Level) {
 	// trying to run this in an immutable container.
 	encoderConfig := getZapEncoderConfig(config)
 	if config.Debug {
-		return zapcore.NewConsoleEncoder(encoderConfig), zap.DebugLevel
+		return zapcore.NewConsoleEncoder(encoderConfig), zapLevel, nil
 	}
 
-	return zapcore.NewJSONEncoder(encoderConfig), zap.InfoLevel
+	return zapcore.NewJSONEncoder(encoderConfig), zapLevel, nil
 }
 
 func getZapEncoderConfig(config *Config) zapcore.EncoderConfig {

@@ -14,6 +14,8 @@ type fakeIMDSProvider struct {
 	tenancyId        string
 	realmTLD         string
 	internalRealmTLD string
+	hostclass        string
+	hostSubclass     string
 	err              error
 }
 
@@ -59,6 +61,20 @@ func (f *fakeIMDSProvider) GetInternalRealmTLD() (string, error) {
 	return f.internalRealmTLD, nil
 }
 
+func (f *fakeIMDSProvider) GetHostclass() (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.hostclass, nil
+}
+
+func (f *fakeIMDSProvider) GetHostSubclass() (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.hostSubclass, nil
+}
+
 func TestIMDS_Resolve(t *testing.T) {
 	imdsProvider := &fakeIMDSProvider{
 		realm:            "region1",
@@ -67,6 +83,8 @@ func TestIMDS_Resolve(t *testing.T) {
 		tenancyId:        "ocid1.tenancy.region1..aaaaaaaaprtuilmrj6e4x6zzoanmhj347ssh",
 		internalRealmTLD: "internalrealm.oracleiaas.com",
 		realmTLD:         "realm.oracleiaas.com",
+		hostclass:        "ace-unstable",
+		hostSubclass:     "faas-customer24",
 		err:              nil,
 	}
 
@@ -97,10 +115,30 @@ func TestIMDS_Resolve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "internalrealm.oracleiaas.com", internalRealmTLD)
 	})
-	t.Run("resolve internal realm TLD", func(t *testing.T) {
+	t.Run("resolve realm TLD", func(t *testing.T) {
 		realmTLD, err := r.Resolve(RealmTLD)
 		assert.NoError(t, err)
 		assert.Equal(t, "realm.oracleiaas.com", realmTLD)
+	})
+	t.Run("resolve Hostclass", func(t *testing.T) {
+		hostclass, err := r.Resolve(Hostclass)
+		assert.NoError(t, err)
+		assert.Equal(t, "ace-unstable", hostclass)
+	})
+	t.Run("resolve host subclass", func(t *testing.T) {
+		subclass, err := r.Resolve(HostSubclass)
+		assert.NoError(t, err)
+		assert.Equal(t, "faas-customer24", subclass)
+	})
+	t.Run("resolve hostclass failure", func(t *testing.T) {
+		imdsProvider.err = errors.New("expect error")
+		_, err := r.Resolve(Hostclass)
+		assert.Error(t, err)
+	})
+	t.Run("resolve host subclass failure", func(t *testing.T) {
+		imdsProvider.err = errors.New("expect error")
+		_, err := r.Resolve(HostSubclass)
+		assert.Error(t, err)
 	})
 	t.Run("resolve compartmentID failure", func(t *testing.T) {
 		imdsProvider.err = errors.New("expect error")

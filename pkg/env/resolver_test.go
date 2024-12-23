@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vibe"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
@@ -205,13 +207,64 @@ func TestResolveEnvironment(t *testing.T) {
 	})
 }
 
+func TestResolve_LocalCustomVars(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fs, "/etc/custom-var-value", []byte("hello"), 0))
+
+	r, err := newResolver(&ResolverConfig{
+		ResolveVarsWith: []vars.ResolverKind{
+			vars.Local,
+		},
+		Local: vars.LocalResolverConfig{
+			AdditionalVars: []vars.LocalAdditionalVar{
+				{Name: "customVar", FilePath: "/etc/custom-var-value"},
+			},
+		},
+		logger: newTestLogger(),
+		fs:     fs,
+	})
+	require.NoError(t, err)
+
+	env, err := r.Resolve()
+	require.NoError(t, err)
+
+	result, err := env.Resolve("${customVar}")
+	require.NoError(t, err)
+	require.Equal(t, "hello", result)
+}
+
+func TestResolve_VibeVars(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fs, "/vibe/locale.json", []byte("{\"region\": \"some-region-name\"}"), 0))
+	require.NoError(t, afero.WriteFile(fs, vibe.DefaultMetadataFilePath, []byte("{\"region\": \"some-other-name\"}"), 0))
+
+	r, err := newResolver(&ResolverConfig{
+		ResolveVarsWith: []vars.ResolverKind{
+			vars.Vibe,
+		},
+		Vibe: vibe.Config{
+			MetadataFilePath: "/vibe/locale.json",
+		},
+		logger: newTestLogger(),
+		fs:     fs,
+	})
+	require.NoError(t, err)
+
+	env, err := r.Resolve()
+	require.NoError(t, err)
+
+	result, err := env.Resolve("${vibe_target_region}")
+	require.NoError(t, err)
+	require.Equal(t, "some-region-name", result)
+}
+
 func TestResolve_RealmTLD(t *testing.T) {
 	testCases := []struct {
 		realm                      Realm
 		realmTLD, internalRealmTLD string
 	}{
 		{
-			realm:            Region1,
+			realm:            REGION1,
 			realmTLD:         "oracleiaas.com",
 			internalRealmTLD: "oracleiaas.com",
 		},
@@ -440,7 +493,7 @@ func TestResolve_OverlayBastions(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		name := fmt.Sprintf(tc.hostclass)
+		name := tc.hostclass
 		t.Run(name, func(t *testing.T) {
 			fake := fakeVarResolver{
 				vars.Region:    "r1", // whatever value works to omit warnings
@@ -495,7 +548,9 @@ func TestResolve_Ad_Pop(t *testing.T) {
 		output string
 	}{
 		{input: "ad1", output: "ad1"},
+		{input: "ad3", output: "ad3"},
 		{input: "pop1", output: "ad1"},
+		{input: "pop2", output: "ad1"}, // see https://jira.oci.oraclecorp.com/browse/SSD-11835
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
@@ -513,6 +568,20 @@ func TestResolve_Ad_Pop(t *testing.T) {
 			require.Equal(t, tc.output, actualAd)
 		})
 	}
+}
+
+func TestNewResolverConfig_directConfig(t *testing.T) {
+	rc, err := newResolverConfig(
+		WithResolverConfig(ResolverConfig{
+			Local: vars.LocalResolverConfig{
+				AdditionalVars: []vars.LocalAdditionalVar{
+					{Name: "yo", FilePath: "/etc/yo"},
+				}}}),
+		WithResolverLogger(logging.NewTestLogger()),
+		WithResolverFs(afero.NewMemMapFs()),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, rc.Local.AdditionalVars, vars.LocalAdditionalVar{Name: "yo", FilePath: "/etc/yo"})
 }
 
 func mustMakeResolver(config *ResolverConfig, varResolvers ...vars.Resolver) *resolver {

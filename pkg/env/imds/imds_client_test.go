@@ -2,6 +2,10 @@ package imds
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
@@ -64,15 +69,20 @@ P4xtSxIkk0+SssUrMTUXv7FAKzRRNtbqArVIMKmTqihFEjek/gk=
 )
 
 const (
-	iaasInfoResponseFilePath = "testdata/iaasInfoResponse.json"
-	instanceResponseFilePath = "testdata/instanceResponse.json"
+	iaasInfoResponseFilePath                                       = "testdata/iaasInfoResponse.json"
+	instanceResponseFilePath                                       = "testdata/instanceResponse.json"
+	instanceResponseWithoutSubclassFilePath                        = "testdata/instanceResponseWithoutHostsubclass.json"
+	instanceResponseWithInvalidHostSubclassFilePath                = "testdata/instanceResponseWithInvalidHostSubclass.json"
+	instanceResponseWithHostSubclassNameWithCapitalLettersFilePath = "testdata/instanceResponseWithHostSubclassNameInCaps.json"
 )
 
 type fakeHttpDoer struct {
-	instanceResponse *http.Response
-	certResponse     *http.Response
-	iaasInfoResponse *http.Response
-	err              error
+	instanceResponse         *http.Response
+	certResponse             *http.Response
+	intermediateCertResponse *http.Response
+	iaasInfoResponse         *http.Response
+	keyResponse              *http.Response
+	err                      error
 }
 
 func (f *fakeHttpDoer) Do(req *http.Request) (*http.Response, error) {
@@ -85,6 +95,14 @@ func (f *fakeHttpDoer) Do(req *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBufferString(sampleInstanceCert))}, nil
 		}
 		return f.certResponse, nil
+	}
+
+	if strings.Contains(req.URL.RequestURI(), "identity/key") {
+		return f.keyResponse, nil
+	}
+
+	if strings.Contains(req.URL.RequestURI(), "identity/intermediate") {
+		return f.intermediateCertResponse, nil
 	}
 
 	if strings.Contains(req.URL.RequestURI(), "instance") {
@@ -210,7 +228,176 @@ func TestImdsProvider(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, "oracleiaas.com", internalRealm)
 		})
+
+		t.Run("get hostclass from v2", func(t *testing.T) {
+			hostclass, err := imdsClient.GetHostclass()
+			assert.NoError(t, err)
+			assert.Equal(t, "PERMISSIONS-SERVICE-UNSTABLE-OCICORP", hostclass)
+		})
+
+		t.Run("get host subclass from v2", func(t *testing.T) {
+			subclass, err := imdsClient.GetHostSubclass()
+			assert.NoError(t, err)
+			assert.Equal(t, "customer42", subclass)
+		})
+
 	})
+
+	t.Run("case for cert and key", func(t *testing.T) {
+		imdsConfig := DefaultConfig()
+		imdsConfig.TimeoutAfter = 10 * time.Second
+
+		client := &fakeHttpDoer{
+			certResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBufferString(sampleInstanceCert)),
+			},
+			err: nil,
+		}
+
+		imdsClient := &Client{
+			config:     imdsConfig,
+			httpClient: client,
+			logger:     logging.NewTestLogger(),
+		}
+
+		cert, err := imdsClient.GetCertificate()
+		assert.NoError(t, err)
+		actualCert := parseX509Cert(t)
+		assert.True(t, cert.Equal(actualCert))
+
+	})
+
+	t.Run("case for key", func(t *testing.T) {
+		imdsConfig := DefaultConfig()
+		imdsConfig.TimeoutAfter = 10 * time.Second
+		privKeyString := generateFakePrivateKey(t)
+		client := &fakeHttpDoer{
+			certResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBufferString(sampleInstanceCert)),
+			},
+			keyResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBufferString(privKeyString)),
+			},
+
+			err: nil,
+		}
+
+		imdsClient := &Client{
+			config:     imdsConfig,
+			httpClient: client,
+			logger:     logging.NewTestLogger(),
+		}
+
+		// not checking the cert here since mocked response does not have that
+		key, cert, err := imdsClient.GetX509KeyPair()
+		assert.NoError(t, err)
+		certBytes := []byte(sampleInstanceCert)
+		keyBytes := []byte(privKeyString)
+		assert.Equal(t, cert, certBytes)
+		assert.Equal(t, key, keyBytes)
+
+	})
+
+	t.Run("case for missing subclass", func(t *testing.T) {
+		imdsConfig := DefaultConfig()
+		imdsConfig.TimeoutAfter = 10 * time.Second
+
+		client := &fakeHttpDoer{
+			instanceResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBuffer(getFileBytes(instanceResponseWithoutSubclassFilePath))),
+			},
+
+			err: nil,
+		}
+
+		imdsClient := &Client{
+			config:     imdsConfig,
+			httpClient: client,
+			logger:     logging.NewTestLogger(),
+		}
+
+		t.Run("no host subclass in response", func(t *testing.T) {
+			subclass, err := imdsClient.GetHostSubclass()
+			assert.Error(t, err)
+			assert.Equal(t, "", subclass)
+		})
+	})
+
+	t.Run("invalid host subclass name", func(t *testing.T) {
+		imdsConfig := DefaultConfig()
+		imdsConfig.TimeoutAfter = 10 * time.Second
+
+		client := &fakeHttpDoer{
+			instanceResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBuffer(getFileBytes(instanceResponseWithInvalidHostSubclassFilePath))),
+			},
+
+			err: nil,
+		}
+
+		imdsClient := &Client{
+			config:     imdsConfig,
+			httpClient: client,
+			logger:     logging.NewTestLogger(),
+		}
+
+		subclass, err := imdsClient.GetHostSubclass()
+		assert.Error(t, err)
+		assert.Equal(t, subclass, "")
+	})
+
+	t.Run("host subclass name has capital letters -- return host subclass in lower", func(t *testing.T) {
+		imdsConfig := DefaultConfig()
+		imdsConfig.TimeoutAfter = 10 * time.Second
+
+		client := &fakeHttpDoer{
+			instanceResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBuffer(getFileBytes(instanceResponseWithHostSubclassNameWithCapitalLettersFilePath))),
+			},
+
+			err: nil,
+		}
+
+		imdsClient := &Client{
+			config:     imdsConfig,
+			httpClient: client,
+			logger:     logging.NewTestLogger(),
+		}
+
+		subclass, err := imdsClient.GetHostSubclass()
+		assert.NoError(t, err)
+		assert.Equal(t, subclass, "test-subclass")
+	})
+
+	t.Run("case for intermediate cert", func(t *testing.T) {
+		imdsConfig := DefaultConfig()
+		imdsConfig.TimeoutAfter = 10 * time.Second
+		client := &fakeHttpDoer{
+			intermediateCertResponse: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewBufferString(sampleInstanceCert)),
+			},
+			err: nil,
+		}
+
+		imdsClient := &Client{
+			config:     imdsConfig,
+			httpClient: client,
+			logger:     logging.NewTestLogger(),
+		}
+
+		cert, err := imdsClient.GetIntermediateCertificate()
+		assert.NoError(t, err)
+		certBytes := []byte(sampleInstanceCert)
+		assert.Equal(t, cert, certBytes)
+	})
+
 	t.Run("error case", func(t *testing.T) {
 		imdsConfig := DefaultConfig()
 		imdsConfig.TimeoutAfter = 10 * time.Second
@@ -236,6 +423,15 @@ func TestImdsProvider(t *testing.T) {
 
 		_, err = imdsClient.GetInternalRealmTLD()
 		assert.Error(t, err)
+
+		_, err = imdsClient.GetHostclass()
+		assert.Error(t, err)
+
+		_, err = imdsClient.GetHostSubclass()
+		assert.Error(t, err)
+
+		_, err = imdsClient.GetIntermediateCertificate()
+		assert.Error(t, err)
 	})
 }
 
@@ -244,10 +440,37 @@ func getFileBytes(fileName string) []byte {
 	file, _ := os.Open(fileName)
 
 	// defer the closing of our jsonFile so that we can parse it later on
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	// read file as a byte array.
 	byteValue, _ := io.ReadAll(file)
 
 	return byteValue
+}
+
+func generateFakePrivateKey(t *testing.T) string {
+	t.Helper()
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	require.NoError(t, privKey.Validate())
+
+	privDer := x509.MarshalPKCS1PrivateKey(privKey)
+	privBlock := &pem.Block{
+		Type:    "RSA PRIVATE KEY",
+		Headers: nil,
+		Bytes:   privDer,
+	}
+	var privateKey bytes.Buffer
+	require.NoError(t, pem.Encode(&privateKey, privBlock))
+	return privateKey.String()
+}
+
+func parseX509Cert(t *testing.T) *x509.Certificate {
+	t.Helper()
+	block, _ := pem.Decode([]byte(sampleInstanceCert))
+	cert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+	return cert
 }

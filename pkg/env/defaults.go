@@ -149,7 +149,6 @@ func DefaultRealmConfigs() map[string]*RealmConfig {
 				"eu-paris-1",
 				"mx-queretaro-1",
 				"us-lke-1",
-				"us-chicago-1",
 			},
 		},
 

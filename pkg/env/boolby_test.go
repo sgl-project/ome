@@ -1,8 +1,9 @@
 package env
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBoolByRegion(t *testing.T) {

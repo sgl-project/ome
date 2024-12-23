@@ -52,7 +52,7 @@ func TestAPI_FromResolver_Viper(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, "oc2/us-langley-1/ad3", env.TryResolve(e, "${realm}/${region}/${ad}"))
+	assert.Equal(t, "oc2/us-langley-1/ad1", env.TryResolve(e, "${realm}/${region}/${ad}"))
 	assert.Equal(t, ".10x", env.TryResolve(e, "${govExtension}"))
 	assert.Equal(t, "oraclegovcloud.com", env.TryResolve(e, "${realmTLD}"))
 	assert.Equal(t, true, e.IsGov(), "isGov should be true")

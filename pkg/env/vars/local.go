@@ -12,7 +12,7 @@ var (
 )
 
 var (
-	// Default local vars' file paths resolved by local resolver
+	// Default local vars' file paths resolved by local resolver.
 	localVarsToFilePaths = map[Var]string{
 		Ad:                    "/etc/availability-domain",
 		Region:                "/etc/region",
@@ -37,7 +37,7 @@ type LocalAdditionalVar struct {
 }
 
 // constructAddlVars returns a map of Var -> filePath
-// collecting all additional vars specified in the config
+// collecting all additional vars specified in the config.
 func (c LocalResolverConfig) constructAddlVars() (map[Var]string, error) {
 	if len(c.AdditionalVars) == 0 {
 		return nil, nil
@@ -66,7 +66,7 @@ func (c LocalResolverConfig) constructAddlVars() (map[Var]string, error) {
 	return result, nil
 }
 
-// LocalResolver represents a var resolver that uses filesystem
+// LocalResolver represents a var resolver that uses filesystem.
 type LocalResolver struct {
 	varsToFilePaths map[Var]string
 	fs              afero.Fs

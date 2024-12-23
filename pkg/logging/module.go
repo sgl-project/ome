@@ -60,5 +60,5 @@ func provideZapLogger(configKey string) func(v *viper.Viper) (*zap.Logger, error
 	}
 }
 
-// Temporary - provide this interface until all clients are migrated to zap directly
+// Temporary - provide this interface until all clients are migrated to zap directly.
 func provideInterface(l *zap.Logger) Interface { return ForZap(l) }

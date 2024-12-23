@@ -45,7 +45,7 @@ func TestOS_LChown(t *testing.T) {
 			return
 		}
 
-		t.Logf(srcFilePath)
+		t.Log(srcFilePath)
 		// Lchown doesn't work unless tests are run by root
 		// A proper test should run in a docker container
 		nobodyUid, nobodyGid := mustParseUser(t, func() (*user.User, error) { return user.Lookup("nobody") })

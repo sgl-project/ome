@@ -2,13 +2,13 @@ package env
 
 import (
 	"fmt"
-	"github.com/spf13/afero"
-	"os"
 	"sort"
 	"strings"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 	"github.com/hashicorp/go-multierror"
+	"github.com/spf13/afero"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 )
 
 type Resolver interface {
@@ -88,6 +88,11 @@ func makeResolvers(config *ResolverConfig, fs afero.Fs) ([]vars.Resolver, error)
 			if err != nil {
 				return nil, fmt.Errorf("fallback resolver: %w", err)
 			}
+		case vars.Vibe:
+			resolver, err = vars.NewVibeResolver(config.Vibe, fs)
+			if err != nil {
+				return nil, fmt.Errorf("vibe resolver: %w", err)
+			}
 		default:
 			return nil, fmt.Errorf("unknown resolver kind: %s", resolverKind)
 		}
@@ -118,6 +123,7 @@ func (e *resolver) Resolve() (*Environment, error) {
 
 	resolved[vars.Region] = region
 	resolved[vars.Ad] = ad
+	resolved[vars.ActualAd] = e.resolveActualAd()
 	resolved[vars.Realm] = realm.Name()
 
 	resolved[vars.GovExtension] = e.resolveGovExtension(realm)
@@ -151,7 +157,7 @@ func (e *resolver) Resolve() (*Environment, error) {
 }
 
 func (e *resolver) isBuiltinVar(v vars.Var) bool {
-	return v == vars.Realm || v == vars.Region || v == vars.Ad || v == vars.GovExtension
+	return v == vars.Realm || v == vars.Region || v == vars.Ad || v == vars.ActualAd || v == vars.GovExtension
 }
 
 func (e *resolver) resolveVar(v vars.Var) (string, error) {
@@ -181,22 +187,28 @@ func (e *resolver) resolveAd() string {
 	}
 
 	if strings.HasPrefix(ad, "pop") {
-		return "ad" + strings.TrimPrefix(ad, "pop")
+		// see https://jira.oci.oraclecorp.com/browse/SSD-11835
+		return "ad1"
 	}
+
+	return ad
+}
+
+func (e *resolver) resolveActualAd() string {
+	ad, err := e.resolveVar(vars.Ad)
+	if err != nil {
+		e.config.logger.WithError(err).Warn("actualAd couldn't be resolved")
+		return "<actualAd not resolved>"
+	}
+
 	return ad
 }
 
 func (e *resolver) resolveRegion() string {
 	region, err := e.resolveVar(vars.Region)
 	if err != nil {
-		e.config.logger.WithError(err).Warn("region couldn't be resolved from region file, falling back to env var")
-
-		region, exist := os.LookupEnv("REGION")
-		if exist {
-			return region
-		} else {
-			return "<region not resolved>"
-		}
+		e.config.logger.WithError(err).Warn("region couldn't be resolved")
+		return "<region not resolved>"
 	}
 
 	actualRegion, ok := e.canonicalRegion(region)
@@ -328,7 +340,7 @@ func (e *resolver) isTouchEnforcedForRealm(realm Realm) bool {
 	return false
 }
 
-// collectVars collects all variables defined by resolvers
+// collectVars collects all variables defined by resolvers.
 func (e *resolver) collectVars() (map[vars.Var]bool, error) {
 	resultMap := make(map[vars.Var]bool)
 	for _, resolver := range e.varResolvers {

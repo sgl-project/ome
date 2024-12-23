@@ -10,17 +10,12 @@ import (
 type Interface interface {
 	Realm() (string, bool)
 	Region() (string, bool)
-
-	// Should take string literal with ${var} token inside
-	// it to turn those tokens into the resolved values.
-	//
-	// e.g. "${hostclass}" => "WEBADM-JIT"
 	Resolve(string) (string, error)
 }
 
 var _ Interface = &Environment{}
 
-// Environment is responsible for supplying environment specific information
+// Environment is responsible for supplying environment specific information.
 type Environment struct {
 	isGov                  bool
 	isONSR                 bool
@@ -45,10 +40,10 @@ func (e *Environment) Ad() (string, bool) {
 	return result, ok
 }
 
-// Should take string literal with ${var} token inside
+// Resolve takes a string literal with ${var} tokens inside
 // it to turn those tokens into the resolved values.
 //
-// e.g. "${hostclass}" => "WEBADM-JIT"
+// e.g. "${hostclass}" => "WEBADM-JIT".
 func (e *Environment) Resolve(s string) (string, error) {
 	varsToResolve, err := e.parseVars(s)
 	if err != nil {
@@ -80,7 +75,7 @@ func (e *Environment) resolveVar(variable vars.Var) (string, error) {
 }
 
 const (
-	// see comment in parseVars method about this
+	// see comment in parseVars method about this.
 	nonVarPlaceholder = "!OK!"
 )
 
@@ -133,7 +128,7 @@ func substituteVarPlaceholder(s string, v vars.Var, varsToResolve map[string]var
 func (e *Environment) IsGov() bool  { return e.isGov }
 func (e *Environment) IsONSR() bool { return e.isONSR }
 
-// IsOverlayBastion returns whether the host we're running on is an overlay bastion
+// IsOverlayBastion returns whether the host we're running on is an overlay bastion.
 func (e *Environment) IsOverlayBastion() bool { return e.isOverlayBastion }
 
 // IsTouchEnforced returns whether the Yubikey touch should be enforced.
@@ -160,10 +155,10 @@ func TryResolve(e Interface, v string) string {
 	return result
 }
 
-// Option is function that configures the resulting Environment
+// Option is function that configures the resulting Environment.
 type Option func(e *Environment)
 
-// Vars is a short-hand for the underlying type
+// Vars is a shorthand for the underlying type.
 type Vars = map[vars.Var]string
 
 func WithResolvedVars(resolved Vars) Option {
@@ -196,7 +191,7 @@ func WithIsTouchEnforcedForRealm(value bool) Option {
 	}
 }
 
-// New creates a new environment using given set of options
+// New creates a new environment using given set of options.
 func New(opts ...Option) *Environment {
 	e := &Environment{}
 	for _, o := range opts {
@@ -206,7 +201,7 @@ func New(opts ...Option) *Environment {
 	return e
 }
 
-// FromResolver creates a new environment using given set of resolver config options
+// FromResolver creates a new environment using given set of resolver config options.
 func FromResolver(opts ...ResolverOption) (*Environment, error) {
 	conf, err := newResolverConfig(opts...)
 	if err != nil {

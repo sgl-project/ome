@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -17,6 +18,8 @@ import (
 const (
 	opcTenantPrefix = "opc-tenant:"
 )
+
+var validHostSubclassRegex = regexp.MustCompile("^[a-zA-Z][a-zA-Z0-9-]{2,}$")
 
 type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -28,6 +31,8 @@ type instanceResult struct {
 	Realm         string
 	Region        string
 	CompartmentId string
+	Hostclass     string
+	HostSubclass  string
 	Shape         string
 }
 
@@ -47,7 +52,7 @@ type Client struct {
 	// it's better to pull all 3 pieces at once (region/realm/compartmentId)
 	// and save to instanceResult.
 	// NOTE: GetTenancyId still requires pulling & parsing the instance certificate,
-	// but nothing we can do here. Nobody really uses this variable anyways.
+	// but nothing we can do here. Nobody really uses this variable anyway.
 	instanceResultOnce sync.Once
 	instanceResult     instanceResult
 	iaasInfoResult     iaasInfoResult
@@ -55,6 +60,7 @@ type Client struct {
 	iassInfoResultErr  error
 }
 
+// NewClient creates a new imds client.
 func NewClient(config Config, logger logging.Interface) (*Client, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("validating imds config: %w", err)
@@ -69,6 +75,7 @@ func NewClient(config Config, logger logging.Interface) (*Client, error) {
 	}, nil
 }
 
+// GetRealm fetches realm from the instance endpoint response.
 func (ip *Client) GetRealm() (string, error) {
 	ir, err := ip.getInstanceResult()
 	if err != nil {
@@ -78,6 +85,7 @@ func (ip *Client) GetRealm() (string, error) {
 	return ir.Realm, nil
 }
 
+// GetRegion fetches region from the instance endpoint response.
 func (ip *Client) GetRegion() (string, error) {
 	ir, err := ip.getInstanceResult()
 	if err != nil {
@@ -87,8 +95,9 @@ func (ip *Client) GetRegion() (string, error) {
 	return ir.Region, nil
 }
 
+// GetTenancyID fetches tenancy ID from the identity certificate endpoint.
 func (ip *Client) GetTenancyID() (string, error) {
-	cert, err := ip.getCertificate()
+	cert, err := ip.GetCertificate()
 	if err != nil {
 		return "", err
 	}
@@ -96,6 +105,8 @@ func (ip *Client) GetTenancyID() (string, error) {
 	return extractOU(cert, opcTenantPrefix)
 }
 
+// GetCompartmentID fetches instance compartment from the instance endpoint
+// response.
 func (ip *Client) GetCompartmentID() (string, error) {
 	ir, err := ip.getInstanceResult()
 	if err != nil {
@@ -103,6 +114,99 @@ func (ip *Client) GetCompartmentID() (string, error) {
 	}
 
 	return ir.CompartmentId, nil
+}
+
+// GetRealmTLD fetches Realm's Top-level Domain from the iaas info endpoint
+// response.
+func (ip *Client) GetRealmTLD() (string, error) {
+	infoResult, err := ip.getIaasInfoResultJson()
+	if err != nil {
+		return "", err
+	}
+
+	return infoResult.PublicDomainName, nil
+}
+
+// GetInternalRealmTLD fetches Realm's internal Top-level Domain from the iaas
+// info endpoint response.
+func (ip *Client) GetInternalRealmTLD() (string, error) {
+	infoResult, err := ip.getIaasInfoResultJson()
+	if err != nil {
+		return "", err
+	}
+
+	return infoResult.IaasDomainName, nil
+}
+
+// GetHostSubclass fetches Host subclass from the instance endpoint response.
+func (ip *Client) GetHostSubclass() (string, error) {
+	ir, err := ip.getInstanceResult()
+	if err != nil {
+		return "", err
+	}
+
+	if !validHostSubclassRegex.MatchString(ir.HostSubclass) {
+		return "", fmt.Errorf("invalid Host Subclass: %s", ir.HostSubclass)
+	}
+	return strings.ToLower(ir.HostSubclass), nil
+}
+
+// GetHostclass fetches hostclass from the instance endpoint response.
+func (ip *Client) GetHostclass() (string, error) {
+	ir, err := ip.getInstanceResult()
+	if err != nil {
+		return "", err
+	}
+
+	return ir.Hostclass, nil
+}
+
+// GetCertificate fetches the Identity leaf cert from IMDS.
+func (ip *Client) GetCertificate() (*x509.Certificate, error) {
+	pemCert, err := ip.getBytesWithFallback(ip.config.IdentityCertEndpointSuffix)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(pemCert)
+	if block == nil {
+		return nil, fmt.Errorf("no pem block found")
+	}
+	if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+		return nil, fmt.Errorf("invalid block type or block headers are not empty")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parsing certificate: %w", err)
+	}
+
+	return cert, nil
+}
+
+// GetX509KeyPair fetches the identity leaf certificate and its private key from IMDS.
+func (ip *Client) GetX509KeyPair() (key []byte, leafCert []byte, err error) {
+	leafCert, err = ip.getBytesWithFallback(ip.config.IdentityCertEndpointSuffix)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	key, err = ip.getBytesWithFallback(ip.config.IdentityCertPrivateKeyEndpointSuffix)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return key, leafCert, nil
+}
+
+// GetIntermediateCertificate fetches the identity intermediate cert from IMDS.
+func (ip *Client) GetIntermediateCertificate() ([]byte, error) {
+	intermediateCert, err := ip.getBytesWithFallback(ip.config.IdentityIntermediateCertEndpointSuffix)
+	if err != nil {
+		return nil, err
+	}
+
+	return intermediateCert, nil
 }
 
 func (ip *Client) GetInstanceShape() (string, error) {
@@ -114,24 +218,6 @@ func (ip *Client) GetInstanceShape() (string, error) {
 	return ir.Shape, nil
 }
 
-func (ip *Client) GetRealmTLD() (string, error) {
-	infoResult, err := ip.getIaasInfoResultJson()
-	if err != nil {
-		return "", err
-	}
-
-	return infoResult.PublicDomainName, nil
-}
-
-func (ip *Client) GetInternalRealmTLD() (string, error) {
-	infoResult, err := ip.getIaasInfoResultJson()
-	if err != nil {
-		return "", err
-	}
-
-	return infoResult.IaasDomainName, nil
-}
-
 func (ip *Client) getInstanceResult() (instanceResult, error) {
 	ip.instanceResultOnce.Do(func() {
 		jsonBytes, err := ip.getBytesWithFallback(ip.config.InstanceEndpointSuffix)
@@ -140,35 +226,13 @@ func (ip *Client) getInstanceResult() (instanceResult, error) {
 			return
 		}
 
-		ip.instanceResult, ip.instanceResultErr = parseInstanceResultJson(jsonBytes)
+		ip.instanceResult, ip.instanceResultErr = parseInstanceResult(jsonBytes)
 	})
 
 	return ip.instanceResult, ip.instanceResultErr
 }
 
-func parseInstanceResultJson(jsonBytes []byte) (instanceResult, error) {
-	jsonValue := struct {
-		CompartmentId string `json:"compartmentId"`
-		Shape         string `json:"shape"`
-		RegionInfo    struct {
-			Realm  string `json:"realmKey"`
-			Region string `json:"regionIdentifier"`
-		} `json:"regionInfo"`
-	}{}
-
-	if err := json.Unmarshal(jsonBytes, &jsonValue); err != nil {
-		return instanceResult{}, err
-	}
-
-	return instanceResult{
-		Realm:         jsonValue.RegionInfo.Realm,
-		Region:        jsonValue.RegionInfo.Region,
-		CompartmentId: jsonValue.CompartmentId,
-		Shape:         jsonValue.Shape,
-	}, nil
-}
-
-// getIaasInfoResultJson would return the deserialized iaasInfoResult from IMDS
+// getIaasInfoResultJson would return the deserialized iaasInfoResult from IMDS.
 func (ip *Client) getIaasInfoResultJson() (iaasInfoResult, error) {
 	jsonBytes, err := ip.getBytesWithFallback(ip.config.IaasInfoEndpointSuffix)
 	if err != nil {
@@ -215,30 +279,8 @@ func extractOU(cert *x509.Certificate, prefix string) (string, error) {
 	return "", fmt.Errorf("can't find OU with %s prefix", prefix)
 }
 
-func (ip *Client) getCertificate() (*x509.Certificate, error) {
-	pemCert, err := ip.getBytesWithFallback(ip.config.IdentityCertEndpointSuffix)
-	if err != nil {
-		return nil, err
-	}
-
-	block, _ := pem.Decode(pemCert)
-	if block == nil {
-		return nil, fmt.Errorf("no pem block found")
-	}
-	if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
-		return nil, fmt.Errorf("invalid block type or block headers are not empty")
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parsing certificate: %w", err)
-	}
-
-	return cert, nil
-}
-
 // getBytes makes an HTTP GET request to the endpoint (base+suffix)
-// If 404 is returned, then the fallback base endpoint is used
+// If 404 is returned, then the fallback base endpoint is used.
 func (ip *Client) getBytesWithFallback(path string) ([]byte, error) {
 	statusCode, respBytes, err := ip.actuallyGetBytes(path, true /* v2 */)
 	if err != nil || statusCode == 404 {

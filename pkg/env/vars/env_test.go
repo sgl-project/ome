@@ -115,7 +115,7 @@ func TestEnv_Resolve(t *testing.T) {
 	})
 }
 
-// returns a cleanup function
+// returns a cleanup function.
 func setEnv(v Var, value string) func() {
 	variable := varToEnv[v]
 	return setEnvRaw(variable, value)

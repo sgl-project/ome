@@ -135,6 +135,6 @@ func TestConfig_Defaults(t *testing.T) {
 	err := env.WithResolverDefaults()(c)
 	require.NoError(t, err)
 
-	require.Equal(t, []vars.ResolverKind{vars.Local, vars.IMDS, vars.Env}, c.ResolveVarsWith)
+	require.Equal(t, []vars.ResolverKind{vars.Local}, c.ResolveVarsWith)
 	require.Equal(t, imds.DefaultConfig(), c.IMDS)
 }
