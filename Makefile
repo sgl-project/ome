@@ -1,7 +1,7 @@
 # Check Go version and set environment at the start
 ifeq ($(shell which go),/opt/go-1.19.13/bin/go)
-    export GOROOT=/opt/go-1.23.0
-    export PATH:=$(GOROOT)/bin:$(PATH)
+    export GOROOT := /opt/go-1.23.0
+    export PATH := $(GOROOT)/bin:$(PATH)
 endif
 
 # Define the directory containing the charts
