@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -63,14 +64,6 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	var isvcRef *v1beta1.InferenceService
-	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
-		isvcRef, err = benchmarkutils.GetInferenceService(r.Client, benchmarkJob.Spec.Endpoint.InferenceService)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
 	log.Info("Reconciling BenchmarkJob", "name", benchmarkJob.Name, "namespace", benchmarkJob.Namespace)
 
 	// Finalizer handling
@@ -84,10 +77,26 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	// Update status - currently no updates implemented
+	// Update status
 	if err := r.updateStatus(ctx, benchmarkJob); err != nil {
 		r.Recorder.Eventf(benchmarkJob, v1.EventTypeWarning, "StatusUpdateFailed", err.Error())
 		return ctrl.Result{}, err
+	}
+
+	var isvcRef *v1beta1.InferenceService
+	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
+		isvcRef, err = benchmarkutils.GetInferenceService(r.Client, benchmarkJob.Spec.Endpoint.InferenceService)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		isReady := isvcRef.Status.IsReady()
+		if !isReady {
+			log.Info("InferenceService is not ready, re-queuing", "name", benchmarkJob.Name, "namespace", benchmarkJob.Namespace)
+			return ctrl.Result{
+				Requeue:      true,
+				RequeueAfter: time.Minute,
+			}, nil
+		}
 	}
 
 	// Reconcile model PV/PVC if needed
@@ -217,7 +226,7 @@ func (r *BenchmarkJobReconciler) buildMetadata(benchmarkJob *v1beta1.BenchmarkJo
 			"benchmark": benchmarkJob.Name,
 		},
 		Annotations: map[string]string{
-			"log-forwarder": "true",
+			"logging-forward": "true",
 		},
 	}
 }
