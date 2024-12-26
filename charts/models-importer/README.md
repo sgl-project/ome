@@ -14,6 +14,10 @@ A Helm chart for importing ome base models
 | cohere-command-r-082024-v1-7-tp1-128k.lifecyclePhase | string | `"ACTIVE"` |  |
 | cohere-command-r-bs128-16k-chat.enabled | bool | `false` |  |
 | cohere-command-r-bs128-16k-chat.lifecyclePhase | string | `"ONDEMAND_SERVING_DISABLED"` |  |
+| cohere-command-r-plus-082024-v1-6-128k.enabled | bool | `false` |  |
+| cohere-command-r-plus-082024-v1-6-128k.lifecyclePhase | string | `"ACTIVE"` |  |
+| cohere-command-r-plus-v1-2-chat.enabled | bool | `false` |  |
+| cohere-command-r-plus-v1-2-chat.lifecyclePhase | string | `"ACTIVE"` |  |
 | cohere-command-r-v1-2-16k-chat.enabled | bool | `false` |  |
 | cohere-command-r-v1-2-16k-chat.lifecyclePhase | string | `"ACTIVE"` |  |
 | cohere-embed-english-light-v2-0.enabled | bool | `false` |  |
