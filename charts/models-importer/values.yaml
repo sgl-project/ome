@@ -118,3 +118,23 @@ cohere-command-r-082024-v1-7-tp1-128k:
 cohere-command-r-bs128-16k-chat:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-embed-english-light-v2-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-english-light-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-english-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-multilingual-light-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-multilingual-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
