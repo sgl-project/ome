@@ -18,7 +18,7 @@ spec:
   displayName: cohere.embed-multilingual-v3.0
   storage:
     path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-embed-multilingual-v3-0" "osBucket" }}/o/{{ index .Values "cohere-embed-multilingual-v3-0" "vendor" }}/{{ index .Values "cohere-embed-multilingual-v3-0" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/cohere/embed-multilingual-light-03
+    storageUri: /mnt/data/models/cohere/embed-multilingual-03
   vendor: {{ index .Values "cohere-embed-multilingual-v3-0" "vendor" }}
   version: "3.0"
   modelFormat:

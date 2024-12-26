@@ -79,6 +79,12 @@ A Helm chart for Kubernetes
 | ome.modelController.tag | string | `"v0.0.1"` |  |
 | ome.modelController.tolerations | list | `[]` |  |
 | ome.modelController.topologySpreadConstraints | list | `[]` |  |
+| ome.modelInit.authType | string | `"InstancePrincipal"` |  |
+| ome.modelInit.compartmentId | string | `"ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"` |  |
+| ome.modelInit.modelInitImage.repository | string | `"ap-osaka-1.ocir.io/idqj093njucb/serving-init"` |  |
+| ome.modelInit.modelInitImage.tag | string | `"v2.0"` |  |
+| ome.modelInit.region | string | `"ap-osaka-1"` |  |
+| ome.modelInit.vaultId | string | `"ocid1.vault.oc1.ap-osaka-1.fzsn2sguaahse.abvwsljrmzc5vt7ya6qpzlormzkwzxsw45fa2fgtp7dqfgjbxib32z62f5pq"` |  |
 | ome.multinodeProber.cpuLimit | string | `"100m"` |  |
 | ome.multinodeProber.cpuRequest | string | `"100m"` |  |
 | ome.multinodeProber.image | string | `"eu-frankfurt-1.ocir.io/idlsnvn0f2is/multinode-prober"` |  |

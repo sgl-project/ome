@@ -1,23 +1,23 @@
-{{- if index .Values "llama-3-2-3b" "enabled" -}}
+{{- if index .Values "llama-3-2-1b-instruct" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: llama-3-2-3b
+  name: llama-3-2-1b-instruct
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/runtime: "vllm-xsmall-text-generation"
     models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "{{ index .Values "llama-3-2-3b" "isExperimental" }}"
-    models.ome.io/internal: "{{ index .Values "llama-3-2-3b" "isInternal" }}"
-    models.ome.io/lifecycle-phase: "{{ index .Values "llama-3-2-3b" "lifecyclePhase" }}"
+    models.ome.io/experimental: "{{ index .Values "llama-3-2-1b-instruct" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "llama-3-2-1b-instruct" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "llama-3-2-1b-instruct" "lifecyclePhase" }}"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: meta.llama-3.2-3b
+  displayName: meta.llama-3.2-1b-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-3b" "osBucket" }}/o/{{ index .Values "llama-3-2-3b" "vendor" }}/{{ index .Values "llama-3-2-3b" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-2-3b
+    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-1b-instruct" "osBucket" }}/o/{{ index .Values "llama-3-2-1b-instruct" "vendor" }}/{{ index .Values "llama-3-2-1b-instruct" "osPrefixOverride" }}"
+    storageUri: /mnt/data/models/meta/llama-3-2-1b-instruct
   vendor: meta
   version: "1.0.0"
   modelFormat:
@@ -25,10 +25,10 @@ spec:
     version: "1"
   modelType: transformer
   modelArchitecture: LlamaForCausalLM
-  modelParameterSize: 3B
+  modelParameterSize: 1B
   modelCapabilities:
     - "CHAT"
-  maxTokens: 128000
+  maxTokens: 131072
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
@@ -43,17 +43,21 @@ spec:
       "attention_bias": false,
       "attention_dropout": 0.0,
       "bos_token_id": 128000,
-      "eos_token_id": 128001,
-      "head_dim": 128,
+      "eos_token_id": [
+        128001,
+        128008,
+        128009
+      ],
+      "head_dim": 64,
       "hidden_act": "silu",
-      "hidden_size": 3072,
+      "hidden_size": 2048,
       "initializer_range": 0.02,
       "intermediate_size": 8192,
       "max_position_embeddings": 131072,
       "mlp_bias": false,
       "model_type": "llama",
-      "num_attention_heads": 24,
-      "num_hidden_layers": 28,
+      "num_attention_heads": 32,
+      "num_hidden_layers": 16,
       "num_key_value_heads": 8,
       "pretraining_tp": 1,
       "rms_norm_eps": 1e-05,

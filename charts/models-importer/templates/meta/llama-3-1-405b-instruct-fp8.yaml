@@ -28,7 +28,7 @@ spec:
   modelParameterSize: 405B
   modelCapabilities:
     - "CHAT"
-  maxTokens: 16384
+  maxTokens: 131072
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
