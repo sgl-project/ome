@@ -39,31 +39,20 @@ spec:
                 type: object
               dataset:
                 properties:
-                  oSStorageSpec:
-                    properties:
-                      bucketName:
-                        type: string
-                      namespace:
-                        type: string
-                      objectName:
-                        type: string
-                      oboToken:
-                        type: string
-                      prefix:
-                        type: string
-                    required:
-                    - bucketName
-                    - namespace
-                    type: object
-                  pVCStorageSpec:
-                    properties:
-                      path:
-                        type: string
-                    required:
-                    - path
-                    type: object
-                  storageType:
+                  key:
                     type: string
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  path:
+                    type: string
+                  schemaPath:
+                    type: string
+                  storageUri:
+                    type: string
+                required:
+                - path
                 type: object
               endpoint:
                 properties:
@@ -113,31 +102,20 @@ spec:
                 x-kubernetes-list-type: set
               outputLocation:
                 properties:
-                  oSStorageSpec:
-                    properties:
-                      bucketName:
-                        type: string
-                      namespace:
-                        type: string
-                      objectName:
-                        type: string
-                      oboToken:
-                        type: string
-                      prefix:
-                        type: string
-                    required:
-                    - bucketName
-                    - namespace
-                    type: object
-                  pVCStorageSpec:
-                    properties:
-                      path:
-                        type: string
-                    required:
-                    - path
-                    type: object
-                  storageType:
+                  key:
                     type: string
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  path:
+                    type: string
+                  schemaPath:
+                    type: string
+                  storageUri:
+                    type: string
+                required:
+                - path
                 type: object
               podOverride:
                 properties:

@@ -34,7 +34,5 @@ spec:
   additionalRequestParams:
     temperature: "0.0"
   outputLocation:
-    storageType: "OBJECT_STORAGE"
-    oSStorageSpec:
-      bucketName: "benchmark-results"
-      namespace: "oci-namespace"
+    storageUri: "oci://<bucket-name>/llama-3-1-70b-benchmark"
+    path: "/"

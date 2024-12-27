@@ -75,11 +75,11 @@ type BenchmarkJobSpec struct {
 	// Dataset is the dataset used for benchmarking.
 	// It is optional and only required for tasks other than "text-to-<output-modality>".
 	// +optional
-	Dataset *Storage `json:"dataset,omitempty"`
+	Dataset *StorageSpec `json:"dataset,omitempty"`
 
 	// OutputLocation specifies where the benchmark results will be stored (e.g., object storage).
 	// +required
-	OutputLocation Storage `json:"outputLocation"`
+	OutputLocation *StorageSpec `json:"outputLocation"`
 
 	// Pod defines the pod configuration for the benchmark job. This is optional, if not provided, default values will be used.
 	// +optional

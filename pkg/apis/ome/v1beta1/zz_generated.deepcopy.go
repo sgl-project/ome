@@ -285,10 +285,14 @@ func (in *BenchmarkJobSpec) DeepCopyInto(out *BenchmarkJobSpec) {
 	}
 	if in.Dataset != nil {
 		in, out := &in.Dataset, &out.Dataset
-		*out = new(Storage)
+		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	in.OutputLocation.DeepCopyInto(&out.OutputLocation)
+	if in.OutputLocation != nil {
+		in, out := &in.OutputLocation, &out.OutputLocation
+		*out = new(StorageSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.PodOverride != nil {
 		in, out := &in.PodOverride, &out.PodOverride
 		*out = new(PodOverride)

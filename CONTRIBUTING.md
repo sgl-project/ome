@@ -77,12 +77,12 @@ meet these requirements, you can make changes and
 You must install these tools:
 
 1. [`go`](https://golang.org/doc/install): OME controller is written in Go and requires Go 1.22.0+.
-1. [`git`](https://help.github.com/articles/set-up-git/): For source control.
-1. [`Go Module`](https://blog.golang.org/using-go-modules): Go's new dependency management system.
-1. [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/): For
+2. [`git`](https://help.github.com/articles/set-up-git/): For source control.
+3. [`Go Module`](https://blog.golang.org/using-go-modules): Go's new dependency management system.
+4. [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/): For
    managing development environments.
-1. [`kustomize`](https://github.com/kubernetes-sigs/kustomize/) To customize YAMLs for different environments, requires v5.0.0+.
-1. [`yq`](https://github.com/mikefarah/yq) yq is used in the project makefiles to parse and display YAML output, requires yq `4.*`.
+5. [`kustomize`](https://github.com/kubernetes-sigs/kustomize/) To customize YAMLs for different environments, requires v5.0.0+.
+6. [`yq`](https://github.com/mikefarah/yq) yq is used in the project makefiles to parse and display YAML output, requires yq `4.*`.
 
 ### Install Optional Knative on a Kubernetes cluster
 
@@ -106,12 +106,12 @@ recommend adding them to your `.bashrc`):
 
 1. `GOPATH`: If you don't have one, simply pick a directory and add
    `export GOPATH=...`
-1. `$GOPATH/bin` on `PATH`: This is so that tooling installed via `go get` will
+2. `$GOPATH/bin` on `PATH`: This is so that tooling installed via `go get` will
    work properly.
-1. `GONOPROXY`: Set go proxy to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
-1. `GOPRIVATE`: Set go private to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
-1. `ARCH`: If you are using M1 or M2 MacBook the value is `linux/arm64`.
-1. `REGISTRY`: The docker repository to which developer images should be
+3. `GONOPROXY`: Set go proxy to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
+4. `GOPRIVATE`: Set go private to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
+5. `ARCH`: If you are using M1 or M2 MacBook the value is `linux/arm64`.
+6. `REGISTRY`: The docker repository to which developer images should be
    pushed (e.g. `ord.ocir.io/<namespace>`).
 
 

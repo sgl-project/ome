@@ -275,7 +275,7 @@
         },
         "dataset": {
           "description": "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"text-to-\u003coutput-modality\u003e\".",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
         },
         "endpoint": {
           "description": "Endpoint is the reference to the inference service to benchmark.",
@@ -309,8 +309,7 @@
         },
         "outputLocation": {
           "description": "OutputLocation specifies where the benchmark results will be stored (e.g., object storage).",
-          "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Storage"
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
         },
         "podOverride": {
           "description": "Pod defines the pod configuration for the benchmark job. This is optional, if not provided, default values will be used.",

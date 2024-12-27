@@ -661,14 +661,13 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref common.ReferenceCallback) 
 					"dataset": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"text-to-<output-modality>\".",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 					"outputLocation": {
 						SchemaProps: spec.SchemaProps{
 							Description: "OutputLocation specifies where the benchmark results will be stored (e.g., object storage).",
-							Default:     map[string]interface{}{},
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"),
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 					"podOverride": {
@@ -682,7 +681,7 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref common.ReferenceCallback) 
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EndpointSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodOverride", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Storage"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EndpointSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodOverride", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"},
 	}
 }
 
