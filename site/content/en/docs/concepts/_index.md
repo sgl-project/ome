@@ -14,11 +14,10 @@ abstractions that OME uses to represent model serving, model training, models, a
 
 ### [Base Model](/docs/concepts/base_model)
 
-The BaseModel CRD manages the lifecycle of foundational AI models such as GPT, BERT, and other architectures. These base models can be used for both training and serving.
-
-### [Cluster Base Model](/docs/concepts/cluster_base_model)
-
-The ClusterBaseModel CRD is similar to BaseModel, but operates at the cluster level, allowing for global model management across namespaces.
+The BaseModel CRD manages the lifecycle of foundational Hugging Face compatible and TensorRT LLM/AI models such as GPT,
+BERT, and other architectures， model type, model format, capabilities, model sizes and model configurations.
+These base models can be used for both training and serving.
+This resource has both namespace-scoped and cluster-scoped which can be used to define base models for different models.
 
 ### [Fine-Tuned Weight](/docs/concepts/fine_tuned_weight)
 
