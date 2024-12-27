@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.command-r-plus
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "osBucket" }}/o/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/cohere/command-r-plus-082024-v1.6-128k
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "osBucket" }}/o/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/command-r-plus-082024-v1.6-128k
   vendor: {{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}
   version: "1.6"
   modelFormat:

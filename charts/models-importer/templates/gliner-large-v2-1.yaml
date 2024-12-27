@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: urchade.gliner-large-v2-1
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "gliner-large-v2-1" "osBucket" }}/o/{{ index .Values "gliner-large-v2-1" "vendor" }}/{{ index .Values "gliner-large-v2-1" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/urchade/gliner-large-v2-1
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "gliner-large-v2-1" "osBucket" }}/o/{{ index .Values "gliner-large-v2-1" "vendor" }}/{{ index .Values "gliner-large-v2-1" "osPrefixOverride" }}"
+    path: /mnt/data/models/urchade/gliner-large-v2-1
   vendor: {{ index .Values "gliner-large-v2-1" "vendor" }}
   version: "1.0.0"
   modelFormat:

@@ -15,8 +15,8 @@ spec:
   disabled: false
   displayName: mistralai.mixtral-8x7b-instruct
   storage:
-    path: oci://n/idlsnvn0f2is/b/model-store/o/mistralai/mixtral-8x7b-instruct-v0-1
-    storageUri: /raid/models/mistralai/mixtral-8x7b-instruct-v0-1
+    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/mistralai/mixtral-8x7b-instruct-v0-1
+    path: /raid/models/mistralai/mixtral-8x7b-instruct-v0-1
   vendor: mistralai
   version: "0.1"
   modelFormat:

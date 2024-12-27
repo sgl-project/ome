@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: cohere.command-r-plus
   storage:
-    path: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command-r-plus-v1.2
-    storageUri: /raid/models/cohere/command-r-plus-v1.2
+    storageUri: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command-r-plus-v1.2
+    path: /raid/models/cohere/command-r-plus-v1.2
   vendor: cohere
   version: "1.2"
   modelFormat:

@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: meta.llama-3.2-90b-vision-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-90b-vision-instruct" "osBucket" }}/o/{{ index .Values "llama-3-2-90b-vision-instruct" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-2-90b-vision-instruct
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-90b-vision-instruct" "osBucket" }}/o/{{ index .Values "llama-3-2-90b-vision-instruct" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct" "osPrefixOverride" }}"
+    path: /mnt/data/models/meta/llama-3-2-90b-vision-instruct
   vendor: meta
   version: "1.0.0"
   modelFormat:

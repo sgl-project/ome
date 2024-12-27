@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: protectai.deberta-v3-base-prompt-injection-v2
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "deberta-v3-base-prompt-injection-v2" "osBucket" }}/o/{{ index .Values "deberta-v3-base-prompt-injection-v2" "vendor" }}/{{ index .Values "deberta-v3-base-prompt-injection-v2" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/protectai/deberta-v3-base-prompt-injection-v2
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "deberta-v3-base-prompt-injection-v2" "osBucket" }}/o/{{ index .Values "deberta-v3-base-prompt-injection-v2" "vendor" }}/{{ index .Values "deberta-v3-base-prompt-injection-v2" "osPrefixOverride" }}"
+    path: /mnt/data/models/protectai/deberta-v3-base-prompt-injection-v2
   vendor: {{ index .Values "deberta-v3-base-prompt-injection-v2" "vendor" }}
   version: "1.0.0"
   modelFormat:

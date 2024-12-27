@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.embed-english-light-v2.0
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-embed-english-light-v2-0" "osBucket" }}/o/{{ index .Values "cohere-embed-english-light-v2-0" "vendor" }}/{{ index .Values "cohere-embed-english-light-v2-0" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/cohere/e355m-3.1.0-ft-triton
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-embed-english-light-v2-0" "osBucket" }}/o/{{ index .Values "cohere-embed-english-light-v2-0" "vendor" }}/{{ index .Values "cohere-embed-english-light-v2-0" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/e355m-3.1.0-ft-triton
   vendor: {{ index .Values "cohere-embed-english-light-v2-0" "vendor" }}
   version: "2.0"
   modelFormat:

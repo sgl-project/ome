@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: cohere.embed-multilingual-light-v3.0
   storage:
-    path: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/embed-multilingual-light-03
-    storageUri: /raid/models/cohere/embed-multilingual-light-03
+    storageUri: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/embed-multilingual-light-03
+    path: /raid/models/cohere/embed-multilingual-light-03
   vendor: cohere
   version: "3.0"
   modelFormat:

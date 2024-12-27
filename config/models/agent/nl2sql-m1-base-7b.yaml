@@ -15,8 +15,8 @@ spec:
   disabled: false
   displayName: olm.nl2sql-m1-base-7b
   storage:
-    path: oci://n/idlsnvn0f2is/b/model-store/o/olm/nl2sql-m1-base-7b
-    storageUri: /raid/models/olm/nl2sql-m1-base-7b
+    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/olm/nl2sql-m1-base-7b
+    path: /raid/models/olm/nl2sql-m1-base-7b
   vendor: olm
   version: "1.0"
   modelFormat:

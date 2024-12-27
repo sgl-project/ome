@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: meta.llama-3.2-3b-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-3b-instruct" "osBucket" }}/o/{{ index .Values "llama-3-2-3b-instruct" "vendor" }}/{{ index .Values "llama-3-2-3b-instruct" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-2-3b-instruct
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-3b-instruct" "osBucket" }}/o/{{ index .Values "llama-3-2-3b-instruct" "vendor" }}/{{ index .Values "llama-3-2-3b-instruct" "osPrefixOverride" }}"
+    path: /mnt/data/models/meta/llama-3-2-3b-instruct
   vendor: meta
   version: "1.0.0"
   modelFormat:

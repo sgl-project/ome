@@ -37,7 +37,7 @@ func (c *PVReconciler) Reconcile(benchmarkJob *v1beta1.BenchmarkJob, baseModelNa
 
 	// Reconcile primary PersistentVolume
 	pvName := constants.PVName(benchmarkJob.Name, benchmarkJob.Namespace, baseModelName)
-	if err := c.reconcilePV(pvName, benchmarkJob, *baseModelSpec.Storage.StorageUri, "1000Gi", corev1.ReadWriteOnce); err != nil {
+	if err := c.reconcilePV(pvName, benchmarkJob, *baseModelSpec.Storage.Path, "1000Gi", corev1.ReadWriteOnce); err != nil {
 		return ctrl.Result{}, err
 	}
 

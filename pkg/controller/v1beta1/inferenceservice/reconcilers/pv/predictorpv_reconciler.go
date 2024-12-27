@@ -38,7 +38,7 @@ func (c *PVReconciler) Reconcile(isvc *v1beta1.InferenceService, baseModelSpec *
 
 	// Reconcile primary PersistentVolume
 	pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
-	if err := c.reconcilePV(pvName, isvc, *baseModelSpec.Storage.StorageUri, "1000Gi", corev1.ReadWriteOnce); err != nil {
+	if err := c.reconcilePV(pvName, isvc, *baseModelSpec.Storage.Path, "1000Gi", corev1.ReadWriteOnce); err != nil {
 		return ctrl.Result{}, err
 	}
 

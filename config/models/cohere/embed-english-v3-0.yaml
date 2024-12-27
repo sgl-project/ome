@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: cohere.embed-english-v3.0
   storage:
-    path: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/embed-english-03
-    storageUri: /raid/models/cohere/embed-english-03
+    storageUri: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/embed-english-03
+    path: /raid/models/cohere/embed-english-03
   vendor: cohere
   version: "3.0"
   modelFormat:

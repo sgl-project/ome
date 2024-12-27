@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: intfloat.e5-mistral-7b-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "e5-mistral-7b-instruct" "osBucket" }}/o/{{ index .Values "e5-mistral-7b-instruct" "vendor" }}/{{ index .Values "e5-mistral-7b-instruct" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/intfloat/e5-mistral-7b-instruct
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "e5-mistral-7b-instruct" "osBucket" }}/o/{{ index .Values "e5-mistral-7b-instruct" "vendor" }}/{{ index .Values "e5-mistral-7b-instruct" "osPrefixOverride" }}"
+    path: /mnt/data/models/intfloat/e5-mistral-7b-instruct
   vendor: intfloat
   version: "0.0"
   modelFormat:

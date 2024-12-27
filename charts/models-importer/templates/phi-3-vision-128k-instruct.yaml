@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: microsoft.phi-3-vision-128k-instruct
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "phi-3-vision-128k-instruct-chat" "osBucket" }}/o/{{ index .Values "phi-3-vision-128k-instruct-chat" "vendor" }}/{{ index .Values "phi-3-vision-128k-instruct-chat" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/microsoft/phi-3-vision-128k-instruct
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "phi-3-vision-128k-instruct-chat" "osBucket" }}/o/{{ index .Values "phi-3-vision-128k-instruct-chat" "vendor" }}/{{ index .Values "phi-3-vision-128k-instruct-chat" "osPrefixOverride" }}"
+    path: /mnt/data/models/microsoft/phi-3-vision-128k-instruct
   vendor: microsoft
   version: "0.1"
   modelFormat:

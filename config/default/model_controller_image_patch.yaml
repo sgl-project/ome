@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: model-controller
-          image: ord.ocir.io/idqj093njucb/ome/model-controller:v1.1-63-2-g1daa15b
+          image: ord.ocir.io/idqj093njucb/ome/model-controller:v1.1-121-3-g8ad9707

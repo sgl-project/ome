@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: meta.llama-3.2-11b-vision
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-11b-vision" "osBucket" }}/o/{{ index .Values "llama-3-2-11b-vision" "vendor" }}/{{ index .Values "llama-3-2-11b-vision" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-2-11b-vision
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-11b-vision" "osBucket" }}/o/{{ index .Values "llama-3-2-11b-vision" "vendor" }}/{{ index .Values "llama-3-2-11b-vision" "osPrefixOverride" }}"
+    path: /mnt/data/models/meta/llama-3-2-11b-vision
   vendor: meta
   version: "1.0.0"
   modelFormat:

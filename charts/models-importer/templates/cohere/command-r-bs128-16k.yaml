@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.command-r
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-bs128-16k-chat" "osBucket" }}/o/{{ index .Values "cohere-command-r-bs128-16k-chat" "vendor" }}/{{ index .Values "cohere-command-r-bs128-16k-chat" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/cohere/command-r-bs128-16k
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-bs128-16k-chat" "osBucket" }}/o/{{ index .Values "cohere-command-r-bs128-16k-chat" "vendor" }}/{{ index .Values "cohere-command-r-bs128-16k-chat" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/command-r-bs128-16k
   vendor: {{ index .Values "cohere-command-r-bs128-16k-chat" "vendor" }}
   version: "1.0-16k"
   modelFormat:

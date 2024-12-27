@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: cohere.embed-english-light-v2.0
   storage:
-    path: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/e355m-3.1.0-ft-triton
-    storageUri: /raid/models/cohere/e355m-3.1.0-ft-triton
+    storageUri: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/e355m-3.1.0-ft-triton
+    path: /raid/models/cohere/e355m-3.1.0-ft-triton
   vendor: cohere
   version: "2.0"
   modelFormat:

@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: olm.nl2rqs-7b-v4
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2rqs-7b-v4" "osBucket" }}/o/{{ index .Values "nl2rqs-7b-v4" "vendor" }}/{{ index .Values "nl2rqs-7b-v4" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/olm/nl2rqs-7b-v4
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2rqs-7b-v4" "osBucket" }}/o/{{ index .Values "nl2rqs-7b-v4" "vendor" }}/{{ index .Values "nl2rqs-7b-v4" "osPrefixOverride" }}"
+    path: /mnt/data/models/olm/nl2rqs-7b-v4
   vendor: olm
   version: "4.0"
   modelFormat:

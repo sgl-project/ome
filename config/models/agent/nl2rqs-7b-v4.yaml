@@ -15,8 +15,8 @@ spec:
   disabled: false
   displayName: olm.nl2rqs-7b-v4
   storage:
-    path: oci://n/idlsnvn0f2is/b/model-store/o/olm/nl2rqs-7b-v4
-    storageUri: /raid/models/olm/nl2rqs-7b-v4
+    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/olm/nl2rqs-7b-v4
+    path: /raid/models/olm/nl2rqs-7b-v4
   vendor: olm
   version: "4.0"
   modelFormat:

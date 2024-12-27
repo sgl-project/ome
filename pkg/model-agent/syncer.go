@@ -180,20 +180,20 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 	var destPath string
 	var storagePath string
 	if baseModel != nil {
-		if baseModel.Spec.Storage.Path == nil {
-			return nil, "", fmt.Errorf("Got empty storge path in baseModel %s in namespace %s", baseModel.Name, baseModel.Namespace)
+		if baseModel.Spec.Storage.StorageUri == nil {
+			return nil, "", fmt.Errorf("got empty storge uri in baseModel %s in namespace %s", baseModel.Name, baseModel.Namespace)
 		}
-		storagePath = *baseModel.Spec.Storage.Path
+		storagePath = *baseModel.Spec.Storage.StorageUri
 		if baseModel.Spec.Storage.StorageUri != nil {
-			destPath = *baseModel.Spec.Storage.StorageUri
+			destPath = *baseModel.Spec.Storage.Path
 		}
 	} else {
-		if clusterBaseModel.Spec.Storage.Path == nil {
-			return nil, "", fmt.Errorf("Got empty storge path in clusterBaseModel %s", clusterBaseModel.Name)
+		if clusterBaseModel.Spec.Storage.StorageUri == nil {
+			return nil, "", fmt.Errorf("got empty storge uri in clusterBaseModel %s", clusterBaseModel.Name)
 		}
-		storagePath = *clusterBaseModel.Spec.Storage.Path
+		storagePath = *clusterBaseModel.Spec.Storage.StorageUri
 		if clusterBaseModel.Spec.Storage.StorageUri != nil {
-			destPath = *clusterBaseModel.Spec.Storage.StorageUri
+			destPath = *clusterBaseModel.Spec.Storage.Path
 		}
 	}
 

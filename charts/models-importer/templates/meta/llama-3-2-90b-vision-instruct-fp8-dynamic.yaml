@@ -16,8 +16,8 @@ spec:
   disabled: false
   displayName: meta.llama-3.2-90b-vision-instruct-fp8-dynamic
   storage:
-    path: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osBucket" }}/o/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osPrefixOverride" }}"
-    storageUri: /mnt/data/models/meta/llama-3-2-90b-vision-instruct-fp8-dynamic
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osBucket" }}/o/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osPrefixOverride" }}"
+    path: /mnt/data/models/meta/llama-3-2-90b-vision-instruct-fp8-dynamic
   vendor: meta
   version: "1.0.0"
   modelFormat:
