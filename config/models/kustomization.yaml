@@ -30,3 +30,4 @@ resources:
   - e5-mistral-7b-instruct.yaml
   - Phi-3-vision-128k-instruct.yaml
   - agent/phi-3-vision-128k-instruct-ft-v1.yaml
+  - deepseek-ai/DeepSeek-V3.yaml
