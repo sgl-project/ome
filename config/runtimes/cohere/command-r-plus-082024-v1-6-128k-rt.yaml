@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: cohere-command-r-v3
+  name: command-r-plus-082024-v1-6-128k
 spec:
   disabled: false
   annotations:
@@ -16,11 +16,12 @@ spec:
       key: nvidia.com/gpu
       operator: Exists
   supportedModelFormats:
-    - autoSelect: true
-      modelArchitecture: Cohere
-      name: tensorrt_llm
-      modelType: transformer
+    - name: tensorrt_llm
+      modelType: tensorrtllm
+      modelArchitecture: CohereForCausalLM
       version: 'v0.11.0'
+      autoSelect: true
+      priority: 1
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -71,9 +72,10 @@ spec:
       ports:
         - containerPort: 8080
           name: http1
+          protocol: TCP
       resources:
         limits:
-          pu: 16
+          cpu: 16
           memory: 120Gi
           nvidia.com/gpu: "4"
         requests:

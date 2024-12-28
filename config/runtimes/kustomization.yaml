@@ -15,4 +15,4 @@ resources:
   - vllm/e5-mistral-7b-instruct-rt.yaml
   - srt/llama-3-1-405b-instruct-fp8-rt.yaml
   - srt/llama-3-1-70b-instruct-rt.yaml
-  - cohere/command-r-v3.yaml
+  - cohere/command-r-plus-082024-v1-6-128k-rt.yaml

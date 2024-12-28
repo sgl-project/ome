@@ -27,7 +27,6 @@ target:
 
 model_framework: tensorrtllm
 tensorrt_llm_version: "v0.11.0"
-#A10, A100-80GB, A100-40GB, A100-80GB, H100
 node_shape_alias: ""
 num_of_gpu: 1
 disable_model_decryption: false
@@ -51,7 +50,7 @@ training_data:
   object_name: ""
 model:
   bucket_name: "fine-tuned-model-weights"
-  namespace: "idqj093njucb" &service_tenancy_namespace
+  namespace: &service_tenancy_namespace "idqj093njucb"
   object_name: *training_name
 training_metrics:
   bucket_name: "model-training-metrics"
