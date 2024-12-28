@@ -9,6 +9,7 @@ spec:
     prometheus.io/scrape: 'true'
     ome.io/disable-blocklist: 'true'
     ome.io/inject-model-init: 'true'
+    ome.io/base-model-decryption-key-name: "command_r"
   labels:
     logging-forward: enabled
   tolerations:
