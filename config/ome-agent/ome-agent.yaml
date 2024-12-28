@@ -1,5 +1,6 @@
 auth_type: &default_auth_type "UserPrincipal"
 profile: "DEFAULT"
+region: "eu-frankfurt-1"
 
 local_path: "/Users/simolin/mnt/cohere/command-r-v1.6-16k"
 model_store_directory: "/opt/ml/model"

@@ -56,7 +56,7 @@ spec:
                 values:
                   - BM.GPU4.8
   protocolVersions:
-    - cohere
+    - openAI
   schedulerName: "genai-kube-scheduler"
   volumes:
     - name: shared-memory

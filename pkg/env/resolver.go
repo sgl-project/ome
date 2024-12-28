@@ -1,7 +1,9 @@
 package env
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -208,7 +210,12 @@ func (e *resolver) resolveRegion() string {
 	region, err := e.resolveVar(vars.Region)
 	if err != nil {
 		e.config.logger.WithError(err).Warn("region couldn't be resolved")
-		return "<region not resolved>"
+		region, exist := os.LookupEnv(constants.AgentRegionEnvVarKey)
+		if exist {
+			return region
+		} else {
+			return "<region not resolved>"
+		}
 	}
 
 	actualRegion, ok := e.canonicalRegion(region)

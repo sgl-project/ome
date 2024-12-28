@@ -170,6 +170,7 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 		{Name: constants.AgentBaseModelTypeEnvVarKey, Value: mi.getLabelOrDefault(pod, constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel))},
 		{Name: constants.AgentLocalPathEnvVarKey, Value: constants.InitContainerModelSourceDefaultPath},
 		{Name: constants.AgentModelStoreDirectoryEnvVarKey, Value: constants.InitContainerModelFinalDefaultPath},
+		{Name: constants.AgentRegionEnvVarKey, Value: mi.Region},
 	}
 
 	if modelFormat := pod.ObjectMeta.Annotations[constants.BaseModelFormat]; modelFormat == "tensorrt_llm" {
