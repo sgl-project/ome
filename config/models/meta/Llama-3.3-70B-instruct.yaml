@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: llama-3-1-70b-instruct
+  name: llama-3-3-70b-instruct
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
@@ -27,7 +27,7 @@ spec:
   modelParameterSize: 70B
   modelCapabilities:
     - "CHAT"
-  maxTokens: 8192
+  maxTokens: 131072
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:

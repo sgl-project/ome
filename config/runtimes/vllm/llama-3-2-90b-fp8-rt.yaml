@@ -1,14 +1,14 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-vision
+  name: vllm-llama-3-2-90b-vision-instruct-fp8
 spec:
+  disabled: false
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
   labels:
-    sidecar.istio.io/inject: 'true'
     logging-forward: enabled
   tolerations:
     - key: "nvidia.com/gpu"
@@ -33,15 +33,18 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: Phi3VForCausalLM
+      modelArchitecture: MllamaForConditionalGeneration
       version: "1"
       autoSelect: true
       priority: 1
+  modelSizeRange:
+    min: 85B
+    max: 95B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
+      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
       ports:
         - containerPort: 8080
           name: http1
@@ -55,25 +58,28 @@ spec:
           python3 -m vllm.entrypoints.openai.api_server \
           --port=8080 \
           --model="$MODEL_PATH" \
-          --max-log-len=1 \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --max-log-len=1 \
           --served-model-name=vllm-model \
-          --tensor-parallel-size=1 \
-          --trust-remote-code \
-          --max-num-seqs=16 \
-          --enable-chunked-prefill
+          --tensor-parallel-size=4 \
+          --max-num-seqs=32 \
+          --enforce-eager \
+          --preemption-mode=swap \
+          --limit-mm-per-prompt=image=1 \
+          --max-model-len=131072 \
+          --gpu-memory-utilization=0.99
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 1
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 8
         limits:
-          cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 1
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 8
 
       readinessProbe:
         httpGet:

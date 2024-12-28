@@ -102,7 +102,7 @@ func (m *ModelSpec) GetSupportingRuntimes(cl client.Client, namespace string) ([
 	var srSpecs []SupportedRuntime
 	var clusterSrSpecs []SupportedRuntime
 
-	model, err := GetBaseModel(cl, *m.BaseModel, namespace)
+	model, err := GetBaseModel(cl, namespace, *m.BaseModel)
 	if err != nil {
 		return nil, err
 	}

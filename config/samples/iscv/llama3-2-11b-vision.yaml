@@ -1,19 +1,17 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-2-11b-vision-instruct
+---
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: llama-3-2-11b-vision
-  namespace: llama-3-2-11b-vision
+  name: llama-3-2-11b-vision-instruct
+  namespace: llama-3-2-11b-vision-instruct
 spec:
   predictor:
     model:
-      runtime: vllm-llama-3-2-11b
       baseModel: llama-3-2-11b-vision-instruct
       protocolVersion: openAI
     minReplicas: 1
     maxReplicas: 1
-
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: llama-3-2-11b-vision

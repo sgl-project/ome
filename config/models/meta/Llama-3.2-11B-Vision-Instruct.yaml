@@ -27,7 +27,7 @@ spec:
   storage:
     storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-2-11b-vision-instruct
     path: /raid/models/meta/Llama-3.2-11B-Vision-Instruct
-  maxTokens: 128000
+  maxTokens: 131072
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:

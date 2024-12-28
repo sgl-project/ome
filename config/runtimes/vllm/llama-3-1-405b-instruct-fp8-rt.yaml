@@ -1,23 +1,19 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-one-card-chat
+  name: vllm-llama-3-1-405b-instruct-fp8
 spec:
+  disabled: false
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
   labels:
     logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
       effect: "NoSchedule"
-  volumes:
-    - name: dshm
-      emptyDir:
-        medium: Memory
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -33,30 +29,22 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: MistralForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: Qwen2ForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
       modelArchitecture: LlamaForCausalLM
       version: "1"
       autoSelect: true
       priority: 1
-  modelSizeRange:
-    min: 1M
-    max: 25B
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
   protocolVersions:
     - openAI
+  modelSizeRange:
+    min: 400B
+    max: 410B
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
+      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
       ports:
         - containerPort: 8080
           name: http1
@@ -70,23 +58,25 @@ spec:
           python3 -m vllm.entrypoints.openai.api_server \
           --port=8080 \
           --model="$MODEL_PATH" \
-          --max-log-len=1 \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --served-model-name=vllm-mode\
-          --tensor-parallel-size=1 \
+          --max-log-len=1 \
+          --served-model-name=vllm-model \
+          --tensor-parallel-size=8 \
+          --max-model-len=131072 \
+          --gpu-memory-utilization=0.95 \
           --enable-chunked-prefill
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 1
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
         limits:
-          cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 1
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
 
       readinessProbe:
         httpGet:
@@ -113,5 +103,5 @@ spec:
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
-        initialDelaySeconds: 15
+        initialDelaySeconds: 60
         timeoutSeconds: 30

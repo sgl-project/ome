@@ -13,6 +13,7 @@ spec:
   modelType: transformer
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 405B
+  maxTokens: 131072
   modelCapabilities:
     - "TEXT_GENERATION"
   storage:

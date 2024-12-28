@@ -26,6 +26,12 @@ spec:
     - jsonPath: .spec.supportedModelFormats[*].modelArchitecture
       name: ModelArchitecture
       type: string
+    - jsonPath: .spec.modelSizeRange.min
+      name: ModelSizeMin
+      type: string
+    - jsonPath: .spec.modelSizeRange.max
+      name: ModelSizeMax
+      type: string
     - jsonPath: .spec.containers[*].image
       name: Images
       type: string

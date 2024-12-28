@@ -222,6 +222,8 @@ type BuiltInAdapter struct {
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.supportedModelFormats[*].name"
 // +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.supportedModelFormats[*].modelType"
 // +kubebuilder:printcolumn:name="ModelArchitecture",type="string",JSONPath=".spec.supportedModelFormats[*].modelArchitecture"
+// +kubebuilder:printcolumn:name="ModelSizeMin",type="string",JSONPath=".spec.modelSizeRange.min"
+// +kubebuilder:printcolumn:name="ModelSizeMax",type="string",JSONPath=".spec.modelSizeRange.max"
 // +kubebuilder:printcolumn:name="Images",type="string",JSONPath=".spec.containers[*].image"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type ServingRuntime struct {
@@ -253,6 +255,8 @@ type ServingRuntimeList struct {
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.supportedModelFormats[*].name"
 // +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.supportedModelFormats[*].modelType"
 // +kubebuilder:printcolumn:name="ModelArchitecture",type="string",JSONPath=".spec.supportedModelFormats[*].modelArchitecture"
+// +kubebuilder:printcolumn:name="ModelSizeMin",type="string",JSONPath=".spec.modelSizeRange.min"
+// +kubebuilder:printcolumn:name="ModelSizeMax",type="string",JSONPath=".spec.modelSizeRange.max"
 // +kubebuilder:printcolumn:name="Images",type="string",JSONPath=".spec.containers[*].image"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type ClusterServingRuntime struct {

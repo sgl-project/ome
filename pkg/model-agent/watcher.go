@@ -10,7 +10,7 @@ import (
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/ome/v1beta1"
 	omev1beta1lister "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	utils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -232,10 +232,6 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 	newBaseModel := new.(*v1beta1.BaseModel)
-	if !ok {
-		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", new)
-		return
-	}
 
 	if oldBaseModel.GetResourceVersion() == newBaseModel.GetResourceVersion() {
 		return

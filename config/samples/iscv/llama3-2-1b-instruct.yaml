@@ -13,8 +13,7 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: sglang-xsmall-text-generation
-      baseModel: llama3-2-1b-instruct
+      baseModel: llama-3-2-1b-instruct
       protocolVersion: openAI
     minReplicas: 1
     maxReplicas: 1

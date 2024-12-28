@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+
+	"k8s.io/apiserver/pkg/server/healthz"
 
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
@@ -14,7 +17,6 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapiserver "k8s.io/apiserver/pkg/server"
-	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -22,67 +24,81 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Starts the model agent",
-	Long:  `Starts the model agent to watch the basemodel custom resources and update the node labels`,
-	Run:   rumCommand,
+	Long:  `Starts the model agent to watch the base model custom resources and update the node labels`,
+	Run:   runCommand,
 }
 
-var (
+type config struct {
 	healthCheckPort     int
 	modelsRootDir       string
 	modelsRootDirOnHost string
 	nodeName            string
-	nodelabelRetry      int
+	nodeLabelRetry      int
 	downloadRetry       int
 	downloadAuthType    string
 	numDownloadWorker   int
 	namespace           string
-)
+}
+
+var cfg config
+
+func init() {
+	rootCmd.Flags().IntVar(&cfg.healthCheckPort, "health-check-port", 8080, "Address for readiness and liveness health check")
+	rootCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
+	rootCmd.Flags().StringVar(&cfg.modelsRootDir, "models-root-dir", "/raid/models", "folder for all models' root dir for the model-agent")
+	rootCmd.Flags().IntVar(&cfg.nodeLabelRetry, "node-label-retry", 2, "number of retries for the node labeling operations")
+	rootCmd.Flags().IntVar(&cfg.downloadRetry, "download-retry", 3, "number of retries for the model download operations")
+	rootCmd.Flags().StringVar(&cfg.downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
+	rootCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
+	rootCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
+
+	nodeName, ok := os.LookupEnv("NODE_NAME")
+	if !ok {
+		panic("NODE_NAME environment variable is not set for model-agent")
+	}
+	if nodeName == "" {
+		panic("NODE_NAME environment variable is empty")
+	}
+	cfg.nodeName = nodeName
+}
 
 type Logger = zap.SugaredLogger
 
-func initializeLogger() *Logger {
-	zaplogger, _ := zap.NewProduction()
-	return zaplogger.Sugar()
+func initializeLogger() (*Logger, error) {
+	zapLogger, err := zap.NewProduction()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	return zapLogger.Sugar(), nil
 }
 
-func init() {
-	rootCmd.Flags().IntVar(&healthCheckPort, "health-check-port", 8080, "Address for readiness and liveness health check")
-	rootCmd.Flags().StringVar(&modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
-	rootCmd.Flags().StringVar(&modelsRootDir, "models-root-dir", "/raid/models", "folder for all models' root dir for the model-agent")
-	rootCmd.Flags().IntVar(&nodelabelRetry, "node-label-retry", 2, "number of retries for the node labeling operations")
-	rootCmd.Flags().IntVar(&downloadRetry, "download-retry", 3, "number of retries for the model download operations")
-	rootCmd.Flags().StringVar(&downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
-	rootCmd.Flags().IntVar(&numDownloadWorker, "num-download-worker", 3, "number of download workers")
-	rootCmd.Flags().StringVar(&namespace, "namespace", "ome", "the namespace of the ome model agents daemonset")
-	if nName, ok := os.LookupEnv("NODE_NAME"); !ok {
-		panic(fmt.Errorf("NODE_NAME is not set for model-agent"))
-	} else {
-		if len(nName) == 0 {
-			panic(fmt.Errorf("NODE_NAME is set as empty"))
-		} else {
-			nodeName = nName
-		}
+func setupHealthServer(port int, modelsRootDir string, logger *Logger) *http.Server {
+	mux := http.NewServeMux()
+	healthz.InstallPathHandler(mux, "/healthz", modelagent.NewModelAgentHealthCheck(modelsRootDir))
+	healthz.InstallLivezHandler(mux, healthz.PingHealthz)
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
 	}
 }
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+func runCommand(cmd *cobra.Command, args []string) {
+	logger, err := initializeLogger()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-}
 
-func rumCommand(cmd *cobra.Command, args []string) {
-	logger := initializeLogger()
-	inclusterKubeConfig := getKubeConfig()
-	kubeClient := createKubeClient(inclusterKubeConfig)
-	nodeShape := getNodeShape(kubeClient, nodeName)
+	inClusterKubeConfig := getKubeConfig()
+	kubeClient := createKubeClient(inClusterKubeConfig)
+	nodeShape := getNodeShape(kubeClient, cfg.nodeName)
 
-	omev1beta1ClientSet := createOmeClient(inclusterKubeConfig)
+	omev1beta1ClientSet := createOmeClient(inClusterKubeConfig)
 	var omev1beta1InformerFactoryOpts []omev1beta1informers.SharedInformerOption
-	omev1beta1informerFactory := omev1beta1informers.NewSharedInformerFactoryWithOptions(omev1beta1ClientSet, 0, omev1beta1InformerFactoryOpts...)
-	baseModelsInformer := omev1beta1informerFactory.Ome().V1beta1().BaseModels()
-	clusterBaseModelsInformer := omev1beta1informerFactory.Ome().V1beta1().ClusterBaseModels()
+	omev1beta1InformerFactory := omev1beta1informers.NewSharedInformerFactoryWithOptions(omev1beta1ClientSet, 0, omev1beta1InformerFactoryOpts...)
+	baseModelsInformer := omev1beta1InformerFactory.Ome().V1beta1().BaseModels()
+	clusterBaseModelsInformer := omev1beta1InformerFactory.Ome().V1beta1().ClusterBaseModels()
 
 	// global stop signal
 	stopCh := kubeapiserver.SetupSignalHandler()
@@ -99,61 +115,51 @@ func rumCommand(cmd *cobra.Command, args []string) {
 	syncerTaskChan := make(chan *modelagent.SyncerTask)
 
 	// create node labeler
-	nodeLabler := modelagent.NewNodeLabler(nodeName, namespace, kubeClient, nodelabelRetry)
+	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry)
 
 	// create watcher
 	watcher, err := modelagent.NewWatcher(
 		nodeShape,
-		nodeName,
+		cfg.nodeName,
 		baseModelsInformer,
 		clusterBaseModelsInformer,
-		omev1beta1informerFactory,
+		omev1beta1InformerFactory,
 		syncerTaskChan,
 		kubeClient,
-		nodeLabler,
+		nodeLabeler,
 		logger)
 	if err != nil {
-		panic(fmt.Errorf("error creating watcher: %s", err.Error()))
+		logger.Fatalf("Failed to create watcher: %v", err)
 	}
 
 	// create syncer
 	syncer, err := modelagent.NewSyncer(
-		downloadAuthType,
-		downloadRetry,
-		modelsRootDir,
-		modelsRootDirOnHost,
+		cfg.downloadAuthType,
+		cfg.downloadRetry,
+		cfg.modelsRootDir,
+		cfg.modelsRootDirOnHost,
 		syncerTaskChan,
-		nodeLabler,
+		nodeLabeler,
 		logger)
 	if err != nil {
-		panic(fmt.Errorf("error creating syncer: %s", err.Error()))
+		logger.Fatalf("Failed to create syncer: %v", err)
 	}
 
-	// create health checker
-	mux := http.NewServeMux()
-	healthz.InstallPathHandler(mux, "/healthz", modelagent.NewModelAgentHealthCheck(modelsRootDir))
-	healthz.InstallLivezHandler(mux, healthz.PingHealthz)
-
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", healthCheckPort),
-		Handler: mux,
-	}
-
-	// start syncer
-	go syncer.Run(stopCh, numDownloadWorker)
-
-	// start health checker
+	// create and start health checker
+	server := setupHealthServer(cfg.healthCheckPort, cfg.modelsRootDir, logger)
 	go func() {
-		logger.Infof("Start listening to %d for health check", healthCheckPort)
-
-		if err := server.ListenAndServe(); err != nil {
-			logger.Infof("Error starting server for health check: %v", err)
+		logger.Infof("Starting health check server on port %d", cfg.healthCheckPort)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Errorf("Health check server error: %v", err)
 		}
 	}()
 
+	// start syncer
+	go syncer.Run(stopCh, cfg.numDownloadWorker)
+
 	// start watcher
 	if err := watcher.Run(stopCh); err != nil {
-		logger.Fatalf("Error running watcher: %s", err.Error())
+		logger.Fatalf("Error running watcher: %v", err)
 	}
 }
 
@@ -188,5 +194,12 @@ func getNodeShape(client *kubernetes.Clientset, nodeName string) string {
 		}
 	} else {
 		panic(fmt.Errorf("%s label not found for node %s", constants.NodeInstanceShapeLabel, nodeName))
+	}
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }

@@ -1,19 +1,23 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-large-text-generation
+  name: srt-llama-3-3-70b-instruct
 spec:
+  disabled: false
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
   labels:
     logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
       effect: "NoSchedule"
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -31,23 +35,16 @@ spec:
       modelType: transformer
       modelArchitecture: LlamaForCausalLM
       version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralForCausalLM
-      version: "1"
-      autoSelect: true
-      priority: 1
-  volumes:
-    - name: dshm
-      emptyDir:
-        medium: Memory
+  modelSizeRange:
+    min: 60B
+    max: 75B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:0.5.3.post1.7f8d612d-log
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.1d9e6ee3
       ports:
         - containerPort: 8080
           name: http1
@@ -58,30 +55,26 @@ spec:
         - --
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
+          python3 -m sglang.launch_server \
           --port=8080 \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=1 \
-          --served-model-name=vllm-model \
-          --tensor-parallel-size=8 \
-          --enable-chunked-prefill
+          --model-path="$MODEL_PATH" \
+          --tp-size=4 \
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -99,7 +92,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 150
         successThreshold: 1

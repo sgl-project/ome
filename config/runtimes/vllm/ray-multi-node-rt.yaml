@@ -1,16 +1,15 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-pp-rdma
+  name: vllm-ray-multi-node
 spec:
+  disabled: false
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
-    ome.io/service-type: "LoadBalancer"
   labels:
     logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
@@ -27,75 +26,25 @@ spec:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
-  pipelineParallelism: true
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
       modelArchitecture: LlamaForCausalLM
       version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
-
   volumes:
     - name: dshm
       emptyDir:
         medium: Memory
-    - hostPath:
-        path: /dev/infiniband
-      name: devinf
     - emptyDir: { }
       name: log-volume
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.3.post1.a2c71c54
+      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
       env:
-        - name: NCCL_NET_PLUGIN
-          value: none
-        - name: NCCL_DEBUG
-          value: INFO
-        - name: NCCL_CROSS_NIC
-          value: '2'
-        - name: NCCL_SOCKET_NTHREADS
-          value: '16'
-        - name: NCCL_CUMEM_ENABLE
-          value: '0'
-        - name: NCCL_IB_SPLIT_DATA_ON_QPS
-          value: '0'
-        - name: NCCL_IB_QPS_PER_CONNECTION
-          value: '16'
-        - name: NCCL_IB_GID_INDEX
-          value: '3'
-        - name: NCCL_IB_HCA
-          value: >-
-            =mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7
-            ,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16
-            ,mlx5_17
-        - name: NCCL_IB_TC
-          value: '41'
-        - name: NCCL_IB_SL
-          value: '0'
-        - name: NCCL_IB_TIMEOUT
-          value: '22'
-        - name: HCOLL_ENABLE_MCAST_ALL
-          value: '0'
-        - name: coll_hcoll_enable
-          value: '0'
-        - name: UCX_TLS
-          value: tcp
-        - name: UCX_NET_DEVICES
-          value: eth0
-        - name: RX_QUEUE_LEN
-          value: '8192'
-        - name: IB_RX_QUEUE_LEN
-          value: '8192'
-        - name: NCCL_SOCKET_IFNAME
-          value: eth0
-        - name: NCCL_IGNORE_CPU_AFFINITY
-          value: '1'
-        - name: GLOO_SOCKET_IFNAME
-          value: eth0
         - name: VLLM_PORT
           value: "9000"
       command:
@@ -125,8 +74,6 @@ spec:
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
-        - mountPath: /dev/infiniband
-          name: devinf
         - mountPath: /tmp/ray
           name: log-volume
       resources:
@@ -138,12 +85,7 @@ spec:
           cpu: 128
           memory: 216Gi
           nvidia.com/gpu: 8
-      securityContext:
-        capabilities:
-          add:
-            - IPC_LOCK
-            - CAP_SYS_ADMIN
-        privileged: true
+
       livenessProbe:
         exec:
           command:

@@ -2,14 +2,17 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - vllm-one-card-embeding.yaml
-  - vllm-large-text-generation.yaml
-  - vllm-medium-text-generation.yaml
-  - vllm-pp-rdma.yaml
-  - vllm-pp.yaml
-  - vllm-small-text-generation.yaml
-  - vllm-vision.yaml
-  - sglang-large-text-generation.yaml
-  - sglang-medium-text-generation.yaml
-  - sglang-small-text-generation.yaml
-  - sglang-xsmall-text-generation.yaml
+  - vllm/ray-multi-node-rt.yaml
+  - vllm/ray-multi-node-rdma-rt.yaml
+  - vllm/llama-3-1-405b-instruct-fp8-rt.yaml
+  - vllm/llama-3-1-70b-instruct-rt.yaml
+  - vllm/llama-3-2-11b-rt.yaml
+  - vllm/llama-3-2-1b-rt.yaml
+  - vllm/llama-3-2-3b-rt.yaml
+  - vllm/llama-3-2-90b-fp8-rt.yaml
+  - vllm/llama-3-3-70b-instruct-rt.yaml
+  - vllm/mistral-7b-instruct.yaml
+  - vllm/e5-mistral-7b-instruct-rt.yaml
+  - srt/llama-3-1-405b-instruct-fp8-rt.yaml
+  - srt/llama-3-1-70b-instruct-rt.yaml
+  - cohere/command-r-v3.yaml

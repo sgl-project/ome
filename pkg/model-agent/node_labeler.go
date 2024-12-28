@@ -47,7 +47,7 @@ type patchStringValue struct {
 	Value string `json:"value"`
 }
 
-func NewNodeLabler(nodeName string, namespace string, kubeClient *kubernetes.Clientset, opRetry int) *NodeLabeler {
+func NewNodeLabeler(nodeName string, namespace string, kubeClient *kubernetes.Clientset, opRetry int) *NodeLabeler {
 	return &NodeLabeler{
 		opRetry:    opRetry,
 		nodeName:   nodeName,
