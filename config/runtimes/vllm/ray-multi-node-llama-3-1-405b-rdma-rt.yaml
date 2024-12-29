@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-ray-multi-node-rdma
+  name: vllm-ray-multi-node-llama-3-1-405b-rdma
 spec:
   disabled: false
   annotations:
@@ -27,6 +27,9 @@ spec:
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
   pipelineParallelism: true
+  modelSizeRange:
+    min: 400B
+    max: 420B
   supportedModelFormats:
     - name: safetensors
       modelType: transformer

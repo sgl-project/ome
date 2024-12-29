@@ -88,7 +88,7 @@ data:
       "startupPeriodSeconds": 30,
       "startupTimeoutSeconds": 60,
       "startupInitialDelaySeconds": 200,
-      "unavailableThresholdSeconds": 600
+      "unavailableThresholdSeconds": 1800
     }
 
   kedaConfig: |-
