@@ -10,7 +10,7 @@ metadata:
     models.ome.io/experimental: "true"
     models.ome.io/internal: "false"
     models.ome.io/lifecycle-phase: "ONDEMAND_SERVING_DISABLED"
-    ome.io/base-model-decryption-key: "command_r"
+    ome.io/base-model-decryption-key-name: "command_r"
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaazq
   disabled: false
