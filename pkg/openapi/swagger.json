@@ -3777,9 +3777,6 @@
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec": {
       "type": "object",
-      "required": [
-        "path"
-      ],
       "properties": {
         "key": {
           "description": "The Storage Key in the secret for this model.",

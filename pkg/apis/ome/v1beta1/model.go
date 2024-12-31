@@ -19,7 +19,7 @@ type ModelFormat struct {
 type StorageSpec struct {
 	// The path to the model object in the object storage.
 	// Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)
-	// +required
+	// +optional
 	Path *string `json:"path,omitempty"`
 	// The path to the model schema file in the storage.
 	// +optional

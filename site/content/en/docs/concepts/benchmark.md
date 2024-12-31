@@ -47,7 +47,13 @@ spec:
     gpuType: "A100"
     gpuCount: 1
   outputLocation:
-    path: "oci://my-namespace/my-bucket/benchmark-results"
+    storageUri: "oci://n/my-namespace/b/my-bucket/o/benchmark-results"
+    parameters:
+      auth: "instance_principal"  # Authentication type
+      config_file: "/path/to/config"  # Optional: Config file for user_principal auth
+      profile: "DEFAULT"  # Optional: Profile name for user_principal auth
+      security_token: "token"  # Optional: Token for security_token auth
+      region: "us-phoenix-1"  # Optional: Region for security_token auth
   podOverride:
     resources:
       requests:
@@ -94,6 +100,44 @@ endpoint:
     apiFormat: "openai"
     modelName: "my-model"
 ```
+
+## Storage Configuration
+
+BenchmarkJob supports storing benchmark results in OCI Object Storage. The storage configuration is specified in the `outputLocation` field:
+
+```yaml
+outputLocation:
+  storageUri: "oci://n/my-namespace/b/my-bucket/o/benchmark-results"
+  parameters:
+    auth: "instance_principal"  # Authentication type
+    config_file: "/path/to/config"  # Optional: Config file for user_principal auth
+    profile: "DEFAULT"  # Optional: Profile name for user_principal auth
+    security_token: "token"  # Optional: Token for security_token auth
+    region: "us-phoenix-1"  # Optional: Region for security_token auth
+```
+
+### Storage URI Format
+
+The storage URI must follow this format:
+```
+oci://n/{namespace}/b/{bucket}/o/{object_path}
+```
+
+Where:
+- `{namespace}`: Your OCI object storage namespace
+- `{bucket}`: The bucket name
+- `{object_path}`: Path prefix for benchmark results
+
+### Authentication Options
+
+The following authentication methods are supported:
+
+- `user_principal`: Uses OCI config file credentials
+  - Requires `config_file` and optionally `profile`
+- `instance_principal`: Uses instance credentials
+- `security_token`: Uses security token authentication
+  - Requires `security_token` and `region`
+- `instance_obo_user`: Uses instance principal on behalf of user
 
 ## Reconciliation Process
 

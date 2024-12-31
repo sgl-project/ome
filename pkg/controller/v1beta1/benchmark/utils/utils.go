@@ -3,6 +3,7 @@ package benchmarkutils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
@@ -110,4 +111,79 @@ func buildArgsFromInferenceService(c client.Client, ref *v1beta1.InferenceServic
 	args["--api-base"] = fmt.Sprintf("%s:%d", inferenceService.Status.URL, 8080)
 
 	return args, nil
+}
+
+// OCIStorageComponents represents the parsed components of an OCI storage URI
+type OCIStorageComponents struct {
+	Namespace string
+	Bucket    string
+	Prefix    string
+}
+
+// ParseOCIStorageURI parses an OCI storage URI and returns its components
+// Format: oci://n/{namespace}/b/{bucket}/o/{object_path}
+func ParseOCIStorageURI(uri string) (*OCIStorageComponents, error) {
+	parts := strings.Split(strings.TrimPrefix(uri, "oci://"), "/")
+	if len(parts) < 6 || parts[0] != "n" || parts[2] != "b" || parts[4] != "o" {
+		return nil, fmt.Errorf("invalid OCI storage URI format. Expected: oci://n/{namespace}/b/{bucket}/o/{object_path}")
+	}
+
+	return &OCIStorageComponents{
+		Namespace: parts[1],
+		Bucket:    parts[3],
+		Prefix:    strings.Join(parts[5:], "/"),
+	}, nil
+}
+
+// BuildStorageArgs builds command line arguments for OCI storage configuration
+func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) []string {
+	if storageSpec == nil {
+		return nil
+	}
+
+	var args []string
+	args = append(args, "--upload-results")
+
+	// Parse and add storage URI components
+	if storageSpec.StorageUri != nil {
+		if components, err := ParseOCIStorageURI(*storageSpec.StorageUri); err == nil {
+			args = append(args,
+				"--namespace", components.Namespace,
+				"--bucket", components.Bucket,
+				"--prefix", components.Prefix,
+			)
+		}
+	}
+
+	// Add storage authentication parameters if specified
+	if storageSpec.Parameters != nil {
+		params := *storageSpec.Parameters
+
+		// Add auth type
+		if authType, ok := params["auth"]; ok {
+			args = append(args, "--auth", authType)
+		}
+
+		// Add config file path if specified
+		if configFile, ok := params["config_file"]; ok {
+			args = append(args, "--config-file", configFile)
+		}
+
+		// Add profile if specified
+		if profile, ok := params["profile"]; ok {
+			args = append(args, "--profile", profile)
+		}
+
+		// Add security token if specified
+		if securityToken, ok := params["security_token"]; ok {
+			args = append(args, "--security-token", securityToken)
+		}
+
+		// Add region if specified
+		if region, ok := params["region"]; ok {
+			args = append(args, "--region", region)
+		}
+	}
+
+	return args
 }

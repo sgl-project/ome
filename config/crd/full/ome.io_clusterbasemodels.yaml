@@ -120,8 +120,6 @@ spec:
                     type: string
                   storageUri:
                     type: string
-                required:
-                - path
                 type: object
               tensorRTLLMConfiguration:
                 type: object

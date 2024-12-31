@@ -443,6 +443,11 @@ func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.Ben
 		)
 	}
 
+	if benchmarkJob.Spec.OutputLocation != nil {
+		storageArgs := benchmarkutils.BuildStorageArgs(benchmarkJob.Spec.OutputLocation)
+		args = append(args, storageArgs...)
+	}
+
 	return command, args, nil
 }
 

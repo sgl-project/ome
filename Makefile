@@ -310,7 +310,7 @@ test-cmd: fmt vet manifests envtest ## Run cmd tests with coverage
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
 		./cmd/... \
 		-coverprofile=coverage-cmd.out \
-		-coverpkg=./cmd/... \
+		-cover \
 		-covermode=atomic
 
 .PHONY: test-pkg
@@ -318,23 +318,39 @@ test-pkg: fmt vet manifests envtest ## Run pkg tests with coverage
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
 		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go) \
 		-coverprofile=coverage-pkg.out \
-		-coverpkg=./pkg/... \
+		-cover \
 		-covermode=atomic
-
 
 .PHONY: test-internal
 test-internal: fmt vet manifests envtest ## Run internal tests with coverage
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
 		./internal/... \
 		-coverprofile=coverage-internal.out \
-		-coverpkg=./internal/... \
+		-cover \
 		-covermode=atomic
 
 .PHONY: coverage
-coverage: ## Show coverage details for all components
-	go tool cover -func=coverage-cmd.out | grep -v "100.0%"
-	go tool cover -func=coverage-pkg.out | grep -v "100.0%"
-	go tool cover -func=coverage-internal.out | grep -v "100.0%"
+coverage: ## Show coverage for all packages
+	@echo "\n---------- Coverage Summary ----------"
+	@echo "CMD Coverage:"
+	@go tool cover -func=coverage-cmd.out | grep -v "100.0%"
+	@echo "\nPKG Coverage:"
+	@go tool cover -func=coverage-pkg.out | grep -v "100.0%"
+	@echo "\nInternal Coverage:"
+	@go tool cover -func=coverage-internal.out | grep -v "100.0%"
+	@echo "\nTotal Coverage:"
+	@cmd_cov=$$(go tool cover -func=coverage-cmd.out | grep total | awk '{sub(/%/,"",$$3); print $$3}'); \
+	pkg_cov=$$(go tool cover -func=coverage-pkg.out | grep total | awk '{sub(/%/,"",$$3); print $$3}'); \
+	int_cov=$$(go tool cover -func=coverage-internal.out | grep total | awk '{sub(/%/,"",$$3); print $$3}'); \
+	echo "CMD: $$cmd_cov%"; \
+	echo "PKG: $$pkg_cov%"; \
+	echo "Internal: $$int_cov%"; \
+	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
+	echo "\nAverage Coverage: $$avg_cov%"; \
+	if awk "BEGIN {exit !($$avg_cov < 13)}"; then \
+		echo "Average coverage $$avg_cov% is below minimum threshold of 13%"; \
+		exit 1; \
+	fi
 
 .PHONY: update-go-base-image
 update-go-base-image: ## Update the go base image in all dockerfiles

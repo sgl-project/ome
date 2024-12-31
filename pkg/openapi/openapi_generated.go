@@ -6796,7 +6796,6 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 						},
 					},
 				},
-				Required: []string{"path"},
 			},
 		},
 	}
