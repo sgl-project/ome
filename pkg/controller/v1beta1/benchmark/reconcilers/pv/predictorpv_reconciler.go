@@ -1,9 +1,10 @@
 package benchmarkjobpv
 
 import (
+	"context"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"context"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -78,7 +79,7 @@ func (c *PVReconciler) reconcilePV(pvName string, benchmarkJob *v1beta1.Benchmar
 				},
 			},
 		}
-		if err := c.client.Create(context.TODO(), newPV); err != nil {
+		if _, err := c.clientset.CoreV1().PersistentVolumes().Create(context.TODO(), newPV, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 	} else if err != nil {

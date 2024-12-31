@@ -70,7 +70,7 @@ func (c *PVCReconciler) reconcilePVC(benchmarkJob *v1beta1.BenchmarkJob, pvcName
 		if err := controllerutil.SetControllerReference(benchmarkJob, newPVC, c.scheme); err != nil {
 			return err
 		}
-		if err := c.client.Create(context.TODO(), newPVC); err != nil {
+		if _, err := c.clientset.CoreV1().PersistentVolumeClaims(benchmarkJob.Namespace).Create(context.TODO(), newPVC, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 	} else if err != nil {
