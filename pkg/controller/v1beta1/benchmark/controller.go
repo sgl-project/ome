@@ -295,7 +295,7 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 			Name: *inferenceService.Spec.Predictor.Model.BaseModel,
 			VolumeSource: v1.VolumeSource{
 				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: constants.PVCName(inferenceService.Name, *inferenceService.Spec.Predictor.Model.BaseModel),
+					ClaimName: constants.PVCName(benchmarkJob.Name, *inferenceService.Spec.Predictor.Model.BaseModel),
 					ReadOnly:  true,
 				},
 			},
