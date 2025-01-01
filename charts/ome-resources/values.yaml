@@ -15,6 +15,13 @@ ome:
     airportCode: ORD
     adNumberName: ad2
     namespace: ax0pqskufyud
+  benchmarkJob:
+    image: phx.ocir.io/idqj093njucb/genai-bench
+    tag: 0.1.113
+    cpuRequest: "2"
+    memoryRequest: "2Gi"
+    cpuLimit: "2"
+    memoryLimit: "2Gi"
   multinodeProber:
     image: eu-frankfurt-1.ocir.io/idlsnvn0f2is/multinode-prober
     tag: v0.1
@@ -69,10 +76,9 @@ ome:
     affinity: {}
     image: ord.ocir.io/idqj093njucb/model-controller
     tag: *defaultVersion
-  modelInit:
-    modelInitImage:
-      repository: ap-osaka-1.ocir.io/idqj093njucb/serving-init
-      tag: "v2.0"
+  omeAgent:
+    image: ap-osaka-1.ocir.io/idqj093njucb/genai-ome-agent
+    tag: *defaultVersion
 
     authType: InstancePrincipal
     compartmentId: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva

@@ -155,6 +155,15 @@ helm-lint: helm ## Lint all charts
 helm-doc: helm-docs ## Generate Helm chart documentation via helm-docs
 	$(HELM_DOCS) --chart-search-root=charts --output-file=README.md
 
+
+.PHONY: helm-version-update
+helm-version-update: yq ## Update Helm chart version
+	@for chart in $(CHARTS_DIR)/*/; do \
+		echo "Updating $$chart..."; \
+		$(YQ) e -i '.version = "$(GIT_TAG)"' "$${chart}/Chart.yaml"; \
+		$(YQ) e -i '.appVersion = "$(GIT_TAG)"' "$${chart}/Chart.yaml"; \
+	done
+
 ##@ Build
 
 .PHONY: ome-manager

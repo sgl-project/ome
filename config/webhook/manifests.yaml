@@ -93,7 +93,7 @@ webhooks:
       service:
         name: $(webhookServiceName)
         namespace: $(omeNamespace)
-        path: /validate-serving-ome-io-v1alpha1-clusterservingruntime
+        path: /validate-ome-io-v1beta1-clusterservingruntime
     failurePolicy: Fail
     name: clusterservingruntime.ome-webhook-server.validator
     sideEffects: None
@@ -120,7 +120,7 @@ webhooks:
       service:
         name: $(webhookServiceName)
         namespace: $(omeNamespace)
-        path: /validate-serving-ome-io-v1alpha1-servingruntime
+        path: /validate-ome-io-v1beta1-servingruntime
     failurePolicy: Fail
     name: servingruntime.ome-webhook-server.validator
     sideEffects: None

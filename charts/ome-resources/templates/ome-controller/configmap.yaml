@@ -77,15 +77,15 @@ data:
     }
   modelInit: |-
     {
-        "image" : "{{ .Values.ome.modelInit.modelInitImage.repository }}:{{ .Values.ome.modelInit.modelInitImage.tag }}",
+        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
         "memoryRequest": "320Gi",
         "memoryLimit": "320Gi",
         "cpuRequest": "15",
         "cpuLimit": "15",
-        "compartmentId": "{{ .Values.ome.modelInit.compartmentId }}",
-        "authType" : "{{ .Values.ome.modelInit.authType }}",
-        "vaultId": "{{ .Values.ome.modelInit.vaultId }}",
-        "region": "{{ .Values.ome.modelInit.region }}"
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
     }
 
 ---
@@ -103,4 +103,22 @@ data:
   dacReconcilePolicy: |-
     {
       "reconcileFailedLifecycleState": false
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: benchmarkjob-config
+  namespace: ome
+data:
+  benchmarkjob: |
+    {
+      "podConfig": {
+        "image": "{{ .Values.ome.benchmarkJob.image }}:{{ .Values.ome.benchmarkJob.tag }}",
+        "cpuRequest": "{{ .Values.ome.benchmarkJob.cpuRequest }}",
+        "memoryRequest": "{{ .Values.ome.benchmarkJob.memoryRequest }}",
+        "cpuLimit": "{{ .Values.ome.benchmarkJob.cpuLimit }}",
+        "memoryLimit": "{{ .Values.ome.benchmarkJob.memoryLimit }}"
+      }
     }

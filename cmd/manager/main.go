@@ -287,12 +287,12 @@ func main() {
 		})
 
 		setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
-		hookServer.Register("/validate-serving-ome-io-v1alpha1-clusterservingruntime", &webhook.Admission{
+		hookServer.Register("/validate-ome-io-v1beta1-clusterservingruntime", &webhook.Admission{
 			Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		setupLog.Info("registering serving runtime validator webhook to the webhook server")
-		hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
+		hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
 			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
