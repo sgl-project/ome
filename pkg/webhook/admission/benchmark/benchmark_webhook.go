@@ -59,6 +59,11 @@ func (v *BenchmarkJobValidator) validateBenchmarkJob(ctx context.Context, benchm
 		return fmt.Errorf("invalid additional request parameters: %w", err)
 	}
 
+	// Validate Storage
+	if err := v.validateStorage(benchmarkJob.Spec.OutputLocation); err != nil {
+		return fmt.Errorf("invalid storage: %w", err)
+	}
+
 	return nil
 }
 
@@ -105,6 +110,28 @@ func (v *BenchmarkJobValidator) validateTrafficScenarios(task string, scenarios 
 			return fmt.Errorf("failed to validate scenario '%s': %w", scenario, err)
 		}
 	}
+	return nil
+}
+
+func (v *BenchmarkJobValidator) validateStorage(storage *v1beta1.StorageSpec) error {
+	if storage == nil {
+		return nil
+	}
+
+	if storage.StorageUri == nil {
+		return fmt.Errorf("storageUri cannot be empty")
+	}
+
+	// Validate OCI storage URI format: oci://n/{namespace}/b/{bucket}/o/{object_path}
+	pattern := `^oci://n/[^/]+/b/[^/]+/o/.*$`
+	matched, err := regexp.MatchString(pattern, *storage.StorageUri)
+	if err != nil {
+		return fmt.Errorf("error validating storage URI format: %v", err)
+	}
+	if !matched {
+		return fmt.Errorf("invalid storage URI format. Must be: oci://n/{namespace}/b/{bucket}/o/{object_path}")
+	}
+
 	return nil
 }
 

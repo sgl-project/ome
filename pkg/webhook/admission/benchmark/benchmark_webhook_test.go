@@ -248,3 +248,60 @@ func TestValidateAdditionalRequestParams(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateStorage(t *testing.T) {
+	scenarios := map[string]struct {
+		storage  *v1beta1.StorageSpec
+		expected gomega.OmegaMatcher
+	}{
+		"Valid storage URI": {
+			storage: &v1beta1.StorageSpec{
+				StorageUri: ptr("oci://n/mynamespace/b/mybucket/o/path/to/object"),
+			},
+			expected: gomega.BeNil(),
+		},
+		"Nil storage": {
+			storage:  nil,
+			expected: gomega.BeNil(),
+		},
+		"Nil storage URI": {
+			storage: &v1beta1.StorageSpec{
+				StorageUri: nil,
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Invalid storage URI format - missing n": {
+			storage: &v1beta1.StorageSpec{
+				StorageUri: ptr("oci://mynamespace/b/mybucket/o/object"),
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Invalid storage URI format - missing b": {
+			storage: &v1beta1.StorageSpec{
+				StorageUri: ptr("oci://n/mynamespace/mybucket/o/object"),
+			},
+			expected: gomega.HaveOccurred(),
+		},
+		"Invalid storage URI format - missing o": {
+			storage: &v1beta1.StorageSpec{
+				StorageUri: ptr("oci://n/mynamespace/b/mybucket/object"),
+			},
+			expected: gomega.HaveOccurred(),
+		},
+	}
+
+	g := gomega.NewGomegaWithT(t)
+	validator := &BenchmarkJobValidator{}
+
+	for name, scenario := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			err := validator.validateStorage(scenario.storage)
+			g.Expect(err).To(scenario.expected)
+		})
+	}
+}
+
+// ptr returns a pointer to the string value
+func ptr(s string) *string {
+	return &s
+}
