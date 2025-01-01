@@ -18,10 +18,20 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func TestConfigInitialization(t *testing.T) {
+func setupTestEnv(t *testing.T) {
+	t.Helper()
 	// Save original env and restore after test
 	originalNodeName := os.Getenv("NODE_NAME")
-	defer os.Setenv("NODE_NAME", originalNodeName)
+	t.Cleanup(func() {
+		os.Setenv("NODE_NAME", originalNodeName)
+	})
+	os.Setenv("NODE_NAME", "test-node")
+}
+
+func TestConfigInitialization(t *testing.T) {
+	setupTestEnv(t)
+	// Reset config before each test
+	cfg = config{}
 
 	tests := []struct {
 		name          string
@@ -32,6 +42,7 @@ func TestConfigInitialization(t *testing.T) {
 			name: "valid NODE_NAME",
 			setupEnv: func() {
 				os.Setenv("NODE_NAME", "test-node")
+				initConfig(nil, nil)
 			},
 			expectedPanic: false,
 		},
@@ -53,18 +64,15 @@ func TestConfigInitialization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset config before each test
-			cfg = config{}
-
 			if tt.expectedPanic {
 				assert.Panics(t, func() {
 					tt.setupEnv()
-					rootCmd.PersistentPreRun(nil, nil)
+					initConfig(nil, nil)
 				})
 			} else {
 				assert.NotPanics(t, func() {
 					tt.setupEnv()
-					rootCmd.PersistentPreRun(nil, nil)
+					initConfig(nil, nil)
 				})
 			}
 		})
@@ -72,10 +80,7 @@ func TestConfigInitialization(t *testing.T) {
 }
 
 func TestDefaultConfig(t *testing.T) {
-	// Set required env var
-	os.Setenv("NODE_NAME", "test-node")
-	defer os.Unsetenv("NODE_NAME")
-
+	setupTestEnv(t)
 	// Create a new command instance for testing
 	testCmd := &cobra.Command{
 		Use:   "start",
@@ -113,12 +118,14 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestInitializeLogger(t *testing.T) {
+	setupTestEnv(t)
 	logger, err := initializeLogger()
 	require.NoError(t, err)
 	require.NotNil(t, logger)
 }
 
 func TestSetupHealthServer(t *testing.T) {
+	setupTestEnv(t)
 	logger, _ := initializeLogger()
 	server := setupHealthServer(8080, "/tmp", logger)
 	require.NotNil(t, server)
@@ -140,6 +147,7 @@ func TestSetupHealthServer(t *testing.T) {
 }
 
 func TestCreateKubeClient(t *testing.T) {
+	setupTestEnv(t)
 	config := &rest.Config{
 		Host: "http://localhost:8080",
 	}
@@ -148,6 +156,7 @@ func TestCreateKubeClient(t *testing.T) {
 }
 
 func TestGetNodeShape(t *testing.T) {
+	setupTestEnv(t)
 	tests := []struct {
 		name          string
 		nodeName      string
@@ -219,6 +228,7 @@ func TestGetNodeShape(t *testing.T) {
 }
 
 func TestCreateOmeClient(t *testing.T) {
+	setupTestEnv(t)
 	config := &rest.Config{
 		Host: "http://localhost:8080",
 	}
@@ -238,6 +248,7 @@ func (m *mockHealthCheck) Check(_ *http.Request) error {
 }
 
 func TestHealthCheckEndpoint(t *testing.T) {
+	setupTestEnv(t)
 	logger, _ := initializeLogger()
 	server := setupHealthServer(18080, "/tmp", logger)
 	require.NotNil(t, server)

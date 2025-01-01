@@ -15,6 +15,7 @@ import (
 	modelagent "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/model-agent"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/kubernetes"
@@ -54,6 +55,12 @@ func initConfig(_ *cobra.Command, _ []string) {
 	cfg.nodeName = nodeName
 }
 
+var (
+	logLevel       string
+	logEncoder     string
+	logDevelopment bool
+)
+
 func init() {
 	rootCmd.Flags().IntVar(&cfg.healthCheckPort, "health-check-port", 8080, "Address for readiness and liveness health check")
 	rootCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
@@ -63,12 +70,37 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
 	rootCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	rootCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
+
+	// Logger flags
+	rootCmd.PersistentFlags().StringVar(&logLevel, "zap-level", "info", "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().StringVar(&logEncoder, "zap-encoder", "console", "Log encoder (console, json)")
+	rootCmd.PersistentFlags().BoolVar(&logDevelopment, "zap-development", false, "Development mode")
 }
 
 type Logger = zap.SugaredLogger
 
 func initializeLogger() (*Logger, error) {
-	zapLogger, err := zap.NewProduction()
+	level, err := zapcore.ParseLevel(logLevel)
+	if err != nil {
+		return nil, fmt.Errorf("invalid log level %q: %w", logLevel, err)
+	}
+
+	config := zap.Config{
+		Level:            zap.NewAtomicLevelAt(level),
+		Development:      logDevelopment,
+		Encoding:         logEncoder,
+		EncoderConfig:    zap.NewProductionEncoderConfig(),
+		OutputPaths:      []string{"stdout"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
+
+	// Use more human-friendly timestamp format for console encoder
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	if logEncoder == "console" {
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	}
+
+	zapLogger, err := config.Build()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}

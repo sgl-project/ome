@@ -11,6 +11,7 @@ import (
 	modelcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/model"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -34,6 +35,16 @@ var (
 	// allowed for timeout. Checks within the timeout period after the lease
 	// expires will still return healthy.
 	leaderHealthzAdaptorTimeout = time.Second * 20
+
+	// logging config
+	logLevel       string
+	logEncoder     string
+	logDevelopment bool
+
+	// controller config
+	namespace      string
+	controllerName string
+	agentNamespace string
 )
 
 var rootCmd = &cobra.Command{
@@ -45,18 +56,11 @@ var rootCmd = &cobra.Command{
 
 type Logger = zap.SugaredLogger
 
-func initializeLogger() *Logger {
-	zaplogger, _ := zap.NewProduction()
-	return zaplogger.Sugar()
-}
-
-var (
-	namespace      string
-	controllerName string
-	agentNamespace string
-)
-
 func init() {
+	rootCmd.PersistentFlags().StringVar(&logLevel, "zap-level", "info", "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().StringVar(&logEncoder, "zap-encoder", "console", "Log encoder (console, json)")
+	rootCmd.PersistentFlags().BoolVar(&logDevelopment, "zap-development", false, "Development mode")
+
 	rootCmd.Flags().StringVar(&namespace, "namespace", "ome", "namespace to create the leader election lock")
 	rootCmd.Flags().StringVar(&controllerName, "controller-name", "ome-model-controller", "the name of this controller")
 	rootCmd.Flags().StringVar(&agentNamespace, "agent-namespace", "ome", "the namespace of the model agents")
@@ -70,7 +74,11 @@ func main() {
 }
 
 func runCommand(cmd *cobra.Command, args []string) {
-	logger := initializeLogger()
+	logger, err := initializeLogger()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	inclusterKubeConfig := getKubeConfig()
 	kubeClient := createKubeClient(inclusterKubeConfig)
 	omev1beta1ClientSet := createOmeClient(inclusterKubeConfig)
@@ -180,6 +188,34 @@ func runCommand(cmd *cobra.Command, args []string) {
 	})
 
 	logger.Fatalf("finished without leader elect")
+}
+
+func initializeLogger() (*Logger, error) {
+	level, err := zap.ParseAtomicLevel(logLevel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse log level: %w", err)
+	}
+
+	config := zap.Config{
+		Level:            level,
+		Development:      logDevelopment,
+		Encoding:         logEncoder,
+		EncoderConfig:    zap.NewProductionEncoderConfig(),
+		OutputPaths:      []string{"stdout"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
+
+	// Use more human-friendly timestamp format for console encoder
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	if logEncoder == "console" {
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	}
+
+	zapLogger, err := config.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	return zapLogger.Sugar(), nil
 }
 
 func createKubeClient(kubeConfig *rest.Config) *kubernetes.Clientset {

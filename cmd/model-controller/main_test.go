@@ -38,7 +38,8 @@ func TestConfigInitialization(t *testing.T) {
 }
 
 func TestInitializeLogger(t *testing.T) {
-	logger := initializeLogger()
+	logger, err := initializeLogger()
+	require.NoError(t, err)
 	require.NotNil(t, logger)
 }
 
@@ -153,7 +154,8 @@ func TestGetKubeConfig(t *testing.T) {
 }
 
 func TestCheckCRDExists(t *testing.T) {
-	logger := initializeLogger()
+	logger, err := initializeLogger()
+	require.NoError(t, err)
 	client := omefake.NewSimpleClientset()
 
 	// Test CRD check with mock client
