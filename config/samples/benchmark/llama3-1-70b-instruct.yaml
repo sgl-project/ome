@@ -5,7 +5,7 @@ metadata:
   namespace: llama-3-1-70b
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.110"
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.113"
   huggingFaceSecretReference:
     name: huggingface-secret
   endpoint:

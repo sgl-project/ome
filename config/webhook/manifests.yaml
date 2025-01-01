@@ -102,7 +102,7 @@ webhooks:
       - apiGroups:
           - ome.io
         apiVersions:
-          - v1alpha1
+          - v1beta1
         operations:
           - CREATE
           - UPDATE
@@ -129,9 +129,36 @@ webhooks:
       - apiGroups:
           - ome.io
         apiVersions:
-          - v1alpha1
+          - v1beta1
         operations:
           - CREATE
           - UPDATE
         resources:
           - servingruntimes
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: benchmarkjob.ome.io
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: $(webhookServiceName)
+        namespace: $(omeNamespace)
+        path: /validate-ome-io-v1beta1-benchmarkjob
+    failurePolicy: Fail
+    name: benchmarkjob.ome-webhook-server.validator
+    sideEffects: None
+    admissionReviewVersions: ["v1beta1"]
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - benchmarkjobs

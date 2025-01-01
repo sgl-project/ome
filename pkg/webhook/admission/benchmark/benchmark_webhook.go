@@ -23,7 +23,7 @@ type BenchmarkJobValidator struct {
 	Decoder admission.Decoder
 }
 
-// +kubebuilder:webhook:path=/validate-benchmark-job,mutating=false,failurePolicy=fail,groups=serving.ome.io,resources=benchmarkjobs,verbs=create;update,versions=v1beta1,name=vbenchmarkjob.kb.io,sideEffects=None,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-ome-io-benchmark-job,mutating=false,failurePolicy=fail,groups=serving.ome.io,resources=benchmarkjobs,,verbs=create;update,versions=v1beta1,name=benchmarkjob.ome-webhook-server.validator,sideEffects=None,admissionReviewVersions=v1
 
 // Handle implements webhook.Validator so a webhook will be registered for the type
 func (v *BenchmarkJobValidator) Handle(ctx context.Context, req admission.Request) admission.Response {

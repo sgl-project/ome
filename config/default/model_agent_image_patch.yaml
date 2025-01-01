@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: model-agent
-          image: ord.ocir.io/idqj093njucb/ome/model-agent:v1.1-139-3-gd848d7f
+          image: ord.ocir.io/idqj093njucb/ome/model-agent:v1.1-143-4-gb4bdf3c-dirty

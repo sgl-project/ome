@@ -7,6 +7,7 @@ import (
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 	"flag"
@@ -293,6 +294,11 @@ func main() {
 		setupLog.Info("registering serving runtime validator webhook to the webhook server")
 		hookServer.Register("/validate-serving-ome-io-v1alpha1-servingruntime", &webhook.Admission{
 			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("registering benchmark job validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
+			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
