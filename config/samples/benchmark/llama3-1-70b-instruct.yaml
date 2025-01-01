@@ -5,7 +5,7 @@ metadata:
   namespace: llama-3-1-70b
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.99"
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.110"
   huggingFaceSecretReference:
     name: huggingface-secret
   endpoint:
@@ -34,5 +34,7 @@ spec:
   additionalRequestParams:
     temperature: "0.0"
   outputLocation:
-    storageUri: "oci://<bucket-name>/llama-3-1-70b-benchmark"
-    path: "/"
+    storageUri: "oci://n/idqj093njucb/b/test-bucket/o/llama-3-1-70b-benchmark"
+    parameters:
+      auth: "instance_principal"
+      region: "us-chicago-1"
