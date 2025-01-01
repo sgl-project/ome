@@ -535,7 +535,7 @@ func (r *BenchmarkJobReconciler) updateStatus(ctx context.Context, benchmarkJob 
 
 	// Update the BenchmarkJob status on the cluster if changed.
 	// This ensures the status is stored and reflected in the resource.
-	return r.Status().Update(ctx, benchmarkJob)
+	return r.Update(ctx, benchmarkJob)
 }
 
 // cleanupResources handles resource cleanup during deletion.
