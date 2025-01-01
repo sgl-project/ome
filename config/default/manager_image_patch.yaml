@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: manager
-          image: ord.ocir.io/idqj093njucb/ome/manager:v1.1-136-1-g222db9b
+          image: ord.ocir.io/idqj093njucb/ome/manager:v1.1-139-dirty

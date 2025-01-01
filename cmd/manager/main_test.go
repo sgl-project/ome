@@ -1,16 +1,29 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"os"
 	"testing"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	istionetworking "istio.io/api/networking/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 func TestGetOptions(t *testing.T) {
@@ -179,4 +192,249 @@ func TestInit(t *testing.T) {
 	// Test that init() function sets the Istio API client flags correctly
 	require.True(t, istionetworking.VirtualServiceUnmarshaler.AllowUnknownFields)
 	require.True(t, istionetworking.GatewayUnmarshaler.AllowUnknownFields)
+}
+
+// TestManagerSetup tests the manager configuration
+func TestManagerSetup(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          Options
+		expectedError bool
+		setupMockFunc func()
+		cleanupFunc   func()
+	}{
+		{
+			name: "valid configuration",
+			opts: Options{
+				metricsAddr:             ":18080",
+				probeAddr:               ":18081",
+				webhookPort:             18443,
+				leaderElectionNamespace: LeaderElectionNamespace,
+			},
+			expectedError: false,
+		},
+		{
+			name: "custom metrics port",
+			opts: Options{
+				metricsAddr:             ":19090",
+				probeAddr:               ":19081",
+				webhookPort:             19443,
+				leaderElectionNamespace: LeaderElectionNamespace,
+			},
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMockFunc != nil {
+				tt.setupMockFunc()
+			}
+			if tt.cleanupFunc != nil {
+				defer tt.cleanupFunc()
+			}
+
+			cfg := &rest.Config{
+				Host: "http://localhost:8080",
+			}
+
+			mgr, err := manager.New(cfg, manager.Options{
+				Metrics: metricsserver.Options{
+					BindAddress: tt.opts.metricsAddr},
+				WebhookServer: webhook.NewServer(webhook.Options{
+					Port: tt.opts.webhookPort}),
+				LeaderElection:          tt.opts.enableLeaderElection,
+				LeaderElectionID:        LeaderLockName,
+				LeaderElectionNamespace: tt.opts.leaderElectionNamespace,
+				HealthProbeBindAddress:  tt.opts.probeAddr,
+			})
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, mgr)
+			}
+		})
+	}
+}
+
+// createMockConfigMap creates a mock ConfigMap for testing
+func createMockConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "inferenceservice-config",
+			Namespace: "ome",
+		},
+		Data: map[string]string{
+			"deploy": `{
+				"defaultDeploymentMode": "Serverless"
+			}`,
+			"ingress": `{
+				"ingressGateway": "test-gateway",
+				"ingressService": "test-service"
+			}`,
+		},
+	}
+}
+
+// TestDeployConfigSetup tests the setup of deployment configuration
+func TestDeployConfigSetup(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func() (kubernetes.Interface, error)
+		shouldError bool
+	}{
+		{
+			name: "successful config setup",
+			setupFunc: func() (kubernetes.Interface, error) {
+				client := fake.NewSimpleClientset()
+				// Create the required ConfigMap
+				_, err := client.CoreV1().ConfigMaps("ome").Create(context.Background(), createMockConfigMap(), metav1.CreateOptions{})
+				if err != nil {
+					return nil, err
+				}
+				return client, nil
+			},
+			shouldError: false,
+		},
+		{
+			name: "config setup failure",
+			setupFunc: func() (kubernetes.Interface, error) {
+				return nil, errors.New("failed to create clientset")
+			},
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientset, err := tt.setupFunc()
+			if tt.shouldError {
+				assert.Error(t, err)
+				return
+			}
+
+			deployConfig, err := v1beta1.NewDeployConfig(clientset)
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, deployConfig)
+			}
+		})
+	}
+}
+
+// TestIngressConfigSetup tests the setup of ingress configuration
+func TestIngressConfigSetup(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func() (kubernetes.Interface, error)
+		shouldError bool
+	}{
+		{
+			name: "successful ingress config setup",
+			setupFunc: func() (kubernetes.Interface, error) {
+				client := fake.NewSimpleClientset()
+				// Create the required ConfigMap
+				_, err := client.CoreV1().ConfigMaps("ome").Create(context.Background(), createMockConfigMap(), metav1.CreateOptions{})
+				if err != nil {
+					return nil, err
+				}
+				return client, nil
+			},
+			shouldError: false,
+		},
+		{
+			name: "ingress config setup failure",
+			setupFunc: func() (kubernetes.Interface, error) {
+				return nil, errors.New("failed to create clientset")
+			},
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientset, err := tt.setupFunc()
+			if tt.shouldError {
+				assert.Error(t, err)
+				return
+			}
+
+			ingressConfig, err := v1beta1.NewIngressConfig(clientset)
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, ingressConfig)
+			}
+		})
+	}
+}
+
+// TestCRDSetup tests the setup of various CRDs
+func TestCRDSetup(t *testing.T) {
+	tests := []struct {
+		name        string
+		crdType     string
+		available   bool
+		setupError  error
+		shouldError bool
+	}{
+		{
+			name:        "Ray CRD available",
+			crdType:     "Ray",
+			available:   true,
+			setupError:  nil,
+			shouldError: false,
+		},
+		{
+			name:        "Ray CRD not available",
+			crdType:     "Ray",
+			available:   false,
+			setupError:  nil,
+			shouldError: false,
+		},
+		{
+			name:        "Volcano CRD available",
+			crdType:     "Volcano",
+			available:   true,
+			setupError:  nil,
+			shouldError: false,
+		},
+		{
+			name:        "Error checking CRD",
+			crdType:     "Ray",
+			available:   false,
+			setupError:  errors.New("failed to check CRD"),
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockChecker := &mockCRDChecker{
+				available: tt.available,
+				err:       tt.setupError,
+			}
+
+			cfg := &rest.Config{}
+			var err error
+
+			switch tt.crdType {
+			case "Ray":
+				_, err = mockChecker.IsCrdAvailable(cfg, ray.SchemeGroupVersion.String(), constants.RayClusterKind)
+			case "Volcano":
+				_, err = mockChecker.IsCrdAvailable(cfg, volcano.SchemeGroupVersion.String(), constants.VolcanoQueueKind)
+			}
+
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

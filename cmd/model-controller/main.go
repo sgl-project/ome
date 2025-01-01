@@ -11,7 +11,6 @@ import (
 	modelcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/model"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -41,7 +40,7 @@ var rootCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Starts model controller",
 	Long:  `Starts the model controller to watch and updates all the baseModels`,
-	Run:   rumCommand,
+	Run:   runCommand,
 }
 
 type Logger = zap.SugaredLogger
@@ -70,7 +69,7 @@ func main() {
 	}
 }
 
-func rumCommand(cmd *cobra.Command, args []string) {
+func runCommand(cmd *cobra.Command, args []string) {
 	logger := initializeLogger()
 	inclusterKubeConfig := getKubeConfig()
 	kubeClient := createKubeClient(inclusterKubeConfig)
@@ -199,26 +198,15 @@ func getKubeConfig() *rest.Config {
 	return config
 }
 
-func checkCRDExists(clientset omev1beta1client.Interface, logger *zap.SugaredLogger) bool {
-	_, err := clientset.OmeV1beta1().ClusterBaseModels().List(context.TODO(), metav1.ListOptions{})
-
+func checkCRDExists(client omev1beta1client.Interface, logger *Logger) bool {
+	_, err := client.OmeV1beta1().BaseModels("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		logger.Error(err)
-		if _, ok := err.(*errors.StatusError); ok {
-			if errors.IsNotFound(err) {
-				return false
-			}
+		if errors.IsNotFound(err) {
+			logger.Info("BaseModel CRD not found")
+			return false
 		}
-	}
-
-	_, err = clientset.OmeV1beta1().BaseModels(corev1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		logger.Error(err)
-		if _, ok := err.(*errors.StatusError); ok {
-			if errors.IsNotFound(err) {
-				return false
-			}
-		}
+		logger.Errorf("Error checking CRD: %v", err)
+		return false
 	}
 	return true
 }

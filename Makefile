@@ -347,8 +347,8 @@ coverage: ## Show coverage for all packages
 	echo "Internal: $$int_cov%"; \
 	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
 	echo "\nAverage Coverage: $$avg_cov%"; \
-	if awk "BEGIN {exit !($$avg_cov < 13)}"; then \
-		echo "Average coverage $$avg_cov% is below minimum threshold of 13%"; \
+	if awk "BEGIN {exit !($$avg_cov < 15)}"; then \
+		echo "Average coverage $$avg_cov% is below minimum threshold of 15%"; \
 		exit 1; \
 	fi
 

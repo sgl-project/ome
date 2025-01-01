@@ -1,14 +1,15 @@
 package benchmark
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"strconv"
 
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"

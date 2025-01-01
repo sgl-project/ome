@@ -22,10 +22,11 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Starts the model agent",
-	Long:  `Starts the model agent to watch the base model custom resources and update the node labels`,
-	Run:   runCommand,
+	Use:              "start",
+	Short:            "Starts the model agent",
+	Long:             `Starts the model agent to watch the base model custom resources and update the node labels`,
+	Run:              runCommand,
+	PersistentPreRun: initConfig,
 }
 
 type config struct {
@@ -42,6 +43,17 @@ type config struct {
 
 var cfg config
 
+func initConfig(_ *cobra.Command, _ []string) {
+	nodeName, ok := os.LookupEnv("NODE_NAME")
+	if !ok {
+		panic("NODE_NAME environment variable is not set for model-agent")
+	}
+	if nodeName == "" {
+		panic("NODE_NAME environment variable is empty")
+	}
+	cfg.nodeName = nodeName
+}
+
 func init() {
 	rootCmd.Flags().IntVar(&cfg.healthCheckPort, "health-check-port", 8080, "Address for readiness and liveness health check")
 	rootCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
@@ -51,15 +63,6 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
 	rootCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	rootCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
-
-	nodeName, ok := os.LookupEnv("NODE_NAME")
-	if !ok {
-		panic("NODE_NAME environment variable is not set for model-agent")
-	}
-	if nodeName == "" {
-		panic("NODE_NAME environment variable is empty")
-	}
-	cfg.nodeName = nodeName
 }
 
 type Logger = zap.SugaredLogger
@@ -179,7 +182,7 @@ func getKubeConfig() *rest.Config {
 	return config
 }
 
-func getNodeShape(client *kubernetes.Clientset, nodeName string) string {
+func getNodeShape(client kubernetes.Interface, nodeName string) string {
 	opts := metav1.GetOptions{}
 	node, err := client.CoreV1().Nodes().Get(context.TODO(), nodeName, opts)
 	if err != nil {
