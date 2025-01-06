@@ -10,7 +10,8 @@ metadata:
     models.ome.io/experimental: "false"
     models.ome.io/internal: "false"
     models.ome.io/lifecycle-phase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
-    ome.io/base-model-decryption-key-name: "embed-dek"
+    ome.io/base-model-decryption-key-name: "embed"
+    ome.io/base-model-encryption-secret-name: "embed-dek"
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaazq
   disabled: false

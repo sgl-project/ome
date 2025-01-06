@@ -11,7 +11,8 @@ metadata:
     models.ome.io/experimental: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "isInternal" }}"
     models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "lifecyclePhase" }}"
-    ome.io/base-model-decryption-key-name: "command_r-dek"
+    ome.io/base-model-decryption-key-name: "command_r"
+    ome.io/base-model-encryption-secret-name: "command_r-dek"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false

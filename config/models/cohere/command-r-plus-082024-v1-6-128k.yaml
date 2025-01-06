@@ -10,7 +10,8 @@ metadata:
     models.ome.io/experimental: "false"
     models.ome.io/internal: "false"
     models.ome.io/lifecycle-phase: "ACTIVE"
-    ome.io/base-model-decryption-key-name: "command_r-dek"
+    ome.io/base-model-decryption-key-name: "command_r"
+    ome.io/base-model-encryption-secret-name: "command_r-dek"
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaazq
   disabled: false
