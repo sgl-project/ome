@@ -31,4 +31,12 @@ spec:
   modelCapabilities:
     - "CHAT"
   maxTokens: 128000
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_COHERE_V2
+          quotaUnit: 1
+          default: true
+    internalName: "command-r-082024-v1.6-tp4-128k"
+    type: "Serving"
 {{- end }}

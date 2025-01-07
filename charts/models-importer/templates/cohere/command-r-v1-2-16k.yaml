@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "gais-coherecommandrsmallv2"
+    models.ome.io/runtime: "cohere-command-r-small-v2"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "cohere-command-r-v1-2-16k-chat" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "cohere-command-r-v1-2-16k-chat" "isInternal" }}"

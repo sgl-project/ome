@@ -5,7 +5,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "gais-cohereembedv3"
+    models.ome.io/runtime: "cohere-embed-v3"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "false"
     models.ome.io/internal: "false"
@@ -22,9 +22,9 @@ spec:
   vendor: cohere
   version: "3.0"
   modelFormat:
-    name: tensorrt_llm
-    version: 'v0.9.0'
-  modelType: tensorrtllm
+    name: onnxruntime
+    version: '1'
+  modelType: onnxruntime
   modelArchitecture: CohereForCasualLM
   modelParameterSize: 112M
   modelCapabilities:

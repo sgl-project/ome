@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "gais-coherecommandrsmallvnext"
+    models.ome.io/runtime: "cohere-command-r-small-vnext"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "cohere-command-r-082024-v1-7-tp1-128k" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "cohere-command-r-082024-v1-7-tp1-128k" "isInternal" }}"

@@ -3,18 +3,18 @@ kind: ClusterServingRuntime
 metadata:
   name: cohere-command-r-v3
 spec:
-  {{- with .Values.cohere.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .Values.cohere.commonLabels }}
+    prometheus.io/port: '8081'
+    prometheus.io/scrape: 'true'
+    ome.io/disable-blocklist: 'true'
+    ome.io/inject-model-init: 'true'
   labels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .Values.commonTolerations }}
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   tolerations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCasualLM
@@ -67,7 +67,7 @@ spec:
         medium: Memory
   containers:
     - name: ome-container
-      image: "{{ .Values.cohere.commandRv3Image.repository }}:{{ .Values.cohere.commandRv3Image.tag }}"
+      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.7.4-100124
       ports:
         - containerPort: 8080
           name: http1
@@ -84,8 +84,27 @@ spec:
         - mountPath: /opt/ml/model
           name: model-empty-dir
       readinessProbe:
-        {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 10
+        timeoutSeconds: 20
       livenessProbe:
-        {{- toYaml .Values.cohere.livenessProbe | nindent 8 }}
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 10
+        timeoutSeconds: 20
       startupProbe:
-        {{- toYaml .Values.cohere.startupProbe | nindent 8 }}
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 100
+        successThreshold: 1
+        periodSeconds: 3
+        initialDelaySeconds: 60
+        timeoutSeconds: 5
