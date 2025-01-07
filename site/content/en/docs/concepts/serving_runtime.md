@@ -50,13 +50,24 @@ spec:
 
 Several out-of-the-box _ClusterServingRuntimes_ are provided with OME so that users can quickly deploy common models without having to define the runtimes themselves.
 
-| Name                 | Supported Model Types | Supported Model Architecture         | Supported Model Format |
-|----------------------|-----------------------|--------------------------------------|------------------------|
-| vllm-text-generation | safetensors           | LlamaForCausalLM, MistralForCausalLM | Transformer            |
-| vllm-embedding       | safetensors           | MistralModel                         | Transformer            |
-| vllm-vision          | safetensors           | Phi3VForCausalLM                     | Transformer            |
-| vllm-multi-node      | safetensors           | LlamaForCausalLM                     | Transformer            |
-
+| Name                                | Supported Model Types | Supported Model Architecture   | Supported Model Format |
+|-------------------------------------|-----------------------|--------------------------------|------------------------|
+| vllm-mistral-7b-instruct            | safetensors           | MistralForCausalLM             | Transformer            |
+| vllm-e5-mistral-7b-instruct         | safetensors           | MistralModel                   | Transformer            |
+| vllm-llama-3-1-70b-instruct         | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-llama-3-1-405b-instruct-fp8    | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-llama-3-2-1b                   | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-llama-3-2-3b                   | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-llama-3-2-11b                  | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-llama-3-2-90b-vision-fp8       | safetensors           | MllamaForConditionalGeneration | Transformer            |
+| vllm-llama-3-3-70b-instruct         | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-deepseek-v3                    | safetensors           | DeepseekV3ForCausalLM          | Transformer            |
+| vllm-deepseek-v3-rdma               | safetensors           | DeepseekV3ForCausalLM          | Transformer            |
+| vllm-multi-node-llama-3-1-405b      | safetensors           | LlamaForCausalLM               | Transformer            |
+| vllm-multi-node-llama-3-1-405b-rdma | safetensors           | LlamaForCausalLM               | Transformer            |
+| command-r-plus                      | tensorrt_llm          | CohereForCausalLM              | TensorRTLLM            |
+| sglang-small                        | safetensors           | LlamaForCausalLM               | Transformer            |
+| sglang-xsmall                       | safetensors           | LlamaForCausalLM               | Transformer            |
 
 ## Spec Attributes
 
