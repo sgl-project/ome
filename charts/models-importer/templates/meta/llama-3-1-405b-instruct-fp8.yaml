@@ -6,7 +6,11 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
+    {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" -}}
+    models.ome.io/runtime: "vllm-eight-card-chat"
+    {{- else }}
     models.ome.io/runtime: "vllm-pp"
+    {{- end }}
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "llama-3-1-405b-instruct-fp8" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "llama-3-1-405b-instruct-fp8" "isInternal" }}"
@@ -30,11 +34,19 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
+    {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" -}}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC_2
+          quotaUnit: 1
+          default: true
+    {{- else }}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: LARGE_GENERIC_4
           quotaUnit: 1
           default: true
+    {{- end }}
   modelConfiguration:
     {
       "_name_or_path": "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8",

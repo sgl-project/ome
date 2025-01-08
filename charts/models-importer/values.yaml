@@ -3,6 +3,7 @@ osnamespace: mynamespace
 
 llama-3-1-405b-instruct-fp8:
   enabled: false
+  singleNode: true
   lifecyclePhase: "ACTIVE"
 
 llama-3-1-70b-instruct:
