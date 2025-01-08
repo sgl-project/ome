@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-1-70b-instruct
+  name: srt-e5-mistral-7b-instruct
 spec:
   disabled: false
   annotations:
@@ -33,18 +33,18 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
+      modelArchitecture: MistralModel
       version: "1"
       autoSelect: false
       priority: 1
   modelSizeRange:
-    min: 60B
-    max: 75B
+    min: 5B
+    max: 10B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post2-srt-cu121
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.e5f3f92-srt-cu121
       ports:
         - containerPort: 8080
           name: http1
@@ -60,21 +60,20 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp-size=4 \
-          --mem-frac=0.9 \
-          --max-total-tokens=131072
+          --tp 1 \
+          --is-embedding
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 4
+          memory: 80Gi
+          nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 4
+          memory: 80Gi
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:

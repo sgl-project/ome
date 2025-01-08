@@ -44,7 +44,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.1d9e6ee3
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.e5f3f92-srt-cu121
       ports:
         - containerPort: 8080
           name: http1
@@ -56,9 +56,13 @@ spec:
       args:
         - |
           python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
           --port=8080 \
+          --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp-size=8 \
+          --tp 8 \
+          --mem-frac=0.9 \
+          --max-total-tokens=131072
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

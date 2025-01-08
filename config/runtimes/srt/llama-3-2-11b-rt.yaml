@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-1-70b-instruct
+  name: srt-llama-3-2-11b-vision-instruct
 spec:
   disabled: false
   annotations:
@@ -33,18 +33,18 @@ spec:
   supportedModelFormats:
     - name: safetensors
       modelType: transformer
-      modelArchitecture: LlamaForCausalLM
+      modelArchitecture: MllamaForConditionalGeneration
       version: "1"
       autoSelect: false
       priority: 1
   modelSizeRange:
-    min: 60B
-    max: 75B
+    min: 10B
+    max: 12B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post2-srt-cu121
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.e5f3f92-srt-cu121
       ports:
         - containerPort: 8080
           name: http1
@@ -60,21 +60,22 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp-size=4 \
+          --tp 1 \
           --mem-frac=0.9 \
-          --max-total-tokens=131072
+          --max-total-tokens=131072 \
+          --chat-template llama_3_vision
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 4
+          memory: 30Gi
+          nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 160Gi
-          nvidia.com/gpu: 4
+          memory: 30Gi
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:

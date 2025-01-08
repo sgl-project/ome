@@ -1,15 +1,15 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: sglang-xsmall-text-generation
+  name: srt-llama-3-2-1b-instruct
 spec:
+  disabled: false
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
   labels:
     logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
@@ -35,22 +35,16 @@ spec:
       modelType: transformer
       modelArchitecture: LlamaForCausalLM
       version: "1"
-      autoSelect: true
-      priority: 1
-    - name: safetensors
-      modelType: transformer
-      modelArchitecture: MistralForCausalLM
-      version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
   modelSizeRange:
-    min: 60B
-    max: 128B
+    min: 500M
+    max: 2B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: phx.ocir.io/idqj093njucb/sglang:a95d558
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.e5f3f92-srt-cu121
       ports:
         - containerPort: 8080
           name: http1
@@ -62,20 +56,24 @@ spec:
       args:
         - |
           python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
           --port=8080 \
+          --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp-size=1 \
+          --tp 1 \
+          --mem-frac=0.9 \
+          --max-total-tokens=131072
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 10
-          memory: 160Gi
+          memory: 30Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 160Gi
+          memory: 30Gi
           nvidia.com/gpu: 1
 
       readinessProbe:
