@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: cohere-rerank-v3
+  name: cohere-embed-v2
 spec:
   annotations:
     prometheus.io/port: '8081'
@@ -18,8 +18,8 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCasualLM
-      name: python
-      modelType: python
+      name: fastertransformer
+      modelType: fastertransformer
       version: '1'
   affinity:
     nodeAffinity:
@@ -71,10 +71,15 @@ spec:
         medium: Memory
   containers:
     - name: genai-container
-      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.7.5-110124-oci
+      image: us-chicago-1.ocir.io/idqj093njucb/oracle-serving:v0.3.4-ffa7943
       ports:
         - containerPort: 8080
           name: http1
+      env:
+        - name: ENDPOINT
+          value: "embed"
+        - name: ENVIRONMENT
+          value: "DEV"
       resources:
         limits:
           nvidia.com/gpu: "1"
@@ -85,7 +90,7 @@ spec:
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
-        - mountPath: /opt/ml/model/python
+        - mountPath: /opt/ml/model/fastertransformer
           name: model-empty-dir
       readinessProbe:
         httpGet:
@@ -112,3 +117,4 @@ spec:
         periodSeconds: 3
         initialDelaySeconds: 60
         timeoutSeconds: 5
+

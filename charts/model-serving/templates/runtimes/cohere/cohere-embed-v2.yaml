@@ -1,25 +1,25 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: cohere-rerank-v3
+  name: cohere-embed-v2
 spec:
+  {{- with .Values.cohere.commonAnnotations }}
   annotations:
-    prometheus.io/port: '8081'
-    prometheus.io/scrape: 'true'
-    ome.io/disable-blocklist: 'true'
-    ome.io/inject-model-init: 'true'
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.cohere.commonLabels }}
   labels:
-    logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.commonTolerations }}
   tolerations:
-    - key: "nvidia.com/gpu"
-      operator: "Exists"
-      effect: "NoSchedule"
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCasualLM
-      name: python
-      modelType: python
+      name: fastertransformer
+      modelType: fastertransformer
       version: '1'
   affinity:
     nodeAffinity:
@@ -71,10 +71,15 @@ spec:
         medium: Memory
   containers:
     - name: genai-container
-      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.7.5-110124-oci
+      image: "{{ .Values.cohere.embedv2Image.repository }}:{{ .Values.cohere.embedv2Image.tag }}"
       ports:
         - containerPort: 8080
           name: http1
+      env:
+        - name: ENDPOINT
+          value: "embed"
+        - name: ENVIRONMENT
+          value: "DEV"
       resources:
         limits:
           nvidia.com/gpu: "1"
@@ -85,30 +90,11 @@ spec:
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
-        - mountPath: /opt/ml/model/python
+        - mountPath: /opt/ml/model/fastertransformer
           name: model-empty-dir
       readinessProbe:
-        httpGet:
-          path: /ping
-          port: 8080
-        failureThreshold: 5
-        successThreshold: 1
-        periodSeconds: 10
-        timeoutSeconds: 20
+        {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
       livenessProbe:
-        httpGet:
-          path: /ping
-          port: 8080
-        failureThreshold: 5
-        successThreshold: 1
-        periodSeconds: 10
-        timeoutSeconds: 20
+        {{- toYaml .Values.cohere.livenessProbe | nindent 8 }}
       startupProbe:
-        httpGet:
-          path: /ping
-          port: 8080
-        failureThreshold: 100
-        successThreshold: 1
-        periodSeconds: 3
-        initialDelaySeconds: 60
-        timeoutSeconds: 5
+        {{- toYaml .Values.cohere.startupProbe | nindent 8 }}

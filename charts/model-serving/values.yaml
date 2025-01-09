@@ -61,9 +61,25 @@ cohere:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.7.5-110124-oci"
   
+  embedv2Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/oracle-serving
+    tag: "v0.3.4-ffa7943"
+  
   rerankv1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.4.4-2302"
+
+  command1Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.4.4-2302"
+  
+  command1TRTImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.5.0"
+  
+  command1TRTv2Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.6.0"
   
   readinessProbe:
     httpGet:

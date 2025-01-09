@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: cohere-embed-v3
+  name: cohere-rerank-v1
 spec:
   {{- with .Values.cohere.commonAnnotations }}
   annotations:
