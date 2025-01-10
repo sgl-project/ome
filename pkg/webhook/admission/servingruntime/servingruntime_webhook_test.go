@@ -733,6 +733,314 @@ func TestValidateServingRuntimePriority(t *testing.T) {
 			},
 			expected: gomega.BeNil(),
 		},
+		"When two serving runtime has the same supported model format then it should return error": {
+			newServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-1",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "vllm",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("CohereForCasualLM"),
+							ModelType:         proto.String("tensorrtllm"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			existingServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-2",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "vllm",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("CohereForCasualLM"),
+							ModelType:         proto.String("tensorrtllm"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: gomega.Equal(fmt.Errorf(InvalidPriorityError, "vllm")),
+		},
+		"When two serving runtime has the same supported model format but different architecture then it should return nil": {
+			newServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-1",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "vllm",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("CohereForCasualLM"),
+							ModelType:         proto.String("tensorrtllm"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			existingServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-2",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "vllm",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("Cohere2ForCasualLM"),
+							ModelType:         proto.String("tensorrtllm"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: gomega.BeNil(),
+		},
+		"When two serving runtime has the same supported model format but different type then it should return nil": {
+			newServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-1",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "vllm",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("LlamaForCasualLM"),
+							ModelType:         proto.String("x"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			existingServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-2",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "vllm",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("LlamaForCasualLM"),
+							ModelType:         proto.String("y"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: gomega.BeNil(),
+		},
+		"When two serving runtime has the same supported model format but different size then it should return nil": {
+			newServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-1",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "safetensors",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("LlamaForCasualLM"),
+							ModelType:         proto.String("transformer"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+						Min: proto.String("100B"),
+						Max: proto.String("200B"),
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			existingServingRuntime: &v1beta1.ServingRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example-runtime-2",
+					Namespace: "test",
+				},
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							Name:              "safetensors",
+							Version:           proto.String("1"),
+							AutoSelect:        proto.Bool(true),
+							Priority:          proto.Int32(1),
+							ModelArchitecture: proto.String("LlamaForCasualLM"),
+							ModelType:         proto.String("transformer"),
+						},
+					},
+					Disabled: proto.Bool(false),
+					ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+						Min: proto.String("300B"),
+						Max: proto.String("600B"),
+					},
+					ProtocolVersions: []constants.InferenceServiceProtocol{
+						constants.OpenAIProtocol,
+						constants.OpenAIProtocol,
+					},
+					ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  constants.MainContainerName,
+								Image: "ome/vllm:latest",
+								Args: []string{
+									"--model_name={{.Name}}",
+									"--model_dir=/mnt/models",
+									"--http_port=8080",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: gomega.BeNil(),
+		},
 		"When model version is same in both serving runtime and priority is same then it should return error": {
 			newServingRuntime: &v1beta1.ServingRuntime{
 				ObjectMeta: metav1.ObjectMeta{

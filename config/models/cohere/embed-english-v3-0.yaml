@@ -38,4 +38,3 @@ spec:
           default: true
     internalName: "embed-english-03"
     type: "Serving"
-{{- end }}

@@ -1,11 +1,12 @@
 package servingruntime
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"context"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,13 +18,13 @@ import (
 var log = logf.Log.WithName(constants.ServingRuntimeValidatorWebhookName)
 
 const (
-	InvalidPriorityError                        = "Same priority assigned for the model format %s"
+	InvalidPriorityError                        = "same priority assigned for the model format %s"
 	InvalidPriorityServingRuntimeError          = "%s in the servingruntimes %s and %s in namespace %s"
 	InvalidPriorityClusterServingRuntimeError   = "%s in the clusterservingruntimes %s and %s"
-	PriorityIsNotSameError                      = "Different priorities assigned for the model format %s"
+	PriorityIsNotSameError                      = "different priorities assigned for the model format %s"
 	PriorityIsNotSameServingRuntimeError        = "%s under the servingruntime %s"
 	PriorityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
-	ChainsawInjectAnnotationNotAllowError       = "Chainsaw inject annotation is not allowed."
+	ChainsawInjectAnnotationNotAllowError       = "chainsaw inject annotation is not allowed"
 )
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
@@ -64,7 +65,7 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 		}
 
 		if err := validateServingRuntimeAnnotations(&servingRuntime.Spec); err != nil {
-			return admission.Denied(fmt.Sprintf(ChainsawInjectAnnotationNotAllowError))
+			return admission.Denied(ChainsawInjectAnnotationNotAllowError)
 		}
 
 		if err := validateServingRuntimePriority(&servingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, servingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
@@ -99,7 +100,7 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 		}
 
 		if err := validateServingRuntimeAnnotations(&clusterServingRuntime.Spec); err != nil {
-			return admission.Denied(fmt.Sprintf(ChainsawInjectAnnotationNotAllowError))
+			return admission.Denied(ChainsawInjectAnnotationNotAllowError)
 		}
 
 		if err := validateServingRuntimePriority(&clusterServingRuntime.Spec, &ExistingRuntimes.Items[i].Spec, clusterServingRuntime.Name, ExistingRuntimes.Items[i].Name); err != nil {
@@ -110,11 +111,37 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 }
 
 func areSupportedModelFormatsEqual(m1 v1beta1.SupportedModelFormat, m2 v1beta1.SupportedModelFormat) bool {
-	if strings.EqualFold(m1.Name, m2.Name) && ((m1.Version == nil && m2.Version == nil) ||
-		(m1.Version != nil && m2.Version != nil && *m1.Version == *m2.Version)) {
+	if strings.EqualFold(m1.Name, m2.Name) &&
+		((m1.Version == nil && m2.Version == nil) || (m1.Version != nil && m2.Version != nil && *m1.Version == *m2.Version)) &&
+		((m1.ModelType == nil && m2.ModelType == nil) || (m1.ModelType != nil && m2.ModelType != nil && *m1.ModelType == *m2.ModelType)) &&
+		((m1.ModelArchitecture == nil && m2.ModelArchitecture == nil) || (m1.ModelArchitecture != nil && m2.ModelArchitecture != nil && *m1.ModelArchitecture == *m2.ModelArchitecture)) {
 		return true
 	}
 	return false
+}
+
+func areModelSizeRangesEqual(range1 *v1beta1.ModelSizeRangeSpec, range2 *v1beta1.ModelSizeRangeSpec) bool {
+	if range1 == nil || range2 == nil {
+		return range1 == range2
+	}
+
+	// Compare Min values
+	if (range1.Min == nil) != (range2.Min == nil) {
+		return false
+	}
+	if range1.Min != nil && range2.Min != nil && *range1.Min != *range2.Min {
+		return false
+	}
+
+	// Compare Max values
+	if (range1.Max == nil) != (range2.Max == nil) {
+		return false
+	}
+	if range1.Max != nil && range2.Max != nil && *range1.Max != *range2.Max {
+		return false
+	}
+
+	return true
 }
 
 func validateServingRuntimeAnnotations(servingRuntime *v1beta1.ServingRuntimeSpec) error {
@@ -163,8 +190,10 @@ func validateServingRuntimePriority(newSpec *v1beta1.ServingRuntimeSpec, existin
 	if isTheProtocolSame {
 		for _, existingModelFormat := range existingSpec.SupportedModelFormats {
 			for _, newModelFormat := range newSpec.SupportedModelFormats {
-				// Only validate priority if autoselect is ture
-				if existingModelFormat.IsAutoSelectEnabled() && newModelFormat.IsAutoSelectEnabled() && areSupportedModelFormatsEqual(existingModelFormat, newModelFormat) {
+				// Only validate priority if auto select is true and model formats and size ranges are equal
+				if existingModelFormat.IsAutoSelectEnabled() && newModelFormat.IsAutoSelectEnabled() &&
+					areSupportedModelFormatsEqual(existingModelFormat, newModelFormat) &&
+					areModelSizeRangesEqual(existingSpec.ModelSizeRange, newSpec.ModelSizeRange) {
 					if existingModelFormat.Priority != nil && newModelFormat.Priority != nil && *existingModelFormat.Priority == *newModelFormat.Priority {
 						return fmt.Errorf(InvalidPriorityError, newModelFormat.Name)
 					}
