@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" -}}
+    {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" }}
     models.ome.io/runtime: "vllm-eight-card-chat"
     {{- else }}
     models.ome.io/runtime: "vllm-pp"
@@ -34,7 +34,7 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
-    {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" -}}
+    {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" }}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: LARGE_GENERIC_2
