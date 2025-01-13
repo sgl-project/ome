@@ -147,3 +147,43 @@ cohere-command-r-plus-v1-2-chat:
 cohere-command-r-plus-082024-v1-6-128k:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+cohere-command-1-6b-v14-2-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-6b-v15-6-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-52b-v14-2-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-52b-v15-6-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-v15-6-0-trt:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-v15-6-1-trt:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-v16-0-0-trt:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-rerank-english-03:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-rerank-multilingual-03:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-rerank-v3-5:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
