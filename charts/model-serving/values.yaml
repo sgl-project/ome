@@ -18,8 +18,8 @@ vllm:
 sglang:
   port: 8080
   commonImage:
-    repository: &defaultSGLangImage phx.ocir.io/idqj093njucb/sglang
-    tag: &defaultSGLangImageTag a95d558
+    repository: &defaultSGLangImage fra.ocir.io/idqj093njucb/official-sgl
+    tag: &defaultSGLangImageTag v0.4.0.post1.e5f3f92-srt-cu121
 
 cohere:
   commonAnnotations:
