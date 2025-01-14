@@ -13,9 +13,6 @@ metadata:
     chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
-    {{- with .Values.llama_3_1_405b_instruct.annotations }}
-    annotations: {{ toYaml . | nindent 6 }}
-    {{- end }}
     model:
       {{- if and .Values.llama_3_1_405b_instruct.enableRDMA (not .Values.llama_3_1_405b_instruct.singleNode) }}
       runtime: vllm-ray-multi-node-llama-3-1-405b-rdma
@@ -28,12 +25,6 @@ spec:
       protocolVersion: openAI
     minReplicas: {{ .Values.llama_3_1_405b_instruct.minReplicas}}
     maxReplicas: {{ .Values.llama_3_1_405b_instruct.maxReplicas}}
-    {{- with .Values.llama_3_1_405b_instruct.affinity }}
-    affinity: {{ toYaml . | nindent 6 }}
-    {{- end }}
-    {{- with .Values.llama_3_1_405b_instruct.tolerations }}
-    tolerations: {{ toYaml . | nindent 6 }}
-    {{- end }}
     {{- with .Values.llama_3_1_405b_instruct.topologySpreadConstraints }}
     topologySpreadConstraints: {{ toYaml . | nindent 6 }}
     {{- end }}
