@@ -13,7 +13,7 @@ vllm:
   vllm_multimodal_image:
     tag: &vllm_multimodalImageTag 0.5.1.a24e62ea0ad
   vllm_latest_image:
-    tag: &vllm_latest_image v0.6.4.post1.0c9082a1
+    tag: &vllm_latest_image v0.6.4.post1.c78ab524
 
 sglang:
   port: 8080
