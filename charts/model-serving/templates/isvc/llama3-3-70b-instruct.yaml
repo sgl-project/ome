@@ -12,7 +12,6 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
-      runtime: vllm-medium-text-generation
       baseModel: llama-3-3-70b-instruct
       protocolVersion: openAI
     minReplicas: {{ .Values.llama_3_3_70b_instruct.minReplicas}}

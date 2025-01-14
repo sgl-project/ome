@@ -8,6 +8,20 @@ A Helm chart for importing ome base models
 
 | Key                                                          | Type   | Default                                   | Description |
 |--------------------------------------------------------------|--------|-------------------------------------------|-------------|
+| cohere-command-1-52b-v14-2-0.enabled                         | bool   | `false`                                   |             |
+| cohere-command-1-52b-v14-2-0.lifecyclePhase                  | string | `"ONDEMAND_SERVING_DISABLED"`             |             |
+| cohere-command-1-52b-v15-6-0.enabled                         | bool   | `false`                                   |             |
+| cohere-command-1-52b-v15-6-0.lifecyclePhase                  | string | `"ONDEMAND_SERVING_DISABLED"`             |             |
+| cohere-command-1-6b-v14-2-0.enabled                          | bool   | `false`                                   |             |
+| cohere-command-1-6b-v14-2-0.lifecyclePhase                   | string | `"ONDEMAND_SERVING_DISABLED"`             |             |
+| cohere-command-1-6b-v15-6-0.enabled                          | bool   | `false`                                   |             |
+| cohere-command-1-6b-v15-6-0.lifecyclePhase                   | string | `"ONDEMAND_SERVING_DISABLED"`             |             |
+| cohere-command-1-v15-6-0-trt.enabled                         | bool   | `false`                                   |             |
+| cohere-command-1-v15-6-0-trt.lifecyclePhase                  | string | `"ACTIVE"`                                |             |
+| cohere-command-1-v15-6-1-trt.enabled                         | bool   | `false`                                   |             |
+| cohere-command-1-v15-6-1-trt.lifecyclePhase                  | string | `"ACTIVE"`                                |             |
+| cohere-command-1-v16-0-0-trt.enabled                         | bool   | `false`                                   |             |
+| cohere-command-1-v16-0-0-trt.lifecyclePhase                  | string | `"ACTIVE"`                                |             |
 | cohere-command-r-082024-v1-6-tp4-128k.enabled                | bool   | `false`                                   |             |
 | cohere-command-r-082024-v1-6-tp4-128k.lifecyclePhase         | string | `"ACTIVE"`                                |             |
 | cohere-command-r-082024-v1-7-tp1-128k.enabled                | bool   | `false`                                   |             |
@@ -30,6 +44,12 @@ A Helm chart for importing ome base models
 | cohere-embed-multilingual-light-v3-0.lifecyclePhase          | string | `"BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"` |             |
 | cohere-embed-multilingual-v3-0.enabled                       | bool   | `false`                                   |             |
 | cohere-embed-multilingual-v3-0.lifecyclePhase                | string | `"BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"` |             |
+| cohere-rerank-english-03.enabled                             | bool   | `false`                                   |             |
+| cohere-rerank-english-03.lifecyclePhase                      | string | `"ONDEMAND_SERVING_DISABLED"`             |             |
+| cohere-rerank-multilingual-03.enabled                        | bool   | `false`                                   |             |
+| cohere-rerank-multilingual-03.lifecyclePhase                 | string | `"ONDEMAND_SERVING_DISABLED"`             |             |
+| cohere-rerank-v3-5.enabled                                   | bool   | `false`                                   |             |
+| cohere-rerank-v3-5.lifecyclePhase                            | string | `"ACTIVE"`                                |             |
 | compartmentID                                                | string | `"ocid1.compartment.oc1..aaaaaaaazq"`     |             |
 | deberta-v3-base-prompt-injection-v2.enabled                  | bool   | `false`                                   |             |
 | e5-mistral-7b-instruct.enabled                               | bool   | `false`                                   |             |
@@ -37,6 +57,7 @@ A Helm chart for importing ome base models
 | gliner-large-v2-1.enabled                                    | bool   | `false`                                   |             |
 | llama-3-1-405b-instruct-fp8.enabled                          | bool   | `false`                                   |             |
 | llama-3-1-405b-instruct-fp8.lifecyclePhase                   | string | `"ACTIVE"`                                |             |
+| llama-3-1-405b-instruct-fp8.singleNode                       | bool   | `true`                                    |             |
 | llama-3-1-70b-instruct.enabled                               | bool   | `false`                                   |             |
 | llama-3-1-70b-instruct.lifecyclePhase                        | string | `"ACTIVE"`                                |             |
 | llama-3-2-11b-vision-instruct.enabled                        | bool   | `false`                                   |             |

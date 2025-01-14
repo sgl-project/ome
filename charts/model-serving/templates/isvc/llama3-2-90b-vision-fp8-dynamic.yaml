@@ -12,7 +12,6 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
-      runtime: vllm-llama-3-2-90b-fp8-dynamic
       baseModel: llama-3-2-90b-vision-instruct-fp8-dynamic
       protocolVersion: openAI
     minReplicas: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.minReplicas}}

@@ -12,7 +12,6 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
-      runtime: vllm-small-text-generation
       baseModel: mixtral-8x7b-instruct-v0-1-chat
       protocolVersion: openAI
     minReplicas: {{ .Values.mixtral_8x7b_instruct_v0_1_chat.minReplicas}}

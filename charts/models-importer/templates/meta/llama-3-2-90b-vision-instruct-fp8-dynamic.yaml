@@ -6,7 +6,8 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "vllm-vision"
+    # TODO clean up annotations after migration, which is used in MP
+    models.ome.io/runtime: "vllm-llama-3-2-90b-vision-instruct-fp8"
     models.ome.io/category: "MEDIUM"
     models.ome.io/experimental: "{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "isInternal" }}"

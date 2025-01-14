@@ -12,7 +12,6 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
-      runtime: vllm-vision
       baseModel: phi-3-vision-128k-instruct
       protocolVersion: openAI
     minReplicas: {{ .Values.phi_3_vision_128k_instruct.minReplicas}}

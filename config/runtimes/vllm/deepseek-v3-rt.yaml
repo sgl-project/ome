@@ -46,6 +46,10 @@ spec:
     max: 700B
   containers:
     - name: ome-container
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
       image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.6.post1.328841d
       env:
         - name: VLLM_PORT
