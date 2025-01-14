@@ -88,11 +88,11 @@ spec:
         requests:
           cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 8
+          nvidia.com/gpu: 4
         limits:
           cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 8
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:

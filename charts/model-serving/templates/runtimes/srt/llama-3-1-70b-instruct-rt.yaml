@@ -72,7 +72,7 @@ spec:
           --port={{.Values.sglang.port}} \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp-size=4 \
+          --tp 4 \
           --mem-frac=0.9 \
           --max-total-tokens=131072
       volumeMounts:
