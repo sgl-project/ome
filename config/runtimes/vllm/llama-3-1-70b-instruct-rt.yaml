@@ -35,7 +35,7 @@ spec:
       modelType: transformer
       modelArchitecture: LlamaForCausalLM
       version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
   modelSizeRange:
     min: 60B
