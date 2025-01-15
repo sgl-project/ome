@@ -49,6 +49,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.19.3
 	sigs.k8s.io/jobset v0.7.1
 	sigs.k8s.io/kueue v0.10.0-devel
+	sigs.k8s.io/scheduler-plugins v0.30.6
 	sigs.k8s.io/yaml v1.4.0
 	volcano.sh/apis v1.9.0
 )

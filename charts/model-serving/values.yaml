@@ -384,6 +384,7 @@ llama_3_2_90b_vision_instruct:
 
 llama_3_2_90b_vision_fp8_dynamic:
   enabled: false
+  runtime: ""
   labels: {}
   annotations: {}
   affinity:
