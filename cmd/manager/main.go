@@ -1,20 +1,29 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
+
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
+	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
+	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 	"go.uber.org/zap/zapcore"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
+	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -23,9 +32,11 @@ import (
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	rest "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,15 +51,42 @@ import (
 	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
-var (
-	scheme   = runtime.NewScheme() //nolint: unused
-	setupLog = ctrl.Log.WithName("setup")
-)
-
 const (
 	LeaderLockName          = "ome-controller-manager-leader-lock"
 	LeaderElectionNamespace = "ome"
 )
+
+var (
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
+)
+
+// registerOptionalScheme attempts to register a scheme if its CRD is available
+func registerOptionalScheme(cfg *rest.Config, s *runtime.Scheme, groupVersion schema.GroupVersion, kind string, addToScheme func(*runtime.Scheme) error) error {
+	found, err := utils.IsCrdAvailable(cfg, groupVersion.String(), kind)
+	if err != nil {
+		return fmt.Errorf("error checking if %s kind is available: %w", kind, err)
+	}
+	if found {
+		setupLog.Info("Setting up scheme", "kind", kind)
+		if err := addToScheme(s); err != nil {
+			return fmt.Errorf("unable to add %s APIs to scheme: %w", kind, err)
+		}
+	}
+	return nil
+}
+
+func init() {
+	// Allow unknown fields in Istio API client for backwards compatibility if cluster has existing vs with deprecated fields.
+	istionetworking.VirtualServiceUnmarshaler.AllowUnknownFields = true
+	istionetworking.GatewayUnmarshaler.AllowUnknownFields = true
+
+	utilruntime.Must(v1beta1.AddToScheme(scheme))
+	utilruntime.Must(kedav1.AddToScheme(scheme))
+	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
+	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+}
 
 // Options defines the program-configurable options that may be passed on the command line.
 type Options struct {
@@ -93,34 +131,34 @@ func GetOptions() Options {
 	return opts
 }
 
-func init() {
-	// Allow unknown fields in Istio API client for backwards compatibility if cluster has existing vs with deprecated fields.
-	istionetworking.VirtualServiceUnmarshaler.AllowUnknownFields = true
-	istionetworking.GatewayUnmarshaler.AllowUnknownFields = true
-}
-
 func main() {
+	setupLog.Info("Initializing controller manager")
 	options := GetOptions()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&options.zapOpts)))
 
 	// Get a config to talk to the apiserver
-	setupLog.Info("Setting up client for manager")
+	setupLog.Info("Configuring API client connection")
 	cfg, err := config.GetConfig()
 	if err != nil {
-		setupLog.Error(err, "unable to set up client config")
+		setupLog.Error(err, "Failed to initialize API client configuration")
 		os.Exit(1)
 	}
 
 	// Setup clientset to directly talk to the api server
+	setupLog.Info("Creating Kubernetes client set")
 	clientSet, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		setupLog.Error(err, "unable to create clientSet")
+		setupLog.Error(err, "Failed to create Kubernetes client set")
 		os.Exit(1)
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
-	setupLog.Info("Setting up manager")
+	setupLog.Info("Initializing controller manager", 
+		"metricsAddr", options.metricsAddr,
+		"webhookPort", options.webhookPort,
+		"leaderElection", options.enableLeaderElection)
 	mgr, err := manager.New(cfg, manager.Options{
+		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: options.metricsAddr},
 		WebhookServer: webhook.NewServer(webhook.Options{
@@ -131,128 +169,71 @@ func main() {
 		HealthProbeBindAddress:  options.probeAddr,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to set up overall controller manager")
-		os.Exit(1)
-	}
-
-	setupLog.Info("Registering Components.")
-
-	setupLog.Info("Setting up OME v1beta1 scheme")
-	if err := v1beta1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "unable to add OME v1beta1 to scheme")
+		setupLog.Error(err, "Failed to initialize controller manager")
 		os.Exit(1)
 	}
 
 	deployConfig, err := v1beta1.NewDeployConfig(clientSet)
 	if err != nil {
-		setupLog.Error(err, "unable to get deploy config.")
+		setupLog.Error(err, "Failed to initialize deployment configuration")
 		os.Exit(1)
 	}
 	ingressConfig, err := v1beta1.NewIngressConfig(clientSet)
 	if err != nil {
-		setupLog.Error(err, "unable to get ingress config.")
+		setupLog.Error(err, "Failed to initialize ingress configuration")
 		os.Exit(1)
 	}
 
 	dacReconcilePolicyConfig, err := v1beta1.NewDacReconcilePolicyConfig(clientSet)
 	if err != nil {
-		setupLog.Error(err, "unable to get dacReconcilePolicy config.")
+		setupLog.Error(err, "Failed to initialize DAC reconciliation policy configuration")
 		os.Exit(1)
 	}
 
-	rayFound, rayCheckErr := utils.IsCrdAvailable(cfg, ray.SchemeGroupVersion.String(), constants.RayClusterKind)
-	if rayCheckErr != nil {
-		setupLog.Error(rayCheckErr, "error when checking if Ray Cluster kind is available")
-		os.Exit(1)
+	// Register optional schemes based on CRD availability
+	setupLog.Info("Registering optional CRD schemes")
+	optionalSchemes := []struct {
+		groupVersion schema.GroupVersion
+		kind         string
+		addToScheme  func(*runtime.Scheme) error
+	}{
+		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
+		{volcano.SchemeGroupVersion, constants.VolcanoQueueKind, volcano.AddToScheme},
+		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
+		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 	}
-	if rayFound {
-		setupLog.Info("Setting up Ray scheme")
-		if err := ray.AddToScheme(mgr.GetScheme()); err != nil {
-			setupLog.Error(err, "unable to add Ray APIs to scheme")
+
+	for _, s := range optionalSchemes {
+		if err := registerOptionalScheme(cfg, mgr.GetScheme(), s.groupVersion, s.kind, s.addToScheme); err != nil {
+			setupLog.Error(err, "Failed to register optional scheme", 
+				"groupVersion", s.groupVersion.String(),
+				"kind", s.kind)
 			os.Exit(1)
 		}
 	}
 
-	volcanoFound, volcanoCheckErr := utils.IsCrdAvailable(cfg, volcano.SchemeGroupVersion.String(), constants.VolcanoQueueKind)
-	if volcanoCheckErr != nil {
-		setupLog.Error(volcanoCheckErr, "error when checking if Volcano Queue kind is available")
-		os.Exit(1)
-	}
-	if volcanoFound {
-		setupLog.Info("Setting up Volcano scheme")
-		if err := volcano.AddToScheme(mgr.GetScheme()); err != nil {
-			setupLog.Error(err, "unable to add Volcano APIs to scheme")
-			os.Exit(1)
-		}
-	}
-
-	volcanoBatchFound, volcanoCheckErr := utils.IsCrdAvailable(cfg, volcanobatch.SchemeGroupVersion.String(), constants.VolcanoJobKind)
-	if volcanoCheckErr != nil {
-		setupLog.Error(volcanoCheckErr, "error when checking if Volcano Job kind is available")
-		os.Exit(1)
-	}
-	if volcanoBatchFound {
-		setupLog.Info("Setting up Volcano Batch scheme")
-		if err := volcanobatch.AddToScheme(mgr.GetScheme()); err != nil {
-			setupLog.Error(err, "unable to add Volcano Batch APIs to scheme")
-			os.Exit(1)
-		}
-	}
-
-	ksvcFound, ksvcCheckErr := utils.IsCrdAvailable(cfg, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
-	if ksvcCheckErr != nil {
-		setupLog.Error(ksvcCheckErr, "error when checking if Knative Service kind is available")
-		os.Exit(1)
-	}
-	if ksvcFound {
-		setupLog.Info("Setting up Knative scheme")
-		if err := knservingv1.AddToScheme(mgr.GetScheme()); err != nil {
-			setupLog.Error(err, "unable to add Knative APIs to scheme")
-			os.Exit(1)
-		}
-	}
+	// Handle Istio scheme separately due to the additional condition
 	if !ingressConfig.DisableIstioVirtualHost {
-		vsFound, vsCheckErr := utils.IsCrdAvailable(cfg, istioclientv1beta1.SchemeGroupVersion.String(), constants.IstioVirtualServiceKind)
-		if vsCheckErr != nil {
-			setupLog.Error(vsCheckErr, "error when checking if Istio VirtualServices are available")
+		if err := registerOptionalScheme(cfg, mgr.GetScheme(), istioclientv1beta1.SchemeGroupVersion, constants.IstioVirtualServiceKind, istioclientv1beta1.AddToScheme); err != nil {
+			setupLog.Error(err, "Failed to register Istio scheme")
 			os.Exit(1)
 		}
-		if vsFound {
-			setupLog.Info("Setting up Istio schemes")
-			if err := istioclientv1beta1.AddToScheme(mgr.GetScheme()); err != nil {
-				setupLog.Error(err, "unable to add Istio v1beta1 APIs to scheme")
-				os.Exit(1)
-			}
-		}
 	}
 
-	// Register KEDA API to the scheme
-	setupLog.Info("Setting up KEDA ScaledObject scheme")
-	if err := kedav1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "unable to add KEDA ScaledObject to scheme")
-		os.Exit(1)
-	}
-
-	setupLog.Info("Setting up core scheme")
-	if err := v1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "unable to add Core APIs to scheme")
-		os.Exit(1)
-	}
-
-	// Setup all Controllers
-	setupLog.Info("Setting up v1beta1 controller")
+	// Setup Event Broadcaster
+	setupLog.Info("Configuring event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
 	setupLog.Info("Setting up InferenceService controller")
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1isvccontroller.InferenceServiceReconciler{
 		Client:    mgr.GetClient(),
 		Clientset: clientSet,
-		Log:       ctrl.Log.WithName("v1beta1Controllers").WithName("InferenceService"),
+		Log:       ctrl.Log.WithName("InferenceService"),
 		Scheme:    mgr.GetScheme(),
 		Recorder: eventBroadcaster.NewRecorder(
 			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
-		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "InferenceService")
+		setupLog.Error(err, "Failed to create InferenceService controller")
 		os.Exit(1)
 	}
 
@@ -261,11 +242,11 @@ func main() {
 	dedicatedAIClusterEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1dacccontroller.DedicatedAIClusterReconciler{
 		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("v1beta1Controllers").WithName("DedicatedAICluster"),
+		Log:      ctrl.Log.WithName("DedicatedAICluster"),
 		Scheme:   mgr.GetScheme(),
 		Recorder: dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, dacReconcilePolicyConfig); err != nil {
-		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "DedicatedAICluster")
+		setupLog.Error(err, "Failed to create DedicatedAICluster controller")
 		os.Exit(1)
 	}
 
@@ -275,35 +256,57 @@ func main() {
 	if err = (&v1beta1benchmarkjobcontroller.BenchmarkJobReconciler{
 		Client:    mgr.GetClient(),
 		Clientset: clientSet,
-		Log:       ctrl.Log.WithName("v1beta1Controllers").WithName("BenchmarkJob"),
+		Log:       ctrl.Log.WithName("BenchmarkJob"),
 		Scheme:    mgr.GetScheme(),
 		Recorder: benchmarkJobEventBroadcaster.NewRecorder(
 			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "v1beta1Controller", "BenchmarkJob")
+		setupLog.Error(err, "Failed to create Benchmark Job controller")
+		os.Exit(1)
+	}
+
+	// Initialize training runtimes
+	trainingRuntimes, err := trainingruntimecore.New(context.Background(), mgr.GetClient(), mgr.GetFieldIndexer())
+	if err != nil {
+		setupLog.Error(err, "Could not initialize training runtimes")
+		os.Exit(1)
+	}
+
+	trainingJobEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up TrainingJob controller")
+	trainingJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1trainingcontroller.TrainingJobReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("TrainingJob"),
+		Scheme: mgr.GetScheme(),
+		Recorder: trainingJobEventBroadcaster.NewRecorder(
+			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Runtimes: trainingRuntimes,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create Training Job controller")
 		os.Exit(1)
 	}
 
 	if options.enableWebhook {
-		setupLog.Info("setting up webhook server")
+		setupLog.Info("Configuring webhook server", "port", options.webhookPort)
 		hookServer := mgr.GetWebhookServer()
 
-		setupLog.Info("registering webhooks to the webhook server")
+		setupLog.Info("Registering webhooks to the webhook server")
 		hookServer.Register("/mutate-pods", &webhook.Admission{
 			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
-		setupLog.Info("registering cluster serving runtime validator webhook to the webhook server")
+		setupLog.Info("Registering cluster serving runtime validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-clusterservingruntime", &webhook.Admission{
 			Handler: &servingruntime.ClusterServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
-		setupLog.Info("registering serving runtime validator webhook to the webhook server")
+		setupLog.Info("Registering serving runtime validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-servingruntime", &webhook.Admission{
 			Handler: &servingruntime.ServingRuntimeValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
-		setupLog.Info("registering benchmark job validator webhook to the webhook server")
+		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
 			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
@@ -313,7 +316,7 @@ func main() {
 			WithDefaulter(&v1beta1.InferenceServiceDefaulter{}).
 			WithValidator(&v1beta1.InferenceServiceValidator{}).
 			Complete(); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "v1beta1")
+			setupLog.Error(err, "Failed to create webhook", "webhook", "v1beta1")
 			os.Exit(1)
 		}
 	}
@@ -332,9 +335,9 @@ func main() {
 	}
 
 	// Start the Cmd
-	setupLog.Info("Starting the Cmd.")
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "unable to run the manager")
+		setupLog.Error(err, "Failed to start manager")
 		os.Exit(1)
 	}
 }

@@ -24,11 +24,11 @@ import (
 
 // TrainingJobReconciler reconciles a TrainingJob object
 type TrainingJobReconciler struct {
-	client   client.Client
+	Client   client.Client
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	runtimes map[string]trainingruntimes.Runtime
+	Runtimes map[string]trainingruntimes.Runtime
 }
 
 type ObjectOperationState string
@@ -48,7 +48,7 @@ const (
 
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var trainJob v1beta1.TrainingJob
-	if err := r.client.Get(ctx, req.NamespacedName, &trainJob); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, &trainJob); err != nil {
 		if apierr.IsNotFound(err) {
 			r.Log.Error(err, "TrainingJob not found", "namespace", req.NamespacedName)
 			return ctrl.Result{}, nil
@@ -64,7 +64,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	runtimeRefGK := runtimeRefToGroupKind(trainJob.Spec.RuntimeRef).String()
-	runtime, ok := r.runtimes[runtimeRefGK]
+	runtime, ok := r.Runtimes[runtimeRefGK]
 	if !ok {
 		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
 	}
@@ -78,7 +78,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, errors.Join(err, terminalCondErr)
 	}
 	if !equality.Semantic.DeepEqual(&trainJob, originStatus) {
-		return ctrl.Result{}, errors.Join(err, r.client.Status().Update(ctx, &trainJob))
+		return ctrl.Result{}, errors.Join(err, r.Client.Status().Update(ctx, &trainJob))
 	}
 
 	return ctrl.Result{}, nil
@@ -91,7 +91,7 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 	}
 	for _, obj := range objs {
 		var gvk schema.GroupVersionKind
-		if gvk, err = apiutil.GVKForObject(obj.DeepCopyObject(), r.client.Scheme()); err != nil {
+		if gvk, err = apiutil.GVKForObject(obj.DeepCopyObject(), r.Client.Scheme()); err != nil {
 			return BuildObjectFailed, err
 		}
 		logKeysAndValues := []any{
@@ -103,7 +103,7 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 		var creationErr error
 		var created bool
 		if obj.GetResourceVersion() == "" {
-			creationErr = r.client.Create(ctx, obj)
+			creationErr = r.Client.Create(ctx, obj)
 			created = creationErr == nil
 		}
 		switch {
@@ -114,7 +114,7 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 			return CreateObjectFailed, creationErr
 		default:
 			// This indicates CREATE operation has not been performed or the object has already existed in the cluster.
-			if err = r.client.Update(ctx, obj); err != nil {
+			if err = r.Client.Update(ctx, obj); err != nil {
 				return UpdateObjectFailed, err
 			}
 			r.Log.Info("Successfully updated object", "namespace", req.NamespacedName, logKeysAndValues)
@@ -202,7 +202,7 @@ func runtimeRefToGroupKind(runtimeRef omev1beta1.RuntimeRef) schema.GroupKind {
 func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.TrainingJob{})
-	for _, runtime := range r.runtimes {
+	for _, runtime := range r.Runtimes {
 		for _, registrar := range runtime.EventHandlerRegistrars() {
 			if registrar != nil {
 				b = registrar(b, mgr.GetClient(), mgr.GetCache())
