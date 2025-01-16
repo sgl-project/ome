@@ -12,7 +12,7 @@ import (
 type servingSidecarParams struct {
 	fx.In
 
-	AnotherLogger   logging.Interface `name:"another_log"`
+	AnotherLogger           logging.Interface `name:"another_log"`
 	ObjectStorageDataStores *casper.CasperDataStore
 }
 

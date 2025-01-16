@@ -1,18 +1,18 @@
 package serving_sidecar
 
 import (
-	"encoding/json"
-	"io"
-	"os"
-	"os/signal"
-	"syscall"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
+	"encoding/json"
+	"github.com/fsnotify/fsnotify"
+	"io"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
-	"github.com/fsnotify/fsnotify"
 )
 
 const (
@@ -49,7 +49,7 @@ func (s *ServingSidecar) Start() error {
 		panic(err)
 	}
 	defer watcher.Close()
-	
+
 	// ConfigMap never update the file. It creats as a tmp file and delete the old file, and then being renamed.
 	// Use the mount dir to work around
 	fileChangeDetected := s.watchFileChanges(watcher, filepath.Dir(s.Config.FinetunedModelInfoFilePath))
@@ -74,7 +74,7 @@ OuterLoop:
 	return nil
 }
 
-func(s *ServingSidecar) applyFinetunedModelChanges() {
+func (s *ServingSidecar) applyFinetunedModelChanges() {
 	ftModelInfofilePath := s.Config.FinetunedModelInfoFilePath
 	unzippedFtModelDir := s.Config.unzippedFinetunedModelDirectory
 	zippedFtModelDir := s.Config.zippedFinetunedModelDirectory
@@ -158,7 +158,7 @@ func(s *ServingSidecar) applyFinetunedModelChanges() {
 
 // Detects if a file changes
 // Reference: https://medium.com/@skdomino/watch-this-file-watching-in-go-5b5a247cf71f
-func(s *ServingSidecar) watchFileChanges(watcher *fsnotify.Watcher, filePath string) chan bool {
+func (s *ServingSidecar) watchFileChanges(watcher *fsnotify.Watcher, filePath string) chan bool {
 	changeDetected := make(chan bool)
 
 	go func() {
@@ -308,4 +308,3 @@ func deleteFilesWithMatchingString(dirPath, matchString string) error {
 
 	return nil
 }
-

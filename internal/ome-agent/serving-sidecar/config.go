@@ -1,6 +1,5 @@
 package serving_sidecar
 
-
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
@@ -14,10 +13,10 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	FinetunedModelInfoFilePath string              `mapstructure:"finetuned_model_info_file_path" validate:"required"`
-	unzippedFinetunedModelDirectory  string        `mapstructure:"unzipped_finetuned_model_directory" validate:"required"`
-	zippedFinetunedModelDirectory  string          `mapstructure:"zipped_finetuned_model_directory" validate:"required"`
-	ObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
+	FinetunedModelInfoFilePath      string                  `mapstructure:"finetuned_model_info_file_path" validate:"required"`
+	unzippedFinetunedModelDirectory string                  `mapstructure:"unzipped_finetuned_model_directory" validate:"required"`
+	zippedFinetunedModelDirectory   string                  `mapstructure:"zipped_finetuned_model_directory" validate:"required"`
+	ObjectStorageDataStore          *casper.CasperDataStore `validate:"required"`
 }
 
 type Option func(*Config) error
@@ -38,8 +37,7 @@ func (c *Config) Apply(opts ...Option) error {
 
 // defaultConfig returns a new configuration with default values.
 func defaultConfig() *Config {
-	return &Config{
-	}
+	return &Config{}
 }
 
 // NewServingSidecarConfig builds and returns a new configuration from the given options.
@@ -100,4 +98,3 @@ func (c *Config) Validate() error {
 	}
 	return nil
 }
-

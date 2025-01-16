@@ -1,6 +1,10 @@
 package main
 
 import (
+	"flag"
+	"net/http"
+	"os"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
@@ -10,12 +14,11 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
-	"flag"
-	"net/http"
-	"os"
+	"go.uber.org/zap/zapcore"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	zaplog "go.uber.org/zap"
 	istionetworking "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	v1 "k8s.io/api/core/v1"
@@ -67,7 +70,10 @@ func DefaultOptions() Options {
 		enableWebhook:           false,
 		probeAddr:               ":8081",
 		leaderElectionNamespace: LeaderElectionNamespace,
-		zapOpts:                 zap.Options{},
+		zapOpts: zap.Options{
+			TimeEncoder: zapcore.RFC3339TimeEncoder,
+			ZapOpts:     []zaplog.Option{zaplog.AddCaller()},
+		},
 	}
 }
 
