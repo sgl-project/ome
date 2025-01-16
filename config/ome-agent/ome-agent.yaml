@@ -38,6 +38,11 @@ key_name: "command_r"
 secret_name: "command_r-dek"
 model_type: "Serving"
 
+# Configs for serving sidecar
+finetuned_model_info_file_path: "/mnt/ft-model-info.json"
+unzipped_finetuned_model_directory: "/mnt/unzipped-ft-models"
+zipped_finetuned_model_directory: "/mnt/zipped-ft-models"
+
 # Configs for training agent
 runtime: "cohere" #cohere, cohere-commandr, peft
 training_name: &training_name "amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"

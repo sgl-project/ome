@@ -24,4 +24,5 @@ func init() {
 	rootCmd.AddCommand(cmdHFDownload)
 	rootCmd.AddCommand(cmdReplica)
 	rootCmd.AddCommand(cmdTrainingAgent)
+	rootCmd.AddCommand(cmdServingSidecar)
 }
