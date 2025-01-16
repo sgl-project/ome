@@ -232,7 +232,7 @@ llama_3_2_3b_instruct:
     tag: *vllm_latest_image
 
 llama_3_1_405b_instruct:
-  enabled: true
+  enabled: false
   enableRDMA: false
   singleNode: true
   labels: {}
