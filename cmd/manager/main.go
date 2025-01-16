@@ -7,7 +7,35 @@ import (
 	"net/http"
 	"os"
 
+	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
+	zaplog "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	istionetworking "istio.io/api/networking/v1beta1"
+	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
+	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
+	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
+	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -20,35 +48,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
-	"go.uber.org/zap/zapcore"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
-	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
-
-	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	zaplog "go.uber.org/zap"
-	istionetworking "istio.io/api/networking/v1beta1"
-	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes"
-	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	rest "k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
-	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
-	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 const (
@@ -68,7 +67,7 @@ func registerOptionalScheme(cfg *rest.Config, s *runtime.Scheme, groupVersion sc
 		return fmt.Errorf("error checking if %s kind is available: %w", kind, err)
 	}
 	if found {
-		setupLog.Info("Setting up scheme", "kind", kind)
+		setupLog.Info("Setting up scheme", "groupVersion", groupVersion.String(), "kind", kind)
 		if err := addToScheme(s); err != nil {
 			return fmt.Errorf("unable to add %s APIs to scheme: %w", kind, err)
 		}
@@ -153,7 +152,7 @@ func main() {
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
-	setupLog.Info("Initializing controller manager", 
+	setupLog.Info("Initializing controller manager",
 		"metricsAddr", options.metricsAddr,
 		"webhookPort", options.webhookPort,
 		"leaderElection", options.enableLeaderElection)
@@ -205,7 +204,7 @@ func main() {
 
 	for _, s := range optionalSchemes {
 		if err := registerOptionalScheme(cfg, mgr.GetScheme(), s.groupVersion, s.kind, s.addToScheme); err != nil {
-			setupLog.Error(err, "Failed to register optional scheme", 
+			setupLog.Error(err, "Failed to register optional scheme",
 				"groupVersion", s.groupVersion.String(),
 				"kind", s.kind)
 			os.Exit(1)

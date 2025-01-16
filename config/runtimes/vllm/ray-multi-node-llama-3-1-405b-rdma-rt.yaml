@@ -51,10 +51,6 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      ports:
-        - containerPort: 8080
-          name: http1
-          protocol: TCP
       image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
       env:
         - name: NCCL_NET_PLUGIN

@@ -101,7 +101,7 @@ func buildDefaultServicePort(name string) corev1.ServicePort {
 	port, _ := strconv.Atoi(constants.InferenceServiceDefaultHttpPort)
 	return corev1.ServicePort{
 		Name: name,
-		Port: constants.CommonDefaultHttpPort,
+		Port: constants.CommonISVCPort,
 		TargetPort: intstr.IntOrString{
 			Type:   intstr.Int,
 			IntVal: int32(port),

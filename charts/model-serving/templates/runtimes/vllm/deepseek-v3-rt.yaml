@@ -58,10 +58,6 @@ spec:
     max: 700B
   containers:
     - name: ome-container
-      ports:
-        - containerPort: {{ .Values.vllm.port }}
-          name: http1
-          protocol: TCP
       image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
       env:
         - name: VLLM_PORT

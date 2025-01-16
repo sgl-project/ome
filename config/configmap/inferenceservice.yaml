@@ -66,7 +66,7 @@ data:
 
   modelInit: |-
     {
-        "image" : "ord.ocir.io/idqj093njucb/ome/ome-agent:v1.1-128-5-g5f935a1-dirty",
+        "image" : "ord.ocir.io/idqj093njucb/ome/ome-agent:v1.1-177-2-g029e07e-dirty",
         "memoryRequest": "320Gi",
         "memoryLimit": "320Gi",
         "cpuRequest": "15",
