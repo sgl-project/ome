@@ -35,30 +35,17 @@ spec:
               datasetsSpecs:
                 items:
                   properties:
-                    oSStorageSpec:
-                      properties:
-                        bucketName:
-                          type: string
-                        namespace:
-                          type: string
-                        objectName:
-                          type: string
-                        oboToken:
-                          type: string
-                        prefix:
-                          type: string
-                      required:
-                      - bucketName
-                      - namespace
+                    key:
+                      type: string
+                    parameters:
+                      additionalProperties:
+                        type: string
                       type: object
-                    pVCStorageSpec:
-                      properties:
-                        path:
-                          type: string
-                      required:
-                      - path
-                      type: object
-                    storageType:
+                    path:
+                      type: string
+                    schemaPath:
+                      type: string
+                    storageUri:
                       type: string
                   type: object
                 type: array
@@ -104,33 +91,36 @@ spec:
                     type: string
                   outputModel:
                     properties:
-                      oSStorageSpec:
-                        properties:
-                          bucketName:
-                            type: string
-                          namespace:
-                            type: string
-                          objectName:
-                            type: string
-                          oboToken:
-                            type: string
-                          prefix:
-                            type: string
-                        required:
-                        - bucketName
-                        - namespace
+                      key:
+                        type: string
+                      parameters:
+                        additionalProperties:
+                          type: string
                         type: object
-                      pVCStorageSpec:
-                        properties:
-                          path:
-                            type: string
-                        required:
-                        - path
-                        type: object
-                      storageType:
+                      path:
+                        type: string
+                      schemaPath:
+                        type: string
+                      storageUri:
                         type: string
                     type: object
                 type: object
+              runtimeRef:
+                properties:
+                  apiGroup:
+                    default: kubeflow.org
+                    type: string
+                  kind:
+                    default: ClusterTrainingRuntime
+                    type: string
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: runtimeRef is immutable
+                  rule: self == oldSelf
               suspend:
                 default: false
                 type: boolean
@@ -255,12 +245,11 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
-                  runtime:
-                    type: string
                 type: object
             required:
             - datasetsSpecs
             - modelConfig
+            - runtimeRef
             - trainer
             type: object
           status:

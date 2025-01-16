@@ -1,10 +1,13 @@
 package training
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	trainingruntimes "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime"
 	"context"
 	"errors"
+	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	trainingruntimes "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +33,8 @@ type TrainingJobReconciler struct {
 
 type ObjectOperationState string
 
+var errorUnsupportedRuntime = errors.New("the specified runtime is not supported")
+
 const (
 	CreateObjectSucceeded ObjectOperationState = "CreateObjectSucceeded"
 	BuildObjectFailed     ObjectOperationState = "BuildObjectFailed"
@@ -37,12 +42,10 @@ const (
 	UpdateObjectFailed    ObjectOperationState = "UpdateObjectFailed"
 )
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-//
-//	the TrainingJob object against the actual cluster state, and then
-//	perform operations to make the cluster state reflect the state specified by
-//	the user.
+// +kubebuilder:rbac:groups=ome.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=trainingjobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=trainingjobs/finalizers,verbs=get;update;patch
+
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var trainJob v1beta1.TrainingJob
 	if err := r.client.Get(ctx, req.NamespacedName, &trainJob); err != nil {
@@ -60,14 +63,18 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	var trainingRuntime = r.runtimes[*trainJob.Spec.Trainer.Runtime]
+	runtimeRefGK := runtimeRefToGroupKind(trainJob.Spec.RuntimeRef).String()
+	runtime, ok := r.runtimes[runtimeRefGK]
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
+	}
 
-	opState, err := r.reconcileObjects(ctx, trainingRuntime, &trainJob, req)
+	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req)
 
 	originStatus := trainJob.Status.DeepCopy()
 	updateSuspendedCondition(&trainJob)
 	updateCreatedCondition(&trainJob, opState)
-	if terminalCondErr := updateTerminalCondition(ctx, trainingRuntime, &trainJob); terminalCondErr != nil {
+	if terminalCondErr := updateTerminalCondition(ctx, runtime, &trainJob); terminalCondErr != nil {
 		return ctrl.Result{}, errors.Join(err, terminalCondErr)
 	}
 	if !equality.Semantic.DeepEqual(&trainJob, originStatus) {
@@ -185,13 +192,20 @@ func isTrainJobFinished(trainJob *v1beta1.TrainingJob) bool {
 		meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobFailed)
 }
 
+func runtimeRefToGroupKind(runtimeRef omev1beta1.RuntimeRef) schema.GroupKind {
+	return schema.GroupKind{
+		Group: ptr.Deref(runtimeRef.APIGroup, ""),
+		Kind:  ptr.Deref(runtimeRef.Kind, ""),
+	}
+}
+
 func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.TrainingJob{})
 	for _, runtime := range r.runtimes {
 		for _, registrar := range runtime.EventHandlerRegistrars() {
 			if registrar != nil {
-				b = registrar(b, mgr.GetClient())
+				b = registrar(b, mgr.GetClient(), mgr.GetCache())
 			}
 		}
 	}

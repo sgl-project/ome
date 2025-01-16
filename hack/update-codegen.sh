@@ -15,7 +15,7 @@ if [ -z "${GOPATH:-}" ]; then
 fi
 
 echo "Using code-generator version: ${CODEGEN_VERSION}"
-CODEGEN_PKG="$GOPATH/pkg/mod/k8s.io/code-generator@${CODEGEN_VERSION}"
+CODEGEN_PKG=$(cd "${KUBE_ROOT}" && go list -f '{{.Dir}}' -m k8s.io/code-generator@"${CODEGEN_VERSION}")
 THIS_PKG="bitbucket.oci.oraclecorp.com/genaicore/ome"
 
 # shellcheck source=/dev/null

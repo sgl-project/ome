@@ -6,6 +6,13 @@ import (
 	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 )
 
+const (
+	// TrainingRuntimeKind is the Kind name for the TrainingRuntime.
+	TrainingRuntimeKind string = "TrainingRuntime"
+	// ClusterTrainingRuntimeKind is the Kind name for the ClusterTrainingRuntime.
+	ClusterTrainingRuntimeKind string = "ClusterTrainingRuntime"
+)
+
 // TrainingRuntime is the Schema for the TrainingRuntimes API
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -198,4 +205,8 @@ type ClusterTrainingRuntimeList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterTrainingRuntime `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&ClusterTrainingRuntime{}, &ClusterTrainingRuntimeList{}, &TrainingRuntime{}, &TrainingRuntimeList{})
 }

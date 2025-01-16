@@ -1,15 +1,21 @@
 package core
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	runtimeobj "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework"
-	fwkplugins "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime/framework/plugins"
 	"context"
-	"github.com/pkg/errors"
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework"
+	fwkplugins "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework/plugins"
 )
+
+var errorTooManyTerminalConditionPlugin = errors.New("too many TerminalCondition plugins are registered")
 
 type Framework struct {
 	registry                     fwkplugins.Registry
@@ -57,7 +63,7 @@ func New(ctx context.Context, c client.Client, r fwkplugins.Registry, indexer cl
 	return f, nil
 }
 
-func (f *Framework) RunEnforceMLPolicyPlugins(info *runtimeobj.Info, trainJob *v1beta1.TrainingJob) error {
+func (f *Framework) RunEnforceMLPolicyPlugins(info *runtime.Info, trainJob *omev1beta1.TrainingJob) error {
 	for _, plugin := range f.enforceMLPlugins {
 		if err := plugin.EnforceMLPolicy(info, trainJob); err != nil {
 			return err
@@ -66,7 +72,7 @@ func (f *Framework) RunEnforceMLPolicyPlugins(info *runtimeobj.Info, trainJob *v
 	return nil
 }
 
-func (f *Framework) RunEnforcePodGroupPolicyPlugins(info *runtimeobj.Info, trainJob *v1beta1.TrainingJob) error {
+func (f *Framework) RunEnforcePodGroupPolicyPlugins(info *runtime.Info, trainJob *omev1beta1.TrainingJob) error {
 	for _, plugin := range f.enforcePodGroupPolicyPlugins {
 		if err := plugin.EnforcePodGroupPolicy(info, trainJob); err != nil {
 			return err
@@ -75,7 +81,22 @@ func (f *Framework) RunEnforcePodGroupPolicyPlugins(info *runtimeobj.Info, train
 	return nil
 }
 
-func (f *Framework) RunComponentBuilderPlugins(ctx context.Context, runtimeJobTemplate client.Object, info *runtimeobj.Info, trainJob *v1beta1.TrainingJob) ([]client.Object, error) {
+func (f *Framework) RunCustomValidationPlugins(oldObj, newObj *omev1beta1.TrainingJob) (admission.Warnings, field.ErrorList) {
+	var aggregatedWarnings admission.Warnings
+	var aggregatedErrors field.ErrorList
+	for _, plugin := range f.customValidationPlugins {
+		warnings, errs := plugin.Validate(oldObj, newObj)
+		if len(warnings) != 0 {
+			aggregatedWarnings = append(aggregatedWarnings, warnings...)
+		}
+		if errs != nil {
+			aggregatedErrors = append(aggregatedErrors, errs...)
+		}
+	}
+	return aggregatedWarnings, aggregatedErrors
+}
+
+func (f *Framework) RunComponentBuilderPlugins(ctx context.Context, runtimeJobTemplate client.Object, info *runtime.Info, trainJob *omev1beta1.TrainingJob) ([]client.Object, error) {
 	var objs []client.Object
 	for _, plugin := range f.componentBuilderPlugins {
 		obj, err := plugin.Build(ctx, runtimeJobTemplate, info, trainJob)
@@ -89,9 +110,10 @@ func (f *Framework) RunComponentBuilderPlugins(ctx context.Context, runtimeJobTe
 	return objs, nil
 }
 
-func (f *Framework) RunTerminalConditionPlugins(ctx context.Context, trainJob *v1beta1.TrainingJob) (*metav1.Condition, error) {
+func (f *Framework) RunTerminalConditionPlugins(ctx context.Context, trainJob *omev1beta1.TrainingJob) (*metav1.Condition, error) {
+	// TODO (tenzen-y): Once we provide the Configuration API, we should validate which plugin should have terminalCondition execution points.
 	if len(f.terminalConditionPlugins) > 1 {
-		return nil, errors.New("too many TerminalCondition plugins are registered")
+		return nil, errorTooManyTerminalConditionPlugin
 	}
 	if len(f.terminalConditionPlugins) != 0 {
 		return f.terminalConditionPlugins[0].TerminalCondition(ctx, trainJob)

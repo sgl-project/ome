@@ -1,11 +1,16 @@
 package core
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/runtime"
 	"context"
 	"fmt"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
 )
+
+// +kubebuilder:rbac:groups=ome.io,resources=trainingruntimes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ome.io,resources=clustertrainingruntimes,verbs=get;list;watch
 
 func New(ctx context.Context, client client.Client, indexer client.FieldIndexer) (map[string]runtime.Runtime, error) {
 	registry := NewRuntimeRegistry()

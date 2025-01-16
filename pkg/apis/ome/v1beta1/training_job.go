@@ -6,6 +6,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	// TrainingJobKind is the Kind name for the TrainingJob.
+	TrainingJobKind string = "TrainingJob"
+)
+
 // TrainingJob is the Schema for the TrainingJobs API
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -23,6 +28,11 @@ type TrainingJob struct {
 // TrainingJobSpec defines the base job spec which various training job specs implement.
 // It defines the desired state of a training job
 type TrainingJobSpec struct {
+	// Reference to the training runtime.
+	// The field is immutable.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf", message="runtimeRef is immutable"
+	RuntimeRef RuntimeRef `json:"runtimeRef"`
+
 	// Trainer defines the trainer to use for the training job.
 	// +required
 	Trainer *TrainerSpec `json:"trainer,omitempty"`
@@ -33,10 +43,10 @@ type TrainingJobSpec struct {
 
 	// Datasets defines the datasets for the training job.
 	// +required
-	Datasets []*Storage `json:"datasetsSpecs,omitempty"`
+	Datasets []*StorageSpec `json:"datasetsSpecs,omitempty"`
 
-	// HyperparameterTuningConfig defines the hyperparameter configuration and tuning strategy
-	HyperparameterTuningConfig *HyperparameterTuningConfig `json:"hyperparameterConfig,omitempty"`
+	// HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy
+	HyperParameterTuningConfig *HyperparameterTuningConfig `json:"hyperparameterConfig,omitempty"`
 
 	// Whether the controller should suspend the running TrainJob.
 	// Defaults to false.
@@ -57,9 +67,6 @@ type TrainingJobSpec struct {
 }
 
 type TrainerSpec struct {
-	// Runtime defines the training runtime to use for the training job.
-	// +optional
-	Runtime *string `json:"runtime,omitempty"`
 
 	// Docker image for the training container.
 	Image *string `json:"image,omitempty"`
@@ -121,7 +128,7 @@ type ModelConfig struct {
 	InputModel *string `json:"inputModel,omitempty"`
 
 	// OutputModel defines where the finetune weight (output model) stores.
-	OutputModel *Storage `json:"outputModel,omitempty"`
+	OutputModel *StorageSpec `json:"outputModel,omitempty"`
 }
 
 type TrainingJobStatus struct {
@@ -172,6 +179,24 @@ type JobStatus struct {
 
 	// Suspended is the number of child Jobs which are in a suspended state.
 	Suspended int32 `json:"suspended"`
+}
+
+// RuntimeRef represents the reference to the existing training runtime.
+type RuntimeRef struct {
+	// Name of the runtime being referenced.
+	// When namespaced-scoped TrainingRuntime is used, the TrainJob must have
+	// the same namespace as the deployed runtime.
+	Name string `json:"name"`
+
+	// APIGroup of the runtime being referenced.
+	// Defaults to `kubeflow.org`.
+	// +kubebuilder:default="kubeflow.org"
+	APIGroup *string `json:"apiGroup,omitempty"`
+
+	// Kind of the runtime being referenced.
+	// Defaults to ClusterTrainingRuntime.
+	// +kubebuilder:default="ClusterTrainingRuntime"
+	Kind *string `json:"kind,omitempty"`
 }
 
 const (
@@ -239,4 +264,8 @@ type TrainingJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TrainingJob `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&TrainingJob{}, &TrainingJobList{})
 }

@@ -36,4 +36,4 @@ API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/a
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,SupportedRuntime,Name
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,SupportedRuntime,Spec
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobSpec,Datasets
-API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobSpec,HyperparameterTuningConfig
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobSpec,HyperParameterTuningConfig

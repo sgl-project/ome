@@ -1,11 +1,14 @@
 package utils
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/go-logr/logr"
 	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -15,8 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
-	"time"
 )
 
 func GetFineTunedModelName(trainingJobName string) string {
@@ -82,7 +83,7 @@ func checkPodContainerStatus(tjob *v1beta1.TrainingJob, pod v1.Pod, logger logr.
 			}
 
 			// Skip when main training container exited with non-zero code, let sidecar and k8s job handles it
-			if containerName != constants.TrainingJobContainerName && containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
+			if containerName != constants.MainContainerName && containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
 				logger.Info("Container terminated with non zero exit code", "tjob", tjob.Name, "podName", pod.Name, "containerName", containerName, "reason", containerStatus.State.Terminated.Reason, "message", containerStatus.State.Terminated.Message)
 				if isDataIssue(containerStatus.State.Terminated.Message) {
 					return fmt.Errorf(containerStatus.State.Terminated.Message), constants.BadTrainingData

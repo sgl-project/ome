@@ -13,7 +13,7 @@ resources:
   - vllm/llama-3-3-70b-instruct-rt.yaml
   - vllm/mistral-7b-instruct.yaml
   - vllm/deepseek-v3-rt.yaml
-  - vllm/deep-seek-v3-rdma-rt.yaml
+  - vllm/deepseek-v3-rdma-rt.yaml
   - vllm/e5-mistral-7b-instruct-rt.yaml
   - srt/e5-mistral-7b-instruct-rt.yaml
   - srt/llama-3-1-405b-instruct-fp8-rt.yaml

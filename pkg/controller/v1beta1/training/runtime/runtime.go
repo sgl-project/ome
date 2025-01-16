@@ -1,10 +1,12 @@
 package runtime
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 	"maps"
+
+	corev1 "k8s.io/api/core/v1"
 	kueuelr "sigs.k8s.io/kueue/pkg/util/limitrange"
+
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 )
 
 type Info struct {
@@ -20,17 +22,18 @@ type Info struct {
 }
 
 type RuntimePolicy struct {
-	MLPolicy       *v1beta1.MLPolicy
-	PodGroupPolicy *v1beta1.PodGroupPolicy
+	MLPolicy       *omev1beta1.MLPolicy
+	PodGroupPolicy *omev1beta1.PodGroupPolicy
 }
 
 type Trainer struct {
 	NumNodes *int32
-
+	// TODO. Potentially, we can use map for env and sort it to improve code.
 	Env           []corev1.EnvVar
 	ContainerPort *corev1.ContainerPort
 }
 
+// TODO: Potentially, we can add ScheduleTimeoutSeconds to the Scheduler for consistency.
 type Scheduler struct {
 	PodLabels     map[string]string
 	TotalRequests map[string]TotalResourceRequest
@@ -39,12 +42,6 @@ type Scheduler struct {
 type TotalResourceRequest struct {
 	Replicas    int32
 	PodRequests corev1.ResourceList
-}
-
-type podSpecReplica struct {
-	replicas int32
-	name     string
-	podSpec  corev1.PodSpec
 }
 
 type InfoOptions struct {
@@ -58,6 +55,12 @@ type InfoOption func(options *InfoOptions)
 
 var defaultOptions = InfoOptions{}
 
+type podSpecReplica struct {
+	replicas int32
+	name     string
+	podSpec  corev1.PodSpec
+}
+
 func WithLabels(labels map[string]string) InfoOption {
 	return func(o *InfoOptions) {
 		o.labels = maps.Clone(labels)
@@ -70,13 +73,13 @@ func WithAnnotations(annotations map[string]string) InfoOption {
 	}
 }
 
-func WithMLPolicy(mlPolicy *v1beta1.MLPolicy) InfoOption {
+func WithMLPolicy(mlPolicy *omev1beta1.MLPolicy) InfoOption {
 	return func(o *InfoOptions) {
 		o.runtimePolicy.MLPolicy = mlPolicy
 	}
 }
 
-func WithPodGroupPolicy(pgPolicy *v1beta1.PodGroupPolicy) InfoOption {
+func WithPodGroupPolicy(pgPolicy *omev1beta1.PodGroupPolicy) InfoOption {
 	return func(o *InfoOptions) {
 		o.runtimePolicy.PodGroupPolicy = pgPolicy
 	}

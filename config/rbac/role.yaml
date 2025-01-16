@@ -135,6 +135,15 @@ rules:
   - list
   - watch
 - apiGroups:
+  - jobset.x-k8s.io
+  resources:
+  - jobsets
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
   - keda.sh
   resources:
   - scaledobjects
@@ -202,6 +211,7 @@ rules:
   - inferenceservices/finalizers
   - servingruntimes
   - servingruntimes/finalizers
+  - trainingjobs
   verbs:
   - create
   - delete
@@ -221,6 +231,8 @@ rules:
   - dedicatedaiclusters/status
   - inferenceservices/status
   - servingruntimes/status
+  - trainingjobs/finalizers
+  - trainingjobs/status
   verbs:
   - get
   - patch
@@ -228,7 +240,9 @@ rules:
 - apiGroups:
   - ome.io
   resources:
+  - clustertrainingruntimes
   - dedicatedaiclusterprofiles
+  - trainingruntimes
   verbs:
   - get
   - list
@@ -295,6 +309,15 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - scheduling.x-k8s.io
+  resources:
+  - podgroups
+  verbs:
+  - create
+  - get
+  - list
+  - watch
 - apiGroups:
   - serving.knative.dev
   resources:
