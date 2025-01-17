@@ -92,6 +92,11 @@ var (
 	AgentVaultIDEnvVarKey       = AgentAppName + "_" + "VAULT_ID"
 	AgentKeyNameEnvVarKey       = AgentAppName + "_" + "KEY_NAME"
 	AgentSecretNameEnvVarKey    = AgentAppName + "_" + "SECRET_NAME"
+
+	// Serving Sidecar Configuration
+	AgentFinetunedModelInfoFilePath      = AgentAppName + "_" + "FINETUNED_MODEL_INFO_FILE_PATH"
+	AgentUnzippedFinetunedModelDirectory = AgentAppName + "_" + "UNZIPPED_FINETUNED_MODEL_DIRECTORY"
+	AgentZippedFinetunedModelDirectory   = AgentAppName + "_" + "ZIPPED_FINETUNED_MODEL_DIRECTORY"
 )
 
 // InferenceService MultiModel Constants
@@ -127,6 +132,8 @@ var (
 	Scheduler                                = OMEAPIGroupName + "/scheduler"
 	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
 	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
+	ServingSidecarInjectionKey               = OMEAPIGroupName + "/inject-serving-sidecar"
+	ServingFinetunedModelStrategyKey         = OMEAPIGroupName + "/finetuned-model-strategy"
 	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
 	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
 	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
@@ -385,6 +392,7 @@ const (
 	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
 	ModelInitContainerName          = "model-init"
+	ServingSidecarContainerName     = "serving-sidecar"
 	MultiNodeProberContainerPort    = 8080
 
 	// TransformerContainerName transformer container name in collocation
@@ -407,10 +415,15 @@ const (
 
 // Cohere volumn mount paths
 const (
-	EmptyDirVolumeSourceName            = "model-empty-dir"
-	InitContainerModelSourceDefaultPath = "/mnt/model"
-	InitContainerModelFinalDefaultPath  = "/opt/ml/model"
-	ContainerModelFinalDefaultSubPath   = "base"
+	EmptyDirVolumeSourceName               = "model-empty-dir"
+	InitContainerModelSourceDefaultPath    = "/mnt/model"
+	InitContainerModelFinalDefaultPath     = "/opt/ml/model"
+	ContainerModelFinalDefaultSubPath      = "base"
+	FineTunedModelDownloadDefaultMountPath = "/mnt/finetuned/download"
+	FineTunedModelDownloadDefaultSubPath   = "download"
+	FineTunedModelFinalDefaultSubPath      = "finetuned"
+	FineTunedModelDefaultPathPrefix        = "/opt/ml"
+	FineTunedModelInfoFilePath             = "/mnt/ft-model-info.json"
 )
 
 // DefaultModelLocalMountPath is where models will be mounted by the storage-initializer

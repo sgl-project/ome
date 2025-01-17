@@ -88,11 +88,14 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
 	modelInitInjector := newModelInitInjector(configMap)
 
+	servingSidecarInjector := newServingSidecarInjector(configMap)
+
 	mutators := []func(pod *v1.Pod) error{
 		agentInjector.InjectAgent,
 		metricsAggregator.InjectMetricsAggregator,
 		dedicatedAIClusterSchedulingInjector.InjectAffinity,
 		modelInitInjector.InjectModelInit,
+		servingSidecarInjector.InjectServingSidecar,
 	}
 
 	for _, mutator := range mutators {

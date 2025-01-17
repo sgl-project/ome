@@ -87,6 +87,17 @@ data:
         "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
         "region": "{{ .Values.ome.omeAgent.region }}"
     }
+  servingSidecar: |-
+    {
+        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "memoryRequest": "2Gi",
+        "memoryLimit": "4Gi",
+        "cpuRequest": "1",
+        "cpuLimit": "2",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
+    }
 
 ---
 apiVersion: v1
