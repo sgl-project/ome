@@ -43,7 +43,7 @@ type TrainingJobSpec struct {
 
 	// Datasets defines the datasets for the training job.
 	// +required
-	Datasets []*StorageSpec `json:"datasetsSpecs,omitempty"`
+	Datasets *StorageSpec `json:"datasets,omitempty"`
 
 	// HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy
 	HyperParameterTuningConfig *HyperparameterTuningConfig `json:"hyperparameterConfig,omitempty"`

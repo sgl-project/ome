@@ -32,23 +32,21 @@ spec:
                 type: object
               compartmentID:
                 type: string
-              datasetsSpecs:
-                items:
-                  properties:
-                    key:
+              datasets:
+                properties:
+                  key:
+                    type: string
+                  parameters:
+                    additionalProperties:
                       type: string
-                    parameters:
-                      additionalProperties:
-                        type: string
-                      type: object
-                    path:
-                      type: string
-                    schemaPath:
-                      type: string
-                    storageUri:
-                      type: string
-                  type: object
-                type: array
+                    type: object
+                  path:
+                    type: string
+                  schemaPath:
+                    type: string
+                  storageUri:
+                    type: string
+                type: object
               hyperparameterConfig:
                 properties:
                   maxTrials:
@@ -247,7 +245,7 @@ spec:
                     type: object
                 type: object
             required:
-            - datasetsSpecs
+            - datasets
             - modelConfig
             - runtimeRef
             - trainer

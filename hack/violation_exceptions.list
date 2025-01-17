@@ -21,7 +21,6 @@ API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ServingRuntimePodSpec,Tolerations
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ServingRuntimePodSpec,Volumes
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ServingRuntimeSpec,ProtocolVersions
-API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobSpec,Datasets
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobStatus,Conditions
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServicesConfig,MultiNodeProber
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServicesConfig,OCIConfig
@@ -35,5 +34,4 @@ API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/a
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,StorageSpec,StorageKey
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,SupportedRuntime,Name
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,SupportedRuntime,Spec
-API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobSpec,Datasets
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobSpec,HyperParameterTuningConfig

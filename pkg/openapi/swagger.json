@@ -3974,7 +3974,7 @@
         "runtimeRef",
         "trainer",
         "modelConfig",
-        "datasetsSpecs"
+        "datasets"
       ],
       "properties": {
         "annotations": {
@@ -3989,12 +3989,9 @@
           "description": "The compartment ID to use for the training job",
           "type": "string"
         },
-        "datasetsSpecs": {
+        "datasets": {
           "description": "Datasets defines the datasets for the training job.",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
-          }
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
         },
         "hyperparameterConfig": {
           "description": "HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy",

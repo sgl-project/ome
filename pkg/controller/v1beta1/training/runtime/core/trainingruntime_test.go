@@ -187,7 +187,52 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 					NumNodes(100).
 					ContainerTrainer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					InitContainerDatasetModelInitializer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
-					InitContainerDatasetInitializerEnv(nil).
+					InitContainerDatasetInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "STORAGE_URI",
+							Value: "hf://trainjob-dataset",
+						},
+						{
+							Name:  "param1",
+							Value: "value1",
+						},
+						{
+							Name: "STORAGE_KEY",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "dataset-key",
+									},
+									Key: "key",
+								},
+							},
+						},
+					}).
+					InitContainerModelInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "STORAGE_URI",
+							Value: "hf://output-model",
+						},
+						{
+							Name:  "MODEL_NAME",
+							Value: "hf://trainjob-model",
+						},
+						{
+							Name:  "param1",
+							Value: "value1",
+						},
+						{
+							Name: "STORAGE_KEY",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "model-key",
+									},
+									Key: "key",
+								},
+							},
+						},
+					}).
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 			},

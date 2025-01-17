@@ -2726,14 +2726,8 @@ func (in *TrainingJobSpec) DeepCopyInto(out *TrainingJobSpec) {
 	}
 	if in.Datasets != nil {
 		in, out := &in.Datasets, &out.Datasets
-		*out = make([]*StorageSpec, len(*in))
-		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(StorageSpec)
-				(*in).DeepCopyInto(*out)
-			}
-		}
+		*out = new(StorageSpec)
+		(*in).DeepCopyInto(*out)
 	}
 	if in.HyperParameterTuningConfig != nil {
 		in, out := &in.HyperParameterTuningConfig, &out.HyperParameterTuningConfig

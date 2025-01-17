@@ -7125,17 +7125,10 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig"),
 						},
 					},
-					"datasetsSpecs": {
+					"datasets": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Datasets defines the datasets for the training job.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"),
-									},
-								},
-							},
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
 					"hyperparameterConfig": {
@@ -7191,7 +7184,7 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				Required: []string{"runtimeRef", "trainer", "modelConfig", "datasetsSpecs"},
+				Required: []string{"runtimeRef", "trainer", "modelConfig", "datasets"},
 			},
 		},
 		Dependencies: []string{

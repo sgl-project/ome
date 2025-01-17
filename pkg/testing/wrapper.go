@@ -344,9 +344,9 @@ func (t *TrainJobWrapper) Trainer(trainer *omev1beta1.TrainerSpec) *TrainJobWrap
 
 func (t *TrainJobWrapper) DatasetConfig(datasetConfig *omev1beta1.StorageSpec) *TrainJobWrapper {
 	if t.Spec.Datasets == nil {
-		t.Spec.Datasets = make([]*omev1beta1.StorageSpec, 1)
+		t.Spec.Datasets = &omev1beta1.StorageSpec{}
 	}
-	t.Spec.Datasets[0] = datasetConfig
+	t.Spec.Datasets = datasetConfig
 	return t
 }
 

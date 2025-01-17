@@ -89,6 +89,7 @@ func (j *JobSet) Build(ctx context.Context, runtimeJobTemplate client.Object, in
 	jobSet := jobSetBuilder.
 		Trainer(info, trainJob).
 		PodLabels(info.PodLabels).
+		Initializer(trainJob).
 		Suspend(trainJob.Spec.Suspend).
 		Build()
 	if err := ctrlutil.SetControllerReference(trainJob, jobSet, j.scheme); err != nil {
