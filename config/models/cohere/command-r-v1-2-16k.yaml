@@ -38,5 +38,5 @@ spec:
         - name: SMALL_COHERE_V2
           quotaUnit: 1
           default: true
-    internalName: "command-r-v1-2-16k-chat"
+    internalName: "command-r-v1.2-16k"
     type: "Serving"

@@ -37,6 +37,6 @@ spec:
         - name: EMBED_COHERE
           quotaUnit: 1
           default: true
-    internalName: "embed-multilingual-light-03"
+    internalName: "embed-multilingual-03"
     type: "Serving"
 {{- end }}
