@@ -205,7 +205,7 @@ Goland IDE is recommended for running the OME manager in the IDE. After cloning 
     * Run Kind: `File`
     * Files: `${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/manager/main.go`
     * Environment Variables: `KUBECONFIG=<path to kubeconfig file>`
-    * Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8080 --leader-elect`
+    * Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-bind-address 127.0.0.1:8080 --leader-elect`
     * Module: `ome`
 
 This will start the OME manager in the IDE. You can also run the manager in debug mode by adding breakpoints in the code.
@@ -250,7 +250,7 @@ For VSCode or Cursor, follow these steps to set up the development environment:
        "args": [
                 "--zap-encoder", "console",
                 "--health-probe-addr", "127.0.0.1:8081",
-                "--metrics-addr", "127.0.0.1:8080",
+                "--metrics-bind-address", "127.0.0.1:8080",
                 "--leader-elect"
       ]
    }

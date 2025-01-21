@@ -56,7 +56,7 @@ func TestGetOptions(t *testing.T) {
 			name: "custom options",
 			args: []string{
 				"cmd",
-				"--metrics-addr=:9090",
+				"--metrics-bind-address=:9090",
 				"--webhook-port=8443",
 				"--leader-elect=true",
 				"--webhook=true",

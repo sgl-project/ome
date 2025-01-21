@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
@@ -25,7 +26,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
@@ -58,6 +58,7 @@ const (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	tlsOpts  []func(*tls.Config)
 )
 
 // registerOptionalScheme attempts to register a scheme if its CRD is available
@@ -89,6 +90,8 @@ func init() {
 // Options defines the program-configurable options that may be passed on the command line.
 type Options struct {
 	metricsAddr             string
+	secureMetrics           bool
+	enableHTTP2             bool
 	webhookPort             int
 	enableLeaderElection    bool
 	enableWebhook           bool
@@ -104,6 +107,8 @@ func DefaultOptions() Options {
 		webhookPort:             9443,
 		enableLeaderElection:    false,
 		enableWebhook:           false,
+		enableHTTP2:             false,
+		secureMetrics:           false,
 		probeAddr:               ":8081",
 		leaderElectionNamespace: LeaderElectionNamespace,
 		zapOpts: zap.Options{
@@ -116,7 +121,12 @@ func DefaultOptions() Options {
 // GetOptions parses the program flags and returns them as Options.
 func GetOptions() Options {
 	opts := DefaultOptions()
-	flag.StringVar(&opts.metricsAddr, "metrics-addr", opts.metricsAddr, "The address the metric endpoint binds to.")
+	flag.StringVar(&opts.metricsAddr, "metrics-bind-address", opts.metricsAddr, "The address the metrics endpoint binds to. "+
+		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	flag.BoolVar(&opts.secureMetrics, "metrics-secure", opts.secureMetrics,
+		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
+	flag.BoolVar(&opts.enableHTTP2, "enable-http2", opts.enableHTTP2,
+		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.IntVar(&opts.webhookPort, "webhook-port", opts.webhookPort, "The port that the webhook server binds to.")
 	flag.BoolVar(&opts.enableLeaderElection, "leader-elect", opts.enableLeaderElection,
 		"Enable leader election for ome controller manager. "+
@@ -136,11 +146,7 @@ func main() {
 
 	// Get a config to talk to the apiserver
 	setupLog.Info("Configuring API client connection")
-	cfg, err := config.GetConfig()
-	if err != nil {
-		setupLog.Error(err, "Failed to initialize API client configuration")
-		os.Exit(1)
-	}
+	cfg := ctrl.GetConfigOrDie()
 
 	// Setup clientset to directly talk to the api server
 	setupLog.Info("Creating Kubernetes client set")
@@ -148,6 +154,19 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "Failed to create Kubernetes client set")
 		os.Exit(1)
+	}
+
+	if !options.enableHTTP2 {
+		// if the enable-http2 flag is false (the default), http/2 should be disabled
+		// due to its vulnerabilities. More specifically, disabling http/2 will
+		// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
+		// Rapid Reset CVEs. For more information see:
+		// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
+		// - https://github.com/advisories/GHSA-4374-p667-p6c8
+		tlsOpts = append(tlsOpts, func(c *tls.Config) {
+			setupLog.Info("disabling http/2")
+			c.NextProtos = []string{"http/1.1"}
+		})
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
@@ -158,9 +177,14 @@ func main() {
 	mgr, err := manager.New(cfg, manager.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
-			BindAddress: options.metricsAddr},
+			BindAddress:   options.metricsAddr,
+			TLSOpts:       tlsOpts,
+			SecureServing: options.secureMetrics,
+		},
 		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: options.webhookPort}),
+			Port:    options.webhookPort,
+			TLSOpts: tlsOpts,
+		}),
 		LeaderElection:          options.enableLeaderElection,
 		LeaderElectionID:        LeaderLockName,
 		LeaderElectionNamespace: options.leaderElectionNamespace,

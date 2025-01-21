@@ -37,7 +37,6 @@ ome:
   controller:
     replicaCount: 3
     deploymentMode: "RawDeployment"
-    rbacProxyImage: gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1
     ingressGateway:
       domain: svc.cluster.local
       domainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"

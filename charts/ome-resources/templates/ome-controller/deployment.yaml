@@ -45,23 +45,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-      - name: kube-rbac-proxy
-        image: "{{ .Values.ome.controller.rbacProxyImage }}"
-        args:
-        - "--secure-listen-address=0.0.0.0:8443"
-        - "--upstream=http://127.0.0.1:8080/"
-        - "--logtostderr=true"
-        - "--v=10"
-        ports:
-        - containerPort: 8443
-          name: https
       - command:
         - /manager
         image: "{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}"
         imagePullPolicy: IfNotPresent
         name: manager
         args:
-        - "--metrics-addr=:8080"
+        - "--metrics-bind-address=:8080"
         - "--leader-elect"
         - "--webhook"
         - "--zap-encoder=console"

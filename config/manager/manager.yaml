@@ -26,7 +26,7 @@ spec:
       - command:
         - /manager
         args:
-          - "--metrics-addr=:8080"
+          - "--metrics-bind-address=:8080"
           - "--leader-elect"
           - "webhook"
           - "--zap-encoder=console"
