@@ -30,7 +30,7 @@ fi
 
 if ! type telepresence >/dev/null 2>&1; then
   echo "Telepresence is not installed."
-  echo "Please install it, e.g. with \"brew install telepresence\" for Mac"
+  echo "Please install it, e.g. with \"brew install datawire/blackbird/telepresence\" for Mac"
   echo "or download it from https://www.getambassador.io/docs/telepresence/latest/install for all OS"
   exit 1
 fi
@@ -55,7 +55,7 @@ set +e
 if ! telepresence status --output json | jq -e '.user_daemon.intercepts[]? | select(.name == "ome-controller-manager-ome")' > /dev/null; then
   echo "* Intercept ome-webhook-server-service"
   set -e
-  telepresence intercept ome-controller-manager --service=ome-webhook-server-service --port 9443 --mount=false
+  telepresence intercept ome-controller-manager --service=ome-webhook-server-service --port 443 --mount=false
   set +e
 else
   echo "* Webhook service already intercepted"
