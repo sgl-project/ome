@@ -24,7 +24,9 @@ spec:
   modelFormat:
     name: python
     version: '1'
-  modelType: python
+  modelFramework:
+    name: python
+    version: '1'
   modelArchitecture: CohereForCasualLM
   modelParameterSize: 33M
   modelCapabilities:

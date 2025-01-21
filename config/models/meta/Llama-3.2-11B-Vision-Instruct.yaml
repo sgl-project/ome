@@ -22,8 +22,6 @@ spec:
   modelFormat:
     name: safetensors
     version: "1"
-  #TODO model type will be deprecated, delete this filed after migration
-  modelType: transformer
   modelArchitecture: MllamaForConditionalGeneration
   modelParameterSize: 11B
   modelCapabilities:

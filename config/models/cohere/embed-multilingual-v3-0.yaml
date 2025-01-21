@@ -24,7 +24,9 @@ spec:
   modelFormat:
     name: onnxruntime
     version: '1'
-  modelType: onnxruntime
+  modelFramework:
+    name: onnx
+    version: '1'
   modelArchitecture: CohereForCasualLM
   modelParameterSize: 0.52B
   modelCapabilities:
