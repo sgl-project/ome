@@ -1296,6 +1296,24 @@ spec:
                         type: boolean
                       modelArchitecture:
                         type: string
+                      modelFormat:
+                        properties:
+                          name:
+                            type: string
+                          version:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      modelFramework:
+                        properties:
+                          name:
+                            type: string
+                          version:
+                            type: string
+                        required:
+                          - name
+                        type: object
                       modelType:
                         type: string
                       name:
@@ -1306,9 +1324,6 @@ spec:
                         type: integer
                       version:
                         type: string
-                    required:
-                      - modelType
-                      - name
                     type: object
                   type: array
                   x-kubernetes-list-type: atomic

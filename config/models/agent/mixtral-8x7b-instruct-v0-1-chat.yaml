@@ -22,6 +22,9 @@ spec:
   modelFormat:
     name: safetensors
     version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.36.0.dev0"
   modelType: transformer
   modelArchitecture: MixtralForCausalLM
   modelParameterSize: 47B

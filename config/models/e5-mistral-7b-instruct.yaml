@@ -22,6 +22,9 @@ spec:
   modelFormat:
     name: safetensors
     version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.34.0"
   modelType: transformer
   modelArchitecture: MistralModel
   modelParameterSize: 7B

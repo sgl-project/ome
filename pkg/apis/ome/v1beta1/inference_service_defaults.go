@@ -99,8 +99,6 @@ func (isvc *InferenceService) DefaultInferenceService(config *InferenceServicesC
 	}
 	var components []Component
 	if !ok {
-		// Only attempt to assign runtimes and apply defaulting logic for non-modelmesh predictors
-		isvc.setPredictorModelDefaults()
 		components = append(components, &isvc.Spec.Predictor)
 	} else {
 		// If this is a modelmesh predictor, we still want to do "Exactly One" validation.
@@ -118,44 +116,5 @@ func (isvc *InferenceService) DefaultInferenceService(config *InferenceServicesC
 				component.GetExtensions().Default(config)
 			}
 		}
-	}
-}
-
-func (isvc *InferenceService) setPredictorModelDefaults() {
-	openAIProtocol := constants.OpenAIProtocol
-	isvc.Spec.Predictor.Model.ProtocolVersion = &openAIProtocol
-}
-
-func (isvc *InferenceService) SetRuntimeDefaults() {
-	switch {
-	case *isvc.Spec.Predictor.Model.Runtime == constants.TritonServer:
-		isvc.SetTritonDefaults()
-
-	case *isvc.Spec.Predictor.Model.Runtime == constants.VLLMServer:
-		isvc.SetVLLMDefaults()
-
-	case *isvc.Spec.Predictor.Model.Runtime == constants.TGIServer:
-		isvc.SetTGIServerDefaults()
-	}
-}
-
-func (isvc *InferenceService) SetVLLMDefaults() {
-	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
-		protocolV2 := constants.OpenAIProtocol
-		isvc.Spec.Predictor.Model.ProtocolVersion = &protocolV2
-	}
-}
-
-func (isvc *InferenceService) SetTGIServerDefaults() {
-	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
-		protocolV2 := constants.OpenAIProtocol
-		isvc.Spec.Predictor.Model.ProtocolVersion = &protocolV2
-	}
-}
-
-func (isvc *InferenceService) SetTritonDefaults() {
-	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
-		protocolV2 := constants.OpenInferenceProtocolV2
-		isvc.Spec.Predictor.Model.ProtocolVersion = &protocolV2
 	}
 }

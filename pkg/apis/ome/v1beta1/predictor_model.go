@@ -158,6 +158,12 @@ func (m *ModelSpec) getModelFormatLabel(modelSpec *BaseModelSpec) string {
 	if modelSpec.ModelType != nil {
 		label += ":" + *modelSpec.ModelType
 	}
+	if modelSpec.ModelFramework != nil {
+		label += ":" + modelSpec.ModelFramework.Name
+		if modelSpec.ModelFramework.Version != nil {
+			label += ":" + *modelSpec.ModelFramework.Version
+		}
+	}
 
 	return label
 }
@@ -178,6 +184,18 @@ func (m *ModelSpec) getServingRuntimeSupportedModelFormatLabelSet(supportedModel
 			}
 			if t.ModelType != nil {
 				label += ":" + *t.ModelType
+			}
+			if t.ModelFramework != nil {
+				label += ":" + t.ModelFramework.Name
+				if t.ModelFramework.Version != nil {
+					label += ":" + *t.ModelFramework.Version
+				}
+			}
+			if t.ModelFormat != nil {
+				label += ":" + t.ModelFormat.Name
+				if t.ModelFormat.Version != nil {
+					label += ":" + *t.ModelFormat.Version
+				}
 			}
 			set.add(label)
 		}

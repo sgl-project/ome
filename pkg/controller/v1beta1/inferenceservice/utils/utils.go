@@ -261,41 +261,6 @@ func sortPodsByCreatedTimestampDesc(pods *v1.PodList) {
 	})
 }
 
-// TODO: Implement this function
-func ValidateStorageURI(storageURI *string, client client.Client) error {
-	if storageURI == nil {
-		return nil
-	}
-	return nil
-
-	//// Step 1: Passes the validation if we have a storage container CR that supports this storageURI.
-	//storageContainerSpec, err := pod.GetContainerSpecForStorageUri(*storageURI, client)
-	//if err != nil {
-	//	return err
-	//}
-	//if storageContainerSpec != nil {
-	//	return nil
-	//}
-	//
-	//// Step 2: Does the default storage initializer image support this storageURI?
-	//// local path (not some protocol?)
-	//if !regexp.MustCompile(`\w+?://`).MatchString(*storageURI) {
-	//	return nil
-	//}
-	//
-	//// need to verify Azure Blob first, because it uses http(s):// prefix
-	//if strings.Contains(*storageURI, AzureBlobURL) {
-	//	azureURIMatcher := regexp.MustCompile(AzureBlobURIRegEx)
-	//	if parts := azureURIMatcher.FindStringSubmatch(*storageURI); parts != nil {
-	//		return nil
-	//	}
-	//} else if utils.IsPrefixSupported(*storageURI, SupportedStorageURIPrefixList) {
-	//	return nil
-	//}
-	//
-	//return fmt.Errorf(v1beta1.UnsupportedStorageURIFormatError, strings.Join(SupportedStorageURIPrefixList, ", "), *storageURI)
-}
-
 // function to get generate scaledObject name
 func GetScaledObjectName(isvcName string) string {
 	const (

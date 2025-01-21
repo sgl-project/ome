@@ -95,8 +95,6 @@
       "description": "BaseModelSpec defines the desired state of BaseModel",
       "type": "object",
       "required": [
-        "modelFormat",
-        "modelType",
         "storage"
       ],
       "properties": {
@@ -153,6 +151,10 @@
         "modelFormat": {
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFormat"
+        },
+        "modelFramework": {
+          "description": "ModelFramework of the model, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec"
         },
         "modelParameterSize": {
           "description": "ModelParameterSize is the size of the model parameters, e.g., \"175B\"",
@@ -2122,6 +2124,20 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the library in which the model is stored, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
+          "type": "string",
+          "default": ""
+        },
+        "version": {
+          "description": "Version of the library. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
+          "type": "string"
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelRevisionStates": {
       "type": "object",
       "required": [
@@ -3766,10 +3782,6 @@
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SupportedModelFormat": {
       "type": "object",
-      "required": [
-        "name",
-        "modelType"
-      ],
       "properties": {
         "autoSelect": {
           "description": "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",
@@ -3779,12 +3791,20 @@
           "description": "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
           "type": "string"
         },
+        "modelFormat": {
+          "description": "ModelFormat of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"SafeTensors\"",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFormat"
+        },
+        "modelFramework": {
+          "description": "ModelFramework of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"Transformers\"",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec"
+        },
         "modelType": {
           "description": "ModelType of the model architecture, e.g., \"Transformer\", \"GPT-3\", \"BERT\"",
           "type": "string"
         },
         "name": {
-          "description": "Name of the format in which the model is stored, e.g., \"ONNX\", \"TensorFlow SavedModel\", \"PyTorch\", \"SafeTensors\"",
+          "description": "Name of the model",
           "type": "string",
           "default": ""
         },

@@ -10,6 +10,9 @@ spec:
   modelFormat:
     name: safetensors
     version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.33.1"
   modelType: transformer
   modelArchitecture: DeepseekV3ForCausalLM
   modelParameterSize: 685B

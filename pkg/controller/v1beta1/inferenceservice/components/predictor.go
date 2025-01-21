@@ -263,10 +263,6 @@ func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime 
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
-	if err := p.handleStorageURI(isvc, annotations); err != nil {
-		return nil, err
-	}
-
 	p.processServingAnnotations(annotations, isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta)
 
 	return utils.Union(sRuntimeAnnotations, annotations, isvc.Spec.Predictor.Annotations), nil
@@ -309,21 +305,6 @@ func (p *Predictor) processLabels(isvc *v1beta1.InferenceService, sRuntime v1bet
 	)
 
 	return labels, nil
-}
-
-// handleStorageURI handles the storage URI for the predictor.
-func (p *Predictor) handleStorageURI(isvc *v1beta1.InferenceService, annotations map[string]string) error {
-	predictor := isvc.Spec.Predictor.GetImplementation()
-	if sourceURI := predictor.GetStorageUri(); sourceURI != nil {
-		if _, ok := annotations[constants.StorageInitializerSourceUriInternalAnnotationKey]; ok {
-			return errors.New("must provide only one of storageUri and storage.path")
-		}
-		annotations[constants.StorageInitializerSourceUriInternalAnnotationKey] = *sourceURI
-		if err := isvcutils.ValidateStorageURI(sourceURI, p.client); err != nil {
-			return fmt.Errorf("StorageURI not supported: %w", err)
-		}
-	}
-	return nil
 }
 
 // determinePredictorName determines the name of the predictor.
@@ -517,7 +498,6 @@ func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1
 
 // getSpecifiedRuntime retrieves the specified runtime for the predictor.
 func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
-	isvc.SetRuntimeDefaults()
 
 	rt, err := isvcutils.GetServingRuntime(p.client, *isvc.Spec.Predictor.Model.Runtime, isvc.Namespace)
 	if err != nil {
@@ -558,7 +538,6 @@ func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseMod
 	// Use the first supporting runtime.
 	isvc.Spec.Predictor.Model.Runtime = &runtimes[0].Name
 	p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime, "inference service", isvc.Name, "namespace", isvc.Namespace)
-	isvc.SetRuntimeDefaults()
 
 	return runtimes[0].Spec, runtimes[0].Name, ctrl.Result{}, nil
 }

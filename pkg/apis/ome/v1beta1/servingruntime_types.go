@@ -8,17 +8,24 @@ import (
 
 // +k8s:openapi-gen=true
 type SupportedModelFormat struct {
-	// Name of the format in which the model is stored, e.g., "ONNX", "TensorFlow SavedModel", "PyTorch", "SafeTensors"
-	// +required
+	// TODO this field is being used as model format name, and this is not correct, we should deprecate this and use Name from ModelFormat
+	// Name of the model
+	// +optional
 	Name string `json:"name"`
+	// ModelFormat of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "SafeTensors"
+	// +optional
+	ModelFormat *ModelFormat `json:"modelFormat"`
 	// Version of the model format.
 	// Used in validating that a runtime supports a predictor.
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
 	// ModelType of the model architecture, e.g., "Transformer", "GPT-3", "BERT"
-	// +required
+	// +optional
 	ModelType *string `json:"modelType,omitempty"`
+	// ModelFramework of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "Transformers"
+	// +optional
+	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
 	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"
 	// +optional
 	ModelArchitecture *string `json:"modelArchitecture,omitempty"`

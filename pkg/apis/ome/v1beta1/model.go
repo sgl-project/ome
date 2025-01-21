@@ -16,6 +16,17 @@ type ModelFormat struct {
 	Version *string `json:"version,omitempty"`
 }
 
+type ModelFrameworkSpec struct {
+	// Name of the library in which the model is stored, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
+	// +required
+	Name string `json:"name"`
+	// Version of the library.
+	// Used in validating that a runtime supports a predictor.
+	// It Can be "major", "major.minor" or "major.minor.patch".
+	// +optional
+	Version *string `json:"version,omitempty"`
+}
+
 type StorageSpec struct {
 	// The path to the model object in the object storage.
 	// Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)
@@ -38,12 +49,17 @@ type StorageSpec struct {
 
 // BaseModelSpec defines the desired state of BaseModel
 type BaseModelSpec struct {
-	// +required
+	// +optional
 	ModelFormat ModelFormat `json:"modelFormat"`
 
 	// ModelType of the model architecture, e.g., "Transformer", "GPT-3", "BERT"
-	// +required
+	// +optional
+	// +kubebuilder:deprecated:replaced by ModelFramework
 	ModelType *string `json:"modelType,omitempty"`
+
+	// ModelFramework of the model, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
+	// +optional
+	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
 
 	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"
 	// +optional

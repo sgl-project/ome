@@ -7,9 +7,13 @@ spec:
   disabled: false
   version: "1.0.0"
   compartmentID: ocid1.compartment.oc1..aaaaaaaazq
+  modelFramework:
+    name: transformers
+    version: "4.42.3"
   modelFormat:
     name: safetensors
     version: "1"
+  #TODO model type will be deprecated, delete this filed after migration
   modelType: transformer
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 70B

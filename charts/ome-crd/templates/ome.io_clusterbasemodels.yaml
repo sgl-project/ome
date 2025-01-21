@@ -97,6 +97,15 @@ spec:
                 required:
                 - name
                 type: object
+              modelFramework:
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                required:
+                - name
+                type: object
               modelParameterSize:
                 type: string
               modelType:
@@ -129,8 +138,6 @@ spec:
               version:
                 type: string
             required:
-            - modelFormat
-            - modelType
             - storage
             type: object
           status:

@@ -19,9 +19,13 @@ spec:
     path: /raid/models/meta/Llama-3.3-70B-Instruct
   vendor: meta
   version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.40.0.dev0"
   modelFormat:
     name: safetensors
     version: "1"
+  #TODO model type will be deprecated, delete this filed after migration
   modelType: transformer
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 70B
