@@ -227,7 +227,7 @@ type BuiltInAdapter struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.supportedModelFormats[*].name"
-// +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.supportedModelFormats[*].modelType"
+// +kubebuilder:printcolumn:name="ModelFramework",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.name"
 // +kubebuilder:printcolumn:name="ModelArchitecture",type="string",JSONPath=".spec.supportedModelFormats[*].modelArchitecture"
 // +kubebuilder:printcolumn:name="ModelSizeMin",type="string",JSONPath=".spec.modelSizeRange.min"
 // +kubebuilder:printcolumn:name="ModelSizeMax",type="string",JSONPath=".spec.modelSizeRange.max"
@@ -260,7 +260,7 @@ type ServingRuntimeList struct {
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.supportedModelFormats[*].name"
-// +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.supportedModelFormats[*].modelType"
+// +kubebuilder:printcolumn:name="ModelFramework",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.name"
 // +kubebuilder:printcolumn:name="ModelArchitecture",type="string",JSONPath=".spec.supportedModelFormats[*].modelArchitecture"
 // +kubebuilder:printcolumn:name="ModelSizeMin",type="string",JSONPath=".spec.modelSizeRange.min"
 // +kubebuilder:printcolumn:name="ModelSizeMax",type="string",JSONPath=".spec.modelSizeRange.max"

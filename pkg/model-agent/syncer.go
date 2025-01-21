@@ -237,7 +237,7 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
 
 	if shapeFilter.IsTensorrtLLMModel {
-		s.logger.Infof("Tensorrt_llm Model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
+		s.logger.Infof("TensorRTLLM Model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
 		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
 		for _, object := range objects {
 			if object.Name != nil {

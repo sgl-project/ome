@@ -22,7 +22,7 @@ spec:
   vendor: cohere
   version: "1.6"
   modelFormat:
-    name: tensorrt_llm
+    name: tensorrtllm
     version: 'v0.11.0'
   modelFramework:
     name: tensorrtllm

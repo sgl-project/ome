@@ -22,10 +22,10 @@ spec:
   vendor: cohere
   version: "3.0"
   modelFormat:
-    name: onnxruntime
+    name: onnx
     version: '1'
   modelFramework:
-    name: onnx
+    name: onnxruntime
     version: '1'
   modelArchitecture: CohereForCasualLM
   modelParameterSize: 112M

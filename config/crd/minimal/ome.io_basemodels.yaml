@@ -23,26 +23,29 @@ spec:
     - jsonPath: .spec.vendor
       name: Vendor
       type: string
-    - jsonPath: .spec.modelArchitecture
-      name: Architecture
+    - jsonPath: .spec.modelFramework.name
+      name: Framework
       type: string
-    - jsonPath: .spec.compartmentID
-      name: CompartmentID
-      type: string
-    - jsonPath: .spec.modelType
-      name: ModelType
+    - jsonPath: .spec.modelFramework.version
+      name: FrameworkVersion
       type: string
     - jsonPath: .spec.modelFormat.name
       name: ModelFormat
       type: string
-    - jsonPath: .status.state
-      name: Ready
+    - jsonPath: .spec.modelArchitecture
+      name: Architecture
       type: string
     - jsonPath: .spec.modelCapabilities[*]
       name: Capabilities
       type: string
     - jsonPath: .spec.modelParameterSize
       name: Size
+      type: string
+    - jsonPath: .spec.compartmentID
+      name: CompartmentID
+      type: string
+    - jsonPath: .status.state
+      name: Ready
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age

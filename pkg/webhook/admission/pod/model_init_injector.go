@@ -7,6 +7,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"strings"
 )
 
 const (
@@ -173,8 +174,9 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 		{Name: constants.AgentRegionEnvVarKey, Value: mi.Region},
 	}
 
-	if modelFormat := pod.ObjectMeta.Annotations[constants.BaseModelFormat]; modelFormat == "tensorrt_llm" {
-		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: "tensorrtllm"})
+	modelFormat := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(pod.ObjectMeta.Annotations[constants.BaseModelFormat], "_", ""), "-", ""))
+	if modelFormat == strings.ToLower(strings.ReplaceAll(constants.TensorRTLLM, "_", "")) {
+		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: constants.TensorRTLLM})
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentTensorRTLLMVersionsEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelFormatVersion]})
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentNumOfGPUEnvVarKey, Value: mi.getGPUCount(pod)})
 	}

@@ -52,7 +52,7 @@ var (
 	AgentModelNameEnvVarKey             = AgentAppName + "_" + "MODEL_NAME"
 	AgentModelStoreDirectoryEnvVarKey   = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
 	AgentModelFrameworkEnvVarKey        = AgentAppName + "_" + "MODEL_FRAMEWORK"
-	AgentTensorRTLLMVersionsEnvVarKey   = AgentAppName + "_" + "TENSORRT_LLM_VERSION"
+	AgentTensorRTLLMVersionsEnvVarKey   = AgentAppName + "_" + "TENSORRTLLM_VERSION"
 	AgentModelFrameworkVersionEnvVarKey = AgentAppName + "_" + "MODEL_FRAMEWORK_VERSION"
 	AgentBaseModelTypeEnvVarKey         = AgentAppName + "_" + "MODEL_TYPE"
 
@@ -111,7 +111,7 @@ const (
 	AgentEnableFlag       = "--enable-puller"
 	AgentConfigDirArgName = "--config-dir"
 	AgentModelDirArgName  = "--model-dir"
-	TensorRTLLM           = "tensorrt_llm"
+	TensorRTLLM           = "tensorrtllm"
 )
 
 // InferenceService Annotations
@@ -669,7 +669,7 @@ const (
 	CohereStorePathPrefix                                   = "/mnt/cohere/"
 	CohereTrainingInitModelStorePVCMountPath                = "/mnt/models"
 	CohereTrainingInitModelEmptyDirMountPathFastTransformer = "/model/fastertransformer"
-	CohereTrainingInitModelEmptyDirMountPathTensorRT        = "/model/tensorrt_llm"
+	CohereTrainingInitModelEmptyDirMountPathTensorRT        = "/model/tensorrtllm"
 	CohereTrainingInitDataEmptyDirMountPath                 = "/input"
 	CohereTrainingLargeGpuRequest                           = "8"
 	CohereCommandRFTMergedModelWeightSuffix                 = "-merged-weight"
@@ -680,7 +680,7 @@ const (
 	CohereTrainingBaselineModelEnvVarKey                    = "BASELINE_MODEL"
 	CohereMultiLoraBaseModelNameKeyword                     = "multi_lora"
 	CohereCommandRFTRuntimePrefix                           = "cohere-commandr"
-	CohereCommandRMergedWeightsDirectory                    = "model/tensorrt_llm"
+	CohereCommandRMergedWeightsDirectory                    = "model/tensorrtllm"
 	CohereCommandRTFewFTWeightsDirectory                    = "output/tfew_weights"
 	CohereCommandRLoraFineTunedWeightsDirectory             = "output/"
 	CohereTrainingConfigPbtxt                               = "config.pbtxt"

@@ -40,7 +40,7 @@ type Config struct {
 }
 
 type TensorrtLLMConfig struct {
-	TensorrtLlmVersion string `mapstructure:"tensorrt_llm_version"`
+	TensorrtLlmVersion string `mapstructure:"tensorrtllm_version"`
 	NodeShapeAlias     string `mapstructure:"node_shape_alias"`
 	NumOfGpu           string `mapstructure:"num_of_gpu"`
 }
@@ -142,7 +142,7 @@ func configureTensorRTLLM(c *Config, v *viper.Viper, logger logging.Interface) e
 
 	c.TensorrtLLMConfig = &TensorrtLLMConfig{
 		NodeShapeAlias:     nodeShapeAlias,
-		TensorrtLlmVersion: v.GetString("tensorrt_llm_version"),
+		TensorrtLlmVersion: v.GetString("tensorrtllm_version"),
 		NumOfGpu:           v.GetString("num_of_gpu"),
 	}
 

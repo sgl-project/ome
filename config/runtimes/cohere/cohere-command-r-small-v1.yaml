@@ -19,7 +19,7 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCasualLM
-      name: tensorrt_llm
+      name: tensorrtllm
       modelType: tensorrtllm
       version: 'v0.9.0'
   affinity:

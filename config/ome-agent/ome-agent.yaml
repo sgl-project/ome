@@ -27,7 +27,7 @@ target:
   namespace: "idqj093njucb"
 
 model_framework: tensorrtllm
-tensorrt_llm_version: "v0.11.0"
+tensorrtllm_version: "v0.11.0"
 node_shape_alias: ""
 num_of_gpu: 1
 disable_model_decryption: false

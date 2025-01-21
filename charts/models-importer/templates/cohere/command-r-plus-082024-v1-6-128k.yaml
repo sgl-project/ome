@@ -23,7 +23,7 @@ spec:
   vendor: {{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}
   version: "1.6"
   modelFormat:
-    name: tensorrt_llm
+    name: tensorrtllm
     version: 'v0.11.0'
   modelType: tensorrtllm
   modelArchitecture: CohereForCausalLM

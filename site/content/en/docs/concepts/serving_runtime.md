@@ -65,7 +65,7 @@ Several out-of-the-box _ClusterServingRuntimes_ are provided with OME so that us
 | vllm-deepseek-v3-rdma               | safetensors           | DeepseekV3ForCausalLM          | Transformer            |
 | vllm-multi-node-llama-3-1-405b      | safetensors           | LlamaForCausalLM               | Transformer            |
 | vllm-multi-node-llama-3-1-405b-rdma | safetensors           | LlamaForCausalLM               | Transformer            |
-| command-r-plus                      | tensorrt_llm          | CohereForCausalLM              | TensorRTLLM            |
+| command-r-plus                      | tensorrtllm          | CohereForCausalLM              | TensorRTLLM            |
 | sglang-small                        | safetensors           | LlamaForCausalLM               | Transformer            |
 | sglang-xsmall                       | safetensors           | LlamaForCausalLM               | Transformer            |
 

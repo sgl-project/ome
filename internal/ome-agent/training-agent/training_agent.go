@@ -366,12 +366,12 @@ func (d *TrainingAgent) zipCohereFTWeights() {
 *  The zipped file path would be as below for cohere command R TFew FT:
 *                      Model Directory                                   Zipped File Path
 *  ft-weights:     <PATH_PREFIX>/output/tfew_weights       ->  <PATH_PREFIX>/<finetuned_model_suffix>
-*  merged-weights: <PATH_PREFIX>/model/tensorrt_llm        ->  <PATH_PREFIX>/<finetuned_model_suffix>-merged-weight
+*  merged-weights: <PATH_PREFIX>/model/tensorrtllm        ->  <PATH_PREFIX>/<finetuned_model_suffix>-merged-weight
 * ----------------------------------------------------------------------------
 *  The zipped file path would be as below for cohere command R Non-Stacked Lora FT :
 *                      Model Directory                                   Zipped File Path
 *  ft-weights:     <PATH_PREFIX>/output/                   ->  <PATH_PREFIX>/<finetuned_model_suffix>
-*  merged-weights: <PATH_PREFIX>/model/tensorrt_llm        ->  <PATH_PREFIX>/<finetuned_model_suffix>-merged-weight
+*  merged-weights: <PATH_PREFIX>/model/tensorrtllm        ->  <PATH_PREFIX>/<finetuned_model_suffix>-merged-weight
  */
 func (d *TrainingAgent) zipFTWeightsAndMergedWeights(ftWeightsDir string, mergedWeightsDir string) {
 	// zip fine tuned model weights

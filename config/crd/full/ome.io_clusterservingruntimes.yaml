@@ -21,8 +21,8 @@ spec:
         - jsonPath: .spec.supportedModelFormats[*].name
           name: ModelFormat
           type: string
-        - jsonPath: .spec.supportedModelFormats[*].modelType
-          name: ModelType
+        - jsonPath: .spec.supportedModelFormats[*].modelFramework.name
+          name: ModelFramework
           type: string
         - jsonPath: .spec.supportedModelFormats[*].modelArchitecture
           name: ModelArchitecture
