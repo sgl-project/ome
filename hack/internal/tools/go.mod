@@ -4,7 +4,6 @@ go 1.23.0
 
 toolchain go1.23.4
 
-
 require (
 	github.com/gohugoio/hugo v0.134.1
 	github.com/golangci/golangci-lint v1.60.3
