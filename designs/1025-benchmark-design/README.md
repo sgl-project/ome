@@ -73,6 +73,10 @@ type BenchmarkJobSpec struct {
     // OutputLocation specifies where the benchmark results will be stored (e.g., object storage).
     // +required
     OutputLocation           Storage                  `json:"outputLocation"`
+
+    // ResultFolderName specifies the name of the folder that stores the benchmark result. A default name will be assigned if not specified.
+    // +optional
+    ResultFolderName string `json:"resultFolderName,omitempty"`
 }
 ```
 - **HuggingFaceAPIKey**: The API key uses Hugging Face's transformers library to load or download the model tokenizer. This is required for `genai-bench` as it needs to tokenize the input.

@@ -260,7 +260,7 @@ func TestBenchmarkJobReconciler_reconcileModelPVPVC(t *testing.T) {
 							Namespace: "default",
 						},
 					},
-					HuggingFaceSecretReference: v1beta1.HuggingFaceSecretReference{
+					HuggingFaceSecretReference: &v1beta1.HuggingFaceSecretReference{
 						Name: "hf-secret",
 					},
 					Task:                    "chat",
@@ -430,7 +430,7 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.BenchmarkJobSpec{
-					HuggingFaceSecretReference: v1beta1.HuggingFaceSecretReference{
+					HuggingFaceSecretReference: &v1beta1.HuggingFaceSecretReference{
 						Name: "hf-secret",
 					},
 					Endpoint: v1beta1.EndpointSpec{

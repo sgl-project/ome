@@ -30,7 +30,7 @@ type BenchmarkJobSpec struct {
 	// The referenced Secret must reside in the same namespace as the BenchmarkJob.
 	// This field replaces the raw HuggingFaceAPIKey field for improved security.
 	// +optional
-	HuggingFaceSecretReference HuggingFaceSecretReference `json:"huggingFaceSecretReference"`
+	HuggingFaceSecretReference *HuggingFaceSecretReference `json:"huggingFaceSecretReference,omitempty"`
 
 	// Endpoint is the reference to the inference service to benchmark.
 	// +required
@@ -80,6 +80,10 @@ type BenchmarkJobSpec struct {
 	// OutputLocation specifies where the benchmark results will be stored (e.g., object storage).
 	// +required
 	OutputLocation *StorageSpec `json:"outputLocation"`
+
+	// ResultFolderName specifies the name of the folder that stores the benchmark result. A default name will be assigned if not specified.
+	// +optional
+	ResultFolderName *string `json:"resultFolderName,omitempty"`
 
 	// Pod defines the pod configuration for the benchmark job. This is optional, if not provided, default values will be used.
 	// +optional

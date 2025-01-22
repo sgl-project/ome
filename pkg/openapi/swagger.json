@@ -286,7 +286,6 @@
         },
         "huggingFaceSecretReference": {
           "description": "HuggingFaceSecretReference is a reference to a Kubernetes Secret containing the Hugging Face API key. The referenced Secret must reside in the same namespace as the BenchmarkJob. This field replaces the raw HuggingFaceAPIKey field for improved security.",
-          "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HuggingFaceSecretReference"
         },
         "maxRequestsPerIteration": {
@@ -316,6 +315,10 @@
         "podOverride": {
           "description": "Pod defines the pod configuration for the benchmark job. This is optional, if not provided, default values will be used.",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodOverride"
+        },
+        "resultFolderName": {
+          "description": "ResultFolderName specifies the name of the folder that stores the benchmark result. A default name will be assigned if not specified.",
+          "type": "string"
         },
         "serviceMetadata": {
           "description": "ServiceMetadata records metadata about the backend model server or service being benchmarked. This includes details such as server engine, version, and GPU configuration for filtering experiments.",

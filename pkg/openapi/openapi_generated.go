@@ -568,7 +568,6 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref common.ReferenceCallback) 
 					"huggingFaceSecretReference": {
 						SchemaProps: spec.SchemaProps{
 							Description: "HuggingFaceSecretReference is a reference to a Kubernetes Secret containing the Hugging Face API key. The referenced Secret must reside in the same namespace as the BenchmarkJob. This field replaces the raw HuggingFaceAPIKey field for improved security.",
-							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference"),
 						},
 					},
@@ -673,6 +672,13 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref common.ReferenceCallback) 
 						SchemaProps: spec.SchemaProps{
 							Description: "OutputLocation specifies where the benchmark results will be stored (e.g., object storage).",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"),
+						},
+					},
+					"resultFolderName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResultFolderName specifies the name of the folder that stores the benchmark result. A default name will be assigned if not specified.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"podOverride": {
@@ -2984,7 +2990,6 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3833,7 +3838,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3861,7 +3865,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -4259,7 +4262,6 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -4571,7 +4573,6 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -5558,7 +5559,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -6156,7 +6156,6 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 						},
 					},
 				},
-				
 			},
 		},
 	}

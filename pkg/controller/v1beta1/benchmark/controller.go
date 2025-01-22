@@ -250,6 +250,12 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 
 	env := []v1.EnvVar{
 		{
+			Name:  "ENABLE_UI",
+			Value: "false",
+		},
+	}
+	if benchmarkJob.Spec.HuggingFaceSecretReference != nil && benchmarkJob.Spec.HuggingFaceSecretReference.Name != "" {
+		env = append(env, v1.EnvVar{
 			Name: "HUGGINGFACE_API_KEY",
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
@@ -259,11 +265,7 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 					Key: "HUGGINGFACE_API_KEY",
 				},
 			},
-		},
-		{
-			Name:  "ENABLE_UI",
-			Value: "false",
-		},
+		})
 	}
 
 	cmd, args, err := r.buildBenchmarkCommand(benchmarkJob)
@@ -433,13 +435,18 @@ func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.Ben
 		args = append(args, "--num-concurrency", fmt.Sprintf("%d", concurrency))
 	}
 
+	// Add experiment folder name
+	if benchmarkJob.Spec.ResultFolderName != nil {
+		args = append(args, "--experiment-folder-name", *benchmarkJob.Spec.ResultFolderName)
+	}
+
 	// Add server metadata
 	if benchmarkJob.Spec.ServiceMetadata != nil {
 		args = append(args,
 			"--server-engine", benchmarkJob.Spec.ServiceMetadata.Engine,
 			"--server-gpu-type", benchmarkJob.Spec.ServiceMetadata.GpuType,
 			"--server-version", benchmarkJob.Spec.ServiceMetadata.Version,
-			fmt.Sprintf("--server-gpu-count %d", benchmarkJob.Spec.ServiceMetadata.GpuCount),
+			"--server-gpu-count", fmt.Sprintf("%d", benchmarkJob.Spec.ServiceMetadata.GpuCount),
 		)
 	}
 
