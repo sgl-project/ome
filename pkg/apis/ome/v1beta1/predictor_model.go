@@ -175,9 +175,12 @@ func (m *ModelSpec) getServingRuntimeSupportedModelFormatLabelSet(supportedModel
 	for _, t := range supportedModelFormats {
 		// If runtime isn't explicitly set, only add labels for modelFormats where AutoSelect is true.
 		if m.Runtime != nil || (t.AutoSelect != nil && *t.AutoSelect) {
-			label := "mt:" + t.Name
-			if t.Version != nil {
-				label += ":" + *t.Version
+			label := "mt"
+			if t.ModelFormat != nil {
+				label += ":" + t.ModelFormat.Name
+				if t.ModelFormat.Version != nil {
+					label += ":" + *t.ModelFormat.Version
+				}
 			}
 			if t.ModelArchitecture != nil {
 				label += ":" + *t.ModelArchitecture
@@ -189,12 +192,6 @@ func (m *ModelSpec) getServingRuntimeSupportedModelFormatLabelSet(supportedModel
 				label += ":" + t.ModelFramework.Name
 				if t.ModelFramework.Version != nil {
 					label += ":" + *t.ModelFramework.Version
-				}
-			}
-			if t.ModelFormat != nil {
-				label += ":" + t.ModelFormat.Name
-				if t.ModelFormat.Version != nil {
-					label += ":" + *t.ModelFormat.Version
 				}
 			}
 			set.add(label)

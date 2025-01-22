@@ -6,7 +6,7 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: vllm-llama-3-2-90b-fp8-dynamic
+      runtime: vllm-llama-3-2-90b-vision-instruct-fp8
       baseModel: llama-3-2-90b-vision-instruct-fp8-dynamic
       protocolVersion: openAI
     minReplicas: 1

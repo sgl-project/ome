@@ -31,10 +31,13 @@ spec:
     min: 650B
     max: 700B
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFormat:
+        name: safetensors
+        version: "1"
+      modelFramework:
+        name: transformers
+        version: "4.33.1"
       modelArchitecture: DeepseekV3ForCausalLM
-      version: "1"
       autoSelect: false
       priority: 1
 

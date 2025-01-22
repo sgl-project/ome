@@ -250,7 +250,7 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta2.Infere
 	if inferenceServiceStatusEqual(existingService.Status, desiredService.Status) {
 		// If we didn't change anything then don't call updateStatus.
 		// This is important because the copy we loaded from the informer's
-		// cache may be stale and we don't want to overwrite a prior update
+		// cache may be stale, and we don't want to overwrite a prior update
 		// to status with this stale state.
 	} else if err := r.Status().Update(context.TODO(), desiredService); err != nil {
 		r.Log.Error(err, "Failed to update InferenceService status", "InferenceService", desiredService.Name)

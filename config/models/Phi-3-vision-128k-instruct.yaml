@@ -19,12 +19,12 @@ spec:
     path: /raid/models/microsoft/phi-3-vision-128k-instruct
   vendor: microsoft
   version: "0.1"
-  modelFormat:
-    name: safetensors
-    version: "1"
   modelFramework:
     name: transformers
     version: "4.38.1"
+  modelFormat:
+    name: safetensors
+    version: "1"
   modelArchitecture: Phi3VForCausalLM
   modelParameterSize: 4.15B
   modelCapabilities:

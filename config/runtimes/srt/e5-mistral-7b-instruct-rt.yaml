@@ -31,10 +31,13 @@ spec:
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.34.0"
+      modelFormat:
+        name: safetensors
+        version: "1"
       modelArchitecture: MistralModel
-      version: "1"
       autoSelect: false
       priority: 1
   modelSizeRange:

@@ -31,10 +31,13 @@ spec:
     min: 400B
     max: 420B
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.43.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
       modelArchitecture: LlamaForCausalLM
-      version: "1"
       autoSelect: false
       priority: 1
 

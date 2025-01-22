@@ -31,11 +31,14 @@ spec:
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.42.3"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      autoSelect: true
       modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: false
       priority: 1
   modelSizeRange:
     min: 60B
