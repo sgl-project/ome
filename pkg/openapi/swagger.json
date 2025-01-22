@@ -95,6 +95,8 @@
       "description": "BaseModelSpec defines the desired state of BaseModel",
       "type": "object",
       "required": [
+        "modelFormat",
+        "modelFramework",
         "storage"
       ],
       "properties": {
@@ -3785,6 +3787,10 @@
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SupportedModelFormat": {
       "type": "object",
+      "required": [
+        "modelFormat",
+        "modelFramework"
+      ],
       "properties": {
         "autoSelect": {
           "description": "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",

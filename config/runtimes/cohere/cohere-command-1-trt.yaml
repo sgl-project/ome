@@ -18,10 +18,26 @@ spec:
       effect: "NoSchedule"
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
-      name: tensorrtllm
-      modelType: tensorrtllm
-      version: 'v0.8.0'
+      modelArchitecture: Cohere
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      version: "15.6"
+    - autoSelect: true
+      modelArchitecture: Cohere
+      version: "16.0"
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.8.0'
+  modelSizeRange:
+    min: 65B
+    max: 75B
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

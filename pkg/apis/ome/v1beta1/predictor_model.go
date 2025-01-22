@@ -145,27 +145,45 @@ func (m *ModelSpec) RuntimeSupportsModel(srSpec *ServingRuntimeSpec, modelSpec *
 	return true
 }
 
-func (m *ModelSpec) getModelFormatLabel(modelSpec *BaseModelSpec) string {
-	mt := modelSpec.ModelFormat
-	label := "mt:" + mt.Name
+func generateLabel(mt *ModelFormat,
+	modelArchitecture *string,
+	modelType *string,
+	modelFramework *ModelFrameworkSpec,
+	version *string) string {
 
-	if mt.Version != nil {
-		label += ":" + *mt.Version
-	}
-	if modelSpec.ModelArchitecture != nil {
-		label += ":" + *modelSpec.ModelArchitecture
-	}
-	if modelSpec.ModelType != nil {
-		label += ":" + *modelSpec.ModelType
-	}
-	if modelSpec.ModelFramework != nil {
-		label += ":" + modelSpec.ModelFramework.Name
-		if modelSpec.ModelFramework.Version != nil {
-			label += ":" + *modelSpec.ModelFramework.Version
+	label := "mt"
+	if mt != nil {
+		label += ":" + mt.Name
+		if mt.Version != nil {
+			label += ":" + *mt.Version
 		}
 	}
-
+	if modelArchitecture != nil {
+		label += ":" + *modelArchitecture
+	}
+	if modelType != nil {
+		label += ":" + *modelType
+	}
+	if modelFramework != nil {
+		label += ":" + modelFramework.Name
+		if modelFramework.Version != nil {
+			label += ":" + *modelFramework.Version
+		}
+	}
+	if version != nil {
+		label += ":" + *version
+	}
 	return label
+}
+
+func (m *ModelSpec) getModelFormatLabel(modelSpec *BaseModelSpec) string {
+	return generateLabel(
+		&modelSpec.ModelFormat,
+		modelSpec.ModelArchitecture,
+		modelSpec.ModelType,
+		modelSpec.ModelFramework,
+		modelSpec.Version,
+	)
 }
 
 func (m *ModelSpec) getServingRuntimeSupportedModelFormatLabelSet(supportedModelFormats []SupportedModelFormat) stringSet {
@@ -175,25 +193,13 @@ func (m *ModelSpec) getServingRuntimeSupportedModelFormatLabelSet(supportedModel
 	for _, t := range supportedModelFormats {
 		// If runtime isn't explicitly set, only add labels for modelFormats where AutoSelect is true.
 		if m.Runtime != nil || (t.AutoSelect != nil && *t.AutoSelect) {
-			label := "mt"
-			if t.ModelFormat != nil {
-				label += ":" + t.ModelFormat.Name
-				if t.ModelFormat.Version != nil {
-					label += ":" + *t.ModelFormat.Version
-				}
-			}
-			if t.ModelArchitecture != nil {
-				label += ":" + *t.ModelArchitecture
-			}
-			if t.ModelType != nil {
-				label += ":" + *t.ModelType
-			}
-			if t.ModelFramework != nil {
-				label += ":" + t.ModelFramework.Name
-				if t.ModelFramework.Version != nil {
-					label += ":" + *t.ModelFramework.Version
-				}
-			}
+			label := generateLabel(
+				t.ModelFormat,
+				t.ModelArchitecture,
+				t.ModelType,
+				t.ModelFramework,
+				t.Version,
+			)
 			set.add(label)
 		}
 	}

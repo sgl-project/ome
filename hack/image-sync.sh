@@ -17,7 +17,7 @@ cleanup_image() {
 }
 
 # Determine the latest tag
-GIT_TAG=$(git describe --tags --dirty --always)
+GIT_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
 SOURCE_TAG="${GIT_TAG}-linux-amd64"  # Source tag with platform suffix
 TARGET_TAG="${GIT_TAG}"              # Target tag without platform suffix
 REGISTRY="ord.ocir.io/idqj093njucb"

@@ -1,9 +1,10 @@
+#TODO this is not currently used by any model, removed after verifying
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
   name: cohere-rerank-v1
 spec:
-  disabled: false
+  disabled: true
   annotations:
     prometheus.io/port: '8081'
     prometheus.io/scrape: 'true'
@@ -16,12 +17,6 @@ spec:
     - key: "nvidia.com/gpu"
       operator: "Exists"
       effect: "NoSchedule"
-  supportedModelFormats:
-    - autoSelect: true
-      modelArchitecture: CohereForCasualLM
-      name: onnxruntime
-      modelType: onnxruntime
-      version: '1'
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

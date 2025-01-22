@@ -19,9 +19,16 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCasualLM
-      name: onnxruntime
-      modelType: onnxruntime
-      version: '1'
+      version: "3.0"
+      modelFormat:
+        name: onnx
+        version: '1'
+      modelFramework:
+        name: onnxruntime
+        version: '1'
+  modelSizeRange:
+    min: 10M
+    max: 1B
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

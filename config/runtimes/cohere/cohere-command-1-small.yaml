@@ -18,10 +18,26 @@ spec:
       effect: "NoSchedule"
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
-      name: fastertransformer
-      modelType: fastertransformer
-      version: '1'
+      modelArchitecture: Cohere
+      modelFormat:
+        name: fastertransformer
+        version: '1'
+      modelFramework:
+        name: fastertransformer
+        version: '1'
+      version: '14.2'
+    - autoSelect: true
+      modelArchitecture: Cohere
+      modelFormat:
+        name: fastertransformer
+        version: '1'
+      modelFramework:
+        name: fastertransformer
+        version: '1'
+      version: '15.6'
+  modelSizeRange:
+    min: 5B
+    max: 8B
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

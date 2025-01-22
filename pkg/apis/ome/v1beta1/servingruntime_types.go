@@ -13,7 +13,7 @@ type SupportedModelFormat struct {
 	// +optional
 	Name string `json:"name"`
 	// ModelFormat of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "SafeTensors"
-	// +optional
+	// +required
 	ModelFormat *ModelFormat `json:"modelFormat"`
 	// Version of the model format.
 	// Used in validating that a runtime supports a predictor.
@@ -24,7 +24,7 @@ type SupportedModelFormat struct {
 	// +optional
 	ModelType *string `json:"modelType,omitempty"`
 	// ModelFramework of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "Transformers"
-	// +optional
+	// +required
 	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
 	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"
 	// +optional
@@ -226,8 +226,9 @@ type BuiltInAdapter struct {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
-// +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.supportedModelFormats[*].name"
+// +kubebuilder:printcolumn:name="ModelFormat",type=string,JSONPath=".spec.supportedModelFormats[*].modelFormat.name"
 // +kubebuilder:printcolumn:name="ModelFramework",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.name"
+// +kubebuilder:printcolumn:name="ModelFrameworkVersion",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.version"
 // +kubebuilder:printcolumn:name="ModelArchitecture",type="string",JSONPath=".spec.supportedModelFormats[*].modelArchitecture"
 // +kubebuilder:printcolumn:name="ModelSizeMin",type="string",JSONPath=".spec.modelSizeRange.min"
 // +kubebuilder:printcolumn:name="ModelSizeMax",type="string",JSONPath=".spec.modelSizeRange.max"
@@ -259,8 +260,9 @@ type ServingRuntimeList struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
-// +kubebuilder:printcolumn:name="ModelFormat",type="string",JSONPath=".spec.supportedModelFormats[*].name"
+// +kubebuilder:printcolumn:name="ModelFormat",type=string,JSONPath=".spec.supportedModelFormats[*].modelFormat.name"
 // +kubebuilder:printcolumn:name="ModelFramework",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.name"
+// +kubebuilder:printcolumn:name="ModelFrameworkVersion",type=string,JSONPath=".spec.supportedModelFormats[*].modelFramework.version"
 // +kubebuilder:printcolumn:name="ModelArchitecture",type="string",JSONPath=".spec.supportedModelFormats[*].modelArchitecture"
 // +kubebuilder:printcolumn:name="ModelSizeMin",type="string",JSONPath=".spec.modelSizeRange.min"
 // +kubebuilder:printcolumn:name="ModelSizeMax",type="string",JSONPath=".spec.modelSizeRange.max"

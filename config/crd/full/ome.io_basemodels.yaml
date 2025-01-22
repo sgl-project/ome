@@ -141,6 +141,8 @@ spec:
               version:
                 type: string
             required:
+            - modelFormat
+            - modelFramework
             - storage
             type: object
           status:
