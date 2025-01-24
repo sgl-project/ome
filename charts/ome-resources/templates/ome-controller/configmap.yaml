@@ -98,6 +98,17 @@ data:
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "region": "{{ .Values.ome.omeAgent.region }}"
     }
+  mergedFinetunedAdapter: |-
+    {
+        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "memoryRequest": "320Gi",
+        "memoryLimit": "320Gi",
+        "cpuRequest": "15",
+        "cpuLimit": "15",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
+    }
 
 ---
 apiVersion: v1

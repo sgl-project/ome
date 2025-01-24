@@ -84,6 +84,9 @@ var (
 	AgentNodeShapeAliasEnvVarKey         = AgentAppName + "_" + "NODE_SHAPE_ALIAS"
 	AgentNumOfGPUEnvVarKey               = AgentAppName + "_" + "NUM_OF_GPU"
 	AgentDisableModelDecryptionEnvVarKey = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
+	AgentModelBucketNameEnvVarKey        = AgentAppName + "_" + "MODEL_BUCKET_NAME"
+	AgentModelNamespaceEnvVarKey         = AgentAppName + "_" + "MODEL_NAMESPACE"
+	AgentModelObjectName                 = AgentAppName + "_" + "MODEL_OBJECT_NAME"
 
 	// OCI Vault and Security
 	AgentCompartmentIDEnvVarKey = AgentAppName + "_" + "COMPARTMENT_ID"
@@ -132,6 +135,7 @@ var (
 	Scheduler                                = OMEAPIGroupName + "/scheduler"
 	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
 	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
+	MergedFinetunedWeightsInjectionKey       = OMEAPIGroupName + "/inject-merged-finetuned-weight"
 	ServingSidecarInjectionKey               = OMEAPIGroupName + "/inject-serving-sidecar"
 	ServingFinetunedModelStrategyKey         = OMEAPIGroupName + "/finetuned-model-strategy"
 	BaseModelName                            = OMEAPIGroupName + "/base-model-name"

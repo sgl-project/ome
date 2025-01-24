@@ -2990,7 +2990,6 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3839,7 +3838,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3867,7 +3865,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -4265,7 +4262,6 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -4577,7 +4573,6 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -5564,7 +5559,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -6162,7 +6156,6 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 						},
 					},
 				},
-				
 			},
 		},
 	}

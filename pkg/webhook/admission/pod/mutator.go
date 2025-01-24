@@ -88,6 +88,8 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
 	modelInitInjector := newModelInitInjector(configMap)
 
+	mergedFinetunedAdapterInjector := newMergedFinetunedAdapterInjector(configMap, mutator.Client, pod.Namespace)
+
 	servingSidecarInjector := newServingSidecarInjector(configMap)
 
 	mutators := []func(pod *v1.Pod) error{
@@ -95,6 +97,7 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 		metricsAggregator.InjectMetricsAggregator,
 		dedicatedAIClusterSchedulingInjector.InjectAffinity,
 		modelInitInjector.InjectModelInit,
+		mergedFinetunedAdapterInjector.InjectMergedFinetunedAdapter,
 		servingSidecarInjector.InjectServingSidecar,
 	}
 

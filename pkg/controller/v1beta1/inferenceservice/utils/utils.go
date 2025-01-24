@@ -59,6 +59,12 @@ func IsOriginalModelVolumnMountNecessary(annotations map[string]string) bool {
 	return !ok || inject != "true"
 }
 
+func LoadingMergedFinetunedWeights(finetunedWeights []*v1beta1.FineTunedWeight) bool {
+	// TODO: FinetunedWeight should have a indicator about if it is a merged weights
+	// TODO: The webhook should validate if only one merged weights is attached
+	return len(finetunedWeights) == 1
+}
+
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	// Check if the VolcanoQueue annotation exists and set the label if it does.
 	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {
@@ -192,6 +198,18 @@ func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.Bas
 		return nil, nil, err
 	}
 	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
+}
+
+// GetFinetunedWeight Get the finetuned weight from the given finetuned weight name.
+func GetFinetunedWeight(cl client.Client, name string, namespace string) (*v1beta1.FineTunedWeight, error) {
+	finetunedWeight := &v1beta1.FineTunedWeight{}
+	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, finetunedWeight)
+	if err == nil {
+		return finetunedWeight, nil
+	} else if !errors.IsNotFound(err) {
+		return nil, err
+	}
+	return nil, goerrors.New("No FinetunedWeight with the name: " + name + " in namespace: " + namespace)
 }
 
 // ReplacePlaceholders Replace placeholders in runtime container by values from inferenceservice metadata
