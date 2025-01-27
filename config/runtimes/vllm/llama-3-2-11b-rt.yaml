@@ -40,6 +40,7 @@ spec:
       modelArchitecture: MllamaForConditionalGeneration
       autoSelect: true
       priority: 1
+      version: "1.0.0"
   modelSizeRange:
     min: 10B
     max: 12B

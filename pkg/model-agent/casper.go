@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
+	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principalsagent"
+	principals "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principalsagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 )
 
 func NewCasperDataStore(authType string) (casper.CasperDataStore, error) {
@@ -59,16 +60,5 @@ func NewObjectStorageUri(storageUrl string) (*casper.ObjectURI, error) {
 }
 
 func validateStorageUrl(storageUrl string) error {
-	errMsg := "invalid object storage uri. should be in `#  oci://n/${namespace}/b/${bucket}/o/${object-path}` format"
-	if !strings.HasPrefix(storageUrl, constants.ObjectStorageUrlPrefix) {
-		return fmt.Errorf(errMsg)
-	}
-
-	objectStorageUrl := strings.Split(storageUrl, constants.ObjectStorageUrlPrefix)[1]
-	values := strings.Split(objectStorageUrl, "/")
-	if len(values) < 6 {
-		return fmt.Errorf(errMsg)
-	}
-
-	return nil
+	return storage.ValidateOCIStorageURI(storageUrl)
 }

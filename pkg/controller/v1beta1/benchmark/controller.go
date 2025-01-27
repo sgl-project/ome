@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/reconcilers/job"
@@ -15,6 +17,7 @@ import (
 	benchmarkutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/utils"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
@@ -304,6 +307,45 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		})
 	}
 
+	// Handle storage PVC if specified
+	storageType, err := storage.GetStorageType(*benchmarkJob.Spec.OutputLocation.StorageUri)
+	if err != nil {
+		return nil, fmt.Errorf("error determining storage type: %v", err)
+	}
+
+	if storageType == "PVC" {
+		components, err := storage.ParsePVCStorageURI(*benchmarkJob.Spec.OutputLocation.StorageUri)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing PVC storage URI: %v", err)
+		}
+
+		// Check if PVC exists
+		pvc := &v1.PersistentVolumeClaim{}
+		if err := r.Client.Get(context.Background(), types.NamespacedName{
+			Name:      components.PVCName,
+			Namespace: benchmarkJob.Namespace,
+		}, pvc); err != nil {
+			return nil, fmt.Errorf("PVC %s not found: %v", components.PVCName, err)
+		}
+
+		// Add volume for PVC
+		volumes = append(volumes, v1.Volume{
+			Name: "benchmark-output-storage",
+			VolumeSource: v1.VolumeSource{
+				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+					ClaimName: components.PVCName,
+				},
+			},
+		})
+
+		// Add volume mount to container
+		defaultContainer.VolumeMounts = append(defaultContainer.VolumeMounts, v1.VolumeMount{
+			Name:      "benchmark-output-storage",
+			MountPath: "/" + components.SubPath,
+			SubPath:   components.SubPath,
+		})
+	}
+
 	// If no overrides, return default spec
 	if benchmarkJob.Spec.PodOverride == nil {
 		return &v1.PodSpec{
@@ -450,10 +492,8 @@ func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.Ben
 		)
 	}
 
-	if benchmarkJob.Spec.OutputLocation != nil {
-		storageArgs := benchmarkutils.BuildStorageArgs(benchmarkJob.Spec.OutputLocation)
-		args = append(args, storageArgs...)
-	}
+	storageArgs, _ := benchmarkutils.BuildStorageArgs(benchmarkJob.Spec.OutputLocation)
+	args = append(args, storageArgs...)
 
 	return command, args, nil
 }

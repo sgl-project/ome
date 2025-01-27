@@ -51,6 +51,8 @@ spec:
                     type: string
                   storageUri:
                     type: string
+                required:
+                - storageUri
                 type: object
               endpoint:
                 properties:
@@ -112,6 +114,8 @@ spec:
                     type: string
                   storageUri:
                     type: string
+                required:
+                - storageUri
                 type: object
               podOverride:
                 properties:

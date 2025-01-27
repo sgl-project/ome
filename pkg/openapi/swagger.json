@@ -3758,6 +3758,9 @@
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec": {
       "type": "object",
+      "required": [
+        "storageUri"
+      ],
       "properties": {
         "key": {
           "description": "The Storage Key in the secret for this model.",
@@ -3772,7 +3775,7 @@
           }
         },
         "path": {
-          "description": "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
+          "description": "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
           "type": "string"
         },
         "schemaPath": {
@@ -3780,7 +3783,7 @@
           "type": "string"
         },
         "storageUri": {
-          "description": "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
+          "description": "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
           "type": "string"
         }
       }

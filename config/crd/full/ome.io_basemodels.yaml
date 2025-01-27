@@ -134,6 +134,8 @@ spec:
                     type: string
                   storageUri:
                     type: string
+                required:
+                - storageUri
                 type: object
               tensorRTLLMConfiguration:
                 type: object

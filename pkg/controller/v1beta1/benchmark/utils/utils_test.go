@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,13 +22,13 @@ func TestParseOCIStorageURI(t *testing.T) {
 	tests := []struct {
 		name    string
 		uri     string
-		want    *OCIStorageComponents
+		want    *storage.OCIStorageComponents
 		wantErr bool
 	}{
 		{
 			name: "valid uri",
 			uri:  "oci://n/my-namespace/b/my-bucket/o/path/to/results",
-			want: &OCIStorageComponents{
+			want: &storage.OCIStorageComponents{
 				Namespace: "my-namespace",
 				Bucket:    "my-bucket",
 				Prefix:    "path/to/results",
@@ -55,7 +56,7 @@ func TestParseOCIStorageURI(t *testing.T) {
 		{
 			name: "valid uri - multiple path segments",
 			uri:  "oci://n/my-namespace/b/my-bucket/o/path/with/multiple/segments",
-			want: &OCIStorageComponents{
+			want: &storage.OCIStorageComponents{
 				Namespace: "my-namespace",
 				Bucket:    "my-bucket",
 				Prefix:    "path/with/multiple/segments",
@@ -66,7 +67,7 @@ func TestParseOCIStorageURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseOCIStorageURI(tt.uri)
+			got, err := storage.ParseOCIStorageURI(tt.uri)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseOCIStorageURI() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -79,16 +80,18 @@ func TestParseOCIStorageURI(t *testing.T) {
 }
 
 func TestBuildStorageArgs(t *testing.T) {
-	storageUri := "oci://n/my-namespace/b/my-bucket/o/results"
+	ociStorageUri := "oci://n/my-namespace/b/my-bucket/o/results"
+	pvcStorageUri := "pvc://my-pvc/experiment-results"
 	tests := []struct {
 		name        string
 		storageSpec *v1beta1.StorageSpec
 		want        []string
+		wantErr     bool
 	}{
 		{
-			name: "complete storage spec",
+			name: "complete OCI storage spec with all parameters",
 			storageSpec: &v1beta1.StorageSpec{
-				StorageUri: &storageUri,
+				StorageUri: &ociStorageUri,
 				Parameters: &map[string]string{
 					"auth":           "instance_principal",
 					"config_file":    "/path/to/config",
@@ -108,11 +111,29 @@ func TestBuildStorageArgs(t *testing.T) {
 				"--security-token", "token123",
 				"--region", "us-phoenix-1",
 			},
+			wantErr: false,
 		},
 		{
-			name: "only storage uri",
+			name: "OCI storage with only required parameters",
 			storageSpec: &v1beta1.StorageSpec{
-				StorageUri: &storageUri,
+				StorageUri: &ociStorageUri,
+				Parameters: &map[string]string{
+					"auth": "instance_principal",
+				},
+			},
+			want: []string{
+				"--upload-results",
+				"--namespace", "my-namespace",
+				"--bucket", "my-bucket",
+				"--prefix", "results",
+				"--auth", "instance_principal",
+			},
+			wantErr: false,
+		},
+		{
+			name: "OCI storage without parameters",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: &ociStorageUri,
 			},
 			want: []string{
 				"--upload-results",
@@ -120,45 +141,113 @@ func TestBuildStorageArgs(t *testing.T) {
 				"--bucket", "my-bucket",
 				"--prefix", "results",
 			},
+			wantErr: false,
 		},
 		{
-			name: "only auth parameters",
+			name: "invalid OCI storage URI format",
 			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("oci://invalid/format"),
 				Parameters: &map[string]string{
-					"auth":    "user_principal",
+					"auth": "instance_principal",
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "complete PVC storage spec",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: &pvcStorageUri,
+			},
+			want: []string{
+				"--experiment-base-dir", "/experiment-results",
+			},
+			wantErr: false,
+		},
+		{
+			name: "PVC storage with nested path",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("pvc://my-pvc/path/to/results"),
+			},
+			want: []string{
+				"--experiment-base-dir", "/path/to/results",
+			},
+			wantErr: false,
+		},
+		{
+			name: "PVC storage with parameters (should ignore parameters)",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: &pvcStorageUri,
+				Parameters: &map[string]string{
+					"auth":    "instance_principal",
 					"profile": "DEFAULT",
 				},
 			},
 			want: []string{
-				"--upload-results",
-				"--auth", "user_principal",
-				"--profile", "DEFAULT",
+				"--experiment-base-dir", "/experiment-results",
 			},
+			wantErr: false,
+		},
+		{
+			name: "PVC storage with empty subpath",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("pvc://my-pvc/"),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "invalid PVC storage URI format",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("pvc://"),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "PVC storage without subpath",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("pvc://my-pvc"),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "unsupported storage scheme",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("s3://my-bucket/path"),
+			},
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name:        "nil storage spec",
 			storageSpec: nil,
 			want:        nil,
+			wantErr:     true,
 		},
 		{
-			name: "invalid storage uri",
+			name: "nil storage uri",
 			storageSpec: &v1beta1.StorageSpec{
-				StorageUri: strPtr("invalid-uri"),
 				Parameters: &map[string]string{
 					"auth": "instance_principal",
 				},
 			},
-			want: []string{
-				"--upload-results",
-				"--auth", "instance_principal",
-			},
+			want:    nil,
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildStorageArgs(tt.storageSpec)
-			assert.Equal(t, tt.want, got)
+			got, err := BuildStorageArgs(tt.storageSpec)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("BuildStorageArgs() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				assert.Equal(t, tt.want, got)
+			}
 		})
 	}
 }

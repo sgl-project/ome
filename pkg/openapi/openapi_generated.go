@@ -6724,7 +6724,7 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 				Properties: map[string]spec.Schema{
 					"path": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
+							Description: "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -6761,12 +6761,13 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 					},
 					"storageUri": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
+							Description: "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 				},
+				Required: []string{"storageUri"},
 			},
 		},
 	}

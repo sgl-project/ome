@@ -44,6 +44,7 @@ spec:
       modelArchitecture: LlamaForCausalLM
       autoSelect: true
       priority: 1
+      version: "1.0.0"
   modelSizeRange:
     min: 60B
     max: 75B

@@ -12,6 +12,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	storageutil "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -122,14 +123,9 @@ func (v *BenchmarkJobValidator) validateStorage(storage *v1beta1.StorageSpec) er
 		return fmt.Errorf("storageUri cannot be empty")
 	}
 
-	// Validate OCI storage URI format: oci://n/{namespace}/b/{bucket}/o/{object_path}
-	pattern := `^oci://n/[^/]+/b/[^/]+/o/.*$`
-	matched, err := regexp.MatchString(pattern, *storage.StorageUri)
+	err := storageutil.ValidateStorageURI(*storage.StorageUri)
 	if err != nil {
-		return fmt.Errorf("error validating storage URI format: %v", err)
-	}
-	if !matched {
-		return fmt.Errorf("invalid storage URI format. Must be: oci://n/{namespace}/b/{bucket}/o/{object_path}")
+		return fmt.Errorf("error parsing storage URI: %v", err)
 	}
 
 	return nil

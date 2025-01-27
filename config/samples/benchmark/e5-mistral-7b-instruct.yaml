@@ -26,7 +26,45 @@ spec:
     gpuType: "H100"
     gpuCount: 2
   outputLocation:
-    storageUri: "oci://n/idqj093njucb/b/test-bucket/o/e5-mistral-7b-instruct-benchmark"
+    # this is using oci object storage
+    storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/e5-mistral-7b-instruct-benchmark"
     parameters:
       auth: "instance_principal"
-      region: "us-chicago-1"
+      region: "eu-frankfurt-1"
+    # this is using pvc, assuming pvc has already been created, uncomment below pv and pvc section
+#    storageUri: "pvc://e5-mistral-7b-instruct-benchmark-pvc/benchmark-result"
+
+
+---
+#apiVersion: v1
+#kind: PersistentVolume
+#metadata:
+#  name: e5-mistral-7b-instruct-benchmark-pv
+#spec:
+#  capacity:
+#    storage: 200Gi
+#  nfs:
+#    server: 10.0.2.68
+#    path: /oke_fss
+#  accessModes:
+#    - ReadWriteMany
+#  persistentVolumeReclaimPolicy: Retain
+#  storageClassName: benchmark-results-fss
+#  mountOptions:
+#    - nosuid
+#  volumeMode: Filesystem
+---
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: e5-mistral-7b-instruct-benchmark-pvc
+#  namespace: e5-mistral-7b-instruct
+#spec:
+#  accessModes:
+#    - ReadWriteMany
+#  resources:
+#    requests:
+#      storage: 200Gi
+#  volumeName: e5-mistral-7b-instruct-benchmark-pv
+#  storageClassName: benchmark-results-fss
+#  volumeMode: Filesystem
