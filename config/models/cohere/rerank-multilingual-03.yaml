@@ -13,7 +13,7 @@ metadata:
     ome.io/base-model-decryption-key-name: "rerank"
     ome.io/base-model-encryption-secret-name: "rerank-dek"
 spec:
-  compartmentID: ocid1.compartment.oc1..aaaaaaaazq
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
   displayName: cohere.rerank-multilingual-v3.1
   storage:

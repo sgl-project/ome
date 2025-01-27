@@ -11,7 +11,7 @@ metadata:
     models.ome.io/internal: "True"
     models.ome.io/lifecycle-phase: "ACTIVE"
 spec:
-  compartmentID: ocid1.compartment.oc1..aaaaaaaazq
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
   displayName: olm.mistral-7b-instruct-v0.2-ft-action
   storage:
