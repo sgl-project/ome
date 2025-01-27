@@ -218,6 +218,7 @@ kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io infe
 kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io clusterservingruntime.ome.io
 kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io servingruntime.ome.io
 kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
+kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io benchmarkjob.ome.io
 ```
 
 ### Running OME Manager in VSCode or Cursor
