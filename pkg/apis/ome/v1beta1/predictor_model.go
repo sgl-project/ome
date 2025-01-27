@@ -147,7 +147,7 @@ func (m *ModelSpec) RuntimeSupportsModel(srSpec *ServingRuntimeSpec, modelSpec *
 
 func generateLabel(mt *ModelFormat,
 	modelArchitecture *string,
-	modelType *string,
+	quantization *ModelQuantization,
 	modelFramework *ModelFrameworkSpec,
 	version *string) string {
 
@@ -161,8 +161,8 @@ func generateLabel(mt *ModelFormat,
 	if modelArchitecture != nil {
 		label += ":" + *modelArchitecture
 	}
-	if modelType != nil {
-		label += ":" + *modelType
+	if quantization != nil {
+		label += ":" + string(*quantization)
 	}
 	if modelFramework != nil {
 		label += ":" + modelFramework.Name
@@ -180,7 +180,7 @@ func (m *ModelSpec) getModelFormatLabel(modelSpec *BaseModelSpec) string {
 	return generateLabel(
 		&modelSpec.ModelFormat,
 		modelSpec.ModelArchitecture,
-		modelSpec.ModelType,
+		modelSpec.Quantization,
 		modelSpec.ModelFramework,
 		modelSpec.Version,
 	)
@@ -196,7 +196,7 @@ func (m *ModelSpec) getServingRuntimeSupportedModelFormatLabelSet(supportedModel
 			label := generateLabel(
 				t.ModelFormat,
 				t.ModelArchitecture,
-				t.ModelType,
+				t.Quantization,
 				t.ModelFramework,
 				t.Version,
 			)

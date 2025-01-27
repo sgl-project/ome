@@ -1325,6 +1325,8 @@ spec:
                         format: int32
                         minimum: 1
                         type: integer
+                      quantization:
+                        type: string
                       version:
                         type: string
                     required:

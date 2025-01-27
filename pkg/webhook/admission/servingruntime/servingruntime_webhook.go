@@ -113,7 +113,7 @@ func (csr *ClusterServingRuntimeValidator) Handle(ctx context.Context, req admis
 func areSupportedModelFormatsEqual(m1 v1beta1.SupportedModelFormat, m2 v1beta1.SupportedModelFormat) bool {
 	if strings.EqualFold(m1.Name, m2.Name) &&
 		((m1.Version == nil && m2.Version == nil) || (m1.Version != nil && m2.Version != nil && *m1.Version == *m2.Version)) &&
-		((m1.ModelType == nil && m2.ModelType == nil) || (m1.ModelType != nil && m2.ModelType != nil && *m1.ModelType == *m2.ModelType)) &&
+		((m1.Quantization == nil && m2.Quantization == nil) || (m1.Quantization != nil && m2.Quantization != nil && *m1.Quantization == *m2.Quantization)) &&
 		((m1.ModelFramework == nil && m2.ModelFramework == nil) || (m1.ModelFramework != nil && m2.ModelFramework != nil && *m1.ModelFramework == *m2.ModelFramework)) &&
 		((m1.ModelFormat == nil && m2.ModelFormat == nil) || (m1.ModelFormat != nil && m2.ModelFormat != nil && *m1.ModelFormat == *m2.ModelFormat)) &&
 		((m1.ModelArchitecture == nil && m2.ModelArchitecture == nil) || (m1.ModelArchitecture != nil && m2.ModelArchitecture != nil && *m1.ModelArchitecture == *m2.ModelArchitecture)) {

@@ -52,11 +52,6 @@ type BaseModelSpec struct {
 	// +required
 	ModelFormat ModelFormat `json:"modelFormat"`
 
-	// ModelType of the model architecture, e.g., "Transformer", "GPT-3", "BERT"
-	// +optional
-	// +kubebuilder:deprecated:replaced by ModelFramework
-	ModelType *string `json:"modelType,omitempty"`
-
 	// ModelFramework of the model, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
 	// +required
 	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
@@ -64,6 +59,10 @@ type BaseModelSpec struct {
 	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"
 	// +optional
 	ModelArchitecture *string `json:"modelArchitecture,omitempty"`
+
+	// Quantization of the model, e.g., "fp8", "fbgemm_fp8", "int4"
+	// +optional
+	Quantization *ModelQuantization `json:"quantization,omitempty"`
 
 	// ModelParameterSize is the size of the model parameters, e.g., "175B"
 	// +optional
@@ -140,6 +139,14 @@ const (
 	OnDemand = "On-demand"
 	// Dedicated Model Serving Mode
 	Dedicated = "Dedicated"
+)
+
+type ModelQuantization string
+
+const (
+	ModelQuantizationFP8       ModelQuantization = "fp8"
+	ModelQuantizationFbgemmFP8 ModelQuantization = "fbgemm_fp8"
+	ModelQuantizationINT4      ModelQuantization = "int4"
 )
 
 // ModelCapability enum

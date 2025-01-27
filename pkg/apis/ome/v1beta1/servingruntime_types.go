@@ -20,15 +20,17 @@ type SupportedModelFormat struct {
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
-	// ModelType of the model architecture, e.g., "Transformer", "GPT-3", "BERT"
-	// +optional
-	ModelType *string `json:"modelType,omitempty"`
 	// ModelFramework of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "Transformers"
 	// +required
 	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
 	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"
 	// +optional
 	ModelArchitecture *string `json:"modelArchitecture,omitempty"`
+
+	// Quantization of the model, e.g., "fp8", "fbgemm_fp8", "int4"
+	// +optional
+	Quantization *ModelQuantization `json:"quantization,omitempty"`
+
 	// Set to true to allow the ServingRuntime to be used for automatic model placement if
 	// this model format is specified with no explicit runtime.
 	// +optional

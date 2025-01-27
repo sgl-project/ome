@@ -277,13 +277,6 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat"),
 						},
 					},
-					"modelType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ModelType of the model architecture, e.g., \"Transformer\", \"GPT-3\", \"BERT\"",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"modelFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelFramework of the model, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
@@ -293,6 +286,13 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 					"modelArchitecture": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"quantization": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -6799,13 +6799,6 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 							Format:      "",
 						},
 					},
-					"modelType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ModelType of the model architecture, e.g., \"Transformer\", \"GPT-3\", \"BERT\"",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"modelFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelFramework of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"Transformers\"",
@@ -6815,6 +6808,13 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 					"modelArchitecture": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"quantization": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
 							Type:        []string{"string"},
 							Format:      "",
 						},

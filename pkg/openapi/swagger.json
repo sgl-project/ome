@@ -162,8 +162,8 @@
           "description": "ModelParameterSize is the size of the model parameters, e.g., \"175B\"",
           "type": "string"
         },
-        "modelType": {
-          "description": "ModelType of the model architecture, e.g., \"Transformer\", \"GPT-3\", \"BERT\"",
+        "quantization": {
+          "description": "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
           "type": "string"
         },
         "servingMode": {
@@ -3808,10 +3808,6 @@
           "description": "ModelFramework of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"Transformers\"",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec"
         },
-        "modelType": {
-          "description": "ModelType of the model architecture, e.g., \"Transformer\", \"GPT-3\", \"BERT\"",
-          "type": "string"
-        },
         "name": {
           "description": "Name of the model",
           "type": "string",
@@ -3821,6 +3817,10 @@
           "description": "Priority of this serving runtime for auto selection. This is used to select the serving runtime if more than one serving runtime supports the same model format. The value should be greater than zero.  The higher the value, the higher the priority. Priority is not considered if AutoSelect is either false or not specified. Priority can be overridden by specifying the runtime in the InferenceService.",
           "type": "integer",
           "format": "int32"
+        },
+        "quantization": {
+          "description": "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
+          "type": "string"
         },
         "version": {
           "description": "Version of the model format. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
