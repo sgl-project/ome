@@ -1254,7 +1254,11 @@ spec:
                   type: array
                 disabled:
                   type: boolean
+                dnsPolicy:
+                  type: string
                 hostIPC:
+                  type: boolean
+                hostNetwork:
                   type: boolean
                 httpDataEndpoint:
                   type: string
@@ -3255,7 +3259,11 @@ spec:
                           - name
                         type: object
                       type: array
+                    dnsPolicy:
+                      type: string
                     hostIPC:
+                      type: boolean
+                    hostNetwork:
                       type: boolean
                     imagePullSecrets:
                       items:

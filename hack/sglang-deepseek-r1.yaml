@@ -32,6 +32,8 @@ spec:
           - key: nvidia.com/gpu
             operator: Exists
             effect: NoSchedule
+        dnsPolicy: ClusterFirstWithHostNet
+        hostNetwork: true
         containers:
           - name: srt-deepseek-r1-leader
             image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.1.local-1
@@ -43,7 +45,7 @@ spec:
             command:
               - sh
               - -c
-              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-metrics --enable-dp-attention --dp-size 16"
+              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-metrics"
             env:
               - name: NCCL_NET_PLUGIN
                 value: none
@@ -154,13 +156,15 @@ spec:
           - key: nvidia.com/gpu
             operator: Exists
             effect: NoSchedule
+        dnsPolicy: ClusterFirstWithHostNet
+        hostNetwork: true
         containers:
           - name: srt-deepseek-r1-worker
             image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.1.local-1
             command:
               - sh
               - -c
-              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-metrics --enable-dp-attention --dp-size 16"
+              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-metrics"
             resources:
               limits:
                 nvidia.com/gpu: "8"

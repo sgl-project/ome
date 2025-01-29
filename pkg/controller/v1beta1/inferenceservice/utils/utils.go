@@ -136,6 +136,7 @@ func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpe
 		Tolerations:      runtimePodSpec.Tolerations,
 		Volumes:          runtimePodSpec.Volumes,
 		ImagePullSecrets: runtimePodSpec.ImagePullSecrets,
+		DNSPolicy:        runtimePodSpec.DNSPolicy,
 	})
 	if err != nil {
 		return nil, err

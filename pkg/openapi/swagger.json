@@ -3565,8 +3565,16 @@
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
+        "dnsPolicy": {
+          "description": "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
+          "type": "string"
+        },
         "hostIPC": {
           "description": "Use the host's ipc namespace. Optional: Default to false.",
+          "type": "boolean"
+        },
+        "hostNetwork": {
+          "description": "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
           "type": "boolean"
         },
         "imagePullSecrets": {
@@ -3660,8 +3668,16 @@
           "description": "Set to true to disable use of this runtime",
           "type": "boolean"
         },
+        "dnsPolicy": {
+          "description": "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
+          "type": "string"
+        },
         "hostIPC": {
           "description": "Use the host's ipc namespace. Optional: Default to false.",
+          "type": "boolean"
+        },
+        "hostNetwork": {
+          "description": "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
           "type": "boolean"
         },
         "httpDataEndpoint": {
@@ -4218,8 +4234,16 @@
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
+        "dnsPolicy": {
+          "description": "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
+          "type": "string"
+        },
         "hostIPC": {
           "description": "Use the host's ipc namespace. Optional: Default to false.",
+          "type": "boolean"
+        },
+        "hostNetwork": {
+          "description": "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
           "type": "boolean"
         },
         "imagePullSecrets": {

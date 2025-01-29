@@ -38,7 +38,7 @@ spec:
             command:
               - sh
               - -c
-              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-metrics --enable-dp-attention --dp-size 16"
+              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-metrics"
             resources:
               limits:
                 nvidia.com/gpu: "8"
@@ -164,7 +164,7 @@ spec:
             command:
               - sh
               - -c
-              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-metrics --enable-dp-attention --dp-size 16"
+              - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path /models --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-metrics"
             resources:
               limits:
                 nvidia.com/gpu: "8"
