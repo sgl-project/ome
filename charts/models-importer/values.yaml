@@ -195,3 +195,11 @@ cohere-rerank-multilingual-03:
 cohere-rerank-v3-5:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+deepseek-r1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+deepseek-v3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
