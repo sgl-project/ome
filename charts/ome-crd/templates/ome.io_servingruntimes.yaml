@@ -1317,8 +1317,6 @@ spec:
                         required:
                           - name
                         type: object
-                      modelType:
-                        type: string
                       name:
                         type: string
                       priority:

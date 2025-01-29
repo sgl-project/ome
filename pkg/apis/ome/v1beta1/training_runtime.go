@@ -15,7 +15,6 @@ const (
 
 // TrainingRuntime is the Schema for the TrainingRuntimes API
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -180,7 +179,6 @@ type TrainingRuntimeList struct {
 
 // ClusterTrainingRuntime is the Schema for the TrainingRuntimes API in cluster scope
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true
@@ -199,7 +197,6 @@ type ClusterTrainingRuntime struct {
 
 // ClusterTrainingRuntimeList contains a list of ClusterTrainingRuntime
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 type ClusterTrainingRuntimeList struct {
 	metav1.TypeMeta `json:",inline"`

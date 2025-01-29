@@ -137,7 +137,6 @@ type CapacityReservationCondition struct {
 // CapacityReservation is the Schema for the capacityReservations API
 // +kubebuilder:subresource:status
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status"
@@ -163,7 +162,6 @@ type CapacityReservationList struct {
 // ClusterCapacityReservation is the Schema for the capacityReservations API
 // +kubebuilder:subresource:status
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true

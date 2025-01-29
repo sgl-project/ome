@@ -13,7 +13,6 @@ const (
 
 // TrainingJob is the Schema for the TrainingJobs API
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -258,7 +257,6 @@ const (
 
 // TrainingJobList contains a list of TrainingJob
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 type TrainingJobList struct {
 	metav1.TypeMeta `json:",inline"`

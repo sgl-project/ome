@@ -48,7 +48,6 @@ type LoggerSpec struct {
 
 // InferenceService is the Schema for the InferenceServices API
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -75,7 +74,6 @@ type InferenceService struct {
 
 // InferenceServiceList contains a list of Service
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 type InferenceServiceList struct {
 	metav1.TypeMeta `json:",inline"`

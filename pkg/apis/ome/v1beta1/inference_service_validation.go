@@ -34,7 +34,7 @@ var (
 // InferenceServiceValidator is responsible for validating the InferenceService resource
 // when it is created, updated, or deleted.
 //
-// NOTE: The +kubebuilder:object:generate=false and +k8s:deepcopy-gen=false marker prevents controller-gen from generating DeepCopy methods,
+// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 // +kubebuilder:object:generate=false
 // +k8s:deepcopy-gen=false

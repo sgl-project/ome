@@ -83,7 +83,6 @@ type DedicatedAIClusterStatus struct {
 // DedicatedAICluster is the Schema for the dedicatedaiclusters API
 // +kubebuilder:subresource:status
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true
@@ -102,7 +101,6 @@ type DedicatedAICluster struct {
 // DedicatedAIClusterList contains a list of DedicatedAICluster
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type DedicatedAIClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

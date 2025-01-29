@@ -1,6 +1,6 @@
 // Package v1beta1 contains API Schema definitions for the OME v1beta1 API group
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen=package,register
+// +kubebuilder:object:generate=true
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=ome.io
 package v1beta1

@@ -250,7 +250,6 @@ type ModelStatusSpec struct {
 
 // BaseModel is the Schema for the basemodels API
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -276,7 +275,6 @@ type BaseModel struct {
 
 // ClusterBaseModel is the Schema for the basemodels API
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +genclient:nonNamespaced
 // +kubebuilder:object:root=true
@@ -305,7 +303,6 @@ type ClusterBaseModel struct {
 // BaseModelList contains a list of BaseModel
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type BaseModelList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -315,7 +312,6 @@ type BaseModelList struct {
 // ClusterBaseModelList contains a list of ClusterBaseModel
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ClusterBaseModelList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -324,7 +320,6 @@ type ClusterBaseModelList struct {
 
 // FineTunedWeight is the Schema for the finetunedweights API
 // +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -345,7 +340,6 @@ type FineTunedWeight struct {
 // FineTunedWeightList contains a list of FineTunedWeight
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type FineTunedWeightList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

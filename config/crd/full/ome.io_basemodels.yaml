@@ -111,8 +111,6 @@ spec:
                 type: object
               modelParameterSize:
                 type: string
-              modelType:
-                type: string
               quantization:
                 type: string
               servingMode:
