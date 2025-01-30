@@ -2,7 +2,6 @@ package v1beta1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -37,7 +36,6 @@ var (
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 // +kubebuilder:object:generate=false
-// +k8s:deepcopy-gen=false
 // +k8s:openapi-gen=false
 type InferenceServiceValidator struct{}
 
@@ -97,10 +95,6 @@ func validateInferenceService(isvc *InferenceService) (admission.Warnings, error
 	}
 
 	if err := validateAutoscalerTargetUtilizationPercentage(isvc); err != nil {
-		return allWarnings, err
-	}
-
-	if err := validateCollocationStorageURI(isvc.Spec.Predictor); err != nil {
 		return allWarnings, err
 	}
 
@@ -253,21 +247,6 @@ func validateScalingKPACompExtension(compExtSpec *ComponentExtensionSpec) error 
 		}
 	}
 
-	return nil
-}
-
-// validates if transformer container has storage uri or not in collocation of predictor and transformer scenario
-func validateCollocationStorageURI(predictorSpec PredictorSpec) error {
-	for _, container := range predictorSpec.Containers {
-		if container.Name == constants.TransformerContainerName {
-			for _, env := range container.Env {
-				if env.Name == constants.CustomSpecStorageUriEnvVarKey {
-					return errors.New(StorageUriPresentInTransformerError)
-				}
-			}
-			break
-		}
-	}
 	return nil
 }
 
