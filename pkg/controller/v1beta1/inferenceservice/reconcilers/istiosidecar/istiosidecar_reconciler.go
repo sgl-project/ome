@@ -1,4 +1,4 @@
-package raycluster
+package istiosidecar
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -10,9 +10,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 )
+
+var log = ctrl.Log.WithName("IstioSidecarReconciler")
 
 type IstioSidecarReconciler struct {
 	client       kclient.Client

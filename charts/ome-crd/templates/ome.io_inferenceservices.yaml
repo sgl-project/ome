@@ -6407,6 +6407,8 @@ spec:
                           type: boolean
                         shareProcessNamespace:
                           type: boolean
+                        size:
+                          type: integer
                         subdomain:
                           type: string
                         terminationGracePeriodSeconds:
@@ -7267,8 +7269,6 @@ spec:
                               - name
                             type: object
                           type: array
-                        worldSize:
-                          type: integer
                       type: object
                   type: object
               required:

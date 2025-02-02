@@ -25,7 +25,6 @@ spec:
   modelFramework:
     name: transformers
     version: "4.41.2"
-  modelType: transformer
   modelArchitecture: Phi3VForCausalLM
   modelParameterSize: 4.15B
   modelCapabilities:

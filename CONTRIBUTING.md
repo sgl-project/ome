@@ -214,11 +214,7 @@ However, because the cluster might have both mutating and validating webhooks, y
 
 If you want to run the manager locally, you need to remove the webhooks from the cluster. The following command can be used to remove the webhooks:
 ```bash
-kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
-kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io clusterservingruntime.ome.io
-kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io servingruntime.ome.io
-kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io inferenceservice.ome.io
-kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io benchmarkjob.ome.io
+make delete-webhooks
 ```
 
 ### Running OME Manager in VSCode or Cursor

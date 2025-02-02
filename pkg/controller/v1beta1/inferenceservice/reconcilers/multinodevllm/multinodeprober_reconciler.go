@@ -1,4 +1,4 @@
-package raycluster
+package multinodevllm
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"

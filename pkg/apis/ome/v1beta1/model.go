@@ -52,6 +52,11 @@ type BaseModelSpec struct {
 	// +required
 	ModelFormat ModelFormat `json:"modelFormat"`
 
+	// +optional
+	// DEPRECATED: This field is deprecated and will be removed in future releases.
+	// +optional
+	ModelType *string `json:"modelType,omitempty"`
+
 	// ModelFramework of the model, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
 	// +required
 	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`

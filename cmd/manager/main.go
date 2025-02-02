@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
+	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
@@ -224,6 +225,7 @@ func main() {
 		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
 		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 		{jobsetv1alpha2.SchemeGroupVersion, constants.JobSetKind, jobsetv1alpha2.AddToScheme},
+		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
 	}
 
 	for _, s := range optionalSchemes {
@@ -235,7 +237,6 @@ func main() {
 		}
 	}
 
-	// Handle Istio scheme separately due to the additional condition
 	if !ingressConfig.DisableIstioVirtualHost {
 		if err := registerOptionalScheme(cfg, mgr.GetScheme(), istioclientv1beta1.SchemeGroupVersion, constants.IstioVirtualServiceKind, istioclientv1beta1.AddToScheme); err != nil {
 			setupLog.Error(err, "Failed to register Istio scheme")
@@ -253,8 +254,7 @@ func main() {
 		Clientset: clientSet,
 		Log:       ctrl.Log.WithName("InferenceService"),
 		Scheme:    mgr.GetScheme(),
-		Recorder: eventBroadcaster.NewRecorder(
-			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Recorder:  eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
 		setupLog.Error(err, "Failed to create InferenceService controller")
 		os.Exit(1)
@@ -281,8 +281,7 @@ func main() {
 		Clientset: clientSet,
 		Log:       ctrl.Log.WithName("BenchmarkJob"),
 		Scheme:    mgr.GetScheme(),
-		Recorder: benchmarkJobEventBroadcaster.NewRecorder(
-			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create Benchmark Job controller")
 		os.Exit(1)
@@ -299,11 +298,10 @@ func main() {
 	setupLog.Info("Setting up TrainingJob controller")
 	trainingJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1trainingcontroller.TrainingJobReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("TrainingJob"),
-		Scheme: mgr.GetScheme(),
-		Recorder: trainingJobEventBroadcaster.NewRecorder(
-			mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("TrainingJob"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: trainingJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 		Runtimes: trainingRuntimes,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create Training Job controller")

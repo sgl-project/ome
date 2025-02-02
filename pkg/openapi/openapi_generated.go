@@ -277,6 +277,13 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat"),
 						},
 					},
+					"modelType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DEPRECATED: This field is deprecated and will be removed in future releases.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"modelFramework": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ModelFramework of the model, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
@@ -6114,7 +6121,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 					"workerSpec": {
 						SchemaProps: spec.SchemaProps{
 							Description: "WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster",
-							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec"),
 						},
 					},
@@ -7520,9 +7526,9 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
-					"worldSize": {
+					"size": {
 						SchemaProps: spec.SchemaProps{
-							Description: "World size of the worker, this is the number of pods in the worker.",
+							Description: "Size of the worker, this is the number of pods in the worker.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -8133,9 +8139,9 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 							},
 						},
 					},
-					"worldSize": {
+					"size": {
 						SchemaProps: spec.SchemaProps{
-							Description: "World size of the worker, this is the number of pods in the worker.",
+							Description: "Size of the worker, this is the number of pods in the worker.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},

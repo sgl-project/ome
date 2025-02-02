@@ -2,6 +2,7 @@ package components
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
 	"context"
 	"fmt"
 
@@ -92,13 +93,20 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
+	workerPodSpec, result, err := p.reconcileWorkerPodSpec(isvc, sRuntime, &objectMeta)
+	if err != nil {
+		return result, err
+	}
+
 	p.Log.Info("Resolved podSpec for inference service",
 		"inferenceServiceName", isvc.Name,
 		"namespace", isvc.Namespace,
 		"podSpec", podSpec)
 
+	size := p.getWorkerSize(isvc, sRuntime)
+
 	// Reconcile deployment based on the deployment mode
-	if result, err := p.reconcileDeployment(isvc, sRuntime, objectMeta, &podSpec); err != nil {
+	if result, err := p.reconcileDeployment(isvc, objectMeta, &podSpec, size, &workerPodSpec); err != nil {
 		return result, err
 	}
 
@@ -110,13 +118,32 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	return ctrl.Result{}, nil
 }
 
+func (p *Predictor) getWorkerSize(isvc *v1beta1.InferenceService, runtime v1beta1.ServingRuntimeSpec) int {
+	var size int
+
+	// Prioritize sizes in order: Predictor.Worker -> WorkerPodSpec
+	switch {
+	case isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Size != nil:
+		size = *isvc.Spec.Predictor.Worker.Size
+	case runtime.WorkerPodSpec != nil && runtime.WorkerPodSpec.Size != nil:
+		size = *runtime.WorkerPodSpec.Size
+	default:
+		size = 0 // Default value
+	}
+
+	return size
+}
+
 // reconcileDeployment manages the deployment logic for different deployment modes.
-func (p *Predictor) reconcileDeployment(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
-	if p.deploymentMode == constants.RawDeployment && (sRuntime.PipelineParallelism == nil || !*sRuntime.PipelineParallelism) {
+func (p *Predictor) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+	if p.deploymentMode == constants.RawDeployment {
 		return p.reconcileRawDeployment(isvc, objectMeta, podSpec)
 	}
-	if p.deploymentMode == constants.MultiNodeRayVLLM || (p.deploymentMode == constants.RawDeployment && sRuntime.PipelineParallelism != nil && *sRuntime.PipelineParallelism) {
+	if p.deploymentMode == constants.MultiNodeRayVLLM {
 		return p.reconcileMultiNodeVLLM(isvc, objectMeta, podSpec)
+	}
+	if p.deploymentMode == constants.MultiNode {
+		return p.reconcileMultiNode(isvc, objectMeta, podSpec, workerSize, workerPodSpec)
 	}
 	if p.deploymentMode == constants.Serverless {
 		return p.reconcileKnativeDeployment(isvc, objectMeta, podSpec)
@@ -144,15 +171,32 @@ func (p *Predictor) reconcileMultiNodeVLLM(isvc *v1beta1.InferenceService, objec
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := p.setMultiNodeReferences(isvc, r); err != nil {
+	if err := p.setMultiNodeRayVLLMReferences(isvc, r); err != nil {
 		return ctrl.Result{}, err
 	}
 	_, result, err := r.Reconcile()
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
-	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
+	isvc.Status.PropagateMultiNodeRayVLLMStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
 	return result, nil
+}
+
+func (p *Predictor) reconcileMultiNode(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, leaderPodSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+	p.Log.Info("Reconcile MultiNode", "inference service", isvc.Name, "namespace", isvc.Namespace)
+	r, err := p.createMultiNodeReconciler(isvc, objectMeta, leaderPodSpec, workerSize, workerPodSpec)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := p.setMultiNodeMReferences(isvc, r); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := r.Reconcile(); err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
+	}
+	//todo: update status
+	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.LWS.LWS, r.URL)
+	return ctrl.Result{}, nil
 }
 
 // reconcileKnativeDeployment handles the deployment for Knative deployments.
@@ -212,6 +256,18 @@ func (p *Predictor) createMultiNodeVllmReconciler(isvc *v1beta1.InferenceService
 	return r, nil
 }
 
+func (p *Predictor) createMultiNodeReconciler(isvc *v1beta1.InferenceService,
+	objectMeta metav1.ObjectMeta,
+	leaderPodSpec *v1.PodSpec,
+	workerSize int,
+	workerPodSpec *v1.PodSpec) (*multinode.MultiNodeReconciler, error) {
+	r, err := multinode.NewMultiNodeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec.Predictor.ComponentExtensionSpec, leaderPodSpec, workerSize, workerPodSpec)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create MultiNodeReconciler for predictor")
+	}
+	return r, nil
+}
+
 // setRawReferences sets the necessary references for raw deployment.
 func (p *Predictor) setRawReferences(isvc *v1beta1.InferenceService, r *raw.RawKubeReconciler) error {
 	if err := controllerutil.SetControllerReference(isvc, r.Deployment.Deployment, p.scheme); err != nil {
@@ -223,8 +279,8 @@ func (p *Predictor) setRawReferences(isvc *v1beta1.InferenceService, r *raw.RawK
 	return r.Scaler.Autoscaler.SetControllerReferences(isvc, p.scheme)
 }
 
-// setMultiNodeReferences sets the necessary references for multi-node deployment.
-func (p *Predictor) setMultiNodeReferences(isvc *v1beta1.InferenceService, r *multinodevllm.MultiNodeVllmReconciler) error {
+// setMultiNodeRayVLLMReferences sets the necessary references for multi-node deployment.
+func (p *Predictor) setMultiNodeRayVLLMReferences(isvc *v1beta1.InferenceService, r *multinodevllm.MultiNodeVllmReconciler) error {
 	for _, ray := range r.Ray.RayClusters {
 		if err := controllerutil.SetControllerReference(isvc, ray, p.scheme); err != nil {
 			return errors.Wrapf(err, "failed to set ray owner reference for predictor")
@@ -236,6 +292,16 @@ func (p *Predictor) setMultiNodeReferences(isvc *v1beta1.InferenceService, r *mu
 		}
 	}
 	return controllerutil.SetControllerReference(isvc, r.RawMultiNodeService.Service, p.scheme)
+}
+
+func (p *Predictor) setMultiNodeMReferences(isvc *v1beta1.InferenceService, mnr *multinode.MultiNodeReconciler) error {
+	err := controllerutil.SetControllerReference(isvc, mnr.LWS.LWS, p.scheme)
+	if err != nil {
+		return errors.Wrapf(err, "failed to set lws owner reference for leader worker set")
+	}
+
+	return controllerutil.SetControllerReference(isvc, mnr.Service.Service, p.scheme)
+
 }
 
 // reconcileObjectMeta reconciles the object metadata.
@@ -350,6 +416,32 @@ func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1b
 	}
 }
 
+func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
+	if sRuntime.WorkerPodSpec == nil && isvc.Spec.Predictor.Worker == nil {
+		return v1.PodSpec{}, ctrl.Result{}, nil
+	}
+
+	var isvcWorkerOmeContainerIndex = -1
+	sRuntimeWorkerOmeContainerIndex := isvcutils.GetOmeContainerIndex(sRuntime.WorkerPodSpec.Containers)
+	if isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Containers != nil {
+		isvcWorkerOmeContainerIndex = isvcutils.GetOmeContainerIndex(isvc.Spec.Predictor.Worker.Containers)
+	}
+	workerContainer, err := p.createMergedWorkerContainer(isvc, sRuntime, isvcWorkerOmeContainerIndex, sRuntimeWorkerOmeContainerIndex)
+	if err != nil {
+		return v1.PodSpec{}, ctrl.Result{}, err
+	}
+	workerPodSpec, err := p.createMergedWorkerPodSpec(isvc, sRuntime)
+
+	if err != nil {
+		return v1.PodSpec{}, ctrl.Result{}, err
+	}
+
+	p.updateVolumeMounts(isvc, workerContainer, objectMeta)
+	p.updateWorkerPodSpec(isvc, sRuntime, isvcWorkerOmeContainerIndex, sRuntimeWorkerOmeContainerIndex, workerContainer, &workerPodSpec, objectMeta)
+
+	return workerPodSpec, ctrl.Result{}, nil
+}
+
 // reconcilePodSpec reconciles the pod spec.
 func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
@@ -357,6 +449,7 @@ func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
 	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
 	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
+
 	if err != nil {
 		return v1.PodSpec{}, ctrl.Result{}, err
 	}
@@ -389,12 +482,46 @@ func (p *Predictor) createMergedContainer(isvc *v1beta1.InferenceService, sRunti
 	return container, nil
 }
 
+// createMergedWorkerContainer merges the runtime and model containers.
+func (p *Predictor) createMergedWorkerContainer(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, isvcOmeContainerIdx int, sRuntimeOmeContainerIdx int) (*v1.Container, error) {
+	var isvcOmeContainer = v1.Container{}
+	if isvcOmeContainerIdx != -1 {
+		isvcOmeContainer = isvc.Spec.Predictor.Worker.Containers[isvcOmeContainerIdx]
+	}
+	container, err := isvcutils.MergeRuntimeContainers(&sRuntime.WorkerPodSpec.Containers[sRuntimeOmeContainerIdx], &isvcOmeContainer)
+	if err != nil {
+		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to get runtime worker container")
+		return nil, errors.Wrapf(err, "failed to get runtime container")
+	}
+
+	if err = isvcutils.ReplacePlaceholders(container, isvc.ObjectMeta); err != nil {
+		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to replace placeholders in serving runtime worker Container")
+		return nil, errors.Wrapf(err, "failed to replace placeholders in serving runtime worker Container")
+	}
+
+	return container, nil
+}
+
 // createMergedPodSpec merges the runtime and model pod specs.
 func (p *Predictor) createMergedPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (v1.PodSpec, error) {
 	mergedPodSpec, err := isvcutils.MergePodSpec(&sRuntime.ServingRuntimePodSpec, &isvc.Spec.Predictor.PodSpec)
 	if err != nil {
 		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to get runtime PodSpec")
 		return v1.PodSpec{}, errors.Wrapf(err, "failed to consolidate serving runtime PodSpecs")
+	}
+	return *mergedPodSpec, nil
+}
+
+// createMergedWorkerPodSpec merges worker pod specs of the runtime and the inferenceService.
+func (p *Predictor) createMergedWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (v1.PodSpec, error) {
+	var isvcWorkerPodSpec = v1beta1.PodSpec{}
+	if isvc.Spec.Predictor.Worker != nil && &isvc.Spec.Predictor.Worker.PodSpec != nil {
+		isvcWorkerPodSpec = isvc.Spec.Predictor.Worker.PodSpec
+	}
+	mergedPodSpec, err := isvcutils.MergePodSpec(&sRuntime.WorkerPodSpec.ServingRuntimePodSpec, &isvcWorkerPodSpec)
+	if err != nil {
+		p.updateModelTransitionStatus(isvc, v1beta1.InvalidPredictorSpec, "Failed to get runtime WorkerPodSpec")
+		return v1.PodSpec{}, errors.Wrapf(err, "failed to consolidate serving runtime WorkerPodSpecs")
 	}
 	return *mergedPodSpec, nil
 }
@@ -464,6 +591,48 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 			},
 		}
 		volumes = append(volumes, blockListConfigMapVolume)
+	}
+
+	// Add additional volumes if Chainsaw injection is enabled
+	if isvcutils.IsChainsawInjectEnabled(objectMeta.Annotations) {
+		for _, item := range constants.OCIETCHostPaths {
+			volumes = append(volumes, v1.Volume{
+				Name: item.Name,
+				VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+						ClaimName: constants.PVCName(isvc.Name, item.Name),
+					},
+				},
+			})
+		}
+	}
+
+	// Append volumes to the podSpec
+	podSpec.Volumes = append(podSpec.Volumes, volumes...)
+
+	p.Log.Info("PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
+}
+
+// updateWorkerPodSpec updates the worker pod spec for the predictor.
+func (p *Predictor) updateWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, isvcOmeContainerIdx int, sRuntimeOmeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, objectMeta *metav1.ObjectMeta) {
+	// Update containers by inserting the custom container and keeping the other runtime containers
+	podSpec.Containers = append([]v1.Container{*container}, sRuntime.WorkerPodSpec.Containers[:sRuntimeOmeContainerIdx]...)
+	podSpec.Containers = append(podSpec.Containers, sRuntime.WorkerPodSpec.Containers[sRuntimeOmeContainerIdx+1:]...)
+	if isvcOmeContainerIdx != -1 {
+		podSpec.Containers = append([]v1.Container{*container}, isvc.Spec.Predictor.Worker.Containers[:isvcOmeContainerIdx]...)
+		podSpec.Containers = append(podSpec.Containers, isvc.Spec.Predictor.Worker.Containers[isvcOmeContainerIdx+1:]...)
+	}
+
+	// Initialize volumes and add the main PVC volume
+	volumes := []v1.Volume{
+		{
+			Name: *isvc.Spec.Predictor.Model.BaseModel,
+			VolumeSource: v1.VolumeSource{
+				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+					ClaimName: constants.PVCName(isvc.Name, *isvc.Spec.Predictor.Model.BaseModel),
+				},
+			},
+		},
 	}
 
 	// Add additional volumes if Chainsaw injection is enabled

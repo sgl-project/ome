@@ -3284,6 +3284,8 @@ spec:
                       type: object
                     schedulerName:
                       type: string
+                    size:
+                      type: integer
                     tolerations:
                       items:
                         properties:
@@ -4081,8 +4083,6 @@ spec:
                           - name
                         type: object
                       type: array
-                    worldSize:
-                      type: integer
                   required:
                     - containers
                   type: object

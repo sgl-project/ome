@@ -1,4 +1,4 @@
-package raycluster
+package multinodevllm
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -27,7 +27,7 @@ import (
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 )
 
-var log = logf.Log.WithName("RayClusterReconciler")
+var log = logf.Log.WithName("MultiNodeVLLMReconciler")
 
 type RayReconciler struct {
 	client               client.Client

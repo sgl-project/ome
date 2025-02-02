@@ -50,6 +50,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.19.4
 	sigs.k8s.io/jobset v0.7.1
 	sigs.k8s.io/kueue v0.10.0-devel
+	sigs.k8s.io/lws v0.4.2
 	sigs.k8s.io/scheduler-plugins v0.30.6
 	sigs.k8s.io/yaml v1.4.0
 	volcano.sh/apis v1.9.0
@@ -174,7 +175,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.31.2 // indirect
 	k8s.io/component-base v0.31.4 // indirect
-	k8s.io/klog v1.0.0 // indirect
 	knative.dev/networking v0.0.0-20231115015815-3af9769712cd // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.30.3 // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect

@@ -23,6 +23,7 @@ resources:
   - srt/llama-3-2-11b-rt.yaml
   - srt/llama-3-2-90b-fp8-rt.yaml
   - srt/llama-3-3-70b-instruct-rt.yaml
+  - srt/deepseek-r1-rdma-rt.yaml
   - cohere/cohere-command-1-large.yaml
   - cohere/cohere-command-1-small.yaml
   - cohere/cohere-command-1-trt.yaml

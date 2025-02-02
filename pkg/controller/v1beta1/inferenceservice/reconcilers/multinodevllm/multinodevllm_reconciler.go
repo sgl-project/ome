@@ -4,7 +4,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
-	raycluster "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ray"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
 	"fmt"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/kubernetes"
@@ -22,12 +22,12 @@ import (
 type MultiNodeVllmReconciler struct {
 	client client.Client
 	scheme *runtime.Scheme
-	Ray    *raycluster.RayReconciler
+	Ray    *RayReconciler
 	URL    *knapis.URL
 	//TODO - Add other reconcilers such as ingress and autoscaling
 	RawMultiNodeService *service.RayServiceReconciler
-	MultiNodeProber     *raycluster.MultiNodeProberReconciler
-	IstioSidecar        *raycluster.IstioSidecarReconciler
+	MultiNodeProber     *MultiNodeProberReconciler
+	IstioSidecar        *istiosidecar.IstioSidecarReconciler
 	componentExt        *v1beta1.ComponentExtensionSpec
 }
 
@@ -57,10 +57,10 @@ func NewMultiNodeVllmReconciler(client client.Client,
 	return &MultiNodeVllmReconciler{
 		client:              client,
 		scheme:              scheme,
-		Ray:                 raycluster.NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec, time.Duration(multinodeProberConfig.UnavailableThresholdSeconds)*time.Second),
-		MultiNodeProber:     raycluster.NewMultiNodeProberReconciler(client, scheme, componentMeta, componentExt, multinodeProberConfig),
+		Ray:                 NewRayReconciler(client, scheme, componentMeta, componentExt, podSpec, time.Duration(multinodeProberConfig.UnavailableThresholdSeconds)*time.Second),
+		MultiNodeProber:     NewMultiNodeProberReconciler(client, scheme, componentMeta, componentExt, multinodeProberConfig),
 		RawMultiNodeService: service.NewRayServiceReconciler(client, scheme, componentMeta, podSpec),
-		IstioSidecar:        raycluster.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
+		IstioSidecar:        istiosidecar.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
 		URL:                 url,
 	}, nil
 }

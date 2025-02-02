@@ -32,30 +32,33 @@ func NewServiceReconciler(client client.Client,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
-	podSpec *corev1.PodSpec) *ServiceReconciler {
+	podSpec *corev1.PodSpec,
+	Selector map[string]string) *ServiceReconciler {
 	return &ServiceReconciler{
 		client:       client,
 		scheme:       scheme,
-		Service:      buildService(componentMeta, componentExt, podSpec),
+		Service:      buildService(componentMeta, componentExt, podSpec, Selector),
 		componentExt: componentExt,
 	}
 }
 
 // buildService constructs a Service object from the given specifications
 func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
-	podSpec *corev1.PodSpec) *corev1.Service {
+	podSpec *corev1.PodSpec,
+	selector map[string]string) *corev1.Service {
 
 	servicePorts := buildServicePorts(podSpec)
 	serviceType := determineServiceType(componentMeta)
+	if selector == nil {
+		selector = map[string]string{"app": constants.GetRawServiceLabel(componentMeta.Name)}
+	}
 
 	return &corev1.Service{
 		ObjectMeta: componentMeta,
 		Spec: corev1.ServiceSpec{
-			Type: serviceType,
-			Selector: map[string]string{
-				"app": constants.GetRawServiceLabel(componentMeta.Name),
-			},
-			Ports: servicePorts,
+			Type:     serviceType,
+			Selector: selector,
+			Ports:    servicePorts,
 		},
 	}
 }

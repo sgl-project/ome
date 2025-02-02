@@ -162,6 +162,10 @@
           "description": "ModelParameterSize is the size of the model parameters, e.g., \"175B\"",
           "type": "string"
         },
+        "modelType": {
+          "description": "DEPRECATED: This field is deprecated and will be removed in future releases.",
+          "type": "string"
+        },
         "quantization": {
           "description": "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
           "type": "string"
@@ -3426,7 +3430,6 @@
         },
         "workerSpec": {
           "description": "WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster",
-          "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.WorkerSpec"
         }
       }
@@ -4276,6 +4279,11 @@
           "description": "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
           "type": "string"
         },
+        "size": {
+          "description": "Size of the worker, this is the number of pods in the worker.",
+          "type": "integer",
+          "format": "int32"
+        },
         "tolerations": {
           "description": "If specified, the pod's tolerations.",
           "type": "array",
@@ -4293,11 +4301,6 @@
           },
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
-        },
-        "worldSize": {
-          "description": "World size of the worker, this is the number of pods in the worker.",
-          "type": "integer",
-          "format": "int32"
         }
       }
     },
@@ -4505,6 +4508,11 @@
           "description": "Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.",
           "type": "boolean"
         },
+        "size": {
+          "description": "Size of the worker, this is the number of pods in the worker.",
+          "type": "integer",
+          "format": "int32"
+        },
         "subdomain": {
           "description": "If specified, the fully qualified Pod hostname will be \"\u003chostname\u003e.\u003csubdomain\u003e.\u003cpod namespace\u003e.svc.\u003ccluster domain\u003e\". If not specified, the pod will not have a domainname at all.",
           "type": "string"
@@ -4546,11 +4554,6 @@
           },
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
-        },
-        "worldSize": {
-          "description": "World size of the worker, this is the number of pods in the worker.",
-          "type": "integer",
-          "format": "int32"
         }
       }
     }

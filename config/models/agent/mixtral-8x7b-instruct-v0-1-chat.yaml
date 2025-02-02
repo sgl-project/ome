@@ -25,7 +25,6 @@ spec:
   modelFramework:
     name: transformers
     version: "4.36.0.dev0"
-  modelType: transformer
   modelArchitecture: MixtralForCausalLM
   modelParameterSize: 47B
   modelCapabilities:

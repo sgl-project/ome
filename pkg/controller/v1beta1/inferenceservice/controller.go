@@ -6,6 +6,7 @@ import (
 	"fmt"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	"reflect"
+	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	multimodelconfig "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	"github.com/go-logr/logr"
@@ -72,6 +73,9 @@ import (
 // +kubebuilder:rbac:groups=ray.io,resources=rayclusters/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=keda.sh,resources=scaledobjects,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=keda.sh,resources=scaledobjects/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 // InferenceServiceState describes the Readiness of the InferenceService
 type InferenceServiceState string
@@ -216,7 +220,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// check raw deployment
-	if deploymentMode == constants.RawDeployment || deploymentMode == constants.MultiNodeRayVLLM {
+	if deploymentMode == constants.RawDeployment || deploymentMode == constants.MultiNodeRayVLLM || deploymentMode == constants.MultiNode {
 		reconciler, err := ingress.NewRawIngressReconciler(r.Client, r.Scheme, ingressConfig)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
@@ -324,7 +328,8 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
 		Owns(&v1.PersistentVolumeClaim{}).
-		Owns(&ray.RayCluster{})
+		Owns(&ray.RayCluster{}).
+		Owns(&lws.LeaderWorkerSet{})
 
 	if ksvcFound {
 		ctrlBuilder = ctrlBuilder.Owns(&knservingv1.Service{})

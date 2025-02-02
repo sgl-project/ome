@@ -184,9 +184,10 @@ type ServingRuntimeSpec struct {
 }
 
 type WorkerPodSpec struct {
-	// World size of the worker, this is the number of pods in the worker.
+	// Size of the worker, this is the number of pods in the worker.
+	// +immutable
 	// +optional
-	WorldSize int `json:"worldSize,omitempty"`
+	Size *int `json:"size"`
 
 	// PodSpec for the worker
 	// +optional

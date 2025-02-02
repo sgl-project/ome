@@ -164,6 +164,27 @@ rules:
   - patch
   - update
 - apiGroups:
+  - leaderworkerset.x-k8s.io
+  resources:
+  - leaderworkersets
+  - leaderworkersets/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - leaderworkerset.x-k8s.io
+  resources:
+  - leaderworkersets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - networking.istio.io
   resources:
   - sidecars

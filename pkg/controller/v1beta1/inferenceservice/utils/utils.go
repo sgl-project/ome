@@ -30,13 +30,13 @@ case 1: no ome.io/deploymentMode annotation
 
 case 2: ome.io/deploymentMode is set
 
-	        if the mode is "RawDeployment", "Serverless" or "ModelMesh", return it.
+	        if the mode is "RawDeployment", "Serverless", "MultiNodeRayVLLM", or "MultiNode" return it.
 			else return config.deploy.defaultDeploymentMode
 */
 func GetDeploymentMode(annotations map[string]string, deployConfig *v1beta1.DeployConfig) constants.DeploymentModeType {
 	deploymentMode, ok := annotations[constants.DeploymentMode]
 	if ok && (deploymentMode == string(constants.RawDeployment) || deploymentMode ==
-		string(constants.Serverless)) || deploymentMode == string(constants.MultiNodeRayVLLM) {
+		string(constants.Serverless)) || deploymentMode == string(constants.MultiNodeRayVLLM) || deploymentMode == string(constants.MultiNode) {
 		return constants.DeploymentModeType(deploymentMode)
 	}
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
@@ -137,6 +137,7 @@ func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpe
 		Volumes:          runtimePodSpec.Volumes,
 		ImagePullSecrets: runtimePodSpec.ImagePullSecrets,
 		DNSPolicy:        runtimePodSpec.DNSPolicy,
+		HostNetwork:      runtimePodSpec.HostNetwork,
 	})
 	if err != nil {
 		return nil, err
@@ -292,7 +293,7 @@ func GetScaledObjectName(isvcName string) string {
 	return fmt.Sprintf("%s%s", prefix, isvcName)
 }
 
-// getOmeContainerIndex returns the index of the OME container in the runtime containers.
+// GetOmeContainerIndex returns the index of the OME container in the runtime containers.
 func GetOmeContainerIndex(containers []v1.Container) int {
 	for i, container := range containers {
 		if container.Name == constants.MainContainerName {

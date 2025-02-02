@@ -21,61 +21,83 @@ HELM_DOCS_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m
 HUGO_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m -f '{{.Version}}' github.com/gohugoio/hugo)
 MDTOC_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m -f '{{.Version}}' sigs.k8s.io/mdtoc)
 
-##@ Tools
+##@ 📦 Tools
 
 .PHONY: fix-tools-gomod
-fix-tools-gomod:
+fix-tools-gomod: ## 🔧 Fix go.mod file in tools directory
+	@echo "🔧 Fixing tools go.mod file..."
 	@if [ -f "$(TOOLS_DIR)/go.mod" ]; then \
 		sed -i.bak -e 's/^go 1.23.0/go 1.23/' -e '/^toolchain/d' $(TOOLS_DIR)/go.mod && \
 		rm -f $(TOOLS_DIR)/go.mod.bak; \
 	fi
+	@echo "✅ go.mod fixed"
 
 GOLANGCI_LINT = $(PROJECT_DIR)/bin/golangci-lint
 .PHONY: golangci-lint
-golangci-lint: fix-tools-gomod ## Download golangci-lint locally if necessary
+golangci-lint: fix-tools-gomod ## 🔍 Download golangci-lint locally if necessary
+	@echo "🔍 Installing golangci-lint..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@echo "✅ Installation complete"
 
 CONTROLLER_GEN = $(PROJECT_DIR)/bin/controller-gen
 .PHONY: controller-gen
-controller-gen: fix-tools-gomod ## Download controller-gen locally if necessary
+controller-gen: fix-tools-gomod ## 🎮 Download controller-gen locally if necessary
+	@echo "🎮 Installing controller-gen..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+	@echo "✅ Installation complete"
 
 KUSTOMIZE = $(PROJECT_DIR)/bin/kustomize
 .PHONY: kustomize
-kustomize: fix-tools-gomod ## Download kustomize locally if necessary
+kustomize: fix-tools-gomod ## 🔧 Download kustomize locally if necessary
+	@echo "🔧 Installing kustomize..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install sigs.k8s.io/kustomize/kustomize/v4@$(KUSTOMIZE_VERSION)
+	@echo "✅ Installation complete"
 
 ENVTEST = $(PROJECT_DIR)/bin/setup-envtest
 .PHONY: envtest
-envtest: fix-tools-gomod ## Download envtest-setup locally if necessary
+envtest: fix-tools-gomod ## 🧪 Download envtest-setup locally if necessary
+	@echo "🧪 Installing envtest..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
+	@echo "✅ Installation complete"
 
 KIND = $(PROJECT_DIR)/bin/kind
 .PHONY: kind
-kind: fix-tools-gomod ## Download kind locally if necessary
+kind: fix-tools-gomod ## 🐳 Download kind locally if necessary
+	@echo "🐳 Installing kind..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install sigs.k8s.io/kind@$(KIND_VERSION)
+	@echo "✅ Installation complete"
 
 YQ = $(PROJECT_DIR)/bin/yq
 .PHONY: yq
-yq: fix-tools-gomod ## Download yq locally if necessary
+yq: fix-tools-gomod ## 🔧 Download yq locally if necessary
+	@echo "🔧 Installing yq..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install github.com/mikefarah/yq/v4@$(YQ_VERSION)
+	@echo "✅ Installation complete"
 
 HELM = $(PROJECT_DIR)/bin/helm
 .PHONY: helm
-helm: fix-tools-gomod ## Download helm locally if necessary
+helm: fix-tools-gomod ## ⎈ Download helm locally if necessary
+	@echo "⎈ Installing helm..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
+	@echo "✅ Installation complete"
 
 HELM_DOCS = $(PROJECT_DIR)/bin/helm-docs
 .PHONY: helm-docs
-helm-docs: fix-tools-gomod ## Download helm-docs locally if necessary
+helm-docs: fix-tools-gomod ## 📚 Download helm-docs locally if necessary
+	@echo "📚 Installing helm-docs..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install github.com/norwoodj/helm-docs/cmd/helm-docs@$(HELM_DOCS_VERSION)
+	@echo "✅ Installation complete"
 
 HUGO = $(PROJECT_DIR)/bin/hugo
 .PHONY: hugo
-hugo: fix-tools-gomod ## Download hugo locally if necessary
+hugo: fix-tools-gomod ## 📝 Download hugo locally if necessary
+	@echo "📝 Installing hugo..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin CGO_ENABLED=1 $(GO_CMD) install -tags extended github.com/gohugoio/hugo@$(HUGO_VERSION)
+	@echo "✅ Installation complete"
 
 MDTOC = $(PROJECT_DIR)/bin/mdtoc
 .PHONY: mdtoc
-mdtoc: fix-tools-gomod ## Download mdtoc locally if necessary
+mdtoc: fix-tools-gomod ## 📑 Download mdtoc locally if necessary
+	@echo "📑 Installing mdtoc..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin CGO_ENABLED=1 $(GO_CMD) install sigs.k8s.io/mdtoc@$(MDTOC_VERSION)
+	@echo "✅ Installation complete"

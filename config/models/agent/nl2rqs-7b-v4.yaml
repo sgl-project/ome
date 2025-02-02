@@ -25,7 +25,6 @@ spec:
   modelFramework:
     name: transformers
     version: "4.44.2"
-  modelType: transformer
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 7B
   modelCapabilities:

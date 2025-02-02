@@ -9,6 +9,7 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	"reflect"
+	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
 
 // InferenceServiceStatus defines the observed state of InferenceService
@@ -292,7 +293,44 @@ func (ss *InferenceServiceStatus) PropagateRawStatus(
 	ss.ObservedGeneration = deployment.Status.ObservedGeneration
 }
 
-func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(
+func (ss *InferenceServiceStatus) PropagateMultiNodeStatus(component ComponentType, lws *lwsspec.LeaderWorkerSet, url *apis.URL) {
+	if len(ss.Components) == 0 {
+		ss.Components = make(map[ComponentType]ComponentStatusSpec)
+	}
+	statusSpec, ok := ss.Components[component]
+	if !ok {
+		ss.Components[component] = ComponentStatusSpec{}
+	}
+
+	statusSpec.LatestCreatedRevision = lws.GetObjectMeta().GetAnnotations()["resourceVersion"]
+	condition := getLWSConditions(lws, lwsspec.LeaderWorkerSetAvailable)
+	if condition != nil && condition.Status == v1.ConditionTrue {
+		statusSpec.URL = url
+	}
+	readyCondition := readyConditionsMap[component]
+	ss.SetCondition(readyCondition, condition)
+	ss.Components[component] = statusSpec
+	ss.ObservedGeneration = lws.Generation
+}
+
+func getLWSConditions(lws *lwsspec.LeaderWorkerSet, conditionType lwsspec.LeaderWorkerSetConditionType) *apis.Condition {
+	condition := apis.Condition{}
+	for _, con := range lws.Status.Conditions {
+		if lwsspec.LeaderWorkerSetConditionType(con.Type) == conditionType {
+			condition.Type = apis.ConditionType(conditionType)
+			condition.Status = v1.ConditionStatus(con.Status)
+			condition.Message = con.Message
+			condition.LastTransitionTime = apis.VolatileTime{
+				Inner: con.LastTransitionTime,
+			}
+			condition.Reason = con.Reason
+			break
+		}
+	}
+	return &condition
+}
+
+func (ss *InferenceServiceStatus) PropagateMultiNodeRayVLLMStatus(
 	component ComponentType,
 	deployment []*appsv1.Deployment,
 	url *apis.URL) {

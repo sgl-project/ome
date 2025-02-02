@@ -30,7 +30,7 @@ type PredictorSpec struct {
 
 	// WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster
 	// +optional
-	WorkerSpec `json:"workerSpec,omitempty"`
+	Worker *WorkerSpec `json:"workerSpec,omitempty"`
 }
 
 // WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster
@@ -39,9 +39,9 @@ type WorkerSpec struct {
 	// +optional
 	PodSpec `json:",inline"`
 
-	// World size of the worker, this is the number of pods in the worker.
+	// Size of the worker, this is the number of pods in the worker.
 	// +optional
-	WorldSize int `json:"worldSize,omitempty"`
+	Size *int `json:"size,omitempty"`
 }
 
 var _ Component = &PredictorSpec{}

@@ -32,3 +32,4 @@ resources:
   - microsoft/Phi-3-vision-128k-instruct.yaml
   - agent/phi-3-vision-128k-instruct-ft-v1.yaml
   - deepseek-ai/DeepSeek-V3.yaml
+  - deepseek-ai/DeepSeek-R1.yaml

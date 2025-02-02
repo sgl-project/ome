@@ -25,7 +25,6 @@ spec:
   modelFramework:
     name: transformers
     version: "4.36.2"
-  modelType: transformer
   modelArchitecture: MistralForCausalLM
   modelParameterSize: 7B
   modelCapabilities:

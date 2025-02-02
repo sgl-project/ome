@@ -554,6 +554,7 @@ const (
 	RayClusterKind          = "RayCluster"
 	VolcanoQueueKind        = "Queue"
 	VolcanoJobKind          = "Job"
+	LWSKind                 = "LeaderWorkerSet"
 )
 
 // Volcano Job Labels
@@ -892,6 +893,14 @@ func PVCName(isvcName string, component string) string {
 		component = component[len(component)-maxLen:]
 	}
 	return fmt.Sprintf("pvc-%s-%s", isvcName, component)
+}
+
+func LWSName(isvcName string) string {
+	var maxLen = 50
+	if len(isvcName) > maxLen {
+		isvcName = isvcName[len(isvcName)-maxLen:]
+	}
+	return fmt.Sprintf("lws-%s", isvcName)
 }
 
 // nolint: unused

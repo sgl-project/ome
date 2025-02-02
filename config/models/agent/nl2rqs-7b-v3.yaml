@@ -25,7 +25,6 @@ spec:
   modelFramework:
     name: transformers
     version: "4.38.1"
-  modelType: transformer
   modelArchitecture: Qwen2ForCausalLM
   modelParameterSize: 7B
   modelCapabilities:
