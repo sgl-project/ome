@@ -3830,6 +3830,10 @@
           "description": "ModelFramework of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"Transformers\"",
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec"
         },
+        "modelType": {
+          "description": "DEPRECATED: This field is deprecated and will be removed in future releases.",
+          "type": "string"
+        },
         "name": {
           "description": "Name of the model",
           "type": "string",

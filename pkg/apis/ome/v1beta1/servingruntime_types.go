@@ -15,6 +15,10 @@ type SupportedModelFormat struct {
 	// ModelFormat of the model, e.g., "PyTorch", "TensorFlow", "ONNX", "SafeTensors"
 	// +required
 	ModelFormat *ModelFormat `json:"modelFormat"`
+	// +optional
+	// DEPRECATED: This field is deprecated and will be removed in future releases.
+	// +optional
+	ModelType *string `json:"modelType,omitempty"`
 	// Version of the model format.
 	// Used in validating that a runtime supports a predictor.
 	// It Can be "major", "major.minor" or "major.minor.patch".
