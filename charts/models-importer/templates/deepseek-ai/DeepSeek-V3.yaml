@@ -5,10 +5,10 @@ metadata:
   name: deepseek-v3
   labels:
     genai-managed-base-model-v1beta1: "true"
+    models.ome.io/commit-hash: "{{ index .Values "deepseek-v3" "commitHash" }}"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
-    # UPDATE Runtime to SGLang
-    models.ome.io/runtime: "vllm-llama-3-3-70b-instruct"
+    models.ome.io/runtime: "srt-multi-node-deepseek-v3-rdma"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "deepseek-v3" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "deepseek-v3" "isInternal" }}"
@@ -16,6 +16,7 @@ metadata:
 spec:
   vendor: deepseek-ai
   disabled: false
+  displayName: deepseek-ai.deepseek-v3
   version: "1.0.0"
   compartmentID: {{ .Values.compartmentID }}
   modelFormat:

@@ -199,7 +199,9 @@ cohere-rerank-v3-5:
 deepseek-r1:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  commitHash: "5dde110d1a9ee857b90a6710b7138f9130ce6fa0"
 
 deepseek-v3:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  commitHash: "1d044fd82b15f1cedb197a288e50cc96a2c27205"
