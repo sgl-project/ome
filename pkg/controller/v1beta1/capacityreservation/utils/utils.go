@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"sort"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -12,12 +14,33 @@ func ConvertResourceGroupsToFlavorUsage(resourceGroups []kueuev1beta1.ResourceGr
 	flattened := flattenResources(resourceGroups)
 	flavorUsages := make([]kueuev1beta1.FlavorUsage, 0, len(flattened))
 
-	for flavorName, resourceQuotas := range flattened {
+	// Get all flavor names and sort them
+	flavorNames := make([]string, 0, len(flattened))
+	for flavorName := range flattened {
+		flavorNames = append(flavorNames, flavorName)
+	}
+	sort.Strings(flavorNames)
+
+	// Create flavor usages in sorted order
+	for _, flavorName := range flavorNames {
+		resourceQuotas := flattened[flavorName]
 		flavorUsage := kueuev1beta1.FlavorUsage{
 			Name:      kueuev1beta1.ResourceFlavorReference(flavorName),
 			Resources: []kueuev1beta1.ResourceUsage{},
 		}
-		for resourceName, quota := range resourceQuotas {
+
+		// Get all resource names and sort them
+		resourceNames := make([]corev1.ResourceName, 0, len(resourceQuotas))
+		for resourceName := range resourceQuotas {
+			resourceNames = append(resourceNames, resourceName)
+		}
+		sort.Slice(resourceNames, func(i, j int) bool {
+			return string(resourceNames[i]) < string(resourceNames[j])
+		})
+
+		// Add resources in sorted order
+		for _, resourceName := range resourceNames {
+			quota := resourceQuotas[resourceName]
 			flavorUsage.Resources = append(flavorUsage.Resources, kueuev1beta1.ResourceUsage{
 				Name:  resourceName,
 				Total: quota.DeepCopy(),
@@ -182,6 +205,7 @@ func CalculateIncreasedResources(
 func flattenResources(resourceGroups []kueuev1beta1.ResourceGroup) map[string]map[corev1.ResourceName]resource.Quantity {
 	flattened := make(map[string]map[corev1.ResourceName]resource.Quantity)
 
+	// First pass: aggregate resources while preserving original formats
 	for _, group := range resourceGroups {
 		for _, flavor := range group.Flavors {
 			flavorName := string(flavor.Name)
@@ -191,12 +215,35 @@ func flattenResources(resourceGroups []kueuev1beta1.ResourceGroup) map[string]ma
 
 			for _, flavorResource := range flavor.Resources {
 				if current, exists := flattened[flavorName][flavorResource.Name]; exists {
-					// Add to the existing quantity
-					current.Add(flavorResource.NominalQuota)
-					flattened[flavorName][flavorResource.Name] = current
+					// Add the values in milli units for consistent scaling
+					sum := current.MilliValue() + flavorResource.NominalQuota.MilliValue()
+
+					// Create a new quantity with the correct format
+					var q resource.Quantity
+					switch flavorResource.Name {
+					case corev1.ResourceMemory:
+						// Memory should be in BinarySI format (e.g., "20Gi")
+						q = resource.Quantity{Format: resource.BinarySI}
+					default:
+						// All other resources (including CPU) should be in DecimalSI format (e.g., "15")
+						q = resource.Quantity{Format: resource.DecimalSI}
+					}
+					q.SetMilli(sum)
+					flattened[flavorName][flavorResource.Name] = q
 				} else {
-					// Initialize the quantity
-					flattened[flavorName][flavorResource.Name] = flavorResource.NominalQuota.DeepCopy()
+					// Initialize with the correct format
+					value := flavorResource.NominalQuota.MilliValue()
+					var q resource.Quantity
+					switch flavorResource.Name {
+					case corev1.ResourceMemory:
+						// Memory should be in BinarySI format (e.g., "20Gi")
+						q = resource.Quantity{Format: resource.BinarySI}
+					default:
+						// All other resources (including CPU) should be in DecimalSI format (e.g., "15")
+						q = resource.Quantity{Format: resource.DecimalSI}
+					}
+					q.SetMilli(value)
+					flattened[flavorName][flavorResource.Name] = q
 				}
 			}
 		}

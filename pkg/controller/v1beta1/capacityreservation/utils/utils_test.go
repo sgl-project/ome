@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
+
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-	"testing"
 )
 
 func TestConvertResourceGroupsToFlavorUsage(t *testing.T) {
@@ -84,7 +86,7 @@ func TestConvertResourceGroupsToFlavorUsage(t *testing.T) {
 			t.Errorf("Expected flavor name %s, but got %s", expected[i].Name, result[i].Name)
 		}
 		for j := range expected[i].Resources {
-			if !compareQuantities(expected[i].Resources[j].Total, result[i].Resources[j].Total) {
+			if !compareQuantities(t, map[corev1.ResourceName]resource.Quantity{expected[i].Resources[j].Name: expected[i].Resources[j].Total}, map[corev1.ResourceName]resource.Quantity{result[i].Resources[j].Name: result[i].Resources[j].Total}) {
 				t.Errorf("Expected total for resource %s to be %v, but got %v",
 					expected[i].Resources[j].Name, expected[i].Resources[j].Total, result[i].Resources[j].Total)
 			}
@@ -92,8 +94,28 @@ func TestConvertResourceGroupsToFlavorUsage(t *testing.T) {
 	}
 }
 
-func compareQuantities(q1, q2 resource.Quantity) bool {
-	return q1.String() == q2.String() && q1.IsZero() == q2.IsZero()
+func compareQuantities(t *testing.T, expected, actual map[corev1.ResourceName]resource.Quantity) bool {
+	for resourceName, expectedQuantity := range expected {
+		actualQuantity, exists := actual[resourceName]
+		if !exists {
+			t.Errorf("Resource %s not found in actual resources. Available resources: %v", resourceName, actual)
+			return false
+		}
+
+		// Compare string representation
+		stringMatch := expectedQuantity.String() == actualQuantity.String()
+		// Compare zero status
+		zeroMatch := expectedQuantity.IsZero() == actualQuantity.IsZero()
+		// Compare format
+		formatMatch := expectedQuantity.Format == actualQuantity.Format
+
+		if !stringMatch || !zeroMatch || !formatMatch {
+			t.Errorf("Expected total for resource %s to be %+v, but got %+v", resourceName, expectedQuantity, actualQuantity)
+			return false
+		}
+	}
+
+	return true
 }
 
 func TestIsResourceSufficient(t *testing.T) {
