@@ -14,12 +14,13 @@ import (
 )
 
 const (
-	OCIConfigName                = "ociEtc"
-	IngressConfigKeyName         = "ingress"
-	DeployConfigName             = "deploy"
-	DacReconcilePolicyConfigName = "dacReconcilePolicy"
-	MultiNodeProberName          = "multinodeProber"
-	BenchmarkJobConfigName       = "benchmarkjob"
+	OCIConfigName                                = "ociEtc"
+	IngressConfigKeyName                         = "ingress"
+	DeployConfigName                             = "deploy"
+	DacReconcilePolicyConfigName                 = "dacReconcilePolicy"
+	CapacityReservationReconcilePolicyConfigName = "capacityReservationReconcilePolicy"
+	MultiNodeProberName                          = "multinodeProber"
+	BenchmarkJobConfigName                       = "benchmarkjob"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -111,6 +112,11 @@ type DeployConfig struct {
 
 // +kubebuilder:object:generate=false
 type DacReconcilePolicyConfig struct {
+	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
+}
+
+// +kubebuilder:object:generate=false
+type CapacityReservationReconcilePolicyConfig struct {
 	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
 }
 
@@ -242,6 +248,23 @@ func NewDacReconcilePolicyConfig(clientset kubernetes.Interface) (*DacReconcileP
 	}
 	return dacPolicyConfig, nil
 }
+
+func NewCapacityReservationReconcilePolicyConfig(clientset kubernetes.Interface) (*CapacityReservationReconcilePolicyConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.CapacityReservationConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	capacityReservationPolicyConfig := &CapacityReservationReconcilePolicyConfig{}
+	for _, err := range []error{
+		getComponentConfig(CapacityReservationReconcilePolicyConfigName, configMap, &capacityReservationPolicyConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return capacityReservationPolicyConfig, nil
+}
+
 func NewMultiNodeProberConfig(clientset kubernetes.Interface) (*MultiNodeProberConfig, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
 	if err != nil {

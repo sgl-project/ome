@@ -10,6 +10,7 @@ resources:
   - ome.io_dedicatedaiclusters.yaml
   - ome.io_dedicatedaiclusterprofiles.yaml
   - ome.io_capacityreservations.yaml
+  - ome.io_clustercapacityreservations.yaml
   - ome.io_clustertrainingruntimes.yaml
   - ome.io_trainingruntimes.yaml
   - ome.io_trainingjobs.yaml

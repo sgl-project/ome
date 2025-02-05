@@ -16,6 +16,7 @@ resources:
 - ../certmanager
 - ../model-controller
 - ../model-agent
+- ../resources
 
 generatorOptions:
   disableNameSuffixHash: true

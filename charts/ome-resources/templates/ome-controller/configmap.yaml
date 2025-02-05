@@ -131,6 +131,18 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: capacityreservation-config
+  namespace: ome
+data:
+  capacityreservationReconcilePolicy: |-
+    {
+      "reconcileFailedLifecycleState": false
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: benchmarkjob-config
   namespace: ome
 data:

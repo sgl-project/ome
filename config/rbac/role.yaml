@@ -164,6 +164,43 @@ rules:
   - patch
   - update
 - apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - clusterqueues
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - clusterqueues/finalizers
+  - resourceflavors/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - clusterqueues/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - resourceflavors
+  verbs:
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - leaderworkerset.x-k8s.io
   resources:
   - leaderworkersets
@@ -224,6 +261,7 @@ rules:
   - basemodels
   - basemodels/finalizers
   - benchmarkjobs
+  - capacityreservations
   - clusterbasemodels
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
@@ -247,6 +285,7 @@ rules:
   - basemodels/status
   - benchmarkjobs/finalizers
   - benchmarkjobs/status
+  - capacityreservations/status
   - clusterbasemodels/status
   - clusterservingruntimes/status
   - dedicatedaiclusters/status
@@ -261,6 +300,13 @@ rules:
 - apiGroups:
   - ome.io
   resources:
+  - capacityreservations/finalizers
+  - dedicatedaiclusters/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ome.io
+  resources:
   - clustertrainingruntimes
   - dedicatedaiclusterprofiles
   - trainingruntimes
@@ -268,12 +314,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - ome.io
-  resources:
-  - dedicatedaiclusters/finalizers
-  verbs:
-  - update
 - apiGroups:
   - ray.io
   resources:

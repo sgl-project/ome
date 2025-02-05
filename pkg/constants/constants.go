@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	"strings"
 	"time"
 
@@ -37,12 +38,14 @@ var (
 
 // InferenceService Constants
 var (
-	InferenceServiceName            = "inferenceservice"
-	InferenceServiceAPIName         = "inferenceservices"
-	InferenceServicePodLabelKey     = OMEAPIGroupName + "/" + InferenceServiceName
-	InferenceServiceConfigMapName   = "inferenceservice-config"
-	DedicatedAIClusterConfigMapName = "dedicatedaicluster-config"
-	DedicatedAiClusterFinalizer     = "dedicatedaiclusters.ome.io/finalizer"
+	InferenceServiceName                = "inferenceservice"
+	InferenceServiceAPIName             = "inferenceservices"
+	InferenceServicePodLabelKey         = OMEAPIGroupName + "/" + InferenceServiceName
+	InferenceServiceConfigMapName       = "inferenceservice-config"
+	DedicatedAIClusterConfigMapName     = "dedicatedaicluster-config"
+	CapacityReservationConfigMapName    = "capacityreservation-config"
+	DedicatedAiClusterFinalizer         = "dedicatedaiclusters.ome.io/finalizer"
+	ClusterCapacityReservationFinalizer = "clustercapacityreservations.ome.io/finalizer"
 )
 
 // OME Agent Constants
@@ -187,6 +190,31 @@ var (
 var (
 	DedicatedAiClusterReservationPriorityClass = "volcano-reservation-low-priority"
 	DedicatedAiClusterPreemptionPriorityClass  = "volcano-scheduling-high-priority"
+)
+
+// Capacity Reservation
+var (
+	// DedicatedServingCohort represents the cohort name for dedicated serving.
+	// Currently hardcoded, but we plan to introduce additional cohorts (e.g., on-demand-serving cohort) in the future for more flexibility in the system.
+	DedicatedServingCohort = "dedicated-serving"
+	// DefaultPreemptionConfig defines the preemption rules for the cluster.
+	// Currently hardcoded as all clusterQueues in the cluster have the same priority and follow the same preemption rules based on the capacity reservation design.
+	// Future changes may introduce more granular preemption configurations as needed.
+	DefaultPreemptionConfig = kueuev1beta1.ClusterQueuePreemption{
+		// Disables ReclaimWithinCohort and BorrowWithinCohort by default.
+		// All rules must be included. Otherwise, any missing rules will be automatically filled in, triggering a reconciler update.
+		BorrowWithinCohort: &kueuev1beta1.BorrowWithinCohort{
+			Policy: kueuev1beta1.BorrowWithinCohortPolicyNever,
+		},
+		ReclaimWithinCohort: kueuev1beta1.PreemptionPolicyNever,
+		WithinClusterQueue:  kueuev1beta1.PreemptionPolicyLowerPriority,
+	}
+	DefaultQueueingStrategy  = kueuev1beta1.BestEffortFIFO
+	DefaultStopPolicy        = kueuev1beta1.None
+	DefaultFlavorFungibility = kueuev1beta1.FlavorFungibility{
+		WhenCanBorrow:  kueuev1beta1.Borrow,
+		WhenCanPreempt: kueuev1beta1.TryNextFlavor,
+	}
 )
 
 // InferenceService Internal Annotations
@@ -555,6 +583,11 @@ const (
 	VolcanoQueueKind        = "Queue"
 	VolcanoJobKind          = "Job"
 	LWSKind                 = "LeaderWorkerSet"
+	KueueClusterQueueKind   = "ClusterQueue"
+	KueueLocalQueueKind     = "LocalQueue"
+	KueueCohortKind         = "Cohort"
+	KueueResourceFlavorKind = "ResourceFlavor"
+	KueueWorkloadKind       = "Workload"
 )
 
 // Volcano Job Labels

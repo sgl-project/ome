@@ -12,107 +12,108 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage":                 schema_pkg_apis_ome_v1beta1_AssociationUsage(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModel":                        schema_pkg_apis_ome_v1beta1_BaseModel(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelList":                    schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelSpec":                    schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJob":                     schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobConfig":               schema_pkg_apis_ome_v1beta1_BenchmarkJobConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":                 schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":                 schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":               schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BuiltInAdapter":                   schema_pkg_apis_ome_v1beta1_BuiltInAdapter(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservation":              schema_pkg_apis_ome_v1beta1_CapacityReservation(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationCondition":     schema_pkg_apis_ome_v1beta1_CapacityReservationCondition(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationList":          schema_pkg_apis_ome_v1beta1_CapacityReservationList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationSpec":          schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationStatus":        schema_pkg_apis_ome_v1beta1_CapacityReservationStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                 schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":             schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservation":       schema_pkg_apis_ome_v1beta1_ClusterCapacityReservation(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservationList":   schema_pkg_apis_ome_v1beta1_ClusterCapacityReservationList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":            schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":        schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntime":           schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntimeList":       schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":           schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":              schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CoschedulingPodGroupPolicyConfig": schema_pkg_apis_ome_v1beta1_CoschedulingPodGroupPolicyConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CustomPredictor":                  schema_pkg_apis_ome_v1beta1_CustomPredictor(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReconcilePolicyConfig":         schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAICluster":               schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterList":           schema_pkg_apis_ome_v1beta1_DedicatedAIClusterList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfile":        schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfile(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileList":    schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileSpec":    schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileStatus":  schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterSpec":           schema_pkg_apis_ome_v1beta1_DedicatedAIClusterSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterStatus":         schema_pkg_apis_ome_v1beta1_DedicatedAIClusterStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DeployConfig":                     schema_pkg_apis_ome_v1beta1_DeployConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Endpoint":                         schema_pkg_apis_ome_v1beta1_Endpoint(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EndpointSpec":                     schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FailureInfo":                      schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                  schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":              schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":              schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference":       schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig":       schema_pkg_apis_ome_v1beta1_HyperparameterTuningConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceService":                 schema_pkg_apis_ome_v1beta1_InferenceService(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceList":             schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":        schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":             schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":           schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServicesConfig":          schema_pkg_apis_ome_v1beta1_InferenceServicesConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.IngressConfig":                    schema_pkg_apis_ome_v1beta1_IngressConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec":               schema_pkg_apis_ome_v1beta1_JobSetTemplateSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus":                        schema_pkg_apis_ome_v1beta1_JobStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                       schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec":                       schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy":                         schema_pkg_apis_ome_v1beta1_MLPolicy(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicyConfig":                   schema_pkg_apis_ome_v1beta1_MLPolicyConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig":                schema_pkg_apis_ome_v1beta1_MPIMLPolicyConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MetricConfig":                     schema_pkg_apis_ome_v1beta1_MetricConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig":                      schema_pkg_apis_ome_v1beta1_ModelConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelCopies":                      schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":               schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat":                      schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":               schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":              schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":               schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec":                        schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatus":                      schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":                  schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MultiNodeProberConfig":            schema_pkg_apis_ome_v1beta1_MultiNodeProberConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OCIConfig":                        schema_pkg_apis_ome_v1beta1_OCIConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference":                  schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodConfig":                        schema_pkg_apis_ome_v1beta1_PodConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodGroupPolicy":                   schema_pkg_apis_ome_v1beta1_PodGroupPolicy(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodOverride":                      schema_pkg_apis_ome_v1beta1_PodOverride(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodSpec":                          schema_pkg_apis_ome_v1beta1_PodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":           schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec":                    schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef":                       schema_pkg_apis_ome_v1beta1_RuntimeRef(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                  schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntime":                   schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":               schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":            schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":               schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":             schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec":                      schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":             schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedRuntime":                 schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchElasticPolicy":               schema_pkg_apis_ome_v1beta1_TorchElasticPolicy(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig":              schema_pkg_apis_ome_v1beta1_TorchMLPolicyConfig(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec":                      schema_pkg_apis_ome_v1beta1_TrainerSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJob":                      schema_pkg_apis_ome_v1beta1_TrainingJob(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobList":                  schema_pkg_apis_ome_v1beta1_TrainingJobList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobSpec":                  schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobStatus":                schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntime":                  schema_pkg_apis_ome_v1beta1_TrainingRuntime(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeList":              schema_pkg_apis_ome_v1beta1_TrainingRuntimeList(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec":              schema_pkg_apis_ome_v1beta1_TrainingRuntimeSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                    schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec":                       schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage":                         schema_pkg_apis_ome_v1beta1_AssociationUsage(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModel":                                schema_pkg_apis_ome_v1beta1_BaseModel(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelList":                            schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelSpec":                            schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJob":                             schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobConfig":                       schema_pkg_apis_ome_v1beta1_BenchmarkJobConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":                         schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":                         schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":                       schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BuiltInAdapter":                           schema_pkg_apis_ome_v1beta1_BuiltInAdapter(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservation":                      schema_pkg_apis_ome_v1beta1_CapacityReservation(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationCondition":             schema_pkg_apis_ome_v1beta1_CapacityReservationCondition(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationList":                  schema_pkg_apis_ome_v1beta1_CapacityReservationList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationReconcilePolicyConfig": schema_pkg_apis_ome_v1beta1_CapacityReservationReconcilePolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationSpec":                  schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationStatus":                schema_pkg_apis_ome_v1beta1_CapacityReservationStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":                         schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":                     schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservation":               schema_pkg_apis_ome_v1beta1_ClusterCapacityReservation(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterCapacityReservationList":           schema_pkg_apis_ome_v1beta1_ClusterCapacityReservationList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":                    schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":                schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntime":                   schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ClusterTrainingRuntimeList":               schema_pkg_apis_ome_v1beta1_ClusterTrainingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":                   schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":                      schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CoschedulingPodGroupPolicyConfig":         schema_pkg_apis_ome_v1beta1_CoschedulingPodGroupPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CustomPredictor":                          schema_pkg_apis_ome_v1beta1_CustomPredictor(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReconcilePolicyConfig":                 schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAICluster":                       schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterList":                   schema_pkg_apis_ome_v1beta1_DedicatedAIClusterList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfile":                schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfile(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileList":            schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileSpec":            schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfileStatus":          schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfileStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterSpec":                   schema_pkg_apis_ome_v1beta1_DedicatedAIClusterSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterStatus":                 schema_pkg_apis_ome_v1beta1_DedicatedAIClusterStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DeployConfig":                             schema_pkg_apis_ome_v1beta1_DeployConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Endpoint":                                 schema_pkg_apis_ome_v1beta1_Endpoint(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EndpointSpec":                             schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FailureInfo":                              schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                          schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":                      schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":                      schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference":               schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig":               schema_pkg_apis_ome_v1beta1_HyperparameterTuningConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceService":                         schema_pkg_apis_ome_v1beta1_InferenceService(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceList":                     schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":                schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":                     schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":                   schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServicesConfig":                  schema_pkg_apis_ome_v1beta1_InferenceServicesConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.IngressConfig":                            schema_pkg_apis_ome_v1beta1_IngressConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec":                       schema_pkg_apis_ome_v1beta1_JobSetTemplateSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus":                                schema_pkg_apis_ome_v1beta1_JobStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                               schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec":                               schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy":                                 schema_pkg_apis_ome_v1beta1_MLPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicyConfig":                           schema_pkg_apis_ome_v1beta1_MLPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig":                        schema_pkg_apis_ome_v1beta1_MPIMLPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MetricConfig":                             schema_pkg_apis_ome_v1beta1_MetricConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelConfig":                              schema_pkg_apis_ome_v1beta1_ModelConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelCopies":                              schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":                       schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat":                              schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":                       schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":                      schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":                       schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec":                                schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatus":                              schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":                          schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MultiNodeProberConfig":                    schema_pkg_apis_ome_v1beta1_MultiNodeProberConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.OCIConfig":                                schema_pkg_apis_ome_v1beta1_OCIConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ObjectReference":                          schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodConfig":                                schema_pkg_apis_ome_v1beta1_PodConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodGroupPolicy":                           schema_pkg_apis_ome_v1beta1_PodGroupPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodOverride":                              schema_pkg_apis_ome_v1beta1_PodOverride(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PodSpec":                                  schema_pkg_apis_ome_v1beta1_PodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":                   schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec":                            schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef":                               schema_pkg_apis_ome_v1beta1_RuntimeRef(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                          schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntime":                           schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":                       schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":                    schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":                       schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":                     schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec":                              schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":                     schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedRuntime":                         schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchElasticPolicy":                       schema_pkg_apis_ome_v1beta1_TorchElasticPolicy(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TorchMLPolicyConfig":                      schema_pkg_apis_ome_v1beta1_TorchMLPolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainerSpec":                              schema_pkg_apis_ome_v1beta1_TrainerSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJob":                              schema_pkg_apis_ome_v1beta1_TrainingJob(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobList":                          schema_pkg_apis_ome_v1beta1_TrainingJobList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobSpec":                          schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingJobStatus":                        schema_pkg_apis_ome_v1beta1_TrainingJobStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntime":                          schema_pkg_apis_ome_v1beta1_TrainingRuntime(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeList":                      schema_pkg_apis_ome_v1beta1_TrainingRuntimeList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.TrainingRuntimeSpec":                      schema_pkg_apis_ome_v1beta1_TrainingRuntimeSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                            schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec":                               schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
 	}
 }
 
@@ -132,39 +133,33 @@ func schema_pkg_apis_ome_v1beta1_AssociationUsage(ref common.ReferenceCallback) 
 						},
 					},
 					"usage": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Usage of the association.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
-									},
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
 								},
+								"x-kubernetes-list-type": "map",
 							},
 						},
-					},
-					"borrowedQuota": {
 						SchemaProps: spec.SchemaProps{
-							Description: "BorrowedQuota of the association.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Description: "Usage of the association.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/kueue/apis/kueue/v1beta1.FlavorUsage"),
 									},
 								},
 							},
 						},
 					},
 				},
-				Required: []string{"name", "usage", "borrowedQuota"},
+				Required: []string{"name", "usage"},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"sigs.k8s.io/kueue/apis/kueue/v1beta1.FlavorUsage"},
 	}
 }
 
@@ -949,6 +944,24 @@ func schema_pkg_apis_ome_v1beta1_CapacityReservationList(ref common.ReferenceCal
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_CapacityReservationReconcilePolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"reconcileFailedLifecycleState": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -956,10 +969,37 @@ func schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref common.ReferenceCal
 				Description: "CapacityReservationSpec defines the desired state of Capacity Reservation.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"resources": {
+					"resourceGroups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
-							Description: "The resource requirements of the Capacity Reservation.",
-							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+							Description: "ResourceGroups defines the list of resource groups for the Capacity Reservation. These are the groups of resources that the cluster queue will reserve. Limits the number of items to 50 to avoid exceeding validation complexity limits in Kubernetes API.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/kueue/apis/kueue/v1beta1.ResourceGroup"),
+									},
+								},
+							},
+						},
+					},
+					"cohort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Cohort specifies the cohort that the cluster queue belongs to, which is used for grouping cluster queues.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"preemptionRule": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreemptionRule specifies the preemption behavior of the cluster queue associated to capacity reservation.",
+							Ref:         ref("sigs.k8s.io/kueue/apis/kueue/v1beta1.ClusterQueuePreemption"),
 						},
 					},
 					"compartmentID": {
@@ -983,47 +1023,12 @@ func schema_pkg_apis_ome_v1beta1_CapacityReservationSpec(ref common.ReferenceCal
 							Format:      "",
 						},
 					},
-					"affinity": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Affinity defines node affinity for scheduling workloads.",
-							Ref:         ref("k8s.io/api/core/v1.Affinity"),
-						},
-					},
-					"nodeSelector": {
-						SchemaProps: spec.SchemaProps{
-							Description: "NodeSelector defines the node labels for scheduling workloads.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
-						},
-					},
-					"tolerations": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Tolerations for taints to allow workloads scheduling on specific nodes.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.Toleration"),
-									},
-								},
-							},
-						},
-					},
 				},
+				Required: []string{"resourceGroups"},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration"},
+			"sigs.k8s.io/kueue/apis/kueue/v1beta1.ClusterQueuePreemption", "sigs.k8s.io/kueue/apis/kueue/v1beta1.ResourceGroup"},
 	}
 }
 
@@ -1035,34 +1040,58 @@ func schema_pkg_apis_ome_v1beta1_CapacityReservationStatus(ref common.ReferenceC
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"capacity": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Capacity represents the total resources available in this capacity reservation.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/kueue/apis/kueue/v1beta1.FlavorUsage"),
 									},
 								},
 							},
 						},
 					},
 					"allocatable": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Allocatable represents the resources that are available for scheduling.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+										Default: map[string]interface{}{},
+										Ref:     ref("sigs.k8s.io/kueue/apis/kueue/v1beta1.FlavorUsage"),
 									},
 								},
 							},
 						},
 					},
 					"associationUsages": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Usages of associations An association can be a DAC or a Workload",
 							Type:        []string{"array"},
@@ -1118,7 +1147,7 @@ func schema_pkg_apis_ome_v1beta1_CapacityReservationStatus(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationCondition", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CapacityReservationCondition", "sigs.k8s.io/kueue/apis/kueue/v1beta1.FlavorUsage"},
 	}
 }
 
@@ -2997,6 +3026,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3845,6 +3875,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3872,6 +3903,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4269,6 +4301,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4580,6 +4613,7 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5566,6 +5600,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -6162,6 +6197,7 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 	}

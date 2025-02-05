@@ -1,0 +1,17 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterCapacityReservation
+metadata:
+  name: "amaaaaaasgr2ksu81s35hsjdhg172jaeg91k4jskshjwsmsgjxa1khajn2j4"
+spec:
+  compartmentID: "aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2x1"
+  resourceGroups:
+  - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+    flavors:
+    - name: "bm-gpu-h100-8"
+      resources:
+      - name: "cpu"
+        nominalQuota: 1
+      - name: "memory"
+        nominalQuota: 16Gi
+      - name: "nvidia.com/gpu"
+        nominalQuota: 1

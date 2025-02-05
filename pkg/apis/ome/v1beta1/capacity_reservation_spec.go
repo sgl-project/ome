@@ -3,6 +3,7 @@ package v1beta1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
 // CapacityReservationLifecycleState is a string enumeration type for the state of the Capacity Reservation.
@@ -33,9 +34,21 @@ const (
 // CapacityReservationSpec defines the desired state of Capacity Reservation.
 // +k8s:openapi-gen=true
 type CapacityReservationSpec struct {
-	// The resource requirements of the Capacity Reservation.
+	// ResourceGroups defines the list of resource groups for the Capacity Reservation.
+	// These are the groups of resources that the cluster queue will reserve.
+	// Limits the number of items to 50 to avoid exceeding validation complexity limits in Kubernetes API.
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=50
+	// +required
+	ResourceGroups []kueuev1beta1.ResourceGroup `json:"resourceGroups" protobuf:"bytes,8,rep,name=resourceGroups"`
+
+	// Cohort specifies the cohort that the cluster queue belongs to, which is used for grouping cluster queues.
 	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty" protobuf:"bytes,8,opt,name=resources"`
+	Cohort string `json:"cohort" protobuf:"bytes,5,opt,name=cohort"`
+
+	// PreemptionRule specifies the preemption behavior of the cluster queue associated to capacity reservation.
+	// +optional
+	PreemptionRule *kueuev1beta1.ClusterQueuePreemption `json:"preemptionRule" protobuf:"bytes,5,opt,name=preemptionRule"`
 
 	// The compartment ID to use for the Capacity Reservation.
 	// +optional
@@ -48,33 +61,27 @@ type CapacityReservationSpec struct {
 	// AllowBorrowing defines if this capacity reservation can borrow resources from others.
 	// +optional
 	AllowBorrowing bool `json:"allowBorrowing,omitempty"`
-
-	// Affinity defines node affinity for scheduling workloads.
-	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// NodeSelector defines the node labels for scheduling workloads.
-	// +optional
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-
-	// Tolerations for taints to allow workloads scheduling on specific nodes.
-	// +optional
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // CapacityReservationStatus defines the observed status of CapacityReservation.
 // +k8s:openapi-gen=true
 type CapacityReservationStatus struct {
 	// Capacity represents the total resources available in this capacity reservation.
+	// +listType=map
+	// +listMapKey=name
 	// +optional
-	Capacity corev1.ResourceList `json:"capacity,omitempty" protobuf:"bytes,2,rep,name=capacity"`
+	Capacity []kueuev1beta1.FlavorUsage `json:"capacity,omitempty" protobuf:"bytes,2,rep,name=capacity"`
 
 	// Allocatable represents the resources that are available for scheduling.
+	// +listType=map
+	// +listMapKey=name
 	// +optional
-	Allocatable corev1.ResourceList `json:"allocatable,omitempty" protobuf:"bytes,2,rep,name=allocatable"`
+	Allocatable []kueuev1beta1.FlavorUsage `json:"allocatable,omitempty" protobuf:"bytes,2,rep,name=allocatable"`
 
 	// Usages of associations
 	// An association can be a DAC or a Workload
+	// +listType=map
+	// +listMapKey=name
 	// +optional
 	AssociationUsages []AssociationUsage `json:"associationUsages,omitempty" protobuf:"bytes,2,rep,name=associationUsages"`
 
@@ -102,12 +109,10 @@ type AssociationUsage struct {
 	Name string `json:"name"`
 
 	// Usage of the association.
+	// +listType=map
+	// +listMapKey=name
 	// +required
-	Usage corev1.ResourceList `json:"usage" protobuf:"bytes,2,name=usage"`
-
-	// BorrowedQuota of the association.
-	// +required
-	BorrowedQuota corev1.ResourceList `json:"borrowedQuota" protobuf:"bytes,2,name=borrowedQuota"`
+	Usage []kueuev1beta1.FlavorUsage `json:"usage" protobuf:"bytes,2,name=usage"`
 }
 
 // CapacityReservationCondition defines health and operational status of the capacity reservation.

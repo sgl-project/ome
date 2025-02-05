@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
@@ -41,6 +42,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
+	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
 	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
@@ -213,6 +215,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	capacityReservationReconcilePolicyConfig, err := v1beta1.NewCapacityReservationReconcilePolicyConfig(clientSet)
+	if err != nil {
+		setupLog.Error(err, "Failed to initialize CapacityReservation reconciliation policy configuration")
+		os.Exit(1)
+	}
+
 	// Register optional schemes based on CRD availability
 	setupLog.Info("Registering optional CRD schemes")
 	optionalSchemes := []struct {
@@ -226,6 +234,11 @@ func main() {
 		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 		{jobsetv1alpha2.SchemeGroupVersion, constants.JobSetKind, jobsetv1alpha2.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
+		{kueuev1beta1.SchemeGroupVersion, constants.KueueClusterQueueKind, kueuev1beta1.AddToScheme},
+		{kueuev1beta1.SchemeGroupVersion, constants.KueueLocalQueueKind, kueuev1beta1.AddToScheme},
+		{kueuev1beta1.SchemeGroupVersion, constants.KueueCohortKind, kueuev1beta1.AddToScheme},
+		{kueuev1beta1.SchemeGroupVersion, constants.KueueResourceFlavorKind, kueuev1beta1.AddToScheme},
+		{kueuev1beta1.SchemeGroupVersion, constants.KueueWorkloadKind, kueuev1beta1.AddToScheme},
 	}
 
 	for _, s := range optionalSchemes {
@@ -270,6 +283,19 @@ func main() {
 		Recorder: dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, dacReconcilePolicyConfig); err != nil {
 		setupLog.Error(err, "Failed to create DedicatedAICluster controller")
+		os.Exit(1)
+	}
+
+	capacityReservationEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up CapacityReservation controller")
+	capacityReservationEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1capacityreservationcontroller.CapacityReservationReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("CapacityReservation"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: capacityReservationEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr, capacityReservationReconcilePolicyConfig); err != nil {
+		setupLog.Error(err, "Failed to create CapacityReservation controller")
 		os.Exit(1)
 	}
 

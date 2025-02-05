@@ -12,17 +12,9 @@
       "type": "object",
       "required": [
         "name",
-        "usage",
-        "borrowedQuota"
+        "usage"
       ],
       "properties": {
-        "borrowedQuota": {
-          "description": "BorrowedQuota of the association.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/resource.Quantity"
-          }
-        },
         "name": {
           "description": "Name of the association.",
           "type": "string",
@@ -30,10 +22,15 @@
         },
         "usage": {
           "description": "Usage of the association.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/resource.Quantity"
-          }
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/sigs.k8s.io.kueue.apis.kueue.v1beta1.FlavorUsage"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         }
       }
     },
@@ -488,45 +485,50 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationReconcilePolicyConfig": {
+      "type": "object",
+      "properties": {
+        "reconcileFailedLifecycleState": {
+          "type": "boolean"
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationSpec": {
       "description": "CapacityReservationSpec defines the desired state of Capacity Reservation.",
       "type": "object",
+      "required": [
+        "resourceGroups"
+      ],
       "properties": {
-        "affinity": {
-          "description": "Affinity defines node affinity for scheduling workloads.",
-          "$ref": "#/definitions/v1.Affinity"
-        },
         "allowBorrowing": {
           "description": "AllowBorrowing defines if this capacity reservation can borrow resources from others.",
           "type": "boolean"
+        },
+        "cohort": {
+          "description": "Cohort specifies the cohort that the cluster queue belongs to, which is used for grouping cluster queues.",
+          "type": "string",
+          "default": ""
         },
         "compartmentID": {
           "description": "The compartment ID to use for the Capacity Reservation.",
           "type": "string"
         },
-        "nodeSelector": {
-          "description": "NodeSelector defines the node labels for scheduling workloads.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "string",
-            "default": ""
-          }
+        "preemptionRule": {
+          "description": "PreemptionRule specifies the preemption behavior of the cluster queue associated to capacity reservation.",
+          "$ref": "#/definitions/sigs.k8s.io.kueue.apis.kueue.v1beta1.ClusterQueuePreemption"
         },
         "priorityClassName": {
           "description": "PriorityClassName is the priority class assigned to workloads associated to the Capacity Reservation.",
           "type": "string"
         },
-        "resources": {
-          "description": "The resource requirements of the Capacity Reservation.",
-          "$ref": "#/definitions/v1.ResourceRequirements"
-        },
-        "tolerations": {
-          "description": "Tolerations for taints to allow workloads scheduling on specific nodes.",
+        "resourceGroups": {
+          "description": "ResourceGroups defines the list of resource groups for the Capacity Reservation. These are the groups of resources that the cluster queue will reserve. Limits the number of items to 50 to avoid exceeding validation complexity limits in Kubernetes API.",
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/v1.Toleration"
-          }
+            "$ref": "#/definitions/sigs.k8s.io.kueue.apis.kueue.v1beta1.ResourceGroup"
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -536,10 +538,15 @@
       "properties": {
         "allocatable": {
           "description": "Allocatable represents the resources that are available for scheduling.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/resource.Quantity"
-          }
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/sigs.k8s.io.kueue.apis.kueue.v1beta1.FlavorUsage"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "associationUsages": {
           "description": "Usages of associations An association can be a DAC or a Workload",
@@ -547,14 +554,23 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.AssociationUsage"
-          }
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "capacity": {
           "description": "Capacity represents the total resources available in this capacity reservation.",
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/resource.Quantity"
-          }
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/sigs.k8s.io.kueue.apis.kueue.v1beta1.FlavorUsage"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "capacityReservationLifecycleState": {
           "description": "CapacityReservationLifecycleState indicates the current phase of the CapacityReservation (e.g., \"active\", \"creating\", \"Failed\" etc.).",

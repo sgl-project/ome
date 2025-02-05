@@ -133,7 +133,7 @@ This section defines the desired state of Capacity Reservation.
 type CapacityReservationSpec struct {
 	// The resource requirements of the Capacity Reservation.
 	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty" protobuf:"bytes,8,opt,name=resources"`
+    Resources corev1.ResourceList `json:"resources,omitempty" protobuf:"bytes,8,opt,name=resources"`
 
 	// The compartment ID to use for the Capacity Reservation.
 	// +optional
@@ -270,51 +270,25 @@ metadata:
   name: "capacityReservationId"
 spec:
   compartmentID: comp-1234
-  resources:
-    requests:
-      cpu: "32"
-      memory: "128Gi"
-      nvidia.com/gpu: "32"
-    limits:
-      cpu: "64"
-      memory: "256Gi"
-      nvidia.com/gpu: "40"
- ```
-CapacityReservation sample
-```yaml
-apiVersion: ome.io/v1beta1
-kind: CapacityReservation
-metadata:
-  name: "capacityReservationId"
-spec:
-  compartmentID: comp-1234
-  resources:
-    requests:
-      cpu: "8"
-      memory: "16Gi"
-      nvidia.com/gpu: "4"
-    limits:
-      cpu: "16"
-      memory: "32Gi"
-      nvidia.com/gpu: "8"
-  priorityClassName: "workload-high-priority-class"
-  allowBorrowing: true
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: "gpu"
-                operator: In
-                values:
-                  - "true"
-  nodeSelector:
-    dedicated-ai: "true"
-  tolerations:
-    - key: "dedicated-ai"
-      operator: "Equal"
-      value: "true"
-      effect: "NoSchedule"
+  resourceGroups:
+  - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+    flavors:
+	- name: "bm-gpu-a100-v2-8"
+      resources:
+      - name: "cpu"
+        nominalQuota: 20
+      - name: "memory"
+        nominalQuota: 240Gi
+      - name: "nvidia.com/gpu"
+        nominalQuota: 8
+    - name: "bm-gpu-h100-8"
+      resources:
+      - name: "cpu"
+        nominalQuota: 128
+      - name: "memory"
+        nominalQuota: 216Gi
+      - name: "nvidia.com/gpu"
+        nominalQuota: 8
  ```
 
 ## Reference

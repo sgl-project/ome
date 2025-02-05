@@ -1,0 +1,44 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: default-flavor
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: bm-gpu-h100-8
+spec:
+  nodeLabels:
+    node.kubernetes.io/instance-type: BM.GPU.H100.8
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: bm-gpu-a100-v2-8
+spec:
+  nodeLabels:
+    node.kubernetes.io/instance-type: BM.GPU.A100-v2.8
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: bm-gpu-b4-8
+spec:
+  nodeLabels:
+    node.kubernetes.io/instance-type: BM.GPU.B4.8
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: bm-gpu4-8
+spec:
+  nodeLabels:
+    node.kubernetes.io/instance-type: BM.GPU4.8
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: bm-gpu-a10-4
+spec:
+  nodeLabels:
+    node.kubernetes.io/instance-type: BM.GPU.A10.4

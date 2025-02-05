@@ -1,8 +1,6 @@
 module bitbucket.oci.oraclecorp.com/genaicore/ome
 
-go 1.23.0
-
-toolchain go1.23.3
+go 1.23.3
 
 require (
 	github.com/fsnotify/fsnotify v1.8.0
@@ -49,7 +47,7 @@ require (
 	knative.dev/serving v0.39.3
 	sigs.k8s.io/controller-runtime v0.19.4
 	sigs.k8s.io/jobset v0.7.1
-	sigs.k8s.io/kueue v0.10.0-devel
+	sigs.k8s.io/kueue v0.10.1
 	sigs.k8s.io/lws v0.4.2
 	sigs.k8s.io/scheduler-plugins v0.30.6
 	sigs.k8s.io/yaml v1.4.0
@@ -158,7 +156,7 @@ require (
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
-	golang.org/x/net v0.30.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/term v0.27.0 // indirect
