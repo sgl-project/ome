@@ -18,9 +18,16 @@ spec:
       operator: Exists
   supportedModelFormats:
     - autoSelect: true
-      name: pytorch
-      modelType: transformer
+      modelFormat:
+        name: pytorch
+        version: "1"
+      modelFramework:
+        name: transformer
+        version: "1"
       version: '1'
+  modelSizeRange:
+    min: 300M
+    max: 600M
   containers:
     - name: ome-container
       image: {{ .Values.gliner_large_v2_1.image.repository }}:{{ .Values.gliner_large_v2_1.image.tag }}

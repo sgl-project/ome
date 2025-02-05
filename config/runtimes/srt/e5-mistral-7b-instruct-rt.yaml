@@ -39,7 +39,7 @@ spec:
         version: "1"
       modelArchitecture: MistralModel
       autoSelect: false
-      priority: 1
+      priority: 10
   modelSizeRange:
     min: 5B
     max: 10B
