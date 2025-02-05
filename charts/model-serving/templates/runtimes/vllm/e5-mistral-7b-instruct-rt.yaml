@@ -21,7 +21,7 @@ spec:
     {{- if .Values.e5_mistral_7b_instruct.labels }}
     {{ toYaml .Values.e5_mistral_7b_instruct.labels | nindent 6 }}
     {{- end }}
-  {{- end}}
+  {{- end }}
   {{- if or .Values.commonTolerations .Values.e5_mistral_7b_instruct.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
@@ -30,7 +30,7 @@ spec:
     {{- if .Values.e5_mistral_7b_instruct.tolerations }}
     {{ toYaml .Values.e5_mistral_7b_instruct.tolerations | nindent 6 }}
     {{- end }}
-  {{- end}}
+  {{- end }}
   volumes:
     - name: dshm
       emptyDir:
@@ -39,12 +39,16 @@ spec:
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.34.0"
+      modelFormat:
+        name: safetensors
+        version: "1"
       modelArchitecture: MistralModel
-      version: "1"
       autoSelect: true
       priority: 1
+      version: "0.0"
   modelSizeRange:
     min: 5B
     max: 10B

@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-ray-multi-node-llama-3-1-405b
+  name: vllm-ray-multi-node-llama-3-1-405b-instruct-fp8-rdma
 spec:
   disabled: false
   {{- if or .Values.commonAnnotations .Values.llama_3_1_405b_instruct.annotations }}
@@ -21,7 +21,7 @@ spec:
     {{- if .Values.llama_3_1_405b_instruct.labels }}
     {{ toYaml .Values.llama_3_1_405b_instruct.labels | nindent 6 }}
     {{- end }}
-  {{- end}}
+  {{- end }}
   {{- if or .Values.commonTolerations .Values.llama_3_1_405b_instruct.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
@@ -30,36 +30,85 @@ spec:
     {{- if .Values.llama_3_1_405b_instruct.tolerations }}
     {{ toYaml .Values.llama_3_1_405b_instruct.tolerations | nindent 6 }}
     {{- end }}
-  {{- end}}
-  volumes:
-    - name: dshm
-      emptyDir:
-        medium: Memory
-  {{ with .Values.llama_3_1_405b_instruct }}
+  {{- end }}
+  dnsPolicy: ClusterFirstWithHostNet
+  hostNetwork: true
+  {{ with .Values.llama_3_1_405b_instruct_fp8 }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
+  pipelineParallelism: true
+  modelSizeRange:
+    min: 400B
+    max: 420B
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.43.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
       modelArchitecture: LlamaForCausalLM
-      version: "1"
       autoSelect: false
       priority: 1
+      version: "1.0.0"
+
   volumes:
     - name: dshm
       emptyDir:
         medium: Memory
+    - hostPath:
+        path: /dev/infiniband
+      name: devinf
     - emptyDir: { }
       name: log-volume
   protocolVersions:
     - openAI
-  modelSizeRange:
-    min: 400B
-    max: 420B
   containers:
     - name: ome-container
-      image: {{ .Values.vllm.commonImage.repository }}:{{ .Values.vllm.commonImage.tag }}
+      image: {{ .Values.llama_3_1_405b_instruct.image.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag }}
       env:
+        - name: NCCL_NET_PLUGIN
+          value: none
+        - name: NCCL_DEBUG
+          value: INFO
+        - name: NCCL_CROSS_NIC
+          value: '2'
+        - name: NCCL_SOCKET_NTHREADS
+          value: '16'
+        - name: NCCL_CUMEM_ENABLE
+          value: '0'
+        - name: NCCL_IB_SPLIT_DATA_ON_QPS
+          value: '0'
+        - name: NCCL_IB_QPS_PER_CONNECTION
+          value: '16'
+        - name: NCCL_IB_GID_INDEX
+          value: '3'
+        - name: NCCL_IB_HCA
+          value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+        - name: NCCL_IB_TC
+          value: '41'
+        - name: NCCL_IB_SL
+          value: '0'
+        - name: NCCL_IB_TIMEOUT
+          value: '22'
+        - name: HCOLL_ENABLE_MCAST_ALL
+          value: '0'
+        - name: coll_hcoll_enable
+          value: '0'
+        - name: UCX_TLS
+          value: tcp
+        - name: UCX_NET_DEVICES
+          value: eth0
+        - name: RX_QUEUE_LEN
+          value: '8192'
+        - name: IB_RX_QUEUE_LEN
+          value: '8192'
+        - name: NCCL_SOCKET_IFNAME
+          value: eth0
+        - name: NCCL_IGNORE_CPU_AFFINITY
+          value: '1'
+        - name: GLOO_SOCKET_IFNAME
+          value: eth0
         - name: VLLM_PORT
           value: "9000"
       command:
@@ -89,6 +138,8 @@ spec:
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
+        - mountPath: /dev/infiniband
+          name: devinf
         - mountPath: /tmp/ray
           name: log-volume
       resources:
@@ -100,7 +151,12 @@ spec:
           cpu: 128
           memory: 216Gi
           nvidia.com/gpu: 8
-
+      securityContext:
+        capabilities:
+          add:
+            - IPC_LOCK
+            - CAP_SYS_ADMIN
+        privileged: true
       livenessProbe:
         exec:
           command:

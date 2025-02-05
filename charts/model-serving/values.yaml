@@ -4,22 +4,19 @@ vllm:
   commonImage:
     repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
     tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
-  llama3_2_image:
-    tag: &llama_3_2ImageTag v0.6.2.e019c49f
-  vllm_embeding_image:
-    tag : &vllm_embedingImageTag 0.3.3-hotfix-embedding-fix.28d8b56bb1a
-  vllm_chat_image:
-    tag: &vllm_chatImageTag 0.4.0.post1.d7823e5e491
-  vllm_multimodal_image:
-    tag: &vllm_multimodalImageTag 0.5.1.a24e62ea0ad
-  vllm_latest_image:
-    tag: &vllm_latest_image v0.6.4.post1.c78ab524
+  latestImage:
+    tag: &latestVLLMImageTag v0.6.4.post1.c78ab524
+  # If you need to add another image tag, please think twice about the impact, and the business justification
 
 sglang:
   port: 8080
   commonImage:
     repository: &defaultSGLangImage fra.ocir.io/idqj093njucb/official-sgl
     tag: &defaultSGLangImageTag v0.4.0.post1.6b67f9b-srt-cu121
+  latestImage:
+    tag: &latestSGLangImageTag v0.4.2.post1.35b88e65-cu121
+  # If you need to add another image tag, please think twice about the impact, and the business justification
+
 
 cohere:
   commonAnnotations:
@@ -179,7 +176,7 @@ llama_3_3_70b_instruct:
   scaleMetric: { }
   image:
     repository: *defaultVLLMImage
-    tag: *vllm_latest_image
+    tag: *latestVLLMImageTag
 
 llama_3_2_1b_instruct:
   enabled: false
@@ -204,7 +201,7 @@ llama_3_2_1b_instruct:
   scaleMetric: { }
   image:
     repository: *defaultVLLMImage
-    tag: *vllm_latest_image
+    tag: *latestVLLMImageTag
 
 llama_3_2_3b_instruct:
   enabled: false
@@ -229,18 +226,15 @@ llama_3_2_3b_instruct:
   scaleMetric: { }
   image:
     repository: *defaultVLLMImage
-    tag: *vllm_latest_image
+    tag: *latestVLLMImageTag
 
+# TODO: change to llama_3_1_405b_instruct_fp8
 llama_3_1_405b_instruct:
   enabled: false
   enableRDMA: false
   singleNode: true
   labels: {}
-  annotations:
-    linkerd.io/inject: "enabled"
-    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
-    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
-    ome.io/deploymentMode: MultiNodeRayVLLM
+  annotations: {}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -258,7 +252,7 @@ llama_3_1_405b_instruct:
   maxReplicas: 1
   image:
     repository: *defaultVLLMImage
-    tag: *vllm_latest_image
+    tag: *latestVLLMImageTag
 
 phi_3_vision_128k_instruct:
   enabled: false
@@ -380,8 +374,9 @@ llama_3_2_90b_vision_instruct:
   scaleMetric: {}
   image:
     repository: *defaultVLLMImage
-    tag: *llama_3_2ImageTag
+    tag: *latestVLLMImageTag
 
+# TODO: change to llama_3_2_90b_vision_instruct_fp8_dynamic
 llama_3_2_90b_vision_fp8_dynamic:
   enabled: false
   runtime: ""
@@ -404,7 +399,7 @@ llama_3_2_90b_vision_fp8_dynamic:
   scaleMetric: {}
   image:
     repository: *defaultVLLMImage
-    tag: *llama_3_2ImageTag
+    tag: *latestVLLMImageTag
 
 llama_3_2_11b_vision_instruct:
   enabled: false
@@ -427,10 +422,12 @@ llama_3_2_11b_vision_instruct:
   scaleMetric: {}
   image:
     repository: *defaultVLLMImage
-    tag: *llama_3_2ImageTag
+    tag: *latestVLLMImageTag
 
 deepseek_v3:
   enabled: false
+  enableH100: false
+  enableH200: true
   annotations: {}
   labels: {}
   tolerations: []
@@ -445,6 +442,8 @@ deepseek_v3:
 
 deepseek_r1:
   enabled: false
+  enableH100: true
+  enableH200: false
   annotations: {}
   labels: {}
   tolerations: []

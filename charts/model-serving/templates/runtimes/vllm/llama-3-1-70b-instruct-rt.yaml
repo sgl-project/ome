@@ -21,7 +21,7 @@ spec:
     {{- if .Values.llama_3_1_70b_instruct.labels }}
     {{ toYaml .Values.llama_3_1_70b_instruct.labels | nindent 6 }}
     {{- end }}
-  {{- end}}
+  {{- end }}
   {{- if or .Values.commonTolerations .Values.llama_3_1_70b_instruct.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
@@ -30,7 +30,7 @@ spec:
     {{- if .Values.llama_3_1_70b_instruct.tolerations }}
     {{ toYaml .Values.llama_3_1_70b_instruct.tolerations | nindent 6 }}
     {{- end }}
-  {{- end}}
+  {{- end }}
   volumes:
     - name: dshm
       emptyDir:
@@ -39,11 +39,15 @@ spec:
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.42.3"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      autoSelect: true
       modelArchitecture: LlamaForCausalLM
-      version: "1"
-      autoSelect: false
+      version: "1.0.0"
       priority: 1
   modelSizeRange:
     min: 60B

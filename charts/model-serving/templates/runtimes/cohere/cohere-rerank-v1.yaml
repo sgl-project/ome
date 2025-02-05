@@ -18,8 +18,12 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCasualLM
-      name: onnxruntime
-      modelType: onnxruntime
+      modelFormat:
+        name: onnxruntime
+        version: '1'
+      modelFramework:
+        name: onnxruntime
+        version: '1'
       version: '1'
   affinity:
     nodeAffinity:

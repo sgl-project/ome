@@ -17,10 +17,26 @@ spec:
   {{- end }}
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
-      name: tensorrtllm
-      modelType: tensorrtllm
-      version: 'v0.11.0'
+      modelArchitecture: Cohere
+      version: "1.6"
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.11.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.11.0'
+    - autoSelect: true
+      modelArchitecture: CohereForCausalLM
+      version: "1.6"
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.11.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.11.0'
+  modelSizeRange:
+    min: 30B
+    max: 110B
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

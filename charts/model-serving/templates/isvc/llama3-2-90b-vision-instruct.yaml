@@ -2,8 +2,8 @@
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: llama-3-2-90b-vision
-  namespace: llama-3-2-90b-vision
+  name: llama-3-2-90b-vision-instruct
+  namespace: llama-3-2-90b-vision-instruct
   annotations:
     chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
@@ -36,6 +36,6 @@ spec:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: llama-3-2-90b-vision
+  name: llama-3-2-90b-vision-instruct
 
 {{- end }}

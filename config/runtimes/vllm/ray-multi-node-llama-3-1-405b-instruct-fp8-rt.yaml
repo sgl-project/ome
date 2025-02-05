@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-ray-multi-node-llama-3-1-405b
+  name: vllm-ray-multi-node-llama-3-1-405b-instruct-fp8
 spec:
   disabled: false
   annotations:

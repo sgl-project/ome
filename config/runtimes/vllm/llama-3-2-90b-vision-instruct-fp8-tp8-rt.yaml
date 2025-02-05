@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-2-90b-vision-instruct-fp8-8cards
+  name: vllm-llama-3-2-90b-vision-instruct-fp8-tp8
 spec:
   disabled: false
   annotations:

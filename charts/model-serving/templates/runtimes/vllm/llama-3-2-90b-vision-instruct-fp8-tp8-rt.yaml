@@ -1,58 +1,67 @@
+# TODO
+# This is quantized model serving, the model is either being quantized during loading or pre-quantized.
+# Existing runtime does not have very clear way to differentiate quantization and pre-quantization.
+# We will need to have additional API in the serving runtime to support quantization and pre-quantization.
+
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-2-11b-vision-instruct
+  name: vllm-llama-3-2-90b-vision-instruct-fp8-tp8
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_2_11b_vision_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.llama_3_2_90b_vision_fp8_dynamic.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.annotations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.annotations | nindent 6 }}
+    {{- if .Values.llama_3_2_90b_vision_fp8_dynamic.annotations }}
+    {{ toYaml .Values.llama_3_2_90b_vision_fp8_dynamic.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.llama_3_2_11b_vision_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.llama_3_2_90b_vision_fp8_dynamic.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.labels }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.labels | nindent 6 }}
+    {{- if .Values.llama_3_2_90b_vision_fp8_dynamic.labels }}
+    {{ toYaml .Values.llama_3_2_90b_vision_fp8_dynamic.labels | nindent 6 }}
     {{- end }}
-  {{- end}}
-  {{- if or .Values.commonTolerations .Values.llama_3_2_11b_vision_instruct.tolerations }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.llama_3_2_90b_vision_fp8_dynamic.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.tolerations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.tolerations | nindent 6 }}
+    {{- if .Values.llama_3_2_90b_vision_fp8_dynamic.tolerations }}
+    {{ toYaml .Values.llama_3_2_90b_vision_fp8_dynamic.tolerations | nindent 6 }}
     {{- end }}
-  {{- end}}
+  {{- end }}
   volumes:
     - name: dshm
       emptyDir:
         medium: Memory
-  {{ with .Values.llama_3_2_11b_vision_instruct }}
+  {{ with .Values.llama_3_2_90b_vision_fp8_dynamic }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
-    - name: safetensors
-      modelType: transformer
+    - modelFramework:
+        name: transformers
+        version: "4.46.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
       modelArchitecture: MllamaForConditionalGeneration
-      version: "1"
-      autoSelect: true
+      autoSelect: false
       priority: 1
+      version: "1.0.0"
   modelSizeRange:
-    min: 10B
-    max: 12B
+    min: 85B
+    max: 95B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_2_11b_vision_instruct.image.repository }}:{{ .Values.llama_3_2_11b_vision_instruct.image.tag }}
+      image: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.repository }}:{{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.tag }}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1
@@ -69,8 +78,8 @@ spec:
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=1 \
           --served-model-name={{ .Values.vllm.serveModelName }} \
-          --tensor-parallel-size=1 \
-          --max-num-seqs=32 \
+          --tensor-parallel-size=8 \
+          --max-num-seqs=128 \
           --enforce-eager \
           --preemption-mode=swap \
           --limit-mm-per-prompt=image=1 \
@@ -81,13 +90,13 @@ spec:
           name: dshm
       resources:
         requests:
-          cpu: 10
-          memory: 30Gi
-          nvidia.com/gpu: 1
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 8
         limits:
-          cpu: 10
-          memory: 30Gi
-          nvidia.com/gpu: 1
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 8
 
       readinessProbe:
         httpGet:
