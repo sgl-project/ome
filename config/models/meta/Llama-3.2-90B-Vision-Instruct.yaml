@@ -5,7 +5,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "vllm-vision"
+    models.ome.io/runtime: "vllm-llama-3-2-90b-vision-instruct-fp8"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "false"
     models.ome.io/internal: "true"

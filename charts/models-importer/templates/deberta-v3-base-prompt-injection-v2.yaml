@@ -21,9 +21,11 @@ spec:
   vendor: {{ index .Values "deberta-v3-base-prompt-injection-v2" "vendor" }}
   version: "1.0.0"
   modelFormat:
-    name: pytorch
+    name: onnx
     version: "1"
-  modelType: transformer
+  modelFramework:
+    name: transformer
+    version: "1"
   modelArchitecture: DebertaV2ForSequenceClassification
   modelParameterSize: 184M
   modelCapabilities:

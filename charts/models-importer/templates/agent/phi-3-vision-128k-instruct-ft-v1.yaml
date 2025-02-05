@@ -23,7 +23,9 @@ spec:
   modelFormat:
     name: safetensors
     version: "1"
-  modelType: transformer
+  modelFramework:
+    name: transformers
+    version: "4.41.2"
   modelArchitecture: Phi3VForCausalLM
   modelParameterSize: 4.15B
   modelCapabilities:

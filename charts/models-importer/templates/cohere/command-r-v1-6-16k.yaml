@@ -23,9 +23,11 @@ spec:
   vendor: {{ index .Values "cohere-command-r-v1-6-16k-chat" "vendor" }}
   version: "1.6"
   modelFormat:
-    name: tensorrt_llm
+    name: tensorrtllm
     version: 'v0.11.0'
-  modelType: tensorrtllm
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.11.0'
   modelArchitecture: CohereForCasualLM
   modelParameterSize: 34.55B
   modelCapabilities:

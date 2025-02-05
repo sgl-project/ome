@@ -21,10 +21,12 @@ spec:
     path: /mnt/data/models/meta/llama-3-2-11b-vision
   vendor: meta
   version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.45.0.dev0"
   modelFormat:
     name: safetensors
     version: "1"
-  modelType: transformer
   modelArchitecture: MllamaForConditionalGeneration
   modelParameterSize: 11B
   modelCapabilities:

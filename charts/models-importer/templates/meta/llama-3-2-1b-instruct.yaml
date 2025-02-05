@@ -7,7 +7,7 @@ metadata:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
-    models.ome.io/runtime: "vllm-xsmall-text-generation"
+    models.ome.io/runtime: "vllm-llama-3-2-1b-instruct"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "llama-3-2-1b-instruct" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "llama-3-2-1b-instruct" "isInternal" }}"
@@ -21,10 +21,12 @@ spec:
     path: /mnt/data/models/meta/llama-3-2-1b-instruct
   vendor: meta
   version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.45.0.dev0"
   modelFormat:
     name: safetensors
     version: "1"
-  modelType: transformer
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 1B
   modelCapabilities:

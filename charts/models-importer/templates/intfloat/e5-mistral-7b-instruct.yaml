@@ -20,10 +20,12 @@ spec:
     path: /mnt/data/models/intfloat/e5-mistral-7b-instruct
   vendor: intfloat
   version: "0.0"
+  modelFramework:
+    name: transformers
+    version: "4.34.0"
   modelFormat:
     name: safetensors
     version: "1"
-  modelType: transformer
   modelArchitecture: MistralModel
   modelParameterSize: 7B
   modelCapabilities:

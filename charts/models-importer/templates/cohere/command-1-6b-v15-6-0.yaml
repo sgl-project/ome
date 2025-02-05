@@ -25,7 +25,9 @@ spec:
   modelFormat:
     name: fastertransformer
     version: '1'
-  modelType: transformer
+  modelFramework:
+    name: fastertransformer
+    version: '1'
   modelArchitecture: Cohere
   modelParameterSize: 6B
   modelCapabilities:

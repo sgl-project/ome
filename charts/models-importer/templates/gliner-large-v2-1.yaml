@@ -23,7 +23,9 @@ spec:
   modelFormat:
     name: pytorch
     version: "1"
-  modelType: transformer
+  modelFramework:
+    name: transformer
+    version: "1"
   modelParameterSize: 459M
   modelCapabilities:
     - "PII_PROTECTION"

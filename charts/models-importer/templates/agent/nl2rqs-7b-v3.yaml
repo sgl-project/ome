@@ -23,7 +23,9 @@ spec:
   modelFormat:
     name: safetensors
     version: "1"
-  modelType: transformer
+  modelFramework:
+    name: transformers
+    version: "4.38.1"
   modelArchitecture: Qwen2ForCausalLM
   modelParameterSize: 7B
   modelCapabilities:

@@ -19,9 +19,12 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: DebertaV2ForSequenceClassification
-      modelType: transformer
-      name: pytorch
-      version: '1'
+      modelFormat:
+        name: onnx
+        version: "1"
+      modelFramework:
+        name: transformer
+        version: "1"
   containers:
     - name: ome-container
       image: {{ .Values.deberta_v3_base_prompt_injection_v2.image.repository }}:{{ .Values.deberta_v3_base_prompt_injection_v2.image.tag }}

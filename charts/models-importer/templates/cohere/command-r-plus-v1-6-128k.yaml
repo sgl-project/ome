@@ -25,7 +25,6 @@ spec:
   modelFormat:
     name: tensorrt_llm
     version: 'v0.11.0'
-  modelType: tensorrtllm
   modelArchitecture: CohereForCausalLM
   modelParameterSize: 101.32B
   modelCapabilities:

@@ -21,10 +21,12 @@ spec:
     path: /mnt/data/models/meta/llama-3-3-70b-instruct
   vendor: meta
   version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.47.0.dev0"
   modelFormat:
     name: safetensors
     version: "1"
-  modelType: transformer
   modelArchitecture: LlamaForCausalLM
   modelParameterSize: 70B
   modelCapabilities:

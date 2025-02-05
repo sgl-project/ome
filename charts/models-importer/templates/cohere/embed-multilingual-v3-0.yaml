@@ -23,9 +23,11 @@ spec:
   vendor: {{ index .Values "cohere-embed-multilingual-v3-0" "vendor" }}
   version: "3.0"
   modelFormat:
+    name: onnx
+    version: '1'
+  modelFramework:
     name: onnxruntime
     version: '1'
-  modelType: onnxruntime
   modelArchitecture: CohereForCasualLM
   modelParameterSize: 0.52B
   modelCapabilities:
