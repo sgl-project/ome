@@ -62,6 +62,9 @@ $(shell perl -pi -e 's/memory:.*/memory: $(OME_CONTROLLER_MEMORY_LIMIT)/' config
 OLD_IMAGE=odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:go1.23.3-30 AS builder
 NEW_IMAGE=odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:go1.23.5-35 AS builder
 
+# Default to not waiting for controller
+WAIT_FOR_CONTROLLER ?= false
+
 .PHONY: all
 all: test ## 🎯 Run all tests
 	@echo "🎯 Running all tests..."
@@ -374,8 +377,10 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 		./hack/self-signed-ca.sh; \
 	fi
 	
-	@echo "\n⏳ Step 3: Waiting for OME controller to be ready..."
-	kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s
+	@if [ ${WAIT_FOR_CONTROLLER} = true ]; then \
+		echo "\n⏳ Step 3: Waiting for OME controller to be ready..."; \
+		kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s; \
+	fi
 	
 	@echo "\n🔄 Step 4: Applying cluster resources..."
 	kubectl apply -k config/clusterresources
