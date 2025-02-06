@@ -150,6 +150,7 @@ var (
 	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
 	PrometheusPortAnnotationKey              = "prometheus.io/port"
 	PrometheusPathAnnotationKey              = "prometheus.io/path"
+	PrometheusScrapeAnnotationKey            = "prometheus.io/scrape"
 	DefaultPrometheusPath                    = "/metrics"
 	QueueProxyAggregatePrometheusMetricsPort = 9088
 	DefaultPodPrometheusPort                 = "9091"

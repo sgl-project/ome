@@ -56,6 +56,15 @@ func createLWS(headPod *corev1.PodSpec,
 	headPodMeta.Labels["ray.io/node-type"] = "head"
 	utils.SetPodLabelsFromAnnotations(headPodMeta)
 	utils.SetPodLabelsFromAnnotations(workerPodMeta)
+
+	// Need to remove Prometheus annotations for workerPods as workerPods don't expose endpoints
+	abandonedWorkerPodAnnotations := []string{
+		constants.PrometheusPathAnnotationKey,
+		constants.PrometheusPortAnnotationKey,
+		constants.PrometheusScrapeAnnotationKey,
+	}
+	utils.RemovePodAnnotations(workerPodMeta, abandonedWorkerPodAnnotations)
+
 	setDefaultPodSpec(headPod)
 	setDefaultPodSpec(workerPod)
 	replicas := int32(1)
