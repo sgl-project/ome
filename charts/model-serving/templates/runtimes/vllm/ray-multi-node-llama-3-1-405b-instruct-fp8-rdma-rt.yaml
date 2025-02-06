@@ -4,15 +4,17 @@ metadata:
   name: vllm-ray-multi-node-llama-3-1-405b-instruct-fp8-rdma
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_1_405b_instruct.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
-    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
     {{- if .Values.llama_3_1_405b_instruct.annotations }}
-    {{ toYaml .Values.llama_3_1_405b_instruct.annotations | nindent 6 }}
+    {{ toYaml .Values.llama_3_1_405b_instruct.annotations | nindent 4 }}
     {{- end }}
-  {{- end }}
+    linkerd.io/inject: "enabled"
+    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
+    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
+    ome.io/deploymentMode: MultiNodeRayVLLM
   {{- if or .Values.commonLabels .Values.llama_3_1_405b_instruct.labels }}
   labels:
     {{- if .Values.commonLabels }}
@@ -33,7 +35,7 @@ spec:
   {{- end }}
   dnsPolicy: ClusterFirstWithHostNet
   hostNetwork: true
-  {{ with .Values.llama_3_1_405b_instruct_fp8 }}
+  {{ with .Values.llama_3_1_405b_instruct }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   pipelineParallelism: true

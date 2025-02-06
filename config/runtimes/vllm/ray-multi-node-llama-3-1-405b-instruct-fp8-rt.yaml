@@ -8,6 +8,10 @@ spec:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
+    linkerd.io/inject: "enabled"
+    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
+    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
+    ome.io/deploymentMode: MultiNodeRayVLLM
   labels:
     logging-forward: enabled
   tolerations:
