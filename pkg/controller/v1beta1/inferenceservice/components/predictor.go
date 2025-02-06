@@ -191,11 +191,11 @@ func (p *Predictor) reconcileMultiNode(isvc *v1beta1.InferenceService, objectMet
 	if err := p.setMultiNodeMReferences(isvc, r); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := r.Reconcile(); err != nil {
+	lws, err := r.Reconcile()
+	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
-	//todo: update status
-	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, r.LWS.LWS, r.URL)
+	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, lws, r.URL)
 	return ctrl.Result{}, nil
 }
 

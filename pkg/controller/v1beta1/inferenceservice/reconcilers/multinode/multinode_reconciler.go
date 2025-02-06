@@ -15,6 +15,7 @@ import (
 	knapis "knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	lwsSpec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
 
 var log = ctrl.Log.WithName("MultiNodeReconciler")
@@ -75,15 +76,16 @@ func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*
 	return url, nil
 }
 
-func (r *MultiNodeReconciler) Reconcile() error {
-	if _, err := r.LWS.Reconcile(); err != nil {
-		return err
+func (r *MultiNodeReconciler) Reconcile() (*lwsSpec.LeaderWorkerSet, error) {
+	existingLWS, err := r.LWS.Reconcile()
+	if err != nil {
+		return nil, err
 	}
 	if _, err := r.IstioSidecar.Reconcile(); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := r.Service.Reconcile(); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return existingLWS, nil
 }
