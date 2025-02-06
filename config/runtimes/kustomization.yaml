@@ -26,6 +26,7 @@ resources:
   - srt/llama-3-2-90b-vision-instruct-fp8-rt.yaml
   - srt/llama-3-3-70b-instruct-rt.yaml
   - srt/deepseek-r1-rdma-rt.yaml
+  - srt/deepseek-v3-rdma-rt.yaml
   - srt/deepseek-r1-rt.yaml
   - srt/deepseek-v3-rt.yaml
   - cohere/cohere-command-1-large.yaml

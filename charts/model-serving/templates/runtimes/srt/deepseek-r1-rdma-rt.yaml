@@ -67,8 +67,6 @@ spec:
     - hostPath:
         path: /dev/infiniband
       name: devinf
-    - emptyDir: { }
-      name: log-volume
   protocolVersions:
     - openAI
   containers:
@@ -198,8 +196,6 @@ spec:
       - hostPath:
           path: /dev/infiniband
         name: devinf
-      - emptyDir: { }
-        name: log-volume
     containers:
       - name: ome-container
         image: {{ .Values.deepseek_r1.image.repository }}:{{ .Values.deepseek_r1.image.tag }}
@@ -266,5 +262,3 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/ray
-            name: log-volume

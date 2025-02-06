@@ -13,10 +13,8 @@ metadata:
 spec:
   predictor:
     model:
-      {{- if and .Values.deepseek_r1.enableRDMA (not .Values.deepseek_r1.singleNode) }}
-      runtime: deepseek-r1-rdma-rt # UPDATE Runtime
-      {{- else if and .Values.deepseek_r1.singleNode (not .Values.deepseek_r1.enableRDMA) }}
-      runtime: deepseek-r1-rt # UPDATE Runtime
+      {{- if and .Values.deepseek_r1.enableH200 (not .Values.deepseek_r1.enableH100) }}
+      runtime: srt-deepseek-r1
       {{- else }}
       runtime: srt-multi-node-deepseek-r1-rdma
       {{- end }}

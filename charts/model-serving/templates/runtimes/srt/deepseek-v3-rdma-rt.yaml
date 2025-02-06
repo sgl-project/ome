@@ -1,19 +1,36 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-multi-node-deepseek-r1-rdma
+  name: srt-multi-node-deepseek-v3-rdma
 spec:
-  disabled: false
+  disabled: {{ not .Values.deepseek_v3.enableH100 }}
+  {{- if or .Values.commonAnnotations .Values.deepseek_v3.annotations }}
   annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
-    prometheus.io/path: "/metrics"
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.deepseek_v3.annotations }}
+    {{ toYaml .Values.deepseek_v3.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.deepseek_v3.labels }}
   labels:
-    logging-forward: enabled
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.deepseek_v3.labels }}
+    {{ toYaml .Values.deepseek_v3.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.deepseek_v3.tolerations }}
   tolerations:
-    - key: "nvidia.com/gpu"
-      operator: "Exists"
-      effect: "NoSchedule"
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.deepseek_v3.tolerations }}
+    {{ toYaml .Values.deepseek_v3.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
   dnsPolicy: ClusterFirstWithHostNet
   hostNetwork: true
   nodeSelector:
@@ -36,13 +53,13 @@ spec:
     - modelFormat:
         name: safetensors
         version: "1"
-      version: "1.0.0"
       modelFramework:
         name: transformers
-        version: "4.46.3"
+        version: "4.33.1"
       modelArchitecture: DeepseekV3ForCausalLM
       autoSelect: true
       priority: 1
+      version: "1.0.0"
   volumes:
     - name: dshm
       emptyDir:
@@ -54,7 +71,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.2.post1.35b88e65-cu121
+      image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
       env:
         - name: NCCL_NET_PLUGIN
           value: none
@@ -103,7 +120,7 @@ spec:
       command:
         - sh
         - -c
-        - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-reasoning --reasoning-parser DeepSeek-R1 --enable-metrics"
+        - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-metrics"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -151,10 +168,15 @@ spec:
       oci.oraclecloud.com/rdma.authenticated: "16"
       oci.oraclecloud.com/rdma.mlx_issues: "0"
       oke.oraclecloud.com/pool.mode: cluster-network
+    {{- if or .Values.commonTolerations .Values.deepseek_v3.tolerations }}
     tolerations:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.deepseek_v3.tolerations }}
+      {{ toYaml .Values.deepseek_v3.tolerations | nindent 8 }}
+      {{- end }}
+    {{- end }}
     dnsPolicy: ClusterFirstWithHostNet
     hostNetwork: true
     affinity:
@@ -176,11 +198,11 @@ spec:
         name: devinf
     containers:
       - name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.2.post1.35b88e65-cu121
+        image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-reasoning --reasoning-parser DeepSeek-R1 --enable-metrics"
+          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-metrics"
         resources:
           limits:
             nvidia.com/gpu: "8"
