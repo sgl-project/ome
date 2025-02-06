@@ -29,11 +29,20 @@ spec:
   modelParameterSize: 685B
   maxTokens: 163840
   additionalMetadata:
+    {{- if index .Values "deepseek-r1" "singleNode" }}
+    # TODO: update single node DAC shape
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_GENERIC
+        - name: LARGE_GENERIC_2
           quotaUnit: 1
           default: true
+    {{- else }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC_4
+          quotaUnit: 1
+          default: true
+    {{- end }}
   modelCapabilities:
     - "CHAT"
   storage:

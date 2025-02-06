@@ -428,6 +428,8 @@ deepseek_v3:
   enabled: false
   enableH100: false
   enableH200: true
+  enableRDMA: false
+  singleNode: false
   annotations: {}
   labels: {}
   tolerations: []
@@ -444,6 +446,8 @@ deepseek_r1:
   enabled: false
   enableH100: true
   enableH200: false
+  enableRDMA: false
+  singleNode: false
   annotations: {}
   labels: {}
   tolerations: []
