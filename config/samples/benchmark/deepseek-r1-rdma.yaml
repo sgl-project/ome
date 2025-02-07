@@ -5,14 +5,14 @@ metadata:
   namespace: deepseek-r1
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.123"
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.126"
   endpoint:
     inferenceService:
       name: deepseek-r1
       namespace: deepseek-r1
   task: text-to-text
   trafficScenarios:
-    - "N(300,150)/(480,240)"
+    - "N(480,240)/(300,150)"
     - "D(100,100)"
     - "D(100,1000)"
     - "D(2000,200)"
@@ -39,6 +39,8 @@ spec:
     gpuType: "H100"
     gpuCount: 16
   outputLocation:
+    # NOTE: `deepseek-r1-benchmark` is the prefix of the object storage, so please
+    # change it to avoid override when you start a new benchmark
     storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/deepseek-r1-benchmark"
     parameters:
       auth: "instance_principal"

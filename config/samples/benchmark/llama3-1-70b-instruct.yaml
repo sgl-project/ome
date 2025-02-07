@@ -5,7 +5,7 @@ metadata:
   namespace: llama-3-1-70b
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.123"
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.126"
   huggingFaceSecretReference:
     name: huggingface-secret
   endpoint:
@@ -14,7 +14,7 @@ spec:
       namespace: llama-3-1-70b-instruct
   task: text-to-text
   trafficScenarios:
-    - "N(300,150)/(480,240)"
+    - "N(480,240)/(300,150)"
     - "D(100,100)"
     - "D(100,1000)"
     - "D(2000,200)"
