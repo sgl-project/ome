@@ -4,8 +4,6 @@ kind: InferenceService
 metadata:
   name: gliner-large-v2-1
   namespace: gliner-large-v2-1
-  annotations:
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     model:

@@ -4,8 +4,6 @@ kind: InferenceService
 metadata:
   name: deberta-v3-base-prompt-injection-v2
   namespace: deberta-v3-base-prompt-injection-v2
-  annotations:
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     model:
