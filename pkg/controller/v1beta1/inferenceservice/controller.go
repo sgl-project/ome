@@ -1,11 +1,15 @@
 package inferenceservice
 
 import (
-	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"context"
 	"fmt"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	"reflect"
+
+	duckv1 "knative.dev/pkg/apis/duck/v1"
+	"knative.dev/pkg/network"
+
+	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	multimodelconfig "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
@@ -35,6 +39,7 @@ import (
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	knapis "knative.dev/pkg/apis"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices;inferenceservices/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -138,16 +143,18 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// The object is being deleted
 		if utils.Includes(isvc.ObjectMeta.Finalizers, finalizerName) {
 
-			pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
-			r.Log.Info("Force deleting PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
-			if err := r.ForceDeletePV(pvName); err != nil {
-				return ctrl.Result{}, err
-			}
-			for _, item := range constants.OCIETCHostPaths {
-				pvName := constants.PVName(isvc.Name, isvc.Namespace, item.Name)
-				r.Log.Info("Force deleting chainsaw PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
+			if deploymentMode != constants.VirtualDeployment {
+				pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
+				r.Log.Info("Force deleting PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
 				if err := r.ForceDeletePV(pvName); err != nil {
 					return ctrl.Result{}, err
+				}
+				for _, item := range constants.OCIETCHostPaths {
+					pvName := constants.PVName(isvc.Name, isvc.Namespace, item.Name)
+					r.Log.Info("Force deleting chainsaw PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
+					if err := r.ForceDeletePV(pvName); err != nil {
+						return ctrl.Result{}, err
+					}
 				}
 			}
 
@@ -162,17 +169,15 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	// Handle VirtualDeployment without actual reconciliation
+	if deploymentMode == constants.VirtualDeployment {
+		return r.handleVirtualDeployment(isvc)
+	}
+
 	// Abort early if the resolved deployment mode is Serverless, but Knative Services are not available
 	if deploymentMode == constants.Serverless {
-		ksvcAvailable, checkKsvcErr := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
-		if checkKsvcErr != nil {
-			return reconcile.Result{}, checkKsvcErr
-		}
-
-		if !ksvcAvailable {
-			r.Recorder.Event(isvc, v1.EventTypeWarning, "ServerlessModeRejected",
-				"It is not possible to use Serverless deployment mode when Knative Services are not available")
-			return reconcile.Result{Requeue: false}, reconcile.TerminalError(fmt.Errorf("the resolved deployment mode of InferenceService '%s' is Serverless, but Knative Serving is not available", isvc.Name))
+		if result, err := r.handleServerlessPrerequisites(isvc); err != nil {
+			return result, err
 		}
 	}
 
@@ -239,6 +244,59 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err = r.updateStatus(isvc, deploymentMode); err != nil {
 		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.InferenceService) (ctrl.Result, error) {
+	// We directly set URL and inference service status to Ready in VirtualDeployment mode
+
+	// Set URL across all Status components
+	host := network.GetServiceHostname(isvc.Name, isvc.Namespace)
+	openAIURL := knapis.HTTP(host)
+	addressURL := &duckv1.Addressable{
+		URL: &apis.URL{
+			Host:   host,
+			Scheme: "http",
+		},
+	}
+	isvc.Status.URL = openAIURL
+	isvc.Status.Address = addressURL
+	isvc.Status.Components = map[v1beta2.ComponentType]v1beta2.ComponentStatusSpec{
+		v1beta2.PredictorComponent: {
+			URL: openAIURL,
+		},
+	}
+
+	isvc.Status.SetConditions(apis.Conditions{{
+		Type:               apis.ConditionReady,
+		Status:             v1.ConditionTrue,
+		LastTransitionTime: apis.VolatileTime{Inner: metav1.Now()},
+		Reason:             "VirtualDeployment",
+		Message:            "InferenceService is in VirtualDeployment mode",
+	}})
+
+	if err := r.updateStatus(isvc, constants.VirtualDeployment); err != nil {
+		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta2.InferenceService) (ctrl.Result, error) {
+	// Abort early if the resolved deployment mode is Serverless, but Knative Services are not available
+	ksvcAvailable, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !ksvcAvailable {
+		r.Recorder.Event(isvc, v1.EventTypeWarning, "ServerlessModeRejected",
+			"It is not possible to use Serverless deployment mode when Knative Services are not available")
+		return ctrl.Result{Requeue: false},
+			reconcile.TerminalError(fmt.Errorf("the resolved deployment mode of InferenceService '%s' is Serverless, but Knative Serving is not available", isvc.Name))
 	}
 
 	return ctrl.Result{}, nil

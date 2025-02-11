@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,6 +9,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -23,21 +24,16 @@ import (
 )
 
 /*
-GetDeploymentMode returns the current deployment mode, supports Serverless and RawDeployment
-case 1: no ome.io/deploymentMode annotation
-
-	return config.deploy.defaultDeploymentMode
-
-case 2: ome.io/deploymentMode is set
-
-	        if the mode is "RawDeployment", "Serverless", "MultiNodeRayVLLM", or "MultiNode" return it.
-			else return config.deploy.defaultDeploymentMode
+GetDeploymentMode returns the current deployment mode based on annotations and config.
+If a valid deployment mode is specified in annotations, it is used.
+Otherwise, returns the default deployment mode from config.
 */
 func GetDeploymentMode(annotations map[string]string, deployConfig *v1beta1.DeployConfig) constants.DeploymentModeType {
-	deploymentMode, ok := annotations[constants.DeploymentMode]
-	if ok && (deploymentMode == string(constants.RawDeployment) || deploymentMode ==
-		string(constants.Serverless)) || deploymentMode == string(constants.MultiNodeRayVLLM) || deploymentMode == string(constants.MultiNode) {
-		return constants.DeploymentModeType(deploymentMode)
+	if mode, exists := annotations[constants.DeploymentMode]; exists {
+		deploymentMode := constants.DeploymentModeType(mode)
+		if deploymentMode.IsValid() {
+			return deploymentMode
+		}
 	}
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
 }

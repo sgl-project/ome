@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	"strings"
 	"time"
+
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 
@@ -498,11 +499,22 @@ const (
 type DeploymentModeType string
 
 const (
-	Serverless       DeploymentModeType = "Serverless"
-	RawDeployment    DeploymentModeType = "RawDeployment"
-	MultiNodeRayVLLM DeploymentModeType = "MultiNodeRayVLLM"
-	MultiNode        DeploymentModeType = "MultiNode"
+	Serverless        DeploymentModeType = "Serverless"
+	RawDeployment     DeploymentModeType = "RawDeployment"
+	MultiNodeRayVLLM  DeploymentModeType = "MultiNodeRayVLLM"
+	MultiNode         DeploymentModeType = "MultiNode"
+	VirtualDeployment DeploymentModeType = "VirtualDeployment"
 )
+
+// IsValid checks if the deployment mode is valid
+func (d DeploymentModeType) IsValid() bool {
+	switch d {
+	case Serverless, RawDeployment, MultiNodeRayVLLM, MultiNode, VirtualDeployment:
+		return true
+	default:
+		return false
+	}
+}
 
 const (
 	DefaultNSKnativeServing = "knative-serving"
