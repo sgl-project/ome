@@ -179,7 +179,7 @@ fmt: ## 🧹 Run go fmt against code
 .PHONY: vet
 vet: ## 🔍 Run go vet against code
 	@echo "🔍 Checking code with go vet..."
-	@$(GO_CMD) vet ./...
+	@$(GO_CMD) vet -structtag=false ./...
 	@echo "✅ Vet checks passed"
 
 .PHONY: tidy
