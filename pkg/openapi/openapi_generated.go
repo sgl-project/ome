@@ -6824,7 +6824,7 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 					},
 					"storageUri": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model object in the object storage. Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)",
+							Description: "The path to the model object in storage. Supported storage types: - OCI object storage (e.g., oci://n/{namespace}/b/{bucket}/o/{object_path}) - PVC storage (e.g., pvc://{pvc-name}/{sub-path}) - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})",
 							Type:        []string{"string"},
 							Format:      "",
 						},

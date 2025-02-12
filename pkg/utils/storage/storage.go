@@ -10,6 +10,8 @@ const (
 	OCIStoragePrefix = "oci://"
 	// PVCStoragePrefix is the prefix for PVC storage URIs
 	PVCStoragePrefix = "pvc://"
+	// VendorStoragePrefix is the prefix for vendor storage URIs
+	VendorStoragePrefix = "vendor://"
 )
 
 // OCIStorageComponents represents the components of an OCI storage URI
@@ -23,6 +25,13 @@ type OCIStorageComponents struct {
 type PVCStorageComponents struct {
 	PVCName string
 	SubPath string
+}
+
+// VendorStorageComponents represents the components of a vendor storage URI
+type VendorStorageComponents struct {
+	VendorName   string
+	ResourceType string
+	ResourcePath string
 }
 
 // ParseOCIStorageURI parses an OCI storage URI and returns its components
@@ -86,6 +95,38 @@ func ValidatePVCStorageURI(uri string) error {
 	return err
 }
 
+// ParseVendorStorageURI parses a vendor storage URI and returns its components
+// Format: vendor://{vendor-name}/{resource-type}/{resource-path}
+func ParseVendorStorageURI(uri string) (*VendorStorageComponents, error) {
+	if !strings.HasPrefix(uri, VendorStoragePrefix) {
+		return nil, fmt.Errorf("invalid vendor storage URI format: missing %s prefix", VendorStoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, VendorStoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid vendor storage URI format: missing vendor name")
+	}
+
+	// Split into components
+	parts := strings.SplitN(path, "/", 3)
+	if len(parts) < 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return nil, fmt.Errorf("invalid vendor storage URI format. Expected: vendor://{vendor-name}/{resource-type}/{resource-path}")
+	}
+
+	return &VendorStorageComponents{
+		VendorName:   parts[0],
+		ResourceType: parts[1],
+		ResourcePath: parts[2],
+	}, nil
+}
+
+// ValidateVendorStorageURI validates if the given URI matches vendor storage format
+func ValidateVendorStorageURI(uri string) error {
+	_, err := ParseVendorStorageURI(uri)
+	return err
+}
+
 // GetStorageType determines the type of storage URI
 func GetStorageType(uri string) (string, error) {
 	switch {
@@ -93,6 +134,8 @@ func GetStorageType(uri string) (string, error) {
 		return "OCI", nil
 	case strings.HasPrefix(uri, PVCStoragePrefix):
 		return "PVC", nil
+	case strings.HasPrefix(uri, VendorStoragePrefix):
+		return "VENDOR", nil
 	default:
 		return "", fmt.Errorf("unknown storage type for URI: %s", uri)
 	}
@@ -110,6 +153,8 @@ func ValidateStorageURI(uri string) error {
 		return ValidateOCIStorageURI(uri)
 	case "PVC":
 		return ValidatePVCStorageURI(uri)
+	case "VENDOR":
+		return ValidateVendorStorageURI(uri)
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)
 	}

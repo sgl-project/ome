@@ -41,8 +41,11 @@ type StorageSpec struct {
 	// The Storage Key in the secret for this model.
 	// +optional
 	StorageKey *string `json:"key,omitempty"`
-	// The path to the model object in the object storage.
-	// Supported storage types are OCI object storage only.(e.g., oci://n/namespace/b/bucket/o/path-to-model)
+	// The path to the model object in storage.
+	// Supported storage types:
+	// - OCI object storage (e.g., oci://n/{namespace}/b/{bucket}/o/{object_path})
+	// - PVC storage (e.g., pvc://{pvc-name}/{sub-path})
+	// - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})
 	// +required
 	StorageUri *string `json:"storageUri,omitempty"`
 }

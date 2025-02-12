@@ -252,47 +252,53 @@ func TestParsePVCStorageURI(t *testing.T) {
 
 func TestGetStorageType(t *testing.T) {
 	tests := []struct {
-		name    string
-		uri     string
-		want    string
-		wantErr bool
+		name        string
+		uri         string
+		want        string
+		wantErr     bool
+		errContains string
 	}{
 		{
-			name:    "oci storage",
-			uri:     "oci://n/myns/b/mybucket/o/mypath",
-			want:    "OCI",
-			wantErr: false,
+			name: "oci storage",
+			uri:  "oci://n/myns/b/mybucket/o/mypath",
+			want: "OCI",
 		},
 		{
-			name:    "pvc storage",
-			uri:     "pvc://my-pvc/data",
-			want:    "PVC",
-			wantErr: false,
+			name: "pvc storage",
+			uri:  "pvc://mypvc/mypath",
+			want: "PVC",
 		},
 		{
-			name:    "unknown storage type",
-			uri:     "unknown://data",
-			want:    "",
-			wantErr: true,
+			name: "vendor storage",
+			uri:  "vendor://openai/models/gpt-4",
+			want: "VENDOR",
 		},
 		{
-			name:    "empty uri",
-			uri:     "",
-			want:    "",
-			wantErr: true,
+			name:        "unknown storage type",
+			uri:         "unknown://something",
+			wantErr:     true,
+			errContains: "unknown storage type",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "unknown storage type",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := GetStorageType(tt.uri)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetStorageType() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 				return
 			}
-			if got != tt.want {
-				t.Errorf("GetStorageType() = %v, want %v", got, tt.want)
-			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -346,6 +352,151 @@ func TestValidateStorageURI(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateStorageURI() error = %v, wantErr %v", err, tt.wantErr)
 			}
+		})
+	}
+}
+
+func TestParseVendorStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		want        *VendorStorageComponents
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid uri with openai model",
+			uri:  "vendor://openai/models/gpt-4",
+			want: &VendorStorageComponents{
+				VendorName:   "openai",
+				ResourceType: "models",
+				ResourcePath: "gpt-4",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with azure embeddings",
+			uri:  "vendor://azure/embeddings/text-embedding-ada-002",
+			want: &VendorStorageComponents{
+				VendorName:   "azure",
+				ResourceType: "embeddings",
+				ResourcePath: "text-embedding-ada-002",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with nested path",
+			uri:  "vendor://anthropic/models/v2/claude-2",
+			want: &VendorStorageComponents{
+				VendorName:   "anthropic",
+				ResourceType: "models",
+				ResourcePath: "v2/claude-2",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "missing vendor prefix",
+			uri:         "openai/models/gpt-4",
+			wantErr:     true,
+			errContains: "missing vendor:// prefix",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing vendor:// prefix",
+		},
+		{
+			name:        "only prefix",
+			uri:         "vendor://",
+			wantErr:     true,
+			errContains: "missing vendor name",
+		},
+		{
+			name:        "missing resource type",
+			uri:         "vendor://openai",
+			wantErr:     true,
+			errContains: "invalid vendor storage URI format",
+		},
+		{
+			name:        "missing resource path",
+			uri:         "vendor://openai/models",
+			wantErr:     true,
+			errContains: "invalid vendor storage URI format",
+		},
+		{
+			name:        "empty vendor name",
+			uri:         "vendor:///models/gpt-4",
+			wantErr:     true,
+			errContains: "invalid vendor storage URI format",
+		},
+		{
+			name:        "empty resource type",
+			uri:         "vendor://openai//gpt-4",
+			wantErr:     true,
+			errContains: "invalid vendor storage URI format",
+		},
+		{
+			name:        "empty resource path",
+			uri:         "vendor://openai/models/",
+			wantErr:     true,
+			errContains: "invalid vendor storage URI format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseVendorStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.True(t, reflect.DeepEqual(got, tt.want), "expected %+v but got %+v", tt.want, got)
+		})
+	}
+}
+
+func TestValidateVendorStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid uri",
+			uri:     "vendor://openai/models/gpt-4",
+			wantErr: false,
+		},
+		{
+			name:        "invalid uri",
+			uri:         "vendor://openai",
+			wantErr:     true,
+			errContains: "invalid vendor storage URI format",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing vendor:// prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateVendorStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
 		})
 	}
 }
