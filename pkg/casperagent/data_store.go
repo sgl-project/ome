@@ -5,6 +5,7 @@ type ObjectURI struct {
 	BucketName string `mapstructure:"bucket_name" json:"bucket_name"`
 	ObjectName string `mapstructure:"object_name" json:"object_name"`
 	Prefix     string `mapstructure:"prefix" json:"prefix"`
+	IsVendor   bool   `mapstructure:"is_vendor" json:"is_vendor"`
 }
 
 type DataStore interface {

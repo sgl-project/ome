@@ -2,6 +2,7 @@ package model_agent
 
 import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"fmt"
 	"os"
 	"path"
@@ -176,32 +177,60 @@ func (s *Syncer) markModelOnNodeFailed(task *SyncerTask) {
 	}
 }
 
-func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, modelRootDir string, modelRootDirOnHost string) (*casper.ObjectURI, string, error) {
-	var destPath string
-	var storagePath string
+// getStorageInfo extracts storage URI and path from BaseModel or ClusterBaseModel
+func getStorageInfo(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) (storagePath, destPath string, err error) {
 	if baseModel != nil {
 		if baseModel.Spec.Storage.StorageUri == nil {
-			return nil, "", fmt.Errorf("got empty storge uri in baseModel %s in namespace %s", baseModel.Name, baseModel.Namespace)
+			return "", "", fmt.Errorf("got empty storage uri in baseModel %s in namespace %s", baseModel.Name, baseModel.Namespace)
 		}
 		storagePath = *baseModel.Spec.Storage.StorageUri
-		if baseModel.Spec.Storage.StorageUri != nil {
+		if baseModel.Spec.Storage.Path != nil {
 			destPath = *baseModel.Spec.Storage.Path
 		}
-	} else {
-		if clusterBaseModel.Spec.Storage.StorageUri == nil {
-			return nil, "", fmt.Errorf("got empty storge uri in clusterBaseModel %s", clusterBaseModel.Name)
-		}
-		storagePath = *clusterBaseModel.Spec.Storage.StorageUri
-		if clusterBaseModel.Spec.Storage.StorageUri != nil {
-			destPath = *clusterBaseModel.Spec.Storage.Path
-		}
+		return
 	}
 
-	osUri, err := NewObjectStorageUri(storagePath)
-	if err != nil {
-		return nil, "", err
+	if clusterBaseModel.Spec.Storage.StorageUri == nil {
+		return "", "", fmt.Errorf("got empty storage uri in clusterBaseModel %s", clusterBaseModel.Name)
+	}
+	storagePath = *clusterBaseModel.Spec.Storage.StorageUri
+	if clusterBaseModel.Spec.Storage.Path != nil {
+		destPath = *clusterBaseModel.Spec.Storage.Path
+	}
+	return
+}
+
+// validateAndTransformDestPath ensures destPath is under modelRootDir and transforms it if needed
+func validateAndTransformDestPath(destPath, modelRootDir, modelRootDirOnHost string) (string, error) {
+	if len(destPath) == 0 {
+		return "", nil // empty path is valid, caller should handle default path
 	}
 
+	if !strings.HasPrefix(destPath, modelRootDirOnHost) {
+		return "", fmt.Errorf("user defined destination path {%s} is not under model root dir {%s} of the host", destPath, modelRootDir)
+	}
+
+	return strings.Replace(destPath, modelRootDirOnHost, modelRootDir, 1), nil
+}
+
+// handleVendorStorage processes vendor storage URIs
+func handleVendorStorage(vendorComponents *storage.VendorStorageComponents, destPath, modelRootDir string) (*casper.ObjectURI, string) {
+	osUri := &casper.ObjectURI{
+		Namespace:  vendorComponents.VendorName,
+		BucketName: vendorComponents.ResourceType,
+		Prefix:     vendorComponents.ResourcePath,
+		IsVendor:   true,
+	}
+
+	if len(destPath) == 0 {
+		destPath = path.Join(modelRootDir, vendorComponents.VendorName, vendorComponents.ResourceType, vendorComponents.ResourcePath)
+	}
+
+	return osUri, destPath
+}
+
+// handleObjectStorage processes object storage URIs
+func handleObjectStorage(osUri *casper.ObjectURI, destPath, modelRootDir string) (string, error) {
 	if !strings.HasSuffix(osUri.Prefix, "/") {
 		osUri.Prefix = osUri.Prefix + "/"
 	}
@@ -212,18 +241,65 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 		} else {
 			destPath = modelRootDir + "/" + osUri.Prefix
 		}
-	} else {
-		if !strings.HasPrefix(destPath, modelRootDirOnHost) {
-			return nil, "", fmt.Errorf("user defined destination path {%s} is not under model root dir {%s} of the host", destPath, modelRootDir)
-		} else {
-			destPath = strings.Replace(destPath, modelRootDirOnHost, modelRootDir, 1)
+	}
+
+	return destPath, nil
+}
+
+// getTargetDirPath determines the target directory path for a model based on its storage configuration
+func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, modelRootDir string, modelRootDirOnHost string) (*casper.ObjectURI, string, error) {
+	// Get storage URI and path from model
+	storagePath, destPath, err := getStorageInfo(baseModel, clusterBaseModel)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Validate and transform destination path if provided
+	if len(destPath) > 0 {
+		destPath, err = validateAndTransformDestPath(destPath, modelRootDir, modelRootDirOnHost)
+		if err != nil {
+			return nil, "", err
 		}
 	}
 
-	return osUri, destPath, nil
+	// Determine storage type and handle accordingly
+	storageType, err := storage.GetStorageType(storagePath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	switch storageType {
+	case storage.VendorStoragePrefix:
+		vendorComponents, err := storage.ParseVendorStorageURI(storagePath)
+		if err != nil {
+			return nil, "", err
+		}
+		osUri, destPath := handleVendorStorage(vendorComponents, destPath, modelRootDir)
+		return osUri, destPath, nil
+
+	case storage.OCIStoragePrefix:
+		osUri, err := NewObjectStorageUri(storagePath)
+		if err != nil {
+			return nil, "", err
+		}
+		destPath, err = handleObjectStorage(osUri, destPath, modelRootDir)
+		if err != nil {
+			return nil, "", err
+		}
+		return osUri, destPath, nil
+
+	default:
+		return nil, "", fmt.Errorf("unsupported storage type: %s", storageType)
+	}
 }
 
 func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter) error {
+	// If this is a vendor storage URI, skip download operations
+	if uri.IsVendor {
+		s.logger.Infof("Vendor storage URI detected, skipping download operations for %s/%s/%s", uri.Namespace, uri.BucketName, uri.Prefix)
+		return nil
+	}
+
 	s.logger.Infof("Making call to object storage with endpoint %s", s.casperDataStore.CasperClient.Endpoint())
 	objects, err := s.casperDataStore.ListObjects(*uri)
 	if err != nil {

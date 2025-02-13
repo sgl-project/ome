@@ -32,7 +32,7 @@ func (lds *LocalDataStore) Download(source ObjectURI, target string) error {
 func (lds *LocalDataStore) Upload(source string, target ObjectURI) error {
 	err := lds.createWorkingDirectory()
 	if err != nil {
-		return fmt.Errorf("failed to create working directory %s: %s", target, err.Error())
+		return fmt.Errorf("failed to create working directory %s: %s", lds.WorkingDirectory, err.Error())
 	}
 
 	dataTargetPath := filepath.Join(lds.WorkingDirectory, target.ObjectName)
