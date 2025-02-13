@@ -58,7 +58,19 @@ func (r *ProjectService) Update(ctx context.Context, projectID string, body Proj
 		return
 	}
 	path := fmt.Sprintf("organization/projects/%s", projectID)
-	err = option.ExecuteNewRequest(ctx, http.MethodPatch, path, body, &res, opts...)
+	err = option.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	return
+}
+
+// Archive a project
+func (r *ProjectService) Archive(ctx context.Context, projectID string, opts ...option.RequestOption) (res *Project, err error) {
+	opts = append(r.Options[:], opts...)
+	if projectID == "" {
+		err = errors.New("missing required projectID parameter")
+		return
+	}
+	path := fmt.Sprintf("organization/projects/%s/archive", projectID)
+	err = option.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
 	return
 }
 

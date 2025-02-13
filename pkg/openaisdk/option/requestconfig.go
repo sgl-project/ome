@@ -1,9 +1,6 @@
 package option
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apierror"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apiform"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apiquery"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -17,6 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apierror"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apiform"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apiquery"
 )
 
 const PackageVersion = "0.1.0-alpha.0"

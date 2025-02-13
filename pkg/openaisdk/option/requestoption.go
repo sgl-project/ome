@@ -3,12 +3,13 @@ package option
 import (
 	"bytes"
 	"fmt"
-	"github.com/tidwall/sjson"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/tidwall/sjson"
 )
 
 type RequestOption = func(*RequestConfig) error
@@ -67,11 +68,12 @@ func WithMaxRetries(retries int) RequestOption {
 	}
 }
 
-// WithHeader returns a RequestOption that sets the header value to the associated key. It overwrites
-// any value if there was one already present.
-func WithHeader(key, value string) RequestOption {
+// WithHeader returns a RequestOption that adds the header with the given name and value.
+func WithHeader(name, value string) RequestOption {
 	return func(r *RequestConfig) error {
-		r.Request.Header.Set(key, value)
+		if r.Request != nil {
+			r.Request.Header.Set(name, value)
+		}
 		return nil
 	}
 }
