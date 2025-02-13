@@ -20,6 +20,10 @@ spec:
       effect: "NoSchedule"
   dnsPolicy: ClusterFirstWithHostNet
   hostNetwork: true
+  nodeSelector:
+    oci.oraclecloud.com/rdma.authenticated: "16"
+    oci.oraclecloud.com/rdma.mlx_issues: "0"
+    oke.oraclecloud.com/pool.mode: cluster-network
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

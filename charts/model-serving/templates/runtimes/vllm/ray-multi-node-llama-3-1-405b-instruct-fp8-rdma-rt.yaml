@@ -35,6 +35,11 @@ spec:
   {{- end }}
   dnsPolicy: ClusterFirstWithHostNet
   hostNetwork: true
+  nodeSelector:
+    # TODO: uncomment the following two lines once rdma related labels are added
+    # oci.oraclecloud.com/rdma.authenticated: "16"
+    # oci.oraclecloud.com/rdma.mlx_issues: "0"
+    oke.oraclecloud.com/pool.mode: cluster-network
   {{ with .Values.llama_3_1_405b_instruct }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
