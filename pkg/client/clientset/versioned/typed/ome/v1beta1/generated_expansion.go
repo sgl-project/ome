@@ -24,8 +24,18 @@ type FineTunedWeightExpansion interface{}
 
 type InferenceServiceExpansion interface{}
 
+type OrganizationExpansion interface{}
+
+type ProjectExpansion interface{}
+
+type RateLimitExpansion interface{}
+
+type ServiceAccountExpansion interface{}
+
 type ServingRuntimeExpansion interface{}
 
 type TrainingJobExpansion interface{}
 
 type TrainingRuntimeExpansion interface{}
+
+type UserExpansion interface{}

@@ -66,6 +66,22 @@ type InferenceServiceListerExpansion interface{}
 // InferenceServiceNamespaceLister.
 type InferenceServiceNamespaceListerExpansion interface{}
 
+// OrganizationListerExpansion allows custom methods to be added to
+// OrganizationLister.
+type OrganizationListerExpansion interface{}
+
+// ProjectListerExpansion allows custom methods to be added to
+// ProjectLister.
+type ProjectListerExpansion interface{}
+
+// RateLimitListerExpansion allows custom methods to be added to
+// RateLimitLister.
+type RateLimitListerExpansion interface{}
+
+// ServiceAccountListerExpansion allows custom methods to be added to
+// ServiceAccountLister.
+type ServiceAccountListerExpansion interface{}
+
 // ServingRuntimeListerExpansion allows custom methods to be added to
 // ServingRuntimeLister.
 type ServingRuntimeListerExpansion interface{}
@@ -89,3 +105,7 @@ type TrainingRuntimeListerExpansion interface{}
 // TrainingRuntimeNamespaceListerExpansion allows custom methods to be added to
 // TrainingRuntimeNamespaceLister.
 type TrainingRuntimeNamespaceListerExpansion interface{}
+
+// UserListerExpansion allows custom methods to be added to
+// UserLister.
+type UserListerExpansion interface{}

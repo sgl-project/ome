@@ -30,12 +30,22 @@ type Interface interface {
 	FineTunedWeights() FineTunedWeightInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
+	// Organizations returns a OrganizationInformer.
+	Organizations() OrganizationInformer
+	// Projects returns a ProjectInformer.
+	Projects() ProjectInformer
+	// RateLimits returns a RateLimitInformer.
+	RateLimits() RateLimitInformer
+	// ServiceAccounts returns a ServiceAccountInformer.
+	ServiceAccounts() ServiceAccountInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
 	ServingRuntimes() ServingRuntimeInformer
 	// TrainingJobs returns a TrainingJobInformer.
 	TrainingJobs() TrainingJobInformer
 	// TrainingRuntimes returns a TrainingRuntimeInformer.
 	TrainingRuntimes() TrainingRuntimeInformer
+	// Users returns a UserInformer.
+	Users() UserInformer
 }
 
 type version struct {
@@ -104,6 +114,26 @@ func (v *version) InferenceServices() InferenceServiceInformer {
 	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
+// Organizations returns a OrganizationInformer.
+func (v *version) Organizations() OrganizationInformer {
+	return &organizationInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// Projects returns a ProjectInformer.
+func (v *version) Projects() ProjectInformer {
+	return &projectInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// RateLimits returns a RateLimitInformer.
+func (v *version) RateLimits() RateLimitInformer {
+	return &rateLimitInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// ServiceAccounts returns a ServiceAccountInformer.
+func (v *version) ServiceAccounts() ServiceAccountInformer {
+	return &serviceAccountInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
 // ServingRuntimes returns a ServingRuntimeInformer.
 func (v *version) ServingRuntimes() ServingRuntimeInformer {
 	return &servingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
@@ -117,4 +147,9 @@ func (v *version) TrainingJobs() TrainingJobInformer {
 // TrainingRuntimes returns a TrainingRuntimeInformer.
 func (v *version) TrainingRuntimes() TrainingRuntimeInformer {
 	return &trainingRuntimeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// Users returns a UserInformer.
+func (v *version) Users() UserInformer {
+	return &userInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }

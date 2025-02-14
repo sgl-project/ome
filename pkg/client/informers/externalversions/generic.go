@@ -59,12 +59,22 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().FineTunedWeights().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("inferenceservices"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().InferenceServices().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("organizations"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().Organizations().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("projects"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().Projects().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("ratelimits"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().RateLimits().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("serviceaccounts"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().ServiceAccounts().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("servingruntimes"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().ServingRuntimes().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("trainingjobs"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().TrainingJobs().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("trainingruntimes"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().TrainingRuntimes().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("users"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().Users().Informer()}, nil
 
 	}
 

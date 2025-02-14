@@ -56,6 +56,22 @@ func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceSe
 	return &FakeInferenceServices{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) Organizations() v1beta1.OrganizationInterface {
+	return &FakeOrganizations{c}
+}
+
+func (c *FakeOmeV1beta1) Projects() v1beta1.ProjectInterface {
+	return &FakeProjects{c}
+}
+
+func (c *FakeOmeV1beta1) RateLimits() v1beta1.RateLimitInterface {
+	return &FakeRateLimits{c}
+}
+
+func (c *FakeOmeV1beta1) ServiceAccounts() v1beta1.ServiceAccountInterface {
+	return &FakeServiceAccounts{c}
+}
+
 func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntimeInterface {
 	return &FakeServingRuntimes{c, namespace}
 }
@@ -66,6 +82,10 @@ func (c *FakeOmeV1beta1) TrainingJobs(namespace string) v1beta1.TrainingJobInter
 
 func (c *FakeOmeV1beta1) TrainingRuntimes(namespace string) v1beta1.TrainingRuntimeInterface {
 	return &FakeTrainingRuntimes{c, namespace}
+}
+
+func (c *FakeOmeV1beta1) Users() v1beta1.UserInterface {
+	return &FakeUsers{c}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
