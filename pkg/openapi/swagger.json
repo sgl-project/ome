@@ -928,6 +928,20 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name is the name of the referenced resource",
+          "type": "string",
+          "default": ""
+        },
+        "namespace": {
+          "description": "Namespace is the namespace of the referenced resource (optional for cluster-scoped resources)",
+          "type": "string"
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CustomPredictor": {
       "description": "CustomPredictor defines arguments for configuring a custom server.",
       "type": "object",
@@ -2589,6 +2603,109 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Organization": {
+      "description": "Organization represents an AI platform organization configuration",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationStatus"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationList": {
+      "description": "OrganizationList contains a list of Organization",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Organization"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationSpec": {
+      "type": "object",
+      "required": [
+        "vendor",
+        "organizationId",
+        "secretRef"
+      ],
+      "properties": {
+        "config": {
+          "description": "Config contains vendor-specific configuration",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "organizationId": {
+          "description": "OrganizationID is the platform-specific organization ID",
+          "type": "string",
+          "default": ""
+        },
+        "secretRef": {
+          "description": "SecretRef references the secret containing the API key",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
+        },
+        "vendor": {
+          "description": "Vendor specifies the AI platform vendor (e.g., \"openai\", \"anthropic\")",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationStatus": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          }
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodConfig": {
       "type": "object",
       "required": [
@@ -3450,6 +3567,255 @@
         }
       }
     },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Project": {
+      "description": "Project represents an AI platform project",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectStatus"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectList": {
+      "description": "ProjectList contains a list of Project",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Project"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectSpec": {
+      "type": "object",
+      "required": [
+        "name",
+        "organizationRef"
+      ],
+      "properties": {
+        "config": {
+          "description": "Config contains vendor-specific configuration",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "description": {
+          "description": "Description is the project description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the project name",
+          "type": "string",
+          "default": ""
+        },
+        "organizationRef": {
+          "description": "OrganizationRef references the Organization",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectStatus": {
+      "type": "object",
+      "required": [
+        "projectId"
+      ],
+      "properties": {
+        "archivalTime": {
+          "description": "ArchivalTime is the time when the project was archived",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          }
+        },
+        "creationTime": {
+          "description": "CreationTime is the time when the project was created",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "projectId": {
+          "description": "ProjectID is the platform-specific project ID",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimit": {
+      "description": "RateLimit represents rate limit configurations for a project",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitStatus"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitConfig": {
+      "type": "object",
+      "required": [
+        "type",
+        "limit",
+        "window"
+      ],
+      "properties": {
+        "limit": {
+          "description": "Limit is the maximum allowed value",
+          "type": "integer",
+          "format": "int64",
+          "default": 0
+        },
+        "type": {
+          "description": "Type is the type of rate limit (e.g., \"requests\", \"tokens\")",
+          "type": "string",
+          "default": ""
+        },
+        "window": {
+          "description": "Window is the time window for the limit (e.g., \"1m\", \"1d\")",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitList": {
+      "description": "RateLimitList contains a list of RateLimit",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimit"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitSpec": {
+      "type": "object",
+      "required": [
+        "projectRef",
+        "targetRef",
+        "limits"
+      ],
+      "properties": {
+        "config": {
+          "description": "Config contains vendor-specific configuration",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "limits": {
+          "description": "Limits defines the rate limit configurations",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitConfig"
+          }
+        },
+        "projectRef": {
+          "description": "ProjectRef references the Project",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+        },
+        "targetRef": {
+          "description": "TargetRef references either a service account or user",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitStatus": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          }
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RuntimeRef": {
       "description": "RuntimeRef represents the reference to the existing training runtime.",
       "type": "object",
@@ -3464,6 +3830,157 @@
         },
         "name": {
           "description": "Name of the runtime being referenced. When namespaced-scoped TrainingRuntime is used, the TrainJob must have the same namespace as the deployed runtime.",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference": {
+      "type": "object",
+      "required": [
+        "name",
+        "namespace",
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "description": "Key is the key in the secret",
+          "type": "string",
+          "default": ""
+        },
+        "name": {
+          "description": "Name is the name of the secret",
+          "type": "string",
+          "default": ""
+        },
+        "namespace": {
+          "description": "Namespace is the namespace of the secret",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccount": {
+      "description": "ServiceAccount represents a service account within a project",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountStatus"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountList": {
+      "description": "ServiceAccountList contains a list of ServiceAccount",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccount"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountSpec": {
+      "type": "object",
+      "required": [
+        "name",
+        "projectRef"
+      ],
+      "properties": {
+        "config": {
+          "description": "Config contains vendor-specific configuration",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "name": {
+          "description": "Name is the service account name",
+          "type": "string",
+          "default": ""
+        },
+        "permissions": {
+          "description": "Permissions defines the service account permissions",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "projectRef": {
+          "description": "ProjectRef references the Project",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+        },
+        "role": {
+          "description": "Role defines the service account's role in the project, owner or member",
+          "type": "string"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountStatus": {
+      "type": "object",
+      "required": [
+        "serviceAccountId",
+        "apiKeySecretRef"
+      ],
+      "properties": {
+        "apiKeySecretRef": {
+          "description": "APIKeySecretRef references the secret containing the API key",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          }
+        },
+        "creationTime": {
+          "description": "CreationTime is the time when the service account was created",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "serviceAccountId": {
+          "description": "ServiceAccountID is the platform-specific service account ID",
           "type": "string",
           "default": ""
         }
@@ -4226,6 +4743,120 @@
           "description": "JobSet template which will be used by TrainJob.",
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobSetTemplateSpec"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.User": {
+      "description": "User represents a user within a project",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserStatus"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserList": {
+      "description": "UserList contains a list of User",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.User"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserSpec": {
+      "type": "object",
+      "required": [
+        "email",
+        "projectRef"
+      ],
+      "properties": {
+        "config": {
+          "description": "Config contains vendor-specific configuration",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "email": {
+          "description": "Email is the user's email address",
+          "type": "string",
+          "default": ""
+        },
+        "projectRef": {
+          "description": "ProjectRef references the Project",
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+        },
+        "role": {
+          "description": "Role defines the user's role in the project, owner or member",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserStatus": {
+      "type": "object",
+      "required": [
+        "userId"
+      ],
+      "properties": {
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          }
+        },
+        "creationTime": {
+          "description": "CreationTime is the time when the user was created",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "userId": {
+          "description": "UserID is the platform-specific user ID",
+          "type": "string",
+          "default": ""
         }
       }
     },

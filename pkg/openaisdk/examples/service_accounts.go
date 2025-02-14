@@ -56,7 +56,7 @@ func formatServiceAccountDelete(resp *openaisdk.ProjectServiceAccountDeleteRespo
 
 // ServiceAccountsExample demonstrates how to use the service accounts API
 func ServiceAccountsExample() {
-	client := openaisdk.NewClient(option.WithAPIKey("admin-api-key"))
+	client := openaisdk.NewClient(option.WithAPIKey("sk-admin-key"))
 	ctx := context.Background()
 	projectId := "proj_nFGG9rJ8eLAXjq8dD6joN3Zz"
 	svcAcct, err := client.ServiceAccounts.Create(ctx, projectId, openaisdk.ProjectServiceAccountCreateRequest{

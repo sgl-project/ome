@@ -53,10 +53,12 @@ type Project struct {
 
 type ProjectSpec struct {
 	// Name is the project name
+	// +required
 	Name string `json:"name"`
 	// Description is the project description
 	Description string `json:"description,omitempty"`
 	// OrganizationRef references the Organization
+	// +required
 	OrganizationRef CrossReference `json:"organizationRef"`
 	// Config contains vendor-specific configuration
 	// +optional
@@ -65,7 +67,8 @@ type ProjectSpec struct {
 
 type ProjectStatus struct {
 	// ProjectID is the platform-specific project ID
-	ProjectID string `json:"projectId,omitempty"`
+	// +required
+	ProjectID string `json:"projectId"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the project was created
@@ -90,13 +93,17 @@ type ServiceAccount struct {
 
 type ServiceAccountSpec struct {
 	// Name is the service account name
+	// +required
 	Name string `json:"name"`
 	// ProjectRef references the Project
+	// +required
 	ProjectRef CrossReference `json:"projectRef"`
 	// Permissions defines the service account permissions
+	// +optional
 	Permissions []string `json:"permissions,omitempty"`
 	// Role defines the service account's role in the project, owner or member
-	Role string `json:"role"`
+	// +optional
+	Role string `json:"role,omitempty"`
 	// Config contains vendor-specific configuration
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
@@ -104,9 +111,11 @@ type ServiceAccountSpec struct {
 
 type ServiceAccountStatus struct {
 	// ServiceAccountID is the platform-specific service account ID
-	ServiceAccountID string `json:"serviceAccountId,omitempty"`
+	// +required
+	ServiceAccountID string `json:"serviceAccountId"`
 	// APIKeySecretRef references the secret containing the API key
-	APIKeySecretRef *SecretReference `json:"apiKeySecretRef,omitempty"`
+	// +required
+	APIKeySecretRef *SecretReference `json:"apiKeySecretRef"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the service account was created
@@ -131,8 +140,10 @@ type UserSpec struct {
 	// Email is the user's email address
 	Email string `json:"email"`
 	// ProjectRef references the Project
+	// +required
 	ProjectRef CrossReference `json:"projectRef"`
 	// Role defines the user's role in the project, owner or member
+	// +optional
 	Role string `json:"role"`
 	// Config contains vendor-specific configuration
 	// +optional
@@ -141,7 +152,8 @@ type UserSpec struct {
 
 type UserStatus struct {
 	// UserID is the platform-specific user ID
-	UserID string `json:"userId,omitempty"`
+	// +required
+	UserID string `json:"userId"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the user was created
@@ -164,6 +176,7 @@ type RateLimit struct {
 
 type RateLimitSpec struct {
 	// ProjectRef references the Project
+	// +required
 	ProjectRef CrossReference `json:"projectRef"`
 	// TargetRef references either a service account or user
 	TargetRef CrossReference `json:"targetRef"`
@@ -183,15 +196,19 @@ type RateLimitStatus struct {
 
 type SecretReference struct {
 	// Name is the name of the secret
+	// +required
 	Name string `json:"name"`
 	// Namespace is the namespace of the secret
+	// +required
 	Namespace string `json:"namespace"`
 	// Key is the key in the secret
+	// +required
 	Key string `json:"key"`
 }
 
 type CrossReference struct {
 	// Name is the name of the referenced resource
+	// +required
 	Name string `json:"name"`
 	// Namespace is the namespace of the referenced resource (optional for cluster-scoped resources)
 	Namespace string `json:"namespace,omitempty"`
@@ -208,37 +225,55 @@ type RateLimitConfig struct {
 
 // List types for all resources
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// OrganizationList contains a list of Organization
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
 type OrganizationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Organization `json:"items"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// ProjectList contains a list of Project
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
 type ProjectList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Project `json:"items"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// ServiceAccountList contains a list of ServiceAccount
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
 type ServiceAccountList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ServiceAccount `json:"items"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// UserList contains a list of User
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
 type UserList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []User `json:"items"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// RateLimitList contains a list of RateLimit
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
 type RateLimitList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []RateLimit `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&Organization{}, &OrganizationList{})
+	SchemeBuilder.Register(&Project{}, &ProjectList{})
+	SchemeBuilder.Register(&ServiceAccount{}, &ServiceAccountList{})
+	SchemeBuilder.Register(&User{}, &UserList{})
+	SchemeBuilder.Register(&RateLimit{}, &RateLimitList{})
 }

@@ -1,8 +1,9 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/examples"
 	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/examples"
 	"github.com/sirupsen/logrus"
 )
 

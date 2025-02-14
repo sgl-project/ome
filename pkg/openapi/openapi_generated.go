@@ -1782,7 +1782,6 @@ func schema_pkg_apis_ome_v1beta1_CrossReference(ref common.ReferenceCallback) co
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3077,7 +3076,6 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3926,7 +3924,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -3954,7 +3951,6 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -4352,7 +4348,6 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -4664,7 +4659,6 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -4722,7 +4716,8 @@ func schema_pkg_apis_ome_v1beta1_OrganizationList(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "OrganizationList contains a list of Organization",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -5829,7 +5824,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
-				
 			},
 		},
 		Dependencies: []string{
@@ -6448,7 +6442,8 @@ func schema_pkg_apis_ome_v1beta1_ProjectList(ref common.ReferenceCallback) commo
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "ProjectList contains a list of Project",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -6554,6 +6549,7 @@ func schema_pkg_apis_ome_v1beta1_ProjectStatus(ref common.ReferenceCallback) com
 					"projectId": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ProjectID is the platform-specific project ID",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -6585,6 +6581,7 @@ func schema_pkg_apis_ome_v1beta1_ProjectStatus(ref common.ReferenceCallback) com
 						},
 					},
 				},
+				Required: []string{"projectId"},
 			},
 		},
 		Dependencies: []string{
@@ -6681,7 +6678,8 @@ func schema_pkg_apis_ome_v1beta1_RateLimitList(ref common.ReferenceCallback) com
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "RateLimitList contains a list of RateLimit",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -6842,7 +6840,6 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 						},
 					},
 				},
-				
 			},
 		},
 	}
@@ -6937,7 +6934,8 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountList(ref common.ReferenceCallback
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "ServiceAccountList contains a list of ServiceAccount",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -7020,7 +7018,6 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountSpec(ref common.ReferenceCallback
 					"role": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Role defines the service account's role in the project, owner or member",
-							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -7042,7 +7039,7 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountSpec(ref common.ReferenceCallback
 						},
 					},
 				},
-				Required: []string{"name", "projectRef", "role"},
+				Required: []string{"name", "projectRef"},
 			},
 		},
 		Dependencies: []string{
@@ -7059,6 +7056,7 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref common.ReferenceCallba
 					"serviceAccountId": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ServiceAccountID is the platform-specific service account ID",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -7090,6 +7088,7 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref common.ReferenceCallba
 						},
 					},
 				},
+				Required: []string{"serviceAccountId", "apiKeySecretRef"},
 			},
 		},
 		Dependencies: []string{
@@ -8509,7 +8508,8 @@ func schema_pkg_apis_ome_v1beta1_UserList(ref common.ReferenceCallback) common.O
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
+				Description: "UserList contains a list of User",
+				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
@@ -8599,7 +8599,7 @@ func schema_pkg_apis_ome_v1beta1_UserSpec(ref common.ReferenceCallback) common.O
 						},
 					},
 				},
-				Required: []string{"email", "projectRef", "role"},
+				Required: []string{"email", "projectRef"},
 			},
 		},
 		Dependencies: []string{
@@ -8616,6 +8616,7 @@ func schema_pkg_apis_ome_v1beta1_UserStatus(ref common.ReferenceCallback) common
 					"userId": {
 						SchemaProps: spec.SchemaProps{
 							Description: "UserID is the platform-specific user ID",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -8641,6 +8642,7 @@ func schema_pkg_apis_ome_v1beta1_UserStatus(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				Required: []string{"userId"},
 			},
 		},
 		Dependencies: []string{

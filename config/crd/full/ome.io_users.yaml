@@ -46,7 +46,6 @@ spec:
             required:
             - email
             - projectRef
-            - role
             type: object
           status:
             properties:
@@ -91,6 +90,8 @@ spec:
                 type: string
               userId:
                 type: string
+            required:
+            - userId
             type: object
         required:
         - spec
