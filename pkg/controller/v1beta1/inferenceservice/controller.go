@@ -27,10 +27,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"knative.dev/pkg/apis"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -133,15 +133,15 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// The object is not being deleted, so if it does not have our finalizer,
 		// then lets add the finalizer and update the object. This is equivalent
 		// registering our finalizer.
-		if !utils.Includes(isvc.ObjectMeta.Finalizers, finalizerName) {
-			isvc.ObjectMeta.Finalizers = append(isvc.ObjectMeta.Finalizers, finalizerName)
+		if !controllerutil.ContainsFinalizer(isvc, finalizerName) {
+			controllerutil.AddFinalizer(isvc, finalizerName)
 			if err := r.Update(context.Background(), isvc); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
 	} else {
 		// The object is being deleted
-		if utils.Includes(isvc.ObjectMeta.Finalizers, finalizerName) {
+		if controllerutil.ContainsFinalizer(isvc, finalizerName) {
 
 			if deploymentMode != constants.VirtualDeployment {
 				pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
@@ -159,7 +159,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			// remove our finalizer from the list and update it.
-			isvc.ObjectMeta.Finalizers = utils.RemoveString(isvc.ObjectMeta.Finalizers, finalizerName)
+			controllerutil.RemoveFinalizer(isvc, finalizerName)
 			if err := r.Update(context.Background(), isvc); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -256,7 +256,7 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.Infer
 	host := network.GetServiceHostname(isvc.Name, isvc.Namespace)
 	openAIURL := knapis.HTTP(host)
 	addressURL := &duckv1.Addressable{
-		URL: &apis.URL{
+		URL: &knapis.URL{
 			Host:   host,
 			Scheme: "http",
 		},
@@ -269,10 +269,10 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.Infer
 		},
 	}
 
-	isvc.Status.SetConditions(apis.Conditions{{
-		Type:               apis.ConditionReady,
+	isvc.Status.SetConditions(knapis.Conditions{{
+		Type:               knapis.ConditionReady,
 		Status:             v1.ConditionTrue,
-		LastTransitionTime: apis.VolatileTime{Inner: metav1.Now()},
+		LastTransitionTime: knapis.VolatileTime{Inner: metav1.Now()},
 		Reason:             "VirtualDeployment",
 		Message:            "InferenceService is in VirtualDeployment mode",
 	}})
@@ -358,8 +358,8 @@ func (r *InferenceServiceReconciler) ForceDeletePV(pvName string) error {
 
 func inferenceServiceReadiness(status v1beta2.InferenceServiceStatus) bool {
 	return status.Conditions != nil &&
-		status.GetCondition(apis.ConditionReady) != nil &&
-		status.GetCondition(apis.ConditionReady).Status == v1.ConditionTrue
+		status.GetCondition(knapis.ConditionReady) != nil &&
+		status.GetCondition(knapis.ConditionReady).Status == v1.ConditionTrue
 }
 
 func inferenceServiceStatusEqual(s1, s2 v1beta2.InferenceServiceStatus) bool {

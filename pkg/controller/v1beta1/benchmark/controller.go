@@ -16,7 +16,6 @@ import (
 	benchmarkjobpvc "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/reconcilers/pvc"
 	benchmarkutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/utils"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -79,8 +78,12 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Ensure finalizer is present
-	if err := r.ensureFinalizer(ctx, benchmarkJob); err != nil {
-		return ctrl.Result{}, err
+	if !controllerutil.ContainsFinalizer(benchmarkJob, finalizerName) {
+		controllerutil.AddFinalizer(benchmarkJob, finalizerName)
+		if err := r.Update(context.Background(), benchmarkJob); err != nil {
+			r.Log.Error(err, "Failed to add finalizer to BenchmarkJob")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Update status
@@ -145,27 +148,19 @@ func (r *BenchmarkJobReconciler) fetchBenchmarkJob(ctx context.Context, req ctrl
 
 // handleDeletion performs cleanup steps when the BenchmarkJob is being deleted.
 func (r *BenchmarkJobReconciler) handleDeletion(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob) (ctrl.Result, error) {
-	if utils.Includes(benchmarkJob.Finalizers, finalizerName) {
+	if controllerutil.ContainsFinalizer(benchmarkJob, finalizerName) {
 		// Perform cleanup logic here
 		if err := r.cleanupResources(benchmarkJob); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		benchmarkJob.Finalizers = utils.RemoveString(benchmarkJob.Finalizers, finalizerName)
+		controllerutil.RemoveFinalizer(benchmarkJob, finalizerName)
 		if err := r.Update(ctx, benchmarkJob); err != nil {
+			r.Log.Error(err, "Failed to remove finalizer from BenchmarkJob")
 			return ctrl.Result{}, err
 		}
 	}
 	return ctrl.Result{}, nil
-}
-
-// ensureFinalizer adds the finalizer to the BenchmarkJob if not present.
-func (r *BenchmarkJobReconciler) ensureFinalizer(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob) error {
-	if !utils.Includes(benchmarkJob.Finalizers, finalizerName) {
-		benchmarkJob.Finalizers = append(benchmarkJob.Finalizers, finalizerName)
-		return r.Update(ctx, benchmarkJob)
-	}
-	return nil
 }
 
 // reconcileModelPVPVC handles the creation or update of PV and PVC for the benchmark job if needed.
