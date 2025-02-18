@@ -34,6 +34,9 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=capacityreservations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=capacityreservations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=capacityreservations/finalizers,verbs=update
+// +kubebuilder:rbac:groups=ome.io,resources=clustercapacityreservations,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=clustercapacityreservations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=clustercapacityreservations/finalizers,verbs=update
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues/finalizers,verbs=update

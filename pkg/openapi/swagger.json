@@ -2664,8 +2664,7 @@
       "type": "object",
       "required": [
         "vendor",
-        "organizationId",
-        "secretRef"
+        "organizationId"
       ],
       "properties": {
         "config": {
@@ -2676,20 +2675,23 @@
             "default": ""
           }
         },
+        "disabled": {
+          "description": "Disabled indicates whether the organization is disabled",
+          "type": "boolean"
+        },
         "organizationId": {
           "description": "OrganizationID is the platform-specific organization ID",
           "type": "string",
           "default": ""
         },
         "secretRef": {
-          "description": "SecretRef references the secret containing the API key",
+          "description": "SecretRef references the secret containing the API key optional",
           "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
         },
         "vendor": {
           "description": "Vendor specifies the AI platform vendor (e.g., \"openai\", \"anthropic\")",
-          "type": "string",
-          "default": ""
+          "type": "string"
         }
       }
     },

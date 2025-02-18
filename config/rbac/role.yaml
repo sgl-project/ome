@@ -13,6 +13,7 @@ rules:
   - persistentvolumeclaims
   - persistentvolumes
   - pods
+  - secrets
   - services
   verbs:
   - create
@@ -39,16 +40,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
 - apiGroups:
   - ""
   resources:
@@ -263,11 +254,13 @@ rules:
   - benchmarkjobs
   - capacityreservations
   - clusterbasemodels
+  - clustercapacityreservations
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
   - dedicatedaiclusters
   - inferenceservices
   - inferenceservices/finalizers
+  - serviceaccounts
   - servingruntimes
   - servingruntimes/finalizers
   - trainingjobs
@@ -287,9 +280,12 @@ rules:
   - benchmarkjobs/status
   - capacityreservations/status
   - clusterbasemodels/status
+  - clustercapacityreservations/status
   - clusterservingruntimes/status
   - dedicatedaiclusters/status
   - inferenceservices/status
+  - serviceaccounts/finalizers
+  - serviceaccounts/status
   - servingruntimes/status
   - trainingjobs/finalizers
   - trainingjobs/status
@@ -301,6 +297,7 @@ rules:
   - ome.io
   resources:
   - capacityreservations/finalizers
+  - clustercapacityreservations/finalizers
   - dedicatedaiclusters/finalizers
   verbs:
   - update

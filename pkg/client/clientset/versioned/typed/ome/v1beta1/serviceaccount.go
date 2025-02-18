@@ -16,7 +16,7 @@ import (
 // ServiceAccountsGetter has a method to return a ServiceAccountInterface.
 // A group's client should implement this interface.
 type ServiceAccountsGetter interface {
-	ServiceAccounts() ServiceAccountInterface
+	ServiceAccounts(namespace string) ServiceAccountInterface
 }
 
 // ServiceAccountInterface has methods to work with ServiceAccount resources.
@@ -40,13 +40,13 @@ type serviceAccounts struct {
 }
 
 // newServiceAccounts returns a ServiceAccounts
-func newServiceAccounts(c *OmeV1beta1Client) *serviceAccounts {
+func newServiceAccounts(c *OmeV1beta1Client, namespace string) *serviceAccounts {
 	return &serviceAccounts{
 		gentype.NewClientWithList[*v1beta1.ServiceAccount, *v1beta1.ServiceAccountList](
 			"serviceaccounts",
 			c.RESTClient(),
 			scheme.ParameterCodec,
-			"",
+			namespace,
 			func() *v1beta1.ServiceAccount { return &v1beta1.ServiceAccount{} },
 			func() *v1beta1.ServiceAccountList { return &v1beta1.ServiceAccountList{} }),
 	}

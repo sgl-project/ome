@@ -126,12 +126,12 @@ func (v *version) Projects() ProjectInformer {
 
 // RateLimits returns a RateLimitInformer.
 func (v *version) RateLimits() RateLimitInformer {
-	return &rateLimitInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+	return &rateLimitInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ServiceAccounts returns a ServiceAccountInformer.
 func (v *version) ServiceAccounts() ServiceAccountInformer {
-	return &serviceAccountInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+	return &serviceAccountInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ServingRuntimes returns a ServingRuntimeInformer.
@@ -151,5 +151,5 @@ func (v *version) TrainingRuntimes() TrainingRuntimeInformer {
 
 // Users returns a UserInformer.
 func (v *version) Users() UserInformer {
-	return &userInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+	return &userInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

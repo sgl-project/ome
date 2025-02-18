@@ -25,6 +25,11 @@ resources:
 - full/ome.io_trainingruntimes.yaml
 - full/ome.io_trainingjobs.yaml
 - full/ome.io_benchmarkjobs.yaml
+- full/ome.io_organizations.yaml
+- full/ome.io_projects.yaml
+- full/ome.io_serviceaccounts.yaml
+- full/ome.io_users.yaml
+- full/ome.io_ratelimits.yaml
 
 patches:
 # Fix for https://github.com/kubernetes/kubernetes/issues/91395

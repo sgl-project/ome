@@ -16,7 +16,7 @@ import (
 // UsersGetter has a method to return a UserInterface.
 // A group's client should implement this interface.
 type UsersGetter interface {
-	Users() UserInterface
+	Users(namespace string) UserInterface
 }
 
 // UserInterface has methods to work with User resources.
@@ -40,13 +40,13 @@ type users struct {
 }
 
 // newUsers returns a Users
-func newUsers(c *OmeV1beta1Client) *users {
+func newUsers(c *OmeV1beta1Client, namespace string) *users {
 	return &users{
 		gentype.NewClientWithList[*v1beta1.User, *v1beta1.UserList](
 			"users",
 			c.RESTClient(),
 			scheme.ParameterCodec,
-			"",
+			namespace,
 			func() *v1beta1.User { return &v1beta1.User{} },
 			func() *v1beta1.UserList { return &v1beta1.UserList{} }),
 	}

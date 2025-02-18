@@ -15,9 +15,8 @@ type UserLister interface {
 	// List lists all Users in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1beta1.User, err error)
-	// Get retrieves the User from the index for a given name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.User, error)
+	// Users returns an object that can list and get Users.
+	Users(namespace string) UserNamespaceLister
 	UserListerExpansion
 }
 
@@ -29,4 +28,27 @@ type userLister struct {
 // NewUserLister returns a new UserLister.
 func NewUserLister(indexer cache.Indexer) UserLister {
 	return &userLister{listers.New[*v1beta1.User](indexer, v1beta1.Resource("user"))}
+}
+
+// Users returns an object that can list and get Users.
+func (s *userLister) Users(namespace string) UserNamespaceLister {
+	return userNamespaceLister{listers.NewNamespaced[*v1beta1.User](s.ResourceIndexer, namespace)}
+}
+
+// UserNamespaceLister helps list and get Users.
+// All objects returned here must be treated as read-only.
+type UserNamespaceLister interface {
+	// List lists all Users in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
+	List(selector labels.Selector) (ret []*v1beta1.User, err error)
+	// Get retrieves the User from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1beta1.User, error)
+	UserNamespaceListerExpansion
+}
+
+// userNamespaceLister implements the UserNamespaceLister
+// interface.
+type userNamespaceLister struct {
+	listers.ResourceIndexer[*v1beta1.User]
 }

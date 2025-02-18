@@ -4770,8 +4770,14 @@ func schema_pkg_apis_ome_v1beta1_OrganizationSpec(ref common.ReferenceCallback) 
 					"vendor": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Vendor specifies the AI platform vendor (e.g., \"openai\", \"anthropic\")",
-							Default:     "",
 							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"disabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Disabled indicates whether the organization is disabled",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -4785,7 +4791,7 @@ func schema_pkg_apis_ome_v1beta1_OrganizationSpec(ref common.ReferenceCallback) 
 					},
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
-							Description: "SecretRef references the secret containing the API key",
+							Description: "SecretRef references the secret containing the API key optional",
 							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference"),
 						},
@@ -4807,7 +4813,7 @@ func schema_pkg_apis_ome_v1beta1_OrganizationSpec(ref common.ReferenceCallback) 
 						},
 					},
 				},
-				Required: []string{"vendor", "organizationId", "secretRef"},
+				Required: []string{"vendor", "organizationId"},
 			},
 		},
 		Dependencies: []string{

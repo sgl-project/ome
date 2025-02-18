@@ -90,12 +90,12 @@ func (c *OmeV1beta1Client) Projects() ProjectInterface {
 	return newProjects(c)
 }
 
-func (c *OmeV1beta1Client) RateLimits() RateLimitInterface {
-	return newRateLimits(c)
+func (c *OmeV1beta1Client) RateLimits(namespace string) RateLimitInterface {
+	return newRateLimits(c, namespace)
 }
 
-func (c *OmeV1beta1Client) ServiceAccounts() ServiceAccountInterface {
-	return newServiceAccounts(c)
+func (c *OmeV1beta1Client) ServiceAccounts(namespace string) ServiceAccountInterface {
+	return newServiceAccounts(c, namespace)
 }
 
 func (c *OmeV1beta1Client) ServingRuntimes(namespace string) ServingRuntimeInterface {
@@ -110,8 +110,8 @@ func (c *OmeV1beta1Client) TrainingRuntimes(namespace string) TrainingRuntimeInt
 	return newTrainingRuntimes(c, namespace)
 }
 
-func (c *OmeV1beta1Client) Users() UserInterface {
-	return newUsers(c)
+func (c *OmeV1beta1Client) Users(namespace string) UserInterface {
+	return newUsers(c, namespace)
 }
 
 // NewForConfig creates a new OmeV1beta1Client for the given config.

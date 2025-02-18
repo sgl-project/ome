@@ -5,12 +5,14 @@ import (
 )
 
 // Organization represents an AI platform organization configuration
+// +k8s:openapi-gen=true
 // +genclient
 // +genclient:nonNamespaced
-// +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:object:root=true
-// +k8s:openapi-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:printcolumn:name="Vendor",type="string",JSONPath=".spec.vendor"
+// +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 type Organization struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -21,11 +23,17 @@ type Organization struct {
 
 type OrganizationSpec struct {
 	// Vendor specifies the AI platform vendor (e.g., "openai", "anthropic")
-	Vendor string `json:"vendor"`
+	// +required
+	Vendor *string `json:"vendor"`
+	// Disabled indicates whether the organization is disabled
+	// +optional
+	Disabled *bool `json:"disabled,omitempty"`
 	// OrganizationID is the platform-specific organization ID
+	// +required
 	OrganizationID string `json:"organizationId"`
 	// SecretRef references the secret containing the API key
-	SecretRef SecretReference `json:"secretRef"`
+	// optional
+	SecretRef SecretReference `json:"secretRef,omitempty"`
 	// Config contains vendor-specific configuration
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
@@ -37,12 +45,15 @@ type OrganizationStatus struct {
 }
 
 // Project represents an AI platform project
+// +k8s:openapi-gen=true
 // +genclient
 // +genclient:nonNamespaced
-// +kubebuilder:resource:scope="Cluster"
-// +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope="Cluster"
+// +kubebuilder:printcolumn:name="Name",type="string",JSONPath=".spec.name"
+// +kubebuilder:printcolumn:name="ProjectID",type="boolean",JSONPath=".status.projectId"
+// +kubebuilder:printcolumn:name="Organization",type="string",JSONPath=".spec.organizationRef.name"
 type Project struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -78,11 +89,10 @@ type ProjectStatus struct {
 }
 
 // ServiceAccount represents a service account within a project
-// +genclient
-// +genclient:nonNamespaced
 // +k8s:openapi-gen=true
+// +genclient
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:subresource:status
 type ServiceAccount struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -123,11 +133,10 @@ type ServiceAccountStatus struct {
 }
 
 // User represents a user within a project
-// +genclient
-// +genclient:nonNamespaced
 // +k8s:openapi-gen=true
+// +genclient
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:subresource:status
 type User struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -161,11 +170,10 @@ type UserStatus struct {
 }
 
 // RateLimit represents rate limit configurations for a project
-// +genclient
-// +genclient:nonNamespaced
 // +k8s:openapi-gen=true
+// +genclient
 // +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:subresource:status
 type RateLimit struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

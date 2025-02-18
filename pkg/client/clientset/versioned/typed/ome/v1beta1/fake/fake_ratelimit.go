@@ -16,6 +16,7 @@ import (
 // FakeRateLimits implements RateLimitInterface
 type FakeRateLimits struct {
 	Fake *FakeOmeV1beta1
+	ns   string
 }
 
 var ratelimitsResource = v1beta1.SchemeGroupVersion.WithResource("ratelimits")
@@ -26,7 +27,8 @@ var ratelimitsKind = v1beta1.SchemeGroupVersion.WithKind("RateLimit")
 func (c *FakeRateLimits) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.RateLimit, err error) {
 	emptyResult := &v1beta1.RateLimit{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(ratelimitsResource, name, options), emptyResult)
+		Invokes(testing.NewGetActionWithOptions(ratelimitsResource, c.ns, name, options), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -37,7 +39,8 @@ func (c *FakeRateLimits) Get(ctx context.Context, name string, options v1.GetOpt
 func (c *FakeRateLimits) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.RateLimitList, err error) {
 	emptyResult := &v1beta1.RateLimitList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(ratelimitsResource, ratelimitsKind, opts), emptyResult)
+		Invokes(testing.NewListActionWithOptions(ratelimitsResource, ratelimitsKind, c.ns, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -58,14 +61,16 @@ func (c *FakeRateLimits) List(ctx context.Context, opts v1.ListOptions) (result 
 // Watch returns a watch.Interface that watches the requested rateLimits.
 func (c *FakeRateLimits) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(ratelimitsResource, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(ratelimitsResource, c.ns, opts))
+
 }
 
 // Create takes the representation of a rateLimit and creates it.  Returns the server's representation of the rateLimit, and an error, if there is any.
 func (c *FakeRateLimits) Create(ctx context.Context, rateLimit *v1beta1.RateLimit, opts v1.CreateOptions) (result *v1beta1.RateLimit, err error) {
 	emptyResult := &v1beta1.RateLimit{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(ratelimitsResource, rateLimit, opts), emptyResult)
+		Invokes(testing.NewCreateActionWithOptions(ratelimitsResource, c.ns, rateLimit, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -76,7 +81,8 @@ func (c *FakeRateLimits) Create(ctx context.Context, rateLimit *v1beta1.RateLimi
 func (c *FakeRateLimits) Update(ctx context.Context, rateLimit *v1beta1.RateLimit, opts v1.UpdateOptions) (result *v1beta1.RateLimit, err error) {
 	emptyResult := &v1beta1.RateLimit{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(ratelimitsResource, rateLimit, opts), emptyResult)
+		Invokes(testing.NewUpdateActionWithOptions(ratelimitsResource, c.ns, rateLimit, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -88,7 +94,8 @@ func (c *FakeRateLimits) Update(ctx context.Context, rateLimit *v1beta1.RateLimi
 func (c *FakeRateLimits) UpdateStatus(ctx context.Context, rateLimit *v1beta1.RateLimit, opts v1.UpdateOptions) (result *v1beta1.RateLimit, err error) {
 	emptyResult := &v1beta1.RateLimit{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(ratelimitsResource, "status", rateLimit, opts), emptyResult)
+		Invokes(testing.NewUpdateSubresourceActionWithOptions(ratelimitsResource, "status", c.ns, rateLimit, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -98,13 +105,14 @@ func (c *FakeRateLimits) UpdateStatus(ctx context.Context, rateLimit *v1beta1.Ra
 // Delete takes name of the rateLimit and deletes it. Returns an error if one occurs.
 func (c *FakeRateLimits) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(ratelimitsResource, name, opts), &v1beta1.RateLimit{})
+		Invokes(testing.NewDeleteActionWithOptions(ratelimitsResource, c.ns, name, opts), &v1beta1.RateLimit{})
+
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeRateLimits) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(ratelimitsResource, opts, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(ratelimitsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.RateLimitList{})
 	return err
@@ -114,7 +122,8 @@ func (c *FakeRateLimits) DeleteCollection(ctx context.Context, opts v1.DeleteOpt
 func (c *FakeRateLimits) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.RateLimit, err error) {
 	emptyResult := &v1beta1.RateLimit{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(ratelimitsResource, name, pt, data, opts, subresources...), emptyResult)
+		Invokes(testing.NewPatchSubresourceActionWithOptions(ratelimitsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}

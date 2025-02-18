@@ -14,7 +14,14 @@ spec:
     singular: organization
   scope: Cluster
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.vendor
+      name: Vendor
+      type: string
+    - jsonPath: .spec.disabled
+      name: Disabled
+      type: boolean
+    name: v1beta1
     schema:
       openAPIV3Schema:
         properties:
@@ -30,6 +37,8 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              disabled:
+                type: boolean
               organizationId:
                 type: string
               secretRef:
@@ -49,7 +58,6 @@ spec:
                 type: string
             required:
             - organizationId
-            - secretRef
             - vendor
             type: object
           status:
@@ -96,3 +104,5 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

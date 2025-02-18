@@ -16,6 +16,7 @@ import (
 // FakeUsers implements UserInterface
 type FakeUsers struct {
 	Fake *FakeOmeV1beta1
+	ns   string
 }
 
 var usersResource = v1beta1.SchemeGroupVersion.WithResource("users")
@@ -26,7 +27,8 @@ var usersKind = v1beta1.SchemeGroupVersion.WithKind("User")
 func (c *FakeUsers) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.User, err error) {
 	emptyResult := &v1beta1.User{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(usersResource, name, options), emptyResult)
+		Invokes(testing.NewGetActionWithOptions(usersResource, c.ns, name, options), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -37,7 +39,8 @@ func (c *FakeUsers) Get(ctx context.Context, name string, options v1.GetOptions)
 func (c *FakeUsers) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.UserList, err error) {
 	emptyResult := &v1beta1.UserList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(usersResource, usersKind, opts), emptyResult)
+		Invokes(testing.NewListActionWithOptions(usersResource, usersKind, c.ns, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -58,14 +61,16 @@ func (c *FakeUsers) List(ctx context.Context, opts v1.ListOptions) (result *v1be
 // Watch returns a watch.Interface that watches the requested users.
 func (c *FakeUsers) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(usersResource, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(usersResource, c.ns, opts))
+
 }
 
 // Create takes the representation of a user and creates it.  Returns the server's representation of the user, and an error, if there is any.
 func (c *FakeUsers) Create(ctx context.Context, user *v1beta1.User, opts v1.CreateOptions) (result *v1beta1.User, err error) {
 	emptyResult := &v1beta1.User{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(usersResource, user, opts), emptyResult)
+		Invokes(testing.NewCreateActionWithOptions(usersResource, c.ns, user, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -76,7 +81,8 @@ func (c *FakeUsers) Create(ctx context.Context, user *v1beta1.User, opts v1.Crea
 func (c *FakeUsers) Update(ctx context.Context, user *v1beta1.User, opts v1.UpdateOptions) (result *v1beta1.User, err error) {
 	emptyResult := &v1beta1.User{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(usersResource, user, opts), emptyResult)
+		Invokes(testing.NewUpdateActionWithOptions(usersResource, c.ns, user, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -88,7 +94,8 @@ func (c *FakeUsers) Update(ctx context.Context, user *v1beta1.User, opts v1.Upda
 func (c *FakeUsers) UpdateStatus(ctx context.Context, user *v1beta1.User, opts v1.UpdateOptions) (result *v1beta1.User, err error) {
 	emptyResult := &v1beta1.User{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(usersResource, "status", user, opts), emptyResult)
+		Invokes(testing.NewUpdateSubresourceActionWithOptions(usersResource, "status", c.ns, user, opts), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -98,13 +105,14 @@ func (c *FakeUsers) UpdateStatus(ctx context.Context, user *v1beta1.User, opts v
 // Delete takes name of the user and deletes it. Returns an error if one occurs.
 func (c *FakeUsers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(usersResource, name, opts), &v1beta1.User{})
+		Invokes(testing.NewDeleteActionWithOptions(usersResource, c.ns, name, opts), &v1beta1.User{})
+
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeUsers) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(usersResource, opts, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(usersResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.UserList{})
 	return err
@@ -114,7 +122,8 @@ func (c *FakeUsers) DeleteCollection(ctx context.Context, opts v1.DeleteOptions,
 func (c *FakeUsers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.User, err error) {
 	emptyResult := &v1beta1.User{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(usersResource, name, pt, data, opts, subresources...), emptyResult)
+		Invokes(testing.NewPatchSubresourceActionWithOptions(usersResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
+
 	if obj == nil {
 		return emptyResult, err
 	}

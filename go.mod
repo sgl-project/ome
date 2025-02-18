@@ -177,7 +177,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.31.2 // indirect
 	k8s.io/component-base v0.31.4 // indirect
-	k8s.io/klog v1.0.0 // indirect
 	knative.dev/networking v0.0.0-20231115015815-3af9769712cd // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.30.3 // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect

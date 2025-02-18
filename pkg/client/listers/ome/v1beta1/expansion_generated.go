@@ -78,9 +78,17 @@ type ProjectListerExpansion interface{}
 // RateLimitLister.
 type RateLimitListerExpansion interface{}
 
+// RateLimitNamespaceListerExpansion allows custom methods to be added to
+// RateLimitNamespaceLister.
+type RateLimitNamespaceListerExpansion interface{}
+
 // ServiceAccountListerExpansion allows custom methods to be added to
 // ServiceAccountLister.
 type ServiceAccountListerExpansion interface{}
+
+// ServiceAccountNamespaceListerExpansion allows custom methods to be added to
+// ServiceAccountNamespaceLister.
+type ServiceAccountNamespaceListerExpansion interface{}
 
 // ServingRuntimeListerExpansion allows custom methods to be added to
 // ServingRuntimeLister.
@@ -109,3 +117,7 @@ type TrainingRuntimeNamespaceListerExpansion interface{}
 // UserListerExpansion allows custom methods to be added to
 // UserLister.
 type UserListerExpansion interface{}
+
+// UserNamespaceListerExpansion allows custom methods to be added to
+// UserNamespaceLister.
+type UserNamespaceListerExpansion interface{}

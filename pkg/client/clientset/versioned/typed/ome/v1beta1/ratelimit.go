@@ -16,7 +16,7 @@ import (
 // RateLimitsGetter has a method to return a RateLimitInterface.
 // A group's client should implement this interface.
 type RateLimitsGetter interface {
-	RateLimits() RateLimitInterface
+	RateLimits(namespace string) RateLimitInterface
 }
 
 // RateLimitInterface has methods to work with RateLimit resources.
@@ -40,13 +40,13 @@ type rateLimits struct {
 }
 
 // newRateLimits returns a RateLimits
-func newRateLimits(c *OmeV1beta1Client) *rateLimits {
+func newRateLimits(c *OmeV1beta1Client, namespace string) *rateLimits {
 	return &rateLimits{
 		gentype.NewClientWithList[*v1beta1.RateLimit, *v1beta1.RateLimitList](
 			"ratelimits",
 			c.RESTClient(),
 			scheme.ParameterCodec,
-			"",
+			namespace,
 			func() *v1beta1.RateLimit { return &v1beta1.RateLimit{} },
 			func() *v1beta1.RateLimitList { return &v1beta1.RateLimitList{} }),
 	}

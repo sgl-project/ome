@@ -15,9 +15,8 @@ type ServiceAccountLister interface {
 	// List lists all ServiceAccounts in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1beta1.ServiceAccount, err error)
-	// Get retrieves the ServiceAccount from the index for a given name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ServiceAccount, error)
+	// ServiceAccounts returns an object that can list and get ServiceAccounts.
+	ServiceAccounts(namespace string) ServiceAccountNamespaceLister
 	ServiceAccountListerExpansion
 }
 
@@ -29,4 +28,27 @@ type serviceAccountLister struct {
 // NewServiceAccountLister returns a new ServiceAccountLister.
 func NewServiceAccountLister(indexer cache.Indexer) ServiceAccountLister {
 	return &serviceAccountLister{listers.New[*v1beta1.ServiceAccount](indexer, v1beta1.Resource("serviceaccount"))}
+}
+
+// ServiceAccounts returns an object that can list and get ServiceAccounts.
+func (s *serviceAccountLister) ServiceAccounts(namespace string) ServiceAccountNamespaceLister {
+	return serviceAccountNamespaceLister{listers.NewNamespaced[*v1beta1.ServiceAccount](s.ResourceIndexer, namespace)}
+}
+
+// ServiceAccountNamespaceLister helps list and get ServiceAccounts.
+// All objects returned here must be treated as read-only.
+type ServiceAccountNamespaceLister interface {
+	// List lists all ServiceAccounts in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
+	List(selector labels.Selector) (ret []*v1beta1.ServiceAccount, err error)
+	// Get retrieves the ServiceAccount from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1beta1.ServiceAccount, error)
+	ServiceAccountNamespaceListerExpansion
+}
+
+// serviceAccountNamespaceLister implements the ServiceAccountNamespaceLister
+// interface.
+type serviceAccountNamespaceLister struct {
+	listers.ResourceIndexer[*v1beta1.ServiceAccount]
 }
