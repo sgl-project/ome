@@ -104,7 +104,9 @@ type ProjectServiceAccountCreateRequest struct {
 // ProjectServiceAccountCreateResponse represents a response from creating a service account
 type ProjectServiceAccountCreateResponse struct {
 	ProjectServiceAccount
-	APIKey ProjectServiceAccountAPIKey `json:"api_key"`
+	// The API key associated with the service account
+	// +optional
+	APIKey *ProjectServiceAccountAPIKey `json:"api_key,omitempty"`
 }
 
 // ProjectServiceAccountAPIKey represents an API key for a service account
