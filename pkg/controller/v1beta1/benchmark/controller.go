@@ -80,7 +80,7 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Ensure finalizer is present
 	if !controllerutil.ContainsFinalizer(benchmarkJob, finalizerName) {
 		controllerutil.AddFinalizer(benchmarkJob, finalizerName)
-		if err := r.Update(context.Background(), benchmarkJob); err != nil {
+		if err := r.Update(ctx, benchmarkJob); err != nil {
 			r.Log.Error(err, "Failed to add finalizer to BenchmarkJob")
 			return ctrl.Result{}, err
 		}

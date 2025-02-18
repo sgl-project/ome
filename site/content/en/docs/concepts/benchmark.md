@@ -25,60 +25,68 @@ Here's an example of a BenchmarkJob configuration:
 apiVersion: ome.io/v1beta1
 kind: BenchmarkJob
 metadata:
-  name: llama-chat-benchmark
+   name: llama-3-1-70b-benchmark
+   namespace: llama-3-1-70b
 spec:
-  endpoint:
-    inferenceService:
-      name: llama-chat
-      namespace: default
-  task: text-to-text
-  trafficScenarios:
-    - chat-completion
-    - text-completion
-  numConcurrency:
-    - 1
-    - 5
-    - 10
-  maxTimePerIteration: 5
-  maxRequestsPerIteration: 1000
-  serviceMetadata:
-    engine: vllm
-    version: "0.5.3"
-    gpuType: "A100"
-    gpuCount: 1
-  outputLocation:
-    storageUri: "oci://n/my-namespace/b/my-bucket/o/benchmark-results"
-    parameters:
-      auth: "instance_principal"  # Authentication type
-      config_file: "/path/to/config"  # Optional: Config file for user_principal auth
-      profile: "DEFAULT"  # Optional: Profile name for user_principal auth
-      security_token: "token"  # Optional: Token for security_token auth
-      region: "us-phoenix-1"  # Optional: Region for security_token auth
-  podOverride:
-    resources:
-      requests:
-        cpu: "4"
-        memory: "16Gi"
-      limits:
-        cpu: "4"
-        memory: "16Gi"
+   podOverride:
+      image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.127"
+      resources:
+         requests:
+            cpu: "4"
+            memory: "16Gi"
+         limits:
+            cpu: "4"
+            memory: "16Gi"
+   endpoint:
+      inferenceService:
+         name: llama-3-1-70b-instruct
+         namespace: llama-3-1-70b-instruct
+   task: text-to-text
+   trafficScenarios:
+      - "N(480,240)/(300,150)"
+      - "D(100,100)"
+      - "D(100,1000)"
+      - "D(2000,200)"
+      - "D(7800,200)"
+   numConcurrency:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+   maxTimePerIteration: 15
+   maxRequestsPerIteration: 100
+   additionalRequestParams:
+      temperature: "0.0"
+   outputLocation:
+      storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/llama-3-1-70b-benchmark"
+      parameters:
+         auth: "instance_principal"  # Authentication type
+         config_file: "/path/to/config"  # Optional: Config file for user_principal auth
+         profile: "DEFAULT"  # Optional: Profile name for user_principal auth
+         security_token: "token"  # Optional: Token for security_token auth
+         region: "us-phoenix-1"  # Optional: Region for security_token auth
 ```
 
 ## Spec Attributes
 
 Available attributes in the BenchmarkJob spec:
 
-| Attribute | Description |
-|-----------|-------------|
-| `endpoint` | Required. Target inference service configuration |
-| `task` | Required. Type of task to benchmark (e.g., text-to-text) |
-| `trafficScenarios` | Optional. List of traffic patterns to test |
-| `numConcurrency` | Optional. List of concurrency levels to test |
-| `maxTimePerIteration` | Required. Maximum time per test iteration |
-| `maxRequestsPerIteration` | Required. Maximum requests per iteration |
-| `serviceMetadata` | Optional. Backend service information |
-| `outputLocation` | Required. Where to store benchmark results |
-| `podOverride` | Optional. Benchmark pod configuration |
+| Attribute                 | Description                                              |
+|---------------------------|----------------------------------------------------------|
+| `endpoint`                | Required. Target inference service configuration         |
+| `task`                    | Required. Type of task to benchmark (e.g., text-to-text) |
+| `trafficScenarios`        | Optional. List of traffic patterns to test               |
+| `numConcurrency`          | Optional. List of concurrency levels to test             |
+| `maxTimePerIteration`     | Required. Maximum time per test iteration                |
+| `maxRequestsPerIteration` | Required. Maximum requests per iteration                 |
+| `serviceMetadata`         | Optional. Backend service information                    |
+| `outputLocation`          | Required. Where to store benchmark results               |
+| `podOverride`             | Optional. Benchmark pod configuration                    |
 
 ## Endpoint Configuration
 
@@ -192,3 +200,21 @@ status:
 4. **Storage Management**:
    - Use appropriate storage classes for results
    - Clean up old benchmark data regularly
+
+
+## Usage Guide
+1. Make sure an InferenceService is running in the cluster. 
+
+```shell
+# Follow CONTRIBUTING.md to start OME manager
+# Create a Llama-3.1-70b-Instruct iscv if there is not one
+kubectl apply -f config/samples/iscv/meta/llama3-1-70b-instruct.yaml 
+```
+
+2. Start a benchmark
+
+```shell
+# If there is a secret reference, apply the sceret resource first
+kubectl apply -f config/samples/benchmark/huggingface-secret.yaml 
+kubectl apply -f config/samples/benchmark/llama3-1-70b-instruct.yaml 
+```
