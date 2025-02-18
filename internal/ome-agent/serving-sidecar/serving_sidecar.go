@@ -1,11 +1,7 @@
 package serving_sidecar
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 	"encoding/json"
-	"github.com/fsnotify/fsnotify"
 	"io"
 	"os"
 	"os/signal"
@@ -13,6 +9,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
+	"github.com/fsnotify/fsnotify"
 )
 
 const (

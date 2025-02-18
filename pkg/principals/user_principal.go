@@ -2,9 +2,10 @@ package principals
 
 import (
 	"errors"
-	"github.com/oracle/oci-go-sdk/v65/common"
 	"os"
 	"strings"
+
+	"github.com/oracle/oci-go-sdk/v65/common"
 )
 
 // UserPrincipalConfig encapsulates configuration for constructing

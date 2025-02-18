@@ -1,11 +1,12 @@
 package secret_retrieval
 
 import (
+	"errors"
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
-	"errors"
-	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )

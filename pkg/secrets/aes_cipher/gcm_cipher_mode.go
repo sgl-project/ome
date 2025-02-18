@@ -1,11 +1,12 @@
 package aes_cipher
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"io"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 )
 
 /* Use AES GCM cipher mode to do encryption/decryption using DEK */

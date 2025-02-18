@@ -1,8 +1,6 @@
 package model_agent
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"fmt"
 	"os"
 	"path"
@@ -11,7 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
+
+	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"

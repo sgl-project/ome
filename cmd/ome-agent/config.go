@@ -1,14 +1,15 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"errors"
 	"fmt"
+	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
-	"strings"
 )
 
 func configProvider(cli *cobra.Command) fx.Option {

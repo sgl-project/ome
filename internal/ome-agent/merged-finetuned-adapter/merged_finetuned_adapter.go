@@ -1,12 +1,13 @@
 package merged_finetuned_adapter
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 )
 
 const (

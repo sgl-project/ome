@@ -1,11 +1,12 @@
 package training_agent
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 )
 
 type Response struct {

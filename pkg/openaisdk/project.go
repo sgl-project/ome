@@ -1,12 +1,13 @@
 package openaisdk
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apijson"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apijson"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
 )
 
 // ProjectService contains methods and other services that help with interacting with

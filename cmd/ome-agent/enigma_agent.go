@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"os"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/enigma"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
@@ -10,11 +13,9 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsvault"
 	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
 	ocivault "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/vault"
-	"context"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
-	"os"
 )
 
 var cmdEnigma = &cobra.Command{

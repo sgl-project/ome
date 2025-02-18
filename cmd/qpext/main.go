@@ -3,10 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/hashicorp/go-multierror"
-	ioprometheusclient "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/expfmt"
-	"go.uber.org/zap"
 	"io"
 	"net"
 	"net/http"
@@ -14,9 +10,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-import "knative.dev/serving/pkg/queue/sharedmain"
+	"github.com/hashicorp/go-multierror"
+	ioprometheusclient "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"go.uber.org/zap"
+	"knative.dev/serving/pkg/queue/sharedmain"
+)
 
 var (
 	EnvVars   = []string{"SERVING_SERVICE", "SERVING_CONFIGURATION", "SERVING_REVISION"}

@@ -1,16 +1,17 @@
 package multinodevllm
 
 import (
+	"fmt"
+	"time"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
-	"fmt"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 	corev1 "k8s.io/api/core/v1"

@@ -1,14 +1,11 @@
 package casper
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
-	"github.com/oracle/oci-go-sdk/v65/common"
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"io"
 	"math"
 	"os"
@@ -16,6 +13,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 )
 
 type ChunkUnit int

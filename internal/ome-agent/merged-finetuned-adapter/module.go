@@ -1,10 +1,11 @@
 package merged_finetuned_adapter
 
 import (
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"fmt"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )

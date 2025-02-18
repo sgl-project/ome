@@ -1,9 +1,10 @@
 package core
 
 import (
-	testing2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"context"
 	"testing"
+
+	testing2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"

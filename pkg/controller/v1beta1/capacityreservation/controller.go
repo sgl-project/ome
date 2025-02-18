@@ -1,12 +1,14 @@
 package capacityreservation
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	clusterQueueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation/reconcilers/kueueclusterqueue"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation/utils"
-	"context"
-	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -27,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-	"time"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=capacityreservations,verbs=get;list;watch;create;update;patch;delete

@@ -1,9 +1,10 @@
 package apijson
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 	"testing"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 )
 
 type Struct struct {

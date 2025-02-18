@@ -1,10 +1,11 @@
 package model_agent
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"context"
 	"fmt"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions/ome/v1beta1"

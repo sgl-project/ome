@@ -1,7 +1,6 @@
 package apiform
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 )
 
 var encoders sync.Map // map[encoderEntry]encoderFunc

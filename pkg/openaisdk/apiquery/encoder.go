@@ -1,7 +1,6 @@
 package apiquery
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 )
 
 var encoders sync.Map // map[reflect.Type]encoderFunc

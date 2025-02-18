@@ -1,13 +1,14 @@
 package training_agent
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 )
 
 const (

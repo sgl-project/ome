@@ -1,10 +1,11 @@
 package pod
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 

@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -9,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 )
 
 func B64Encode(data string) string {

@@ -1,15 +1,16 @@
 package main
 
 import (
-	ioprometheusclient "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/expfmt"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	ioprometheusclient "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/assert"
 )
 
 var testEnvVarVal = "something"

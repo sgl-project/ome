@@ -1,12 +1,13 @@
 package pod
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
+	"encoding/json"
+	"fmt"
+
+	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	casperutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/model-agent"
-	"encoding/json"
-	"fmt"
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"

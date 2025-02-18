@@ -1,9 +1,10 @@
 package casper
 
 import (
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"fmt"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )

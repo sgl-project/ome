@@ -1,14 +1,15 @@
 package servingruntime
 
 import (
+	"fmt"
+	"testing"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"fmt"
 	"github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
 )
 
 func TestValidateServingRuntimePriority(t *testing.T) {

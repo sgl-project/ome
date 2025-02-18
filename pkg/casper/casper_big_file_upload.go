@@ -3,9 +3,10 @@ package casper
 import (
 	"context"
 	"fmt"
+	"io"
+
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage/transfer"
-	"io"
 )
 
 func (cds *CasperDataStore) prepareMultipartUploadRequest(target ObjectURI, chunkSizeInMB int, uploadThreads int) (*transfer.UploadRequest, error) {

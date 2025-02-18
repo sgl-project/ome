@@ -1,7 +1,6 @@
 package apijson
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/param"
 
 	"github.com/tidwall/sjson"
 )

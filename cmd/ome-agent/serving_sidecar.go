@@ -1,16 +1,17 @@
 package main
 
 import (
+	"context"
+	"os"
+
 	serving_sidecar "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/serving-sidecar"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"context"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
-	"os"
 )
 
 var cmdServingSidecar = &cobra.Command{

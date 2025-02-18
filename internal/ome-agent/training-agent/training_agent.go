@@ -1,10 +1,6 @@
 package training_agent
 
 import (
-	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 )
 
 // constants for Multipart Upload

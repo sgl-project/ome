@@ -1,6 +1,8 @@
 package v1beta1
 
 import (
+	"reflect"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -8,7 +10,6 @@ import (
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
-	"reflect"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
 

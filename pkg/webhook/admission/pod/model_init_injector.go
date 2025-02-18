@@ -1,13 +1,14 @@
 package pod
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"strings"
 )
 
 const (

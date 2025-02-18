@@ -1,9 +1,10 @@
 package secrets
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"errors"
 	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 )
 
 // EnvVar represents a configuration used to resolve the value for some environment variable.

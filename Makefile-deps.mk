@@ -101,3 +101,10 @@ mdtoc: fix-tools-gomod ## 📑 Download mdtoc locally if necessary
 	@echo "📑 Installing mdtoc..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin CGO_ENABLED=1 $(GO_CMD) install sigs.k8s.io/mdtoc@$(MDTOC_VERSION)
 	@echo "✅ Installation complete"
+
+GOIMPORTS = $(PROJECT_DIR)/bin/goimports
+.PHONY: install-goimports
+install-goimports: fix-tools-gomod ## 📦 Install goimports if not present
+	@echo "📦 Installing goimports..."
+	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install golang.org/x/tools/cmd/goimports@latest
+	@echo "✅ Installation complete"

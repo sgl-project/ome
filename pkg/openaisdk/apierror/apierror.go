@@ -1,10 +1,11 @@
 package apierror
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apijson"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/apijson"
 )
 
 // Error represents an error that originates from the API, i.e. when a request is

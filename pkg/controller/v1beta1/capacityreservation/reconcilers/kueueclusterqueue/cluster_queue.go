@@ -1,8 +1,9 @@
 package kueueclusterqueue
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"context"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

@@ -1,10 +1,11 @@
 package ocisecret
 
 import (
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
-	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )

@@ -1,9 +1,10 @@
 package utils
 
 import (
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/imds"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"fmt"
 )
 
 var shapeMap = map[string]string{

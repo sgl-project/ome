@@ -1,10 +1,11 @@
 package keda
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"context"
 	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"

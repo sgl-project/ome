@@ -1,13 +1,14 @@
 package replica
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 )
 
 const (

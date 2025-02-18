@@ -1,6 +1,9 @@
 package enigma
 
 import (
+	"errors"
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
@@ -8,8 +11,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
 	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
-	"errors"
-	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )

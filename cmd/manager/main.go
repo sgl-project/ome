@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"

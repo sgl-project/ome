@@ -1,13 +1,14 @@
 package aes_cipher
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"io"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 )
 
 /* Use AES CFB cipher mode to do encryption/decryption using DEK */

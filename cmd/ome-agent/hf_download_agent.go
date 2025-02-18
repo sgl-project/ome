@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
+	"os"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hf_download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"context"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
-	"os"
 )
 
 var configFilePath string

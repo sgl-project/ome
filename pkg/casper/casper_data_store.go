@@ -1,20 +1,21 @@
 package casper
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
-	"github.com/oracle/oci-go-sdk/v65/common"
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"io"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 )
 
 /*

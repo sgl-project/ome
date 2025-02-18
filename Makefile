@@ -171,9 +171,11 @@ generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto
 	@echo "\n🎉 Code generation process completed successfully!\n"
 
 .PHONY: fmt
-fmt: ## 🧹 Run go fmt against code
+fmt: install-goimports ## 🧹 Run go fmt and goimports against code
 	@echo "🧹 Formatting Go code..."
 	@$(GO_CMD) fmt ./...
+	@echo "🧹 Organizing imports in Go files..."
+	@find . -name '*.go' -not -path '*/vendor/*' -not -exec grep -q '// Code generated' {} \; -exec $(GOIMPORTS) -w {} +
 	@echo "✅ Formatting complete"
 
 .PHONY: vet

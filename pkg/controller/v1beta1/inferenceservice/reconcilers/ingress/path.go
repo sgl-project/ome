@@ -1,10 +1,11 @@
 package ingress
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bytes"
 	"fmt"
 	"text/template"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"net/url"
 )
