@@ -270,7 +270,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 	}
 
 	switch storageType {
-	case storage.VendorStoragePrefix:
+	case storage.StorageTypeVendor:
 		vendorComponents, err := storage.ParseVendorStorageURI(storagePath)
 		if err != nil {
 			return nil, "", err
@@ -278,7 +278,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 		osUri, destPath := handleVendorStorage(vendorComponents, destPath, modelRootDir)
 		return osUri, destPath, nil
 
-	case storage.OCIStoragePrefix:
+	case storage.StorageTypeOCI:
 		osUri, err := NewObjectStorageUri(storagePath)
 		if err != nil {
 			return nil, "", err

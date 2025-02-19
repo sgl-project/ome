@@ -254,24 +254,24 @@ func TestGetStorageType(t *testing.T) {
 	tests := []struct {
 		name        string
 		uri         string
-		want        string
+		want        StorageType
 		wantErr     bool
 		errContains string
 	}{
 		{
 			name: "oci storage",
 			uri:  "oci://n/myns/b/mybucket/o/mypath",
-			want: "OCI",
+			want: StorageTypeOCI,
 		},
 		{
 			name: "pvc storage",
 			uri:  "pvc://mypvc/mypath",
-			want: "PVC",
+			want: StorageTypePVC,
 		},
 		{
 			name: "vendor storage",
 			uri:  "vendor://openai/models/gpt-4",
-			want: "VENDOR",
+			want: StorageTypeVendor,
 		},
 		{
 			name:        "unknown storage type",

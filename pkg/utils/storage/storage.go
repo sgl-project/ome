@@ -14,6 +14,18 @@ const (
 	VendorStoragePrefix = "vendor://"
 )
 
+// StorageType is a string enum for storage type
+type StorageType string
+
+const (
+	// StorageTypePVC is the value for PVC storage
+	StorageTypePVC StorageType = "PVC"
+	// StorageTypeOCI is the value for OCI storage
+	StorageTypeOCI StorageType = "OCI"
+	// StorageTypeVendor is the value for Vendor storage
+	StorageTypeVendor StorageType = "VENDOR"
+)
+
 // OCIStorageComponents represents the components of an OCI storage URI
 type OCIStorageComponents struct {
 	Namespace string
@@ -128,14 +140,14 @@ func ValidateVendorStorageURI(uri string) error {
 }
 
 // GetStorageType determines the type of storage URI
-func GetStorageType(uri string) (string, error) {
+func GetStorageType(uri string) (StorageType, error) {
 	switch {
 	case strings.HasPrefix(uri, OCIStoragePrefix):
-		return "OCI", nil
+		return StorageTypeOCI, nil
 	case strings.HasPrefix(uri, PVCStoragePrefix):
-		return "PVC", nil
+		return StorageTypePVC, nil
 	case strings.HasPrefix(uri, VendorStoragePrefix):
-		return "VENDOR", nil
+		return StorageTypeVendor, nil
 	default:
 		return "", fmt.Errorf("unknown storage type for URI: %s", uri)
 	}
@@ -149,11 +161,11 @@ func ValidateStorageURI(uri string) error {
 	}
 
 	switch storageType {
-	case "OCI":
+	case StorageTypeOCI:
 		return ValidateOCIStorageURI(uri)
-	case "PVC":
+	case StorageTypePVC:
 		return ValidatePVCStorageURI(uri)
-	case "VENDOR":
+	case StorageTypeVendor:
 		return ValidateVendorStorageURI(uri)
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)

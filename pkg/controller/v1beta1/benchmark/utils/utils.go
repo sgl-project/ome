@@ -131,7 +131,7 @@ func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 	var args []string
 
 	switch storageType {
-	case "OCI":
+	case storage.StorageTypeOCI:
 		// Parse and add OCI storage URI components
 		components, err := storage.ParseOCIStorageURI(*storageSpec.StorageUri)
 		if err != nil {
@@ -169,7 +169,7 @@ func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 			}
 		}
 
-	case "PVC":
+	case storage.StorageTypePVC:
 		// For PVC storage, we don't need to add any command line arguments
 		// The storage will be handled by mounting the PVC to the pod
 		// We'll just validate that the URI is correct

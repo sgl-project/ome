@@ -308,7 +308,7 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		return nil, fmt.Errorf("error determining storage type: %v", err)
 	}
 
-	if storageType == "PVC" {
+	if storageType == storage.StorageTypePVC {
 		components, err := storage.ParsePVCStorageURI(*benchmarkJob.Spec.OutputLocation.StorageUri)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing PVC storage URI: %v", err)
