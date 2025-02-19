@@ -134,9 +134,9 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		}
 
 		if task.BaseModel != nil {
-			s.logger.Info("successfully downloaded the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
+			s.logger.Infof("successfully downloaded the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
 		} else {
-			s.logger.Info("successfully downloaded the ClusterBaseModel %s", task.ClusterBaseModel.Name)
+			s.logger.Infof("successfully downloaded the ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 
 		// mark model as Ready
@@ -156,9 +156,9 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 			return err
 		}
 		if task.BaseModel != nil {
-			s.logger.Info("successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
+			s.logger.Infof("successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
 		} else {
-			s.logger.Info("successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
+			s.logger.Infof("successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 	}
 
