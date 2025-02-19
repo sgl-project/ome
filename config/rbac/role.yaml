@@ -26,6 +26,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - limitranges
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - namespaces/finalizers
   verbs:
   - create
@@ -245,6 +252,13 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - node.k8s.io
+  resources:
+  - runtimeclasses
+  verbs:
+  - list
   - watch
 - apiGroups:
   - ome.io
