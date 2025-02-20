@@ -3663,10 +3663,6 @@
         "projectId"
       ],
       "properties": {
-        "archivalTime": {
-          "description": "ArchivalTime is the time when the project was archived",
-          "$ref": "#/definitions/v1.Time"
-        },
         "conditions": {
           "description": "Conditions represent the latest available observations of an object's state",
           "type": "array",

@@ -2,8 +2,10 @@ package project
 
 import (
 	"context"
-	apierr "k8s.io/apimachinery/pkg/api/errors"
+	"fmt"
 	"time"
+
+	apierr "k8s.io/apimachinery/pkg/api/errors"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -24,7 +26,15 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=projects,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=projects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=projects/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=organizations,verbs=get;list;watch
 
+// ProjectService handles OpenAI project operations
+type ProjectService struct {
+	client *openaisdk.Client
+	log    logr.Logger
+}
+
+// ProjectReconciler reconciles a Project object
 type ProjectReconciler struct {
 	client.Client
 	Clientset kubernetes.Interface
@@ -37,81 +47,99 @@ type ProjectReconciler struct {
 // and what is in the Project.Spec. It handles the creation and deletion of projects and manages
 // the associated API key by creating a Kubernetes Secret.
 func (r *ProjectReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	log := r.Log.WithValues("project", request.NamespacedName)
+
 	// Fetch the Project instance
-	p := &v1beta1.Project{}
-	if err := r.Client.Get(ctx, request.NamespacedName, p); err != nil {
-		if apierr.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
-			return reconcile.Result{}, nil
-		}
-		r.Log.Error(err, "unable to fetch Project")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	project := &v1beta1.Project{}
+	if err := r.Client.Get(ctx, request.NamespacedName, project); err != nil {
+		return r.handleGetError(err, log)
 	}
 
-	r.Log.Info("Fetched ProjectSpec", "Name", p.Spec.Name, "OrganizationRef", p.Spec.OrganizationRef.Name)
+	log.Info("Reconciling project", "name", project.Spec.Name, "organization", project.Spec.OrganizationRef.Name)
 
-	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(p, constants.ProjectFinalizerName) {
-		controllerutil.AddFinalizer(p, constants.ProjectFinalizerName)
-		if err := r.Update(ctx, p); err != nil {
-			r.Log.Error(err, "Failed to add finalizer to project")
-			return ctrl.Result{}, err
-		}
+	if err := r.ensureFinalizer(ctx, project); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to ensure finalizer: %w", err)
 	}
 
-	// Initialize OpenAI client. It will initialize the client with the API key from the organization
-	openAIClient, err := r.initializeOpenaiClient(ctx, p)
-	r.Log.Info("Initialized OpenAI client")
+	// Initialize project service
+	projectService, err := r.initializeProjectService(ctx, project)
 	if err != nil {
-		r.Log.Error(err, "Failed to initialize OpenAI client")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to initialize project service: %w", err)
 	}
 
-	// Handle deletion logic
-	if !p.ObjectMeta.DeletionTimestamp.IsZero() {
-		if err := r.deleteProject(ctx, p, openAIClient); err != nil {
-			r.Log.Error(err, "Failed to delete project")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
+	// Handle deletion
+	if !project.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, project, projectService)
 	}
 
-	// Create the project
-	if p.Status.ProjectID == "" {
-		r.Log.Info("Creating project", "Name", p.Spec.Name)
-		if err := r.createProject(ctx, p, openAIClient); err != nil {
-			r.Log.Error(err, "Failed to create project")
-			return ctrl.Result{}, err
-		}
-		r.Log.Info("Project Created", "Name", p.Spec.Name)
-		return ctrl.Result{}, nil
-	}
+	// Handle creation or update
+	return r.handleReconciliation(ctx, project, projectService)
+}
 
-	// Check if update is needed by comparing specs
-	needsUpdate := false
-	proj, err := openAIClient.Projects.Get(ctx, p.Status.ProjectID)
+func (r *ProjectReconciler) handleGetError(err error, log logr.Logger) (reconcile.Result, error) {
+	if apierr.IsNotFound(err) {
+		return reconcile.Result{}, nil
+	}
+	log.Error(err, "unable to fetch Project")
+	return ctrl.Result{}, client.IgnoreNotFound(err)
+}
+
+func (r *ProjectReconciler) ensureFinalizer(ctx context.Context, project *v1beta1.Project) error {
+	if !controllerutil.ContainsFinalizer(project, constants.ProjectFinalizerName) {
+		controllerutil.AddFinalizer(project, constants.ProjectFinalizerName)
+		return r.Update(ctx, project)
+	}
+	return nil
+}
+
+func (r *ProjectReconciler) initializeProjectService(ctx context.Context, project *v1beta1.Project) (*ProjectService, error) {
+	openAIClient, err := r.initializeOpenaiClient(ctx, project)
 	if err != nil {
-		r.Log.Error(err, "Failed to get project")
-		return ctrl.Result{}, err
+		return nil, err
+	}
+	return &ProjectService{
+		client: openAIClient,
+		log:    r.Log.WithName("project-service"),
+	}, nil
+}
+
+func (r *ProjectReconciler) handleDeletion(ctx context.Context, project *v1beta1.Project, service *ProjectService) (reconcile.Result, error) {
+	if err := r.deleteProject(ctx, project, service.client); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to delete project: %w", err)
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *ProjectReconciler) handleReconciliation(ctx context.Context, project *v1beta1.Project, service *ProjectService) (reconcile.Result, error) {
+	// Create project if it doesn't exist
+	if project.Status.ProjectID == "" {
+		if err := r.createProject(ctx, project, service.client); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to create project: %w", err)
+		}
+		return reconcile.Result{}, nil
 	}
 
-	if proj.Name != p.Spec.Name {
-		r.Log.Info("Project name changed, need to update it", "OldName", proj.Name, "NewName", p.Spec.Name)
-		needsUpdate = true
+	// Check if update is needed
+	needsUpdate, err := r.checkIfUpdateNeeded(ctx, project, service.client)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to check if update needed: %w", err)
 	}
 
-	// Only update if changes are needed
 	if needsUpdate {
-		r.Log.Info("Updating project", "Name", p.Spec.Name)
-		if err := r.updateProject(ctx, p, openAIClient); err != nil {
-			r.Log.Error(err, "Failed to update project")
-			return ctrl.Result{}, err
+		if err := r.updateProject(ctx, project, service.client); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update project: %w", err)
 		}
-		r.Log.Info("Project Updated", "Name", p.Spec.Name)
 	}
 
-	return ctrl.Result{}, nil
+	return reconcile.Result{}, nil
+}
+
+func (r *ProjectReconciler) checkIfUpdateNeeded(ctx context.Context, project *v1beta1.Project, client *openaisdk.Client) (bool, error) {
+	proj, err := client.Projects.Get(ctx, project.Status.ProjectID)
+	if err != nil {
+		return false, err
+	}
+	return proj.Name != project.Spec.Name, nil
 }
 
 func (r *ProjectReconciler) getOrganizationApiKeyNameAndNamespace(ctx context.Context, p *v1beta1.Project) (string, string, string, error) {
@@ -167,17 +195,21 @@ func (r *ProjectReconciler) updateProject(ctx context.Context, p *v1beta1.Projec
 	return nil
 }
 
-func (r *ProjectReconciler) updateProjectStatus(ctx context.Context, p *v1beta1.Project, project openaisdk.Project) error {
-	if project.ID != "" {
-		p.Status.ProjectID = project.ID
+func (r *ProjectReconciler) updateProjectStatus(ctx context.Context, project *v1beta1.Project, openAIProject openaisdk.Project) error {
+	original := project.DeepCopy()
+
+	if openAIProject.ID != "" {
+		project.Status.ProjectID = openAIProject.ID
 	}
-	if project.CreatedAt != 0 && p.Status.CreationTime == nil {
-		p.Status.CreationTime = &metav1.Time{Time: time.Unix(project.CreatedAt, 0)}
+	if openAIProject.CreatedAt != 0 && project.Status.CreationTime == nil {
+		project.Status.CreationTime = &metav1.Time{Time: time.Unix(openAIProject.CreatedAt, 0)}
 	}
-	if err := r.Client.Status().Update(ctx, p); err != nil {
-		r.Recorder.Eventf(p, v1.EventTypeWarning, "StatusUpdateFailed", err.Error())
-		return err
+
+	if err := r.Client.Status().Patch(ctx, project, client.MergeFrom(original)); err != nil {
+		r.Recorder.Eventf(project, v1.EventTypeWarning, "StatusUpdateFailed", "Failed to update status: %v", err)
+		return fmt.Errorf("failed to update status: %w", err)
 	}
+
 	return nil
 }
 

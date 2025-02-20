@@ -323,6 +323,7 @@ rules:
   resources:
   - clustertrainingruntimes
   - dedicatedaiclusterprofiles
+  - organizations
   - trainingruntimes
   verbs:
   - get

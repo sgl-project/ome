@@ -6580,12 +6580,6 @@ func schema_pkg_apis_ome_v1beta1_ProjectStatus(ref common.ReferenceCallback) com
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
-					"archivalTime": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ArchivalTime is the time when the project was archived",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
 				},
 				Required: []string{"projectId"},
 			},
