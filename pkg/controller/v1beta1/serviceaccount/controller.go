@@ -5,11 +5,15 @@ import (
 	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,14 +30,14 @@ import (
 // ServiceAccountReconciler reconciles a ServiceAccount object
 type ServiceAccountReconciler struct {
 	client.Client
-	Clientset    kubernetes.Interface
-	Log          logr.Logger
-	Scheme       *runtime.Scheme
-	Recorder     record.EventRecorder
-	OpenAIClient *openaisdk.Client
+	Clientset           kubernetes.Interface
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
+	Recorder            record.EventRecorder
+	OpenAIClientFactory func(apiKey string, baseURL string) *openaisdk.Client
 }
 
-const finalizerName = "serviceaccount.finalizers.openaisdk"
+const finalizerName = "serviceaccount.ome.io.finalizers"
 
 // Reconcile reads the state of the cluster for a ServiceAccount object and makes changes based on the state read
 // and what is in the ServiceAccount.Spec. It handles the creation and deletion of service accounts and manages
@@ -46,7 +50,7 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	r.Log.Info("Fetched ServiceAccountSpec", "Name", sa.Spec.Name, "ProjectRef", sa.Spec.ProjectRef.Name)
+	r.Log.Info("Reconciling ServiceAccount", "Name", sa.Spec.Name, "ProjectRef", sa.Spec.ProjectRef.Name)
 
 	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(sa, finalizerName) {
@@ -57,45 +61,62 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 		}
 	}
 
-	// Handle deletion logic
-	if !sa.DeletionTimestamp.IsZero() {
-		return ctrl.Result{}, r.handleDeletion(ctx, sa)
-	}
-
+	// First check if project exists
 	projectID, err := r.getProjectID(ctx, sa)
 	if err != nil {
+		r.Log.Error(err, "Failed to get project ID")
 		return ctrl.Result{}, err
 	}
+
 	r.Log.Info("Fetched ProjectID", "ProjectID", projectID)
 
-	// Create a new openaiClient and send service account creation request
-	createdSA, err := r.OpenAIClient.ServiceAccounts.Create(ctx, projectID, openaisdk.ProjectServiceAccountCreateRequest{Name: sa.Spec.Name})
+	// Initialize OpenAI client
+	openAIClient, err := r.initializeOpenaiClient(ctx, sa)
 	if err != nil {
-		r.Log.Error(err, "Failed to create service account")
+		r.Log.Error(err, "Failed to initialize OpenAI client")
 		return ctrl.Result{}, err
 	}
 
-	// Check if API key is present and create a secret
-	if createdSA.APIKey == nil {
-		return ctrl.Result{}, fmt.Errorf("created service account does not have an API key")
+	// Handle deletion logic
+	if !sa.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, r.handleDeletion(ctx, sa, openAIClient)
 	}
-	if createdSA.APIKey.Value != "" {
-		if err := r.createSecret(ctx, sa, createdSA.APIKey.Value); err != nil {
-			return ctrl.Result{}, err
+
+	// Create service account if it doesn't exist
+	checkResult, _, err := r.checkServiceAcctExist(ctx, sa, openAIClient, projectID)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to check if service account exists: %w", err)
+	}
+	switch checkResult {
+	case constants.CheckResultCreate:
+		if err := r.createServiceAccount(ctx, sa, openAIClient, projectID); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to create service account: %w", err)
 		}
-	} else {
-		r.Log.Info("API Key creation is not implemented yet", "level", "warning")
+	case constants.CheckResultUpdate:
+		if err := r.updateServiceAccount(ctx, sa, openAIClient, projectID); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update service account: %w", err)
+		}
+	default:
+		r.Log.Info("Service account already exists")
 	}
 
-	// Update the status with the created service account ID
-	sa.Status.ServiceAccountID = createdSA.ProjectServiceAccount.ID
-	if err := r.Client.Status().Update(ctx, sa); err != nil {
-		r.Recorder.Eventf(sa, v1.EventTypeWarning, "StatusUpdateFailed", err.Error())
-		return ctrl.Result{}, err
-	}
-
-	r.Log.Info("Service account created", "ServiceAccountID", createdSA.ProjectServiceAccount.ID)
 	return ctrl.Result{}, nil
+}
+
+func (r *ServiceAccountReconciler) checkServiceAcctExist(ctx context.Context, sa *v1beta1.ServiceAccount, client *openaisdk.Client, projectID string) (constants.CheckResultType, *v1beta1.ServiceAccount, error) {
+	if sa.Status.ServiceAccountID == "" {
+		return constants.CheckResultCreate, sa, nil
+	}
+
+	existingSA, err := client.ServiceAccounts.Get(ctx, projectID, sa.Status.ServiceAccountID)
+	if err != nil {
+		return constants.CheckResultCreate, sa, err
+	}
+	if existingSA.Name != sa.Spec.Name {
+		return constants.CheckResultUpdate, sa, nil
+	}
+
+	return constants.CheckResultExisted, nil, nil
 }
 
 // getProjectID fetches the ProjectID resource using ProjectRef
@@ -105,11 +126,14 @@ func (r *ServiceAccountReconciler) getProjectID(ctx context.Context, sa *v1beta1
 		r.Log.Error(err, "unable to fetch Project")
 		return "", err
 	}
+	if project.Status.ProjectID == "" {
+		return "", fmt.Errorf("project ID is empty")
+	}
 	return project.Status.ProjectID, nil
 }
 
 // handleDeletion handles the deletion logic for the ServiceAccount
-func (r *ServiceAccountReconciler) handleDeletion(ctx context.Context, sa *v1beta1.ServiceAccount) error {
+func (r *ServiceAccountReconciler) handleDeletion(ctx context.Context, sa *v1beta1.ServiceAccount, openAIClient *openaisdk.Client) error {
 	r.Log.Info("Deleting service account", "ServiceAccountID", sa.Status.ServiceAccountID)
 
 	// Fetch the ProjectID from ProjectRef
@@ -120,7 +144,7 @@ func (r *ServiceAccountReconciler) handleDeletion(ctx context.Context, sa *v1bet
 	r.Log.Info("Fetched ProjectID", "ProjectID", projectID)
 
 	// Delete the service account
-	if _, err := r.OpenAIClient.ServiceAccounts.Delete(ctx, projectID, sa.Status.ServiceAccountID); err != nil {
+	if _, err := openAIClient.ServiceAccounts.Delete(ctx, projectID, sa.Status.ServiceAccountID); err != nil {
 		r.Log.Error(err, "Failed to delete service account")
 		return err
 	}
@@ -133,14 +157,145 @@ func (r *ServiceAccountReconciler) handleDeletion(ctx context.Context, sa *v1bet
 	return nil
 }
 
-// createSecret creates a Kubernetes Secret to store the API key
-func (r *ServiceAccountReconciler) createSecret(ctx context.Context, sa *v1beta1.ServiceAccount, apiKey string) error {
+// initializeOpenaiClient initializes the OpenAI client by getting the API key from the organization through project reference
+func (r *ServiceAccountReconciler) initializeOpenaiClient(ctx context.Context, sa *v1beta1.ServiceAccount) (*openaisdk.Client, error) {
+	// Get project first
+	project := &v1beta1.Project{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: sa.Spec.ProjectRef.Name, Namespace: sa.Spec.ProjectRef.Namespace}, project); err != nil {
+		r.Log.Error(err, "Failed to get project")
+		return nil, err
+	}
+
+	// Get organization
+	organization := &v1beta1.Organization{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: project.Spec.OrganizationRef.Name}, organization); err != nil {
+		r.Log.Error(err, "Failed to get organization")
+		return nil, err
+	}
+
+	// Get API key from secret
+	keySecret := &v1.Secret{}
+	if err := r.Client.Get(ctx, client.ObjectKey{
+		Name:      organization.Spec.SecretRef.Name,
+		Namespace: organization.Spec.SecretRef.Namespace,
+	}, keySecret); err != nil {
+		r.Log.Error(err, "Failed to get secret")
+		return nil, err
+	}
+
+	apiKeyValue, exists := keySecret.Data[organization.Spec.SecretRef.Key]
+	if !exists {
+		return nil, fmt.Errorf("API key not found in secret")
+	}
+
+	if r.OpenAIClientFactory != nil {
+		return r.OpenAIClientFactory(string(apiKeyValue), ""), nil
+	}
+
+	return openaisdk.NewClient(option.WithAPIKey(string(apiKeyValue))), nil
+}
+
+// checkIfUpdateNeeded checks if the service account needs to be updated
+func (r *ServiceAccountReconciler) checkIfUpdateNeeded(ctx context.Context, sa *v1beta1.ServiceAccount, client *openaisdk.Client, projectID string) (bool, error) {
+	existingSA, err := client.ServiceAccounts.Get(ctx, projectID, sa.Status.ServiceAccountID)
+	if err != nil {
+		return false, err
+	}
+	return existingSA.Name != sa.Spec.Name, nil
+}
+
+// createServiceAccount creates a new service account and updates the status
+func (r *ServiceAccountReconciler) createServiceAccount(ctx context.Context, sa *v1beta1.ServiceAccount, client *openaisdk.Client, projectID string) error {
+	// Get the project to set owner reference
+	project := &v1beta1.Project{}
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: sa.Spec.ProjectRef.Name, Namespace: sa.Spec.ProjectRef.Namespace}, project); err != nil {
+		r.Log.Error(err, "Failed to get project for owner reference")
+		return err
+	}
+
+	// Set project as owner
+	if err := controllerutil.SetControllerReference(project, sa, r.Scheme); err != nil {
+		r.Log.Error(err, "Failed to set owner reference to project")
+		return err
+	}
+	if err := r.Client.Update(ctx, sa); err != nil {
+		r.Log.Error(err, "Failed to update service account with owner reference")
+		return err
+	}
+
+	createdSA, err := client.ServiceAccounts.Create(ctx, projectID, openaisdk.ProjectServiceAccountCreateRequest{Name: sa.Spec.Name})
+	if err != nil {
+		r.Log.Error(err, "Failed to create service account")
+		return err
+	}
+
+	// Update status with service account ID
+	sa.Status.ServiceAccountID = createdSA.ProjectServiceAccount.ID
+
+	// Create secret if API key is present
+	if createdSA.APIKey != nil && createdSA.APIKey.Value != "" {
+		if err := r.createOrUpdateSecret(ctx, sa, createdSA.APIKey.Value); err != nil {
+			return err
+		}
+	}
+
+	if err := r.Client.Status().Update(ctx, sa); err != nil {
+		r.Recorder.Eventf(sa, v1.EventTypeWarning, "StatusUpdateFailed", err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// updateServiceAccount updates an existing service account
+func (r *ServiceAccountReconciler) updateServiceAccount(ctx context.Context, sa *v1beta1.ServiceAccount, client *openaisdk.Client, projectID string) error {
+	// Note: Currently OpenAI API doesn't support updating service accounts
+	// This is a placeholder for future implementation
+	return nil
+}
+
+// reconcileSecret ensures the K8s secret is in the desired state
+func (r *ServiceAccountReconciler) reconcileSecret(ctx context.Context, sa *v1beta1.ServiceAccount) error {
+	if sa.Status.APIKeySecretRef == nil {
+		return nil // No secret reference, nothing to reconcile
+	}
+
+	// Check if secret exists
+	existingSecret := &v1.Secret{}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name:      sa.Status.APIKeySecretRef.Name,
+		Namespace: sa.Status.APIKeySecretRef.Namespace,
+	}, existingSecret)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Secret doesn't exist but should - this is an error state
+			// We can't recreate it because we don't have the API key value anymore
+			r.Log.Error(err, "API key secret is missing")
+			return fmt.Errorf("API key secret is missing: %w", err)
+		}
+		return err
+	}
+
+	// Secret exists - verify owner reference
+	if err := r.ensureSecretOwnerRef(ctx, sa, existingSecret); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createOrUpdateSecret creates or updates the K8s secret for the API key
+func (r *ServiceAccountReconciler) createOrUpdateSecret(ctx context.Context, sa *v1beta1.ServiceAccount, apiKey string) error {
+	secretName := sa.Name + "-apikey"
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      sa.Name + "-apikey",
+			Name:      secretName,
 			Namespace: sa.Namespace,
 		},
-		Data: map[string][]byte{"api-key": []byte(apiKey)},
+		Data: map[string][]byte{
+			"api-key": []byte(apiKey),
+		},
 	}
 
 	if err := controllerutil.SetControllerReference(sa, secret, r.Scheme); err != nil {
@@ -148,16 +303,40 @@ func (r *ServiceAccountReconciler) createSecret(ctx context.Context, sa *v1beta1
 		return err
 	}
 
-	// Create the secret in Kubernetes
-	if err := r.Client.Create(ctx, secret); err != nil {
-		r.Log.Error(err, "Failed to create secret for API key")
-		return err
+	// Try to create the secret
+	err := r.Client.Create(ctx, secret)
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Update existing secret
+			existing := &v1.Secret{}
+			if err := r.Client.Get(ctx, client.ObjectKey{Name: secretName, Namespace: sa.Namespace}, existing); err != nil {
+				return err
+			}
+			existing.Data = secret.Data
+			if err := r.Client.Update(ctx, existing); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 
-	sa.Status.APIKeySecretRef = &v1beta1.SecretReference{Name: secret.Name, Namespace: secret.Namespace}
-	if err := r.Client.Status().Update(ctx, sa); err != nil {
-		r.Log.Error(err, "Failed to update service account status with secret reference")
-		return err
+	// Update status with secret reference
+	sa.Status.APIKeySecretRef = &v1beta1.SecretReference{
+		Name:      secretName,
+		Key:       "api-key",
+		Namespace: sa.Namespace,
+	}
+	return r.Client.Status().Update(ctx, sa)
+}
+
+// ensureSecretOwnerRef ensures the secret has the correct owner reference
+func (r *ServiceAccountReconciler) ensureSecretOwnerRef(ctx context.Context, sa *v1beta1.ServiceAccount, secret *v1.Secret) error {
+	if !metav1.IsControlledBy(secret, sa) {
+		if err := controllerutil.SetControllerReference(sa, secret, r.Scheme); err != nil {
+			return err
+		}
+		return r.Client.Update(ctx, secret)
 	}
 	return nil
 }

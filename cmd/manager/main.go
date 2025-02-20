@@ -50,7 +50,6 @@ import (
 	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/serviceaccount"
 	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
 	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
@@ -358,12 +357,11 @@ func main() {
 	setupLog.Info("Setting up ServiceAccount controller")
 	serviceAccountEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1serviceaccountcontroller.ServiceAccountReconciler{
-		Client:       mgr.GetClient(),
-		Clientset:    clientSet,
-		Log:          ctrl.Log.WithName("ServiceAccount"),
-		Scheme:       mgr.GetScheme(),
-		Recorder:     serviceAccountEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-		OpenAIClient: openaisdk.NewClient(), // TODO refactor openAI-admin client initialization to each resource reconciliation in each controller when organization CRD is fully tested
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("ServiceAccount"),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  serviceAccountEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create ServiceAccount controller")
 		os.Exit(1)

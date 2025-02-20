@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -27,6 +28,7 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=projects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=projects/finalizers,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=organizations,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list
 
 // ProjectService handles OpenAI project operations
 type ProjectService struct {
@@ -104,10 +106,44 @@ func (r *ProjectReconciler) initializeProjectService(ctx context.Context, projec
 }
 
 func (r *ProjectReconciler) handleDeletion(ctx context.Context, project *v1beta1.Project, service *ProjectService) (reconcile.Result, error) {
+	// First, ensure all service accounts are deleted
+	if err := r.ensureServiceAccountsDeleted(ctx, project); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to delete service accounts: %w", err)
+	}
+
 	if err := r.deleteProject(ctx, project, service.client); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to delete project: %w", err)
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ProjectReconciler) ensureServiceAccountsDeleted(ctx context.Context, project *v1beta1.Project) error {
+	// List all service accounts owned by this project
+	serviceAccounts := &v1beta1.ServiceAccountList{}
+	if err := r.Client.List(ctx, serviceAccounts, client.MatchingFields{
+		".metadata.controller": project.Name,
+	}); err != nil {
+		r.Log.Error(err, "Failed to list service accounts")
+		return err
+	}
+
+	// Delete each service account
+	for _, sa := range serviceAccounts.Items {
+		if err := r.Client.Delete(ctx, &sa); err != nil {
+			if !errors.IsNotFound(err) {
+				r.Log.Error(err, "Failed to delete service account", "ServiceAccount", sa.Name)
+				return err
+			}
+		}
+	}
+
+	// Wait for service accounts to be deleted
+	if len(serviceAccounts.Items) > 0 {
+		// Requeue to wait for service accounts to be deleted
+		return fmt.Errorf("waiting for service accounts to be deleted")
+	}
+
+	return nil
 }
 
 func (r *ProjectReconciler) handleReconciliation(ctx context.Context, project *v1beta1.Project, service *ProjectService) (reconcile.Result, error) {
@@ -229,7 +265,23 @@ func (r *ProjectReconciler) deleteProject(ctx context.Context, p *v1beta1.Projec
 	return nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *ProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Add index for service account owner references
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1beta1.ServiceAccount{}, ".metadata.controller", func(rawObj client.Object) []string {
+		sa := rawObj.(*v1beta1.ServiceAccount)
+		owner := metav1.GetControllerOf(sa)
+		if owner == nil {
+			return nil
+		}
+		if owner.APIVersion != "ome.io/v1beta1" || owner.Kind != "Project" {
+			return nil
+		}
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.Project{}).
 		Complete(r)

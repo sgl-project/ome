@@ -866,7 +866,7 @@ const (
 
 // Constants for aiplatform
 const (
-	ProjectFinalizerName = "project.finalizers.openaisdk"
+	ProjectFinalizerName = "project.ome.io.finalizers"
 )
 
 func (c CheckResultType) String() string {
