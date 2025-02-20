@@ -59,9 +59,6 @@ spec:
             type: object
           status:
             properties:
-              archivalTime:
-                format: date-time
-                type: string
               conditions:
                 items:
                   properties:

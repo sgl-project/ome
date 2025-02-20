@@ -84,8 +84,6 @@ type ProjectStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the project was created
 	CreationTime *metav1.Time `json:"creationTime,omitempty"`
-	// ArchivalTime is the time when the project was archived
-	ArchivalTime *metav1.Time `json:"archivalTime,omitempty"`
 }
 
 // ServiceAccount represents a service account within a project

@@ -864,6 +864,11 @@ const (
 	FinetuningBaseModel BaseModelType = "Finetuning"
 )
 
+// Constants for aiplatform
+const (
+	ProjectFinalizerName = "project.finalizers.openaisdk"
+)
+
 func (c CheckResultType) String() string {
 	switch c {
 	case CheckResultCreate:

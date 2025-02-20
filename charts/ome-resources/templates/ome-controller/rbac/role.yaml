@@ -274,6 +274,7 @@ rules:
   - dedicatedaiclusters
   - inferenceservices
   - inferenceservices/finalizers
+  - projects
   - serviceaccounts
   - servingruntimes
   - servingruntimes/finalizers
@@ -298,6 +299,8 @@ rules:
   - clusterservingruntimes/status
   - dedicatedaiclusters/status
   - inferenceservices/status
+  - projects/finalizers
+  - projects/status
   - serviceaccounts/finalizers
   - serviceaccounts/status
   - servingruntimes/status

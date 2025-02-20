@@ -46,6 +46,7 @@ import (
 	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
+	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/project"
 	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/serviceaccount"
 	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
 	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
@@ -334,6 +335,21 @@ func main() {
 		Runtimes: trainingRuntimes,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create Training Job controller")
+		os.Exit(1)
+	}
+
+	// Setup ProjectReconciler with the manager
+	projectEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up Project controller")
+	projectEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1projectcontroller.ProjectReconciler{
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("Project"),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  projectEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create Project controller")
 		os.Exit(1)
 	}
 
