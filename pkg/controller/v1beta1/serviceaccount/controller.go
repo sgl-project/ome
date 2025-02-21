@@ -104,15 +104,15 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 }
 
 func (r *ServiceAccountReconciler) checkServiceAcctExist(ctx context.Context, sa *v1beta1.ServiceAccount, client *openaisdk.Client, projectID string) (constants.CheckResultType, *v1beta1.ServiceAccount, error) {
-	if sa.Status.ServiceAccountID == "" {
+	if sa.Status.ServiceAccountID == nil {
 		return constants.CheckResultCreate, sa, nil
 	}
 
-	existingSA, err := client.ServiceAccounts.Get(ctx, projectID, sa.Status.ServiceAccountID)
+	existingSA, err := client.ServiceAccounts.Get(ctx, projectID, *sa.Status.ServiceAccountID)
 	if err != nil {
 		return constants.CheckResultCreate, sa, err
 	}
-	if existingSA.Name != sa.Spec.Name {
+	if existingSA.Name != *sa.Spec.Name {
 		return constants.CheckResultUpdate, sa, nil
 	}
 
@@ -144,7 +144,7 @@ func (r *ServiceAccountReconciler) handleDeletion(ctx context.Context, sa *v1bet
 	r.Log.Info("Fetched ProjectID", "ProjectID", projectID)
 
 	// Delete the service account
-	if _, err := openAIClient.ServiceAccounts.Delete(ctx, projectID, sa.Status.ServiceAccountID); err != nil {
+	if _, err := openAIClient.ServiceAccounts.Delete(ctx, projectID, *sa.Status.ServiceAccountID); err != nil {
 		r.Log.Error(err, "Failed to delete service account")
 		return err
 	}
@@ -197,11 +197,11 @@ func (r *ServiceAccountReconciler) initializeOpenaiClient(ctx context.Context, s
 
 // checkIfUpdateNeeded checks if the service account needs to be updated
 func (r *ServiceAccountReconciler) checkIfUpdateNeeded(ctx context.Context, sa *v1beta1.ServiceAccount, client *openaisdk.Client, projectID string) (bool, error) {
-	existingSA, err := client.ServiceAccounts.Get(ctx, projectID, sa.Status.ServiceAccountID)
+	existingSA, err := client.ServiceAccounts.Get(ctx, projectID, *sa.Status.ServiceAccountID)
 	if err != nil {
 		return false, err
 	}
-	return existingSA.Name != sa.Spec.Name, nil
+	return existingSA.Name != *sa.Spec.Name, nil
 }
 
 // createServiceAccount creates a new service account and updates the status
@@ -223,18 +223,18 @@ func (r *ServiceAccountReconciler) createServiceAccount(ctx context.Context, sa 
 		return err
 	}
 
-	createdSA, err := client.ServiceAccounts.Create(ctx, projectID, openaisdk.ProjectServiceAccountCreateRequest{Name: sa.Spec.Name})
+	createdSA, err := client.ServiceAccounts.Create(ctx, projectID, openaisdk.ProjectServiceAccountCreateRequest{Name: *sa.Spec.Name})
 	if err != nil {
 		r.Log.Error(err, "Failed to create service account")
 		return err
 	}
 
 	// Update status with service account ID
-	sa.Status.ServiceAccountID = createdSA.ProjectServiceAccount.ID
+	sa.Status.ServiceAccountID = &createdSA.ProjectServiceAccount.ID
 
 	// Create secret if API key is present
 	if createdSA.APIKey != nil && createdSA.APIKey.Value != "" {
-		if err := r.createOrUpdateSecret(ctx, sa, createdSA.APIKey.Value); err != nil {
+		if err := r.createOrUpdateSecret(ctx, sa, createdSA.APIKey); err != nil {
 			return err
 		}
 	}
@@ -256,15 +256,15 @@ func (r *ServiceAccountReconciler) updateServiceAccount(ctx context.Context, sa 
 
 // reconcileSecret ensures the K8s secret is in the desired state
 func (r *ServiceAccountReconciler) reconcileSecret(ctx context.Context, sa *v1beta1.ServiceAccount) error {
-	if sa.Status.APIKeySecretRef == nil {
+	if sa.Status.APIKey.APIKeySecretRef == nil {
 		return nil // No secret reference, nothing to reconcile
 	}
 
 	// Check if secret exists
 	existingSecret := &v1.Secret{}
 	err := r.Client.Get(ctx, client.ObjectKey{
-		Name:      sa.Status.APIKeySecretRef.Name,
-		Namespace: sa.Status.APIKeySecretRef.Namespace,
+		Name:      sa.Status.APIKey.APIKeySecretRef.Name,
+		Namespace: sa.Status.APIKey.APIKeySecretRef.Namespace,
 	}, existingSecret)
 
 	if err != nil {
@@ -286,7 +286,7 @@ func (r *ServiceAccountReconciler) reconcileSecret(ctx context.Context, sa *v1be
 }
 
 // createOrUpdateSecret creates or updates the K8s secret for the API key
-func (r *ServiceAccountReconciler) createOrUpdateSecret(ctx context.Context, sa *v1beta1.ServiceAccount, apiKey string) error {
+func (r *ServiceAccountReconciler) createOrUpdateSecret(ctx context.Context, sa *v1beta1.ServiceAccount, apiKey *openaisdk.ProjectServiceAccountAPIKey) error {
 	secretName := sa.Name + "-apikey"
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -294,7 +294,7 @@ func (r *ServiceAccountReconciler) createOrUpdateSecret(ctx context.Context, sa 
 			Namespace: sa.Namespace,
 		},
 		Data: map[string][]byte{
-			"api-key": []byte(apiKey),
+			"api-key": []byte(apiKey.Value),
 		},
 	}
 
@@ -321,12 +321,20 @@ func (r *ServiceAccountReconciler) createOrUpdateSecret(ctx context.Context, sa 
 		}
 	}
 
+	// Initialize APIKey if it's nil
+	if sa.Status.APIKey == nil {
+		sa.Status.APIKey = &v1beta1.APIKeySpec{
+			Name: sa.Spec.Name, // Use the service account name for the API key name
+		}
+	}
+
 	// Update status with secret reference
-	sa.Status.APIKeySecretRef = &v1beta1.SecretReference{
+	sa.Status.APIKey.APIKeySecretRef = &v1beta1.SecretReference{
 		Name:      secretName,
 		Key:       "api-key",
 		Namespace: sa.Namespace,
 	}
+	sa.Status.APIKey.APIKeyId = &apiKey.ID
 	return r.Client.Status().Update(ctx, sa)
 }
 

@@ -159,6 +159,7 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 		},
 	}
 
+	serviceName := "test-sa"
 	tests := []struct {
 		name           string
 		serviceAccount *v1beta1.ServiceAccount
@@ -184,7 +185,7 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1beta1.ServiceAccountSpec{
-					Name: "test-sa",
+					Name: &serviceName,
 					ProjectRef: v1beta1.CrossReference{
 						Name:      "test-project",
 						Namespace: "default",
@@ -203,7 +204,7 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1beta1.ServiceAccountSpec{
-						Name: "test-sa",
+						Name: &serviceName,
 						ProjectRef: v1beta1.CrossReference{
 							Name:      "test-project",
 							Namespace: "default",
@@ -227,12 +228,13 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 				assert.Contains(t, sa.Finalizers, finalizerName)
 
 				// Verify service account ID was set
-				assert.Equal(t, "test-sa-id", sa.Status.ServiceAccountID)
+				assert.NotNil(t, sa.Status.ServiceAccountID)
+				assert.Equal(t, "test-sa-id", *sa.Status.ServiceAccountID)
 
 				// Verify API key secret reference was set
-				if assert.NotNil(t, sa.Status.APIKeySecretRef) {
-					assert.Equal(t, "test-sa-apikey", sa.Status.APIKeySecretRef.Name)
-					assert.Equal(t, "default", sa.Status.APIKeySecretRef.Namespace)
+				if assert.NotNil(t, sa.Status.APIKey.APIKeySecretRef) {
+					assert.Equal(t, "test-sa-apikey", sa.Status.APIKey.APIKeySecretRef.Name)
+					assert.Equal(t, "default", sa.Status.APIKey.APIKeySecretRef.Namespace)
 				}
 
 				// Verify API key secret was created
@@ -248,13 +250,14 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "missing project reference",
+
 			serviceAccount: &v1beta1.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-sa",
 					Namespace: "default",
 				},
 				Spec: v1beta1.ServiceAccountSpec{
-					Name: "test-sa",
+					Name: &serviceName,
 					ProjectRef: v1beta1.CrossReference{
 						Name: "non-existent-project",
 					},
@@ -268,7 +271,7 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: v1beta1.ServiceAccountSpec{
-						Name: "test-sa",
+						Name: &serviceName,
 						ProjectRef: v1beta1.CrossReference{
 							Name: "non-existent-project",
 						},

@@ -7,6 +7,28 @@
   },
   "paths": {},
   "definitions": {
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.APIKeySpec": {
+      "type": "object",
+      "required": [
+        "name",
+        "apiKeyId",
+        "apiKeySecretRef"
+      ],
+      "properties": {
+        "apiKeyId": {
+          "description": "APIKeyId is the platform-specific API key ID",
+          "type": "string"
+        },
+        "apiKeySecretRef": {
+          "description": "APIKeySecretRef references the secret containing the API key",
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
+        },
+        "name": {
+          "description": "Name is the API key name",
+          "type": "string"
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.AssociationUsage": {
       "description": "AssociationUsage defines the usage of the association.",
       "type": "object",
@@ -3861,9 +3883,6 @@
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccount": {
       "description": "ServiceAccount represents a service account within a project",
       "type": "object",
-      "required": [
-        "spec"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -3932,8 +3951,7 @@
         },
         "name": {
           "description": "Name is the service account name",
-          "type": "string",
-          "default": ""
+          "type": "string"
         },
         "permissions": {
           "description": "Permissions defines the service account permissions",
@@ -3958,12 +3976,11 @@
       "type": "object",
       "required": [
         "serviceAccountId",
-        "apiKeySecretRef"
+        "apiKey"
       ],
       "properties": {
-        "apiKeySecretRef": {
-          "description": "APIKeySecretRef references the secret containing the API key",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
+        "apiKey": {
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.APIKeySpec"
         },
         "conditions": {
           "description": "Conditions represent the latest available observations of an object's state",
@@ -3979,8 +3996,7 @@
         },
         "serviceAccountId": {
           "description": "ServiceAccountID is the platform-specific service account ID",
-          "type": "string",
-          "default": ""
+          "type": "string"
         }
       }
     },

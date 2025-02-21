@@ -12,6 +12,7 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.APIKeySpec":                               schema_pkg_apis_ome_v1beta1_APIKeySpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.AssociationUsage":                         schema_pkg_apis_ome_v1beta1_AssociationUsage(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModel":                                schema_pkg_apis_ome_v1beta1_BaseModel(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BaseModelList":                            schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
@@ -137,6 +138,41 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.UserStatus":                               schema_pkg_apis_ome_v1beta1_UserStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                            schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec":                               schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_APIKeySpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the API key name",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiKeyId": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIKeyId is the platform-specific API key ID",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiKeySecretRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIKeySecretRef references the secret containing the API key",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference"),
+						},
+					},
+				},
+				Required: []string{"name", "apiKeyId", "apiKeySecretRef"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference"},
 	}
 }
 
@@ -6922,7 +6958,6 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccount(ref common.ReferenceCallback) co
 						},
 					},
 				},
-				Required: []string{"spec"},
 			},
 		},
 		Dependencies: []string{
@@ -6988,7 +7023,6 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountSpec(ref common.ReferenceCallback
 					"name": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Name is the service account name",
-							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -7056,15 +7090,13 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref common.ReferenceCallba
 					"serviceAccountId": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ServiceAccountID is the platform-specific service account ID",
-							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"apiKeySecretRef": {
+					"apiKey": {
 						SchemaProps: spec.SchemaProps{
-							Description: "APIKeySecretRef references the secret containing the API key",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference"),
+							Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.APIKeySpec"),
 						},
 					},
 					"conditions": {
@@ -7088,11 +7120,11 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref common.ReferenceCallba
 						},
 					},
 				},
-				Required: []string{"serviceAccountId", "apiKeySecretRef"},
+				Required: []string{"serviceAccountId", "apiKey"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.APIKeySpec", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 

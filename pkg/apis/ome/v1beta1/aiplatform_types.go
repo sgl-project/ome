@@ -91,18 +91,22 @@ type ProjectStatus struct {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.projectRef.name"
+// +kubebuilder:printcolumn:name="KeyID",type="string",JSONPath=".status.apiKey.keyId"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:storageversion
 type ServiceAccount struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ServiceAccountSpec   `json:"spec"`
+	Spec   ServiceAccountSpec   `json:"spec,omitempty"`
 	Status ServiceAccountStatus `json:"status,omitempty"`
 }
 
 type ServiceAccountSpec struct {
 	// Name is the service account name
 	// +required
-	Name string `json:"name"`
+	Name *string `json:"name"`
 	// ProjectRef references the Project
 	// +required
 	ProjectRef CrossReference `json:"projectRef"`
@@ -111,7 +115,7 @@ type ServiceAccountSpec struct {
 	Permissions []string `json:"permissions,omitempty"`
 	// Role defines the service account's role in the project, owner or member
 	// +optional
-	Role string `json:"role,omitempty"`
+	Role *string `json:"role,omitempty"`
 	// Config contains vendor-specific configuration
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
@@ -120,14 +124,25 @@ type ServiceAccountSpec struct {
 type ServiceAccountStatus struct {
 	// ServiceAccountID is the platform-specific service account ID
 	// +required
-	ServiceAccountID string `json:"serviceAccountId"`
-	// APIKeySecretRef references the secret containing the API key
+	ServiceAccountID *string `json:"serviceAccountId"`
 	// +required
-	APIKeySecretRef *SecretReference `json:"apiKeySecretRef"`
+	APIKey *APIKeySpec `json:"apiKey"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the service account was created
 	CreationTime *metav1.Time `json:"creationTime,omitempty"`
+}
+
+type APIKeySpec struct {
+	// Name is the API key name
+	// +required
+	Name *string `json:"name"`
+	// APIKeyId is the platform-specific API key ID
+	// +required
+	APIKeyId *string `json:"apiKeyId"`
+	// APIKeySecretRef references the secret containing the API key
+	// +required
+	APIKeySecretRef *SecretReference `json:"apiKeySecretRef"`
 }
 
 // User represents a user within a project
