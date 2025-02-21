@@ -13,7 +13,7 @@ metadata:
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
-  displayName: o3-mini-2025-01-31
+  displayName: openai.o3-mini-2025-01-31
   storage:
     storageUri: "vendor://openai/models/o3-mini-2025-01-31"
   vendor: openai

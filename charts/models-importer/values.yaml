@@ -208,7 +208,19 @@ deepseek-v3:
   lifecyclePhase: "ACTIVE"
   commitHash: "1d044fd82b15f1cedb197a288e50cc96a2c27205"
 
+gpt-4o:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 gpt-4o-2024-08-06:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-2024-11-20:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
@@ -216,11 +228,15 @@ gpt-4o-mini-2024-07-18:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+o1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 o1-2024-12-17:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-o1-mini-2024-09-12:
+o3-mini:
   enabled: false
   lifecyclePhase: "ACTIVE"
 

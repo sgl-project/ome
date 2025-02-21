@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: o1-mini-2024-09-12
+  name: o3-mini-2025-01-31
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
@@ -13,9 +13,9 @@ metadata:
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
-  displayName: o1-mini-2024-09-12
+  displayName: openai.o3-mini
   storage:
-    storageUri: "vendor://openai/models/o1-mini-2024-09-12"
+    storageUri: "vendor://openai/models/o3-mini-2025-01-31"
   vendor: openai
   version: "1.0.0"
   modelFormat:
@@ -25,7 +25,7 @@ spec:
     name: transformer
     version: "1"
   modelArchitecture: OpenAIForCasualLM
-  modelParameterSize: 8B
+  modelParameterSize: 200B
   modelCapabilities:
     - "CHAT"
   maxTokens: 200000

@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: o3-mini-2025-01-31
+  displayName: openai.o3-mini-2025-01-31
   storage:
     storageUri: "vendor://openai/models/{{ index .Values "o3-mini-2025-01-31" "osPrefixOverride" }}"
   vendor: {{ index .Values "o3-mini-2025-01-31" "vendor" }}
