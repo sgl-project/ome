@@ -464,6 +464,14 @@ deberta_v3_base_prompt_injection_v2:
     repository: fra.ocir.io/idqj093njucb/genai-prompt-injection-protection
     tag: v0.1-24-release
 
+content_moderator:
+  enabled: false
+  image:
+    repository: fra.ocir.io/idqj093njucb/content-moderator
+    tag: 0.1.1
+  minReplicas: 1
+  maxReplicas: 1
+
 gliner_large_v2_1:
   enabled: false
   minReplicas: 1

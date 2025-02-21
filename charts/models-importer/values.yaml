@@ -65,6 +65,10 @@ e5-mistral-7b-instruct:
 deberta-v3-base-prompt-injection-v2:
   enabled: false
 
+content_moderator:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 gliner-large-v2-1:
   enabled: false
 
