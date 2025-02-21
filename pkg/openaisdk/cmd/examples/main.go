@@ -26,4 +26,7 @@ func main() {
 
 	fmt.Println("\n=== Running API Key Examples ===")
 	examples.ApiKeyExample()
+
+	fmt.Println("\n=== Running Admin API Key Examples ===")
+	examples.AdminApiKeyExample()
 }

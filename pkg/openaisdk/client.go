@@ -11,6 +11,7 @@ import (
 type Client struct {
 	Options []option.RequestOption
 
+	AdminAPIKeys    *AdminApiKeyService
 	Projects        *ProjectService
 	ProjectUsers    *ProjectUserService
 	ServiceAccounts *ProjectServiceAccountService
@@ -36,6 +37,7 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 
 	r = &Client{Options: opts}
 
+	r.AdminAPIKeys = NewAdminApiKeyService(opts...)
 	r.Projects = NewProjectService(opts...)
 	r.ProjectUsers = NewProjectUserService(opts...)
 	r.ServiceAccounts = NewProjectServiceAccountService(opts...)

@@ -28,6 +28,7 @@ func formatAPIKey(a *openaisdk.APIKey) string {
 	return string(b)
 }
 
+// formatAPIKeyList returns a clean string representation of API key list
 func formatAPIKeyList(al *openaisdk.APIKeyListResponse) string {
 	var apikeys []map[string]interface{}
 	for _, a := range al.Data {
@@ -49,6 +50,7 @@ func formatAPIKeyList(al *openaisdk.APIKeyListResponse) string {
 	return string(b)
 }
 
+// formatApiKeyDelete returns a clean string representation of an API key deletion response
 func formatApiKeyDelete(ad *openaisdk.APIKeyDeleteResponse) string {
 	b, _ := json.Marshal(ad)
 	return string(b)

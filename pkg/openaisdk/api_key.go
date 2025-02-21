@@ -111,7 +111,7 @@ type Owner struct {
 type APIKeyListResponse struct {
 	Object  string         `json:"object,required"`
 	Data    []APIKey       `json:"data,required"`
-	FisrtID string         `json:"first_id,required"`
+	FirstID string         `json:"first_id,required"`
 	LastID  string         `json:"last_id,required"`
 	HasMore bool           `json:"has_more,required"`
 	Json    apiKeyListJSON `json:"-"`
@@ -132,7 +132,7 @@ func (r *APIKeyListResponse) UnmarshalJSON(data []byte) (err error) {
 }
 
 type APIKeyDeleteResponse struct {
-	Object string `json:"object,required"`
-	ID     string `json:"id,required"`
-	Delete bool   `json:"delete,required"`
+	Object  string `json:"object,required"`
+	ID      string `json:"id,required"`
+	Deleted bool   `json:"deleted,required"`
 }
