@@ -14,6 +14,7 @@ type Client struct {
 	Projects        *ProjectService
 	ProjectUsers    *ProjectUserService
 	ServiceAccounts *ProjectServiceAccountService
+	APIKeys         *ApiKeyService
 }
 
 // NewClient generates a new client with the default option read from the
@@ -38,6 +39,7 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 	r.Projects = NewProjectService(opts...)
 	r.ProjectUsers = NewProjectUserService(opts...)
 	r.ServiceAccounts = NewProjectServiceAccountService(opts...)
+	r.APIKeys = NewApiKeyService(opts...)
 
 	return
 }

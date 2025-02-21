@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -130,7 +129,7 @@ func (r *ProjectReconciler) ensureServiceAccountsDeleted(ctx context.Context, pr
 	// Delete each service account
 	for _, sa := range serviceAccounts.Items {
 		if err := r.Client.Delete(ctx, &sa); err != nil {
-			if !errors.IsNotFound(err) {
+			if !apierr.IsNotFound(err) {
 				r.Log.Error(err, "Failed to delete service account", "ServiceAccount", sa.Name)
 				return err
 			}

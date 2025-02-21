@@ -23,4 +23,7 @@ func main() {
 
 	fmt.Println("\n=== Running Project Users Examples ===")
 	examples.ProjectUsersExample()
+
+	fmt.Println("\n=== Running API Key Examples ===")
+	examples.ApiKeyExample()
 }
