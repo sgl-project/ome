@@ -233,18 +233,18 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 
 				// Verify API key secret reference was set
 				if assert.NotNil(t, sa.Status.APIKey.APIKeySecretRef) {
-					assert.Equal(t, "test-sa-apikey", sa.Status.APIKey.APIKeySecretRef.Name)
+					assert.Equal(t, "test-sa-api-key", sa.Status.APIKey.APIKeySecretRef.Name)
 					assert.Equal(t, "default", sa.Status.APIKey.APIKeySecretRef.Namespace)
 				}
 
 				// Verify API key secret was created
 				secret := &corev1.Secret{}
 				err = c.Get(context.Background(), types.NamespacedName{
-					Name:      "test-sa-apikey",
+					Name:      "test-sa-api-key",
 					Namespace: "default",
 				}, secret)
 				if assert.NoError(t, err) {
-					assert.Equal(t, "test-api-key-value", string(secret.Data["api-key"]))
+					assert.Equal(t, "test-api-key-value", string(secret.Data["test-sa-id"]))
 				}
 			},
 		},
@@ -285,7 +285,7 @@ func TestServiceAccountReconciler_Reconcile(t *testing.T) {
 				// Verify no secret was created
 				secret := &corev1.Secret{}
 				err := c.Get(context.Background(), types.NamespacedName{
-					Name:      "test-sa-apikey",
+					Name:      "test-sa-api-key",
 					Namespace: "default",
 				}, secret)
 				assert.Error(t, err)

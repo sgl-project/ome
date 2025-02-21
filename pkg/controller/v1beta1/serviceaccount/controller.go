@@ -287,14 +287,14 @@ func (r *ServiceAccountReconciler) reconcileSecret(ctx context.Context, sa *v1be
 
 // createOrUpdateSecret creates or updates the K8s secret for the API key
 func (r *ServiceAccountReconciler) createOrUpdateSecret(ctx context.Context, sa *v1beta1.ServiceAccount, apiKey *openaisdk.ProjectServiceAccountAPIKey) error {
-	secretName := sa.Name + "-apikey"
+	secretName := sa.Name + "-api-key"
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: sa.Namespace,
 		},
 		Data: map[string][]byte{
-			"api-key": []byte(apiKey.Value),
+			*sa.Status.ServiceAccountID: []byte(apiKey.Value),
 		},
 	}
 
