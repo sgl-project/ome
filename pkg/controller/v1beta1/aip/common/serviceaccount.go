@@ -123,6 +123,9 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 	}
 
 	// Update common secret
+	if commonSecret.StringData == nil {
+		commonSecret.StringData = map[string]string{}
+	}
 	commonSecret.StringData[resp.ID] = resp.APIKey.Value
 	if err := sa.Client.Update(ctx, commonSecret); err != nil {
 		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToUpdateCommonSecret", err.Error(), metav1.ConditionFalse)

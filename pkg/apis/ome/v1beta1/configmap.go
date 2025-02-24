@@ -21,7 +21,7 @@ const (
 	CapacityReservationReconcilePolicyConfigName = "capacityReservationReconcilePolicy"
 	MultiNodeProberName                          = "multinodeProber"
 	BenchmarkJobConfigName                       = "benchmarkjob"
-	AIPlatformConfigName                         = "aiplatform"
+	AIPlatformSecretConfigName                   = "aiplatform-config"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -309,13 +309,13 @@ func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig,
 }
 
 func NewAIPlatformConfig(clientset kubernetes.Interface) (*AIPlatformConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.AIPlatformConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	aiPlatformConfig := &AIPlatformConfig{}
 	for _, err := range []error{
-		getComponentConfig(AIPlatformConfigName, configMap, &aiPlatformConfig),
+		getComponentConfig(AIPlatformSecretConfigName, configMap, &aiPlatformConfig),
 	} {
 		if err != nil {
 			return nil, err

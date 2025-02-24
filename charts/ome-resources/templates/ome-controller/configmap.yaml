@@ -167,11 +167,11 @@ metadata:
   name: aiplatform-config
   namespace: ome
 data:
-  aiplatform: |
+  aiplatform-config: |
     {
       "secretConfig": {
         "writeToCommonNamespace": {{.Values.ome.aiPlatformSecretConfig.writeToCommonNamespace}},
         "namespace": "{{.Values.ome.aiPlatformSecretConfig.namespace}}",
-        "secretName": "{{.Values.ome.aiPlatformSecretConfig.secretName}}",
+        "secretName": "{{.Values.ome.aiPlatformSecretConfig.secretName}}"
       }
     }

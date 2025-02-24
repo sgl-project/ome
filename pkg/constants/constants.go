@@ -37,6 +37,11 @@ var (
 	BenchmarkJobConfigMapName = "benchmarkjob-config"
 )
 
+// AI Platform Constants
+var (
+	AIPlatformConfigMapName = "aiplatform-config"
+)
+
 // InferenceService Constants
 var (
 	InferenceServiceName                = "inferenceservice"
