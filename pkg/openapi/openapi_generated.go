@@ -6623,6 +6623,12 @@ func schema_pkg_apis_ome_v1beta1_ProjectStatus(ref common.ReferenceCallback) com
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
 						},
 					},
+					"lastUpdatedTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastUpdatedTime is the time when the project was last updated",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
 				},
 				Required: []string{"projectId"},
 			},

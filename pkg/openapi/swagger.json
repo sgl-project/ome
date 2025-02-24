@@ -3697,6 +3697,10 @@
           "description": "CreationTime is the time when the project was created",
           "$ref": "#/definitions/v1.Time"
         },
+        "lastUpdatedTime": {
+          "description": "LastUpdatedTime is the time when the project was last updated",
+          "$ref": "#/definitions/v1.Time"
+        },
         "projectId": {
           "description": "ProjectID is the platform-specific project ID",
           "type": "string",

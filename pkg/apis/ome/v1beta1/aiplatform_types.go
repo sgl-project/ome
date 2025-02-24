@@ -54,6 +54,7 @@ type OrganizationStatus struct {
 // +kubebuilder:printcolumn:name="Name",type="string",JSONPath=".spec.name"
 // +kubebuilder:printcolumn:name="ProjectID",type="boolean",JSONPath=".status.projectId"
 // +kubebuilder:printcolumn:name="Organization",type="string",JSONPath=".spec.organizationRef.name"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 type Project struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -84,6 +85,8 @@ type ProjectStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the project was created
 	CreationTime *metav1.Time `json:"creationTime,omitempty"`
+	// LastUpdatedTime is the time when the project was last updated
+	LastUpdatedTime *metav1.Time `json:"lastUpdatedTime,omitempty"`
 }
 
 // ServiceAccount represents a service account within a project
@@ -92,8 +95,9 @@ type ProjectStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.projectRef.name"
-// +kubebuilder:printcolumn:name="KeyID",type="string",JSONPath=".status.apiKey.keyId"
+// +kubebuilder:printcolumn:name="KeyID",type="string",JSONPath=".status.apiKey.apiKeyId"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:storageversion
 type ServiceAccount struct {
 	metav1.TypeMeta   `json:",inline"`

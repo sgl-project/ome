@@ -24,6 +24,9 @@ spec:
     - jsonPath: .spec.organizationRef.name
       name: Organization
       type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
     name: v1beta1
     schema:
       openAPIV3Schema:
@@ -96,6 +99,9 @@ spec:
                   type: object
                 type: array
               creationTime:
+                format: date-time
+                type: string
+              lastUpdatedTime:
                 format: date-time
                 type: string
               projectId:
