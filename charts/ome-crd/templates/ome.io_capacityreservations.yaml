@@ -306,6 +306,7 @@ spec:
                     type:
                       enum:
                       - Ready
+                      - ResourcesSufficient
                       - ResourcesProvisioned
                       - DACAssociationsHealthy
                       - WorkloadsHealthy

@@ -2,8 +2,12 @@ package kueueclusterqueue
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,9 +21,14 @@ import (
 var log = logf.Log.WithName("ClusterQueueReconciler")
 
 type ClusterQueueReconciler struct {
-	client       client.Client
-	scheme       *runtime.Scheme
-	ClusterQueue *kueuev1beta1.ClusterQueue
+	client                      client.Client
+	scheme                      *runtime.Scheme
+	ClusterQueue                *kueuev1beta1.ClusterQueue
+	CreationFailedTimeThreshold time.Duration
+}
+
+type ClusterQueueConfig struct {
+	CreationFailedTimeThresholdSecond int `json:"creationFailedTimeThresholdSecond"`
 }
 
 func NewClusterQueueReconciler(
@@ -29,7 +38,22 @@ func NewClusterQueueReconciler(
 	resourceGroups []kueuev1beta1.ResourceGroup,
 	cohort string,
 	preemptionRule *kueuev1beta1.ClusterQueuePreemption,
-) *ClusterQueueReconciler {
+) (*ClusterQueueReconciler, error) {
+	configMap := &corev1.ConfigMap{}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: constants.CapacityReservationConfigMapName, Namespace: constants.OMENamespace}, configMap)
+	if err != nil {
+		return nil, err
+	}
+	clusterQueueConfig := &ClusterQueueConfig{}
+	if cqConfig, ok := configMap.Data["clusterQueue"]; ok {
+		err = json.Unmarshal([]byte(cqConfig), &clusterQueueConfig)
+		if err != nil {
+			panic(fmt.Errorf("unable to unmarshall %v json string due to %v ", "clusterQueue", err))
+		}
+	} else {
+		panic(fmt.Errorf("missing the %v json config in the capacityreservation-config ConfigMap", "clusterQueue"))
+	}
+
 	if cohort == "" {
 		cohort = constants.DedicatedServingCohort
 	}
@@ -61,10 +85,11 @@ func NewClusterQueueReconciler(
 		},
 	}
 	return &ClusterQueueReconciler{
-		client:       client,
-		scheme:       scheme,
-		ClusterQueue: clusterQueue,
-	}
+		client:                      client,
+		scheme:                      scheme,
+		ClusterQueue:                clusterQueue,
+		CreationFailedTimeThreshold: time.Duration(clusterQueueConfig.CreationFailedTimeThresholdSecond) * time.Second,
+	}, nil
 }
 
 func (r *ClusterQueueReconciler) checkExist() (constants.CheckResultType, *kueuev1beta1.ClusterQueue, error) {
@@ -80,7 +105,8 @@ func (r *ClusterQueueReconciler) checkExist() (constants.CheckResultType, *kueue
 	// existed, check equivalent
 	r.ClusterQueue.SetResourceVersion(existingClusterQueue.GetResourceVersion())
 
-	diff, err := kmp.SafeDiff(r.ClusterQueue.Spec, existingClusterQueue.Spec)
+	// kmp.SafeDiff(x, y) output format json { -x +y }
+	diff, err := kmp.SafeDiff(existingClusterQueue.Spec, r.ClusterQueue.Spec)
 	if err != nil {
 		return constants.CheckResultUnknown, nil, err
 	}

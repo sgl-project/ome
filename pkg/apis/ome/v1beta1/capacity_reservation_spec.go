@@ -20,12 +20,13 @@ const (
 )
 
 // CapacityReservationConditionType is a string enumeration type for the condition type of the Capacity Reservation.
-// +kubebuilder:validation:Enum=Ready;ResourcesProvisioned;DACAssociationsHealthy;WorkloadsHealthy
+// +kubebuilder:validation:Enum=Ready;ResourcesSufficient;ResourcesProvisioned;DACAssociationsHealthy;WorkloadsHealthy
 type CapacityReservationConditionType string
 
 // ConditionType Enum
 const (
 	CapacityReservationReady CapacityReservationConditionType = "Ready"
+	ResourcesSufficient      CapacityReservationConditionType = "ResourcesSufficient"
 	ResourcesProvisioned     CapacityReservationConditionType = "ResourcesProvisioned"
 	DACAssociationsHealthy   CapacityReservationConditionType = "DACAssociationsHealthy"
 	WorkloadsHealthy         CapacityReservationConditionType = "WorkloadsHealthy"

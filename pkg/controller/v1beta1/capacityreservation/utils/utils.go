@@ -1,36 +1,40 @@
 package utils
 
 import (
-	"fmt"
 	"sort"
 
-	corev1 "k8s.io/api/core/v1"
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
+// ConvertResourceGroupsToFlavorUsage converts a list of resourceGroups into a lexicographically ordered list of flavorUsages.
+// Ensures consistency in the return value to prevent unnecessary updates.
 func ConvertResourceGroupsToFlavorUsage(resourceGroups []kueuev1beta1.ResourceGroup) []kueuev1beta1.FlavorUsage {
-	flattened := flattenResources(resourceGroups)
+	flattened := ConvertResourceGroupsToMap(resourceGroups)
 	flavorUsages := make([]kueuev1beta1.FlavorUsage, 0, len(flattened))
 
 	// Get all flavor names and sort them
 	flavorNames := make([]string, 0, len(flattened))
 	for flavorName := range flattened {
-		flavorNames = append(flavorNames, flavorName)
+		flavorNames = append(flavorNames, string(flavorName))
 	}
 	sort.Strings(flavorNames)
 
 	// Create flavor usages in sorted order
 	for _, flavorName := range flavorNames {
-		resourceQuotas := flattened[flavorName]
+		flavorReferenceName := kueuev1beta1.ResourceFlavorReference(flavorName)
+		resourceQuotas := flattened[flavorReferenceName]
 		flavorUsage := kueuev1beta1.FlavorUsage{
-			Name:      kueuev1beta1.ResourceFlavorReference(flavorName),
+			Name:      flavorReferenceName,
 			Resources: []kueuev1beta1.ResourceUsage{},
 		}
 
 		// Get all resource names and sort them
-		resourceNames := make([]corev1.ResourceName, 0, len(resourceQuotas))
+		resourceNames := make([]v1.ResourceName, 0, len(resourceQuotas))
 		for resourceName := range resourceQuotas {
 			resourceNames = append(resourceNames, resourceName)
 		}
@@ -67,183 +71,57 @@ func CheckClusterQueueActive(clusterQueue *kueuev1beta1.ClusterQueue) bool {
 	return meta.IsStatusConditionTrue(clusterQueue.Status.Conditions, kueuev1beta1.ClusterQueueActive)
 }
 
-// IsResourceSufficient checks whether resource is sufficient by comparing requested resources and available resources
-// Ignore parameters related to borrowing and lending from cohort for now
+func CheckClusterQueueInactive(clusterQueue *kueuev1beta1.ClusterQueue) bool {
+	if clusterQueue.Status.Conditions == nil {
+		return false
+	}
+	return meta.IsStatusConditionFalse(clusterQueue.Status.Conditions, kueuev1beta1.ClusterQueueActive)
+}
+
 func IsResourceSufficient(
-	requestedResources []kueuev1beta1.ResourceGroup,
-	availableResources []kueuev1beta1.FlavorUsage,
-) (bool, error) {
-	if requestedResources == nil || availableResources == nil {
-		// TODO: remove placeholder and flip the condition
-		// return false, nil
-		return true, nil
-	}
-	// Step 1: Deep copy original availableResource
-	availableCopy := make([]kueuev1beta1.FlavorUsage, len(availableResources))
-	for i, availFlavor := range availableResources {
-		availableCopy[i] = *availFlavor.DeepCopy()
-	}
-
-	// Step 2: Iterate over requested resource groups and their flavors
-	for _, resourceGroup := range requestedResources {
-		for _, reqFlavor := range resourceGroup.Flavors {
-			// Check if the flavor exists in available resources
-			found := false
-			for i, availFlavor := range availableCopy {
-				if reqFlavor.Name == availFlavor.Name {
-					found = true
-					// Step 3: Subtract requested resources from available resources
-					isSufficient, err := compareAndAllocateResources(reqFlavor.Resources, availFlavor.Resources)
-					if err != nil {
-						return false, fmt.Errorf("failed for flavor %s: %v", reqFlavor.Name, err)
-					}
-					if !isSufficient {
-						return false, nil
-					}
-
-					// Update the copy for this flavor
-					availableCopy[i] = availFlavor
-					break
+	availableMap map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity,
+	capacityMap map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity,
+	changeMap map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity,
+) bool {
+	for flavor, changeResources := range changeMap {
+		availableResources, availableExists := availableMap[flavor]
+		if !availableExists {
+			return false
+		}
+		capacityResources, capacityExists := capacityMap[flavor]
+		for resourceName, changeQty := range changeResources {
+			effectiveAvailable := availableResources[resourceName]
+			if capacityExists {
+				if capacityQty, exists := capacityResources[resourceName]; exists {
+					effectiveAvailable.Sub(capacityQty)
 				}
 			}
-			if !found {
-				return false, nil // Requested flavor not found
+			effectiveAvailable.Sub(changeQty)
+			if effectiveAvailable.Sign() < 0 {
+				return false
 			}
 		}
 	}
-
-	// Step 4: If all checks pass, the resources are sufficient
-	return true, nil
+	return true
 }
 
-func compareAndAllocateResources(
-	requestedQuotas []kueuev1beta1.ResourceQuota,
-	availableCapacities []kueuev1beta1.ResourceUsage,
-) (bool, error) {
-	// Create a map for fast lookup and mutation of available capacities by resource name
-	// Ignore parameters related to borrowing and lending from cohort for now
-	capacityMap := make(map[corev1.ResourceName]*resource.Quantity)
-	for i, capacity := range availableCapacities {
-		capacityMap[capacity.Name] = &availableCapacities[i].Total
-	}
+// ConvertResourceGroupsToMap flattens ResourceGroups to a map of flavors : Resources
+func ConvertResourceGroupsToMap(resourceGroups []kueuev1beta1.ResourceGroup) map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity {
+	flattened := make(map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity)
 
-	// Iterate over each requested resource quota
-	for _, requested := range requestedQuotas {
-		// Check if the requested resource name exists in available capacities
-		availableCapacity, found := capacityMap[requested.Name]
-		if !found {
-			// Resource name is not available
-			return false, fmt.Errorf("resource %s is unavailable", requested.Name)
-		}
-
-		// Compare the requested quota with the available capacity
-		if availableCapacity.Cmp(requested.NominalQuota) < 0 {
-			// Not enough resources available
-			return false, nil
-		}
-
-		// Subtract the requested resource from the available capacity
-		availableCapacity.Sub(requested.NominalQuota)
-	}
-
-	// All requested resources are satisfied
-	return true, nil
-}
-
-func CalculateIncreasedResources(
-	newRequested []kueuev1beta1.ResourceGroup,
-	oldRequested []kueuev1beta1.ResourceGroup,
-) ([]kueuev1beta1.ResourceGroup, bool) {
-	// Flatten the new and old resource groups
-	newFlattened := flattenResources(newRequested)
-	oldFlattened := flattenResources(oldRequested)
-
-	// Prepare the resulting ResourceGroup for increased resources
-	increasedFlavors := []kueuev1beta1.FlavorQuotas{}
-
-	hasIncrease := false
-
-	// Iterate over the new resources to calculate increases
-	for flavorName, newResources := range newFlattened {
-		oldResources := oldFlattened[flavorName]
-		increasedQuotas := []kueuev1beta1.ResourceQuota{}
-
-		for resourceName, newQuota := range newResources {
-			oldQuota := oldResources[resourceName]
-
-			if newQuota.Cmp(oldQuota) > 0 {
-				hasIncrease = true
-				increasedQuotas = append(increasedQuotas, kueuev1beta1.ResourceQuota{
-					Name:         resourceName,
-					NominalQuota: *resource.NewQuantity(newQuota.Value()-oldQuota.Value(), resource.DecimalSI),
-				})
-			}
-		}
-
-		if len(increasedQuotas) > 0 {
-			increasedFlavors = append(increasedFlavors, kueuev1beta1.FlavorQuotas{
-				Name:      kueuev1beta1.ResourceFlavorReference(flavorName),
-				Resources: increasedQuotas,
-			})
-		}
-	}
-
-	// If no increase, return nil and false
-	if !hasIncrease {
-		return nil, false
-	}
-
-	// Wrap the increased flavors in a single ResourceGroup
-	return []kueuev1beta1.ResourceGroup{
-		{
-			Flavors: increasedFlavors,
-		},
-	}, true
-}
-
-// flattenResources flattens ResourceGroups to a list of flavors
-func flattenResources(resourceGroups []kueuev1beta1.ResourceGroup) map[string]map[corev1.ResourceName]resource.Quantity {
-	flattened := make(map[string]map[corev1.ResourceName]resource.Quantity)
-
-	// First pass: aggregate resources while preserving original formats
 	for _, group := range resourceGroups {
 		for _, flavor := range group.Flavors {
-			flavorName := string(flavor.Name)
-			if _, exists := flattened[flavorName]; !exists {
-				flattened[flavorName] = make(map[corev1.ResourceName]resource.Quantity)
+			if _, exists := flattened[flavor.Name]; !exists {
+				flattened[flavor.Name] = make(map[v1.ResourceName]resource.Quantity)
 			}
 
-			for _, flavorResource := range flavor.Resources {
-				if current, exists := flattened[flavorName][flavorResource.Name]; exists {
-					// Add the values in milli units for consistent scaling
-					sum := current.MilliValue() + flavorResource.NominalQuota.MilliValue()
-
-					// Create a new quantity with the correct format
-					var q resource.Quantity
-					switch flavorResource.Name {
-					case corev1.ResourceMemory:
-						// Memory should be in BinarySI format (e.g., "20Gi")
-						q = resource.Quantity{Format: resource.BinarySI}
-					default:
-						// All other resources (including CPU) should be in DecimalSI format (e.g., "15")
-						q = resource.Quantity{Format: resource.DecimalSI}
-					}
-					q.SetMilli(sum)
-					flattened[flavorName][flavorResource.Name] = q
+			for _, res := range flavor.Resources {
+				if existingQty, exists := flattened[flavor.Name][res.Name]; exists {
+					// Add() handles quantity format such as BinarySI or DecimalSI
+					existingQty.Add(res.NominalQuota)
+					flattened[flavor.Name][res.Name] = existingQty
 				} else {
-					// Initialize with the correct format
-					value := flavorResource.NominalQuota.MilliValue()
-					var q resource.Quantity
-					switch flavorResource.Name {
-					case corev1.ResourceMemory:
-						// Memory should be in BinarySI format (e.g., "20Gi")
-						q = resource.Quantity{Format: resource.BinarySI}
-					default:
-						// All other resources (including CPU) should be in DecimalSI format (e.g., "15")
-						q = resource.Quantity{Format: resource.DecimalSI}
-					}
-					q.SetMilli(value)
-					flattened[flavorName][flavorResource.Name] = q
+					flattened[flavor.Name][res.Name] = res.NominalQuota
 				}
 			}
 		}
@@ -252,9 +130,92 @@ func flattenResources(resourceGroups []kueuev1beta1.ResourceGroup) map[string]ma
 	return flattened
 }
 
-func GetClusterAvailableResource() ([]kueuev1beta1.FlavorUsage, error) {
+func GetClusterAvailableResource() (map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity, error) {
 	// + input: clusterSnapshot *omev1beta1.clustersnapshot.ClusterSnapshot
 	// Get resource data from clusterSnapshot provided by alfred simulator
 	// TODO: get data from alfred simulator
-	return nil, nil
+	return hardcodeResourcesMap(), nil
+	// return nil, nil
+}
+
+func hardcodeResourcesMap() map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity {
+	// set wide limits to bypass resources sufficiency check
+	flavors := []kueuev1beta1.ResourceFlavorReference{
+		"bm-gpu-h100-8", "bm-gpu-a100-v2-8", "bm-gpu-b4-8", "bm-gpu4-8", "bm-gpu-a10-4",
+	}
+	resources := map[v1.ResourceName]resource.Quantity{
+		"nvidia.com/gpu": resource.MustParse("512"),
+		"cpu":            resource.MustParse("32768"),
+		"memory":         resource.MustParse("256Ti"),
+	}
+	resourcesMap := make(map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity)
+	for _, flavor := range flavors {
+		resourcesMap[flavor] = resources
+	}
+	return resourcesMap
+}
+
+// GetTotalCapacitiesFromCapacityReservationList Get the sum of capacities of all capacity reservations in the list
+// map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity is the map version of []kueuev1beta1.FlavorUsage
+func GetTotalCapacitiesFromCapacityReservationList(
+	capacityReservationList omev1beta1.ClusterCapacityReservationList,
+) map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity {
+	flavorMap := make(map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity)
+
+	for _, capRes := range capacityReservationList.Items {
+		// Allocatable = Capacity - sum of DAC usages. DAC usages have been counted already when get available resource in cluster
+		for _, usage := range capRes.Status.Allocatable {
+			if _, exists := flavorMap[usage.Name]; !exists {
+				flavorMap[usage.Name] = make(map[v1.ResourceName]resource.Quantity)
+			}
+			for _, res := range usage.Resources {
+				if existing, exists := flavorMap[usage.Name][res.Name]; exists {
+					existing.Add(res.Total)
+					flavorMap[usage.Name][res.Name] = existing
+				} else {
+					flavorMap[usage.Name][res.Name] = res.Total
+				}
+			}
+		}
+	}
+	return flavorMap
+}
+
+func CompareResourcesChange(
+	desired []kueuev1beta1.ResourceGroup,
+	existing []kueuev1beta1.FlavorUsage,
+) map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity {
+	// Convert desired []ResourceGroup to a map representation
+	changeMap := ConvertResourceGroupsToMap(desired)
+
+	// Subtract existing []FlavorUsage from changeMap
+	for _, usage := range existing {
+		if _, exists := changeMap[usage.Name]; !exists {
+			changeMap[usage.Name] = make(map[v1.ResourceName]resource.Quantity)
+		}
+		for _, res := range usage.Resources {
+			if existingQty, exists := changeMap[usage.Name][res.Name]; exists {
+				existingQty.Sub(res.Total)
+				changeMap[usage.Name][res.Name] = existingQty
+			} else {
+				negQty := res.Total
+				negQty.Neg()
+				changeMap[usage.Name][res.Name] = negQty
+			}
+		}
+	}
+
+	return changeMap
+}
+
+func IsIncreased(
+	changeMap map[kueuev1beta1.ResourceFlavorReference]map[v1.ResourceName]resource.Quantity) bool {
+	for _, resources := range changeMap {
+		for _, changeQty := range resources {
+			if changeQty.Sign() > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

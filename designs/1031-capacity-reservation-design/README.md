@@ -111,7 +111,16 @@ If resources are insufficient, the webhook rejects the request and provides a me
 
 If webhook admits a workload in a race condition, meaning the webhook oversells a portion of resource, reconciler after the webhook has the logic to validate the request again, in a single thread.
 
-#### 3. Buffer Resources
+#### 3. Check resources sufficiency in controller
+Add logic to check resource sufficiency within the capacity reservation reconciler, in case validation webhook admits the request due to cases such as race condition.
+
+Calculation:
+
+<img alt="diagram4" src="./diagram4.png" width="1000"/>
+
+CCR stands for clusterCapacityReservation.
+
+#### 4. Buffer Resources
 Add spare GPU nodes to the global pool, to handle unexpected demands, such as on-demand model scaling up, node failures, and maintenance tasks. This prevents pending pod backlogs.
 
 ### Support for Rolling Updates
@@ -267,9 +276,9 @@ ClusterCapacityReservation sample
 apiVersion: ome.io/v1beta1
 kind: ClusterCapacityReservation
 metadata:
-  name: "capacityReservationId"
+  name: "capacityreservationid"
 spec:
-  compartmentID: comp-1234
+  compartmentID: comp1234
   resourceGroups:
   - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
     flavors:

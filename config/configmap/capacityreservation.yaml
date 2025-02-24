@@ -4,6 +4,10 @@ metadata:
   name: capacityreservation-config
   namespace: ome
 data:
+  clusterQueue: |-
+    {
+      "creationFailedTimeThresholdSecond" : 30
+    }
   capacityreservationReconcilePolicy: |-
     {
       "reconcileFailedLifecycleState": false
