@@ -4,6 +4,45 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// Common condition types
+	ConditionTypeReady = "Ready"
+	ConditionTypeError = "Error"
+)
+
+// ProjectStatusReason represents the status of a project operation
+type ProjectStatusReason string
+
+const (
+	// ProjectStatusCreated indicates the project was successfully created
+	ProjectStatusCreated ProjectStatusReason = "ProjectCreated"
+	// ProjectStatusUpdated indicates the project was successfully updated
+	ProjectStatusUpdated ProjectStatusReason = "ProjectUpdated"
+	// ProjectStatusArchived indicates the project was successfully archived
+	ProjectStatusArchived ProjectStatusReason = "ProjectArchived"
+	// ProjectStatusInitError indicates an initialization error occurred
+	ProjectStatusInitError ProjectStatusReason = "InitializationError"
+	// ProjectStatusAPIError indicates an API error occurred
+	ProjectStatusAPIError ProjectStatusReason = "APIError"
+	// ProjectStatusOrgError indicates an organization-related error occurred
+	ProjectStatusOrgError ProjectStatusReason = "OrganizationError"
+)
+
+// String returns the string representation of ProjectStatusReason
+func (s ProjectStatusReason) String() string {
+	return string(s)
+}
+
+// IsError returns true if the status represents an error condition
+func (s ProjectStatusReason) IsError() bool {
+	return s == ProjectStatusInitError || s == ProjectStatusAPIError || s == ProjectStatusOrgError
+}
+
+// IsSuccess returns true if the status represents a success condition
+func (s ProjectStatusReason) IsSuccess() bool {
+	return s == ProjectStatusCreated || s == ProjectStatusUpdated || s == ProjectStatusArchived
+}
+
 // Organization represents an AI platform organization configuration
 // +k8s:openapi-gen=true
 // +genclient

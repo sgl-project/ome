@@ -7,6 +7,18 @@
   },
   "paths": {},
   "definitions": {
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.AIPlatformConfig": {
+      "type": "object",
+      "required": [
+        "secretConfig"
+      ],
+      "properties": {
+        "secretConfig": {
+          "default": {},
+          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretConfig"
+        }
+      }
+    },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.APIKeySpec": {
       "type": "object",
       "required": [
@@ -3856,6 +3868,28 @@
           "description": "Name of the runtime being referenced. When namespaced-scoped TrainingRuntime is used, the TrainJob must have the same namespace as the deployed runtime.",
           "type": "string",
           "default": ""
+        }
+      }
+    },
+    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretConfig": {
+      "type": "object",
+      "required": [
+        "writeToCommonNamespace",
+        "namespace",
+        "secretName"
+      ],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "default": ""
+        },
+        "secretName": {
+          "type": "string",
+          "default": ""
+        },
+        "writeToCommonNamespace": {
+          "type": "boolean",
+          "default": false
         }
       }
     },
