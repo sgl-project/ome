@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - openai/default_org.yaml
+  - openai/secret.yaml

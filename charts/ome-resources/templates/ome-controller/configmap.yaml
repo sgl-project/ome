@@ -160,3 +160,18 @@ data:
         "memoryLimit": "{{ .Values.ome.benchmarkJob.memoryLimit }}"
       }
     }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiplatform-config
+  namespace: ome
+data:
+  aiplatform: |
+    {
+      "secretConfig": {
+        "writeToCommonNamespace": {{.Values.ome.aiPlatformSecretConfig.writeToCommonNamespace}},
+        "namespace": "{{.Values.ome.aiPlatformSecretConfig.namespace}}",
+        "secretName": "{{.Values.ome.aiPlatformSecretConfig.secretName}}",
+      }
+    }

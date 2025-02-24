@@ -73,6 +73,17 @@ func (sa *ServiceAccount) updateServiceAccountCondition(ctx context.Context, con
 	return sa.Client.Status().Update(ctx, sa.Resource)
 }
 
+// getCommonSecret retrieves or creates the common secret
+func (sa *ServiceAccount) getCommonSecret(ctx context.Context, config *v1beta1.AIPlatformConfig) (*v1.Secret, error) {
+	secret := &v1.Secret{}
+	err := sa.Get(ctx, client.ObjectKey{Name: config.SecretConfig.SecretName, Namespace: config.SecretConfig.Namespace}, secret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get common secret: %w", err)
+
+	}
+	return secret, nil
+}
+
 // Create implements ResourceOperation
 func (sa *ServiceAccount) Create(ctx context.Context) error {
 	project, err := sa.GetProject(ctx)
@@ -100,6 +111,23 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToCreateServiceAccount", err.Error(), metav1.ConditionFalse)
 	}
 
+	// Add service account key to common secret
+	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
+	if err != nil {
+		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetAIPlatformConfig", err.Error(), metav1.ConditionFalse)
+	}
+
+	commonSecret, err := sa.getCommonSecret(ctx, aiPlatformConfig)
+	if err != nil {
+		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetCommonSecret", err.Error(), metav1.ConditionFalse)
+	}
+
+	// Update common secret
+	commonSecret.StringData[resp.ID] = resp.APIKey.Value
+	if err := sa.Client.Update(ctx, commonSecret); err != nil {
+		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToUpdateCommonSecret", err.Error(), metav1.ConditionFalse)
+	}
+
 	// Create secret for API key
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -108,11 +136,9 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 		},
 		StringData: map[string]string{resp.ID: resp.APIKey.Value},
 	}
-
 	if err := controllerutil.SetControllerReference(sa.Resource, secret, sa.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
-
 	if err := sa.Client.Create(ctx, secret); err != nil {
 		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToCreateSecret", err.Error(), metav1.ConditionFalse)
 	}
@@ -135,9 +161,14 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 	return sa.updateServiceAccountCondition(ctx, "Ready", "ServiceAccountCreated", "Service account successfully created", metav1.ConditionTrue)
 }
 
-// Update implements ResourceOperation (currently no-op)
-func (sa *ServiceAccount) Update(ctx context.Context) error {
-	return nil
+// deleteServiceAccountKeyFromSecret removes a key from the common secret
+func (sa *ServiceAccount) deleteServiceAccountKeyFromSecret(ctx context.Context, aiPlatformConfig *v1beta1.AIPlatformConfig) error {
+	commonSecret, err := sa.getCommonSecret(ctx, aiPlatformConfig)
+	if err != nil {
+		return err
+	}
+	delete(commonSecret.StringData, *sa.Resource.Status.ServiceAccountID)
+	return sa.Client.Update(ctx, commonSecret)
 }
 
 // Delete implements ResourceOperation
@@ -157,25 +188,12 @@ func (sa *ServiceAccount) Delete(ctx context.Context) error {
 		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToInitializeClient", err.Error(), metav1.ConditionFalse)
 	}
 
+	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
+	if err == nil {
+		_ = sa.deleteServiceAccountKeyFromSecret(ctx, aiPlatformConfig)
+	}
+
 	// Delete service account in OpenAI
-	if _, err := openaiClient.ServiceAccounts.Delete(ctx, project.Status.ProjectID, *sa.Resource.Status.ServiceAccountID); err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToDeleteServiceAccount", err.Error(), metav1.ConditionFalse)
-	}
-
-	// Delete API key secret if it exists
-	if sa.Resource.Status.APIKey != nil && sa.Resource.Status.APIKey.APIKeySecretRef != nil {
-		secret := &v1.Secret{}
-		secretKey := client.ObjectKey{
-			Name:      sa.Resource.Status.APIKey.APIKeySecretRef.Name,
-			Namespace: sa.Resource.Status.APIKey.APIKeySecretRef.Namespace,
-		}
-
-		if err := sa.Get(ctx, secretKey, secret); err == nil {
-			if err := sa.Client.Delete(ctx, secret); err != nil {
-				return fmt.Errorf("failed to delete secret: %w", err)
-			}
-		}
-	}
-
-	return nil
+	_, err = openaiClient.ServiceAccounts.Delete(ctx, project.Status.ProjectID, *sa.Resource.Status.ServiceAccountID)
+	return err
 }

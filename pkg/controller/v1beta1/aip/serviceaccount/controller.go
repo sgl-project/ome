@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -29,11 +28,10 @@ const finalizerName = "serviceaccount.ome.io.finalizers"
 // ServiceAccountReconciler reconciles a ServiceAccount object
 type ServiceAccountReconciler struct {
 	client.Client
-	Clientset           kubernetes.Interface
-	Log                 logr.Logger
-	Scheme              *runtime.Scheme
-	Recorder            record.EventRecorder
-	OpenAIClientFactory func(apiKey string, baseURL string) *openaisdk.Client
+	Clientset kubernetes.Interface
+	Log       logr.Logger
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
 }
 
 // Reconcile reads the state of the cluster for a ServiceAccount object and makes changes based on the state read
@@ -78,7 +76,7 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 	}
 
 	// Update if needed
-	if err := resource.Update(ctx); err != nil {
+	if err := resource.Update(ctx, sa); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update service account: %w", err)
 	}
 

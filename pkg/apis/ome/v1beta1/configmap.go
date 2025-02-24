@@ -21,12 +21,23 @@ const (
 	CapacityReservationReconcilePolicyConfigName = "capacityReservationReconcilePolicy"
 	MultiNodeProberName                          = "multinodeProber"
 	BenchmarkJobConfigName                       = "benchmarkjob"
+	AIPlatformConfigName                         = "aiplatform"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
 
 	DefaultUrlScheme = "http"
 )
+
+type AIPlatformConfig struct {
+	SecretConfig SecretConfig `json:"secretConfig"`
+}
+
+type SecretConfig struct {
+	WriteToCommonNamespace bool   `json:"writeToCommonNamespace"`
+	Namespace              string `json:"namespace"`
+	SecretName             string `json:"secretName"`
+}
 
 type BenchmarkJobConfig struct {
 	// PodConfig contains all Pod Configuration
@@ -295,4 +306,20 @@ func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig,
 		}
 	}
 	return benchmarkJobConfig, nil
+}
+
+func NewAIPlatformConfig(clientset kubernetes.Interface) (*AIPlatformConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	aiPlatformConfig := &AIPlatformConfig{}
+	for _, err := range []error{
+		getComponentConfig(AIPlatformConfigName, configMap, &aiPlatformConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return aiPlatformConfig, nil
 }
