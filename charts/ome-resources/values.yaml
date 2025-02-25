@@ -5,8 +5,8 @@ ome:
     enablePrometheusScraping: "false"
   aiPlatformSecretConfig:
     writeToCommonNamespace: true
-    namespace: ax0pqskufyud
-    secretName: gs-dp-api-v2
+    namespace: gs-dp-api-v2
+    secretName: ome-openai-secrets
   ociETC:
     region: us-chicago-1
     serviceTenancyId: ocid1.tenancy.oc1..aaaaaaaa6kumpbo73nsadhi7t4ssehtgn6wtnnkertn6sd74i4gzvia6misa
