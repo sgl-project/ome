@@ -17,3 +17,13 @@ spec:
   projectRef:
     name: default-project
 
+---
+apiVersion: ome.io/v1beta1
+kind: ServiceAccount
+metadata:
+  name: default-service-account-2
+  namespace: generative-ai-service
+spec:
+  name: default-service-account
+  projectRef:
+    name: default-project

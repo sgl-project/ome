@@ -6646,7 +6646,6 @@ func schema_pkg_apis_ome_v1beta1_ProjectStatus(ref common.ReferenceCallback) com
 						},
 					},
 				},
-				Required: []string{"projectId"},
 			},
 		},
 		Dependencies: []string{
@@ -7183,7 +7182,6 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref common.ReferenceCallba
 						},
 					},
 				},
-				Required: []string{"serviceAccountId", "apiKey"},
 			},
 		},
 		Dependencies: []string{

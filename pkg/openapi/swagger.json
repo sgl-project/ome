@@ -3693,9 +3693,6 @@
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectStatus": {
       "type": "object",
-      "required": [
-        "projectId"
-      ],
       "properties": {
         "conditions": {
           "description": "Conditions represent the latest available observations of an object's state",
@@ -4012,10 +4009,6 @@
     },
     "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountStatus": {
       "type": "object",
-      "required": [
-        "serviceAccountId",
-        "apiKey"
-      ],
       "properties": {
         "apiKey": {
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.APIKeySpec"

@@ -106,8 +106,6 @@ spec:
                 type: string
               projectId:
                 type: string
-            required:
-            - projectId
             type: object
         required:
         - spec

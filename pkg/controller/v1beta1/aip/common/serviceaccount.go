@@ -40,6 +40,7 @@ func NewServiceAccount(c client.Client, cs kubernetes.Interface, log logr.Logger
 func (sa *ServiceAccount) GetProject(ctx context.Context) (*v1beta1.Project, error) {
 	project := &v1beta1.Project{}
 	if err := sa.Get(ctx, client.ObjectKey{Name: sa.Resource.Spec.ProjectRef.Name}, project); err != nil {
+		sa.Log.Error(err, "failed to get project from service account: ", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 	return project, nil
@@ -54,23 +55,68 @@ func (sa *ServiceAccount) GetOrganization(ctx context.Context) (*v1beta1.Organiz
 
 	org := &v1beta1.Organization{}
 	if err := sa.Get(ctx, client.ObjectKey{Name: project.Spec.OrganizationRef.Name}, org); err != nil {
+		sa.Log.Error(err, "failed to get organization from service account: ", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
 		return nil, fmt.Errorf("failed to get organization: %w", err)
 	}
 	return org, nil
 }
 
 // updateServiceAccountCondition updates the status conditions for the ServiceAccount
-func (sa *ServiceAccount) updateServiceAccountCondition(ctx context.Context, conditionType, reason, message string, status metav1.ConditionStatus) error {
+func (sa *ServiceAccount) updateServiceAccountCondition(ctx context.Context, status v1beta1.ServiceAccountStatusReason) error {
+	now := metav1.NewTime(time.Now())
+	conditionType := v1beta1.ConditionTypeReady
+	conditionStatus := metav1.ConditionTrue
+
+	if status.IsError() {
+		conditionType = v1beta1.ConditionTypeError
+		conditionStatus = metav1.ConditionFalse
+	}
+
 	condition := metav1.Condition{
 		Type:               conditionType,
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		LastTransitionTime: metav1.NewTime(time.Now()),
+		Status:             conditionStatus,
+		Reason:             string(status),
+		Message:            sa.getStatusMessage(status),
+		LastTransitionTime: now,
 		ObservedGeneration: sa.Resource.Generation,
 	}
-	sa.Resource.Status.Conditions = append(sa.Resource.Status.Conditions, condition)
+
+	// Update or append the condition
+	found := false
+	for i, c := range sa.Resource.Status.Conditions {
+		if c.Type == conditionType {
+			sa.Resource.Status.Conditions[i] = condition
+			found = true
+			break
+		}
+	}
+	if !found {
+		sa.Resource.Status.Conditions = append(sa.Resource.Status.Conditions, condition)
+	}
+
 	return sa.Client.Status().Update(ctx, sa.Resource)
+}
+
+// getStatusMessage returns a human-readable message for a given status
+func (sa *ServiceAccount) getStatusMessage(status v1beta1.ServiceAccountStatusReason) string {
+	switch status {
+	case v1beta1.ServiceAccountStatusCreated:
+		return "Service account successfully created"
+	case v1beta1.ServiceAccountStatusDeleted:
+		return "Service account successfully deleted"
+	case v1beta1.ServiceAccountStatusProjectError:
+		return "Failed to get project information"
+	case v1beta1.ServiceAccountStatusInitError:
+		return "Failed to initialize service account"
+	case v1beta1.ServiceAccountStatusAPIError:
+		return "API operation failed"
+	case v1beta1.ServiceAccountStatusSecretError:
+		return "Secret operation failed"
+	case v1beta1.ServiceAccountStatusConfigError:
+		return "Configuration error occurred"
+	default:
+		return "Unknown status"
+	}
 }
 
 // getCommonSecret retrieves or creates the common secret
@@ -79,7 +125,6 @@ func (sa *ServiceAccount) getCommonSecret(ctx context.Context, config *v1beta1.A
 	err := sa.Get(ctx, client.ObjectKey{Name: config.SecretConfig.SecretName, Namespace: config.SecretConfig.Namespace}, secret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get common secret: %w", err)
-
 	}
 	return secret, nil
 }
@@ -88,38 +133,44 @@ func (sa *ServiceAccount) getCommonSecret(ctx context.Context, config *v1beta1.A
 func (sa *ServiceAccount) Create(ctx context.Context) error {
 	project, err := sa.GetProject(ctx)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetProject", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusProjectError)
 	}
 
 	org, err := sa.GetOrganization(ctx)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetOrganization", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusProjectError)
 	}
 
 	openaiClient, err := sa.InitializeClient(ctx, org)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToInitializeClient", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusInitError)
 	}
 
 	if err := controllerutil.SetControllerReference(project, sa.Resource, sa.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
+	// Check if ProjectID is available
+	if project.Status.ProjectID == "" {
+		sa.Log.Info("ProjectID is not available yet for service account", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusProjectError)
+	}
+
 	// Create service account in OpenAI
 	resp, err := openaiClient.ServiceAccounts.Create(ctx, project.Status.ProjectID, openaisdk.ProjectServiceAccountCreateRequest{Name: *sa.Resource.Spec.Name})
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToCreateServiceAccount", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusAPIError)
 	}
 
 	// Add service account key to common secret
 	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetAIPlatformConfig", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusConfigError)
 	}
 
 	commonSecret, err := sa.getCommonSecret(ctx, aiPlatformConfig)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetCommonSecret", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusSecretError)
 	}
 
 	// Update common secret
@@ -128,7 +179,7 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 	}
 	commonSecret.StringData[resp.ID] = resp.APIKey.Value
 	if err := sa.Client.Update(ctx, commonSecret); err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToUpdateCommonSecret", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusSecretError)
 	}
 
 	// Create secret for API key
@@ -143,7 +194,7 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 	if err := sa.Client.Create(ctx, secret); err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToCreateSecret", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusSecretError)
 	}
 
 	// Update status
@@ -161,16 +212,17 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 		},
 		CreationTime: &creationTime,
 	}
-	return sa.updateServiceAccountCondition(ctx, "Ready", "ServiceAccountCreated", "Service account successfully created", metav1.ConditionTrue)
+	return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusCreated)
 }
 
 // deleteServiceAccountKeyFromSecret removes a key from the common secret
 func (sa *ServiceAccount) deleteServiceAccountKeyFromSecret(ctx context.Context, aiPlatformConfig *v1beta1.AIPlatformConfig) error {
 	commonSecret, err := sa.getCommonSecret(ctx, aiPlatformConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get common secret: %w", err)
 	}
-	delete(commonSecret.StringData, *sa.Resource.Status.ServiceAccountID)
+
+	delete(commonSecret.Data, *sa.Resource.Status.ServiceAccountID)
 	return sa.Client.Update(ctx, commonSecret)
 }
 
@@ -178,25 +230,32 @@ func (sa *ServiceAccount) deleteServiceAccountKeyFromSecret(ctx context.Context,
 func (sa *ServiceAccount) Delete(ctx context.Context) error {
 	project, err := sa.GetProject(ctx)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetProject", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusProjectError)
 	}
 
 	org, err := sa.GetOrganization(ctx)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToGetOrganization", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusProjectError)
 	}
 
 	openaiClient, err := sa.InitializeClient(ctx, org)
 	if err != nil {
-		return sa.updateServiceAccountCondition(ctx, "Error", "FailedToInitializeClient", err.Error(), metav1.ConditionFalse)
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusInitError)
 	}
 
+	if _, err := openaiClient.ServiceAccounts.Delete(ctx, project.Status.ProjectID, *sa.Resource.Status.ServiceAccountID); err != nil {
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusAPIError)
+	}
+
+	// Delete service account key from common secret
 	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
-	if err == nil {
-		_ = sa.deleteServiceAccountKeyFromSecret(ctx, aiPlatformConfig)
+	if err != nil {
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusConfigError)
 	}
 
-	// Delete service account in OpenAI
-	_, err = openaiClient.ServiceAccounts.Delete(ctx, project.Status.ProjectID, *sa.Resource.Status.ServiceAccountID)
-	return err
+	if err := sa.deleteServiceAccountKeyFromSecret(ctx, aiPlatformConfig); err != nil {
+		return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusSecretError)
+	}
+
+	return sa.updateServiceAccountCondition(ctx, v1beta1.ServiceAccountStatusDeleted)
 }

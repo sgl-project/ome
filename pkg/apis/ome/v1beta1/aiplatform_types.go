@@ -4,45 +4,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	// Common condition types
-	ConditionTypeReady = "Ready"
-	ConditionTypeError = "Error"
-)
-
-// ProjectStatusReason represents the status of a project operation
-type ProjectStatusReason string
-
-const (
-	// ProjectStatusCreated indicates the project was successfully created
-	ProjectStatusCreated ProjectStatusReason = "ProjectCreated"
-	// ProjectStatusUpdated indicates the project was successfully updated
-	ProjectStatusUpdated ProjectStatusReason = "ProjectUpdated"
-	// ProjectStatusArchived indicates the project was successfully archived
-	ProjectStatusArchived ProjectStatusReason = "ProjectArchived"
-	// ProjectStatusInitError indicates an initialization error occurred
-	ProjectStatusInitError ProjectStatusReason = "InitializationError"
-	// ProjectStatusAPIError indicates an API error occurred
-	ProjectStatusAPIError ProjectStatusReason = "APIError"
-	// ProjectStatusOrgError indicates an organization-related error occurred
-	ProjectStatusOrgError ProjectStatusReason = "OrganizationError"
-)
-
-// String returns the string representation of ProjectStatusReason
-func (s ProjectStatusReason) String() string {
-	return string(s)
-}
-
-// IsError returns true if the status represents an error condition
-func (s ProjectStatusReason) IsError() bool {
-	return s == ProjectStatusInitError || s == ProjectStatusAPIError || s == ProjectStatusOrgError
-}
-
-// IsSuccess returns true if the status represents a success condition
-func (s ProjectStatusReason) IsSuccess() bool {
-	return s == ProjectStatusCreated || s == ProjectStatusUpdated || s == ProjectStatusArchived
-}
-
 // Organization represents an AI platform organization configuration
 // +k8s:openapi-gen=true
 // +genclient
@@ -118,7 +79,7 @@ type ProjectSpec struct {
 
 type ProjectStatus struct {
 	// ProjectID is the platform-specific project ID
-	// +required
+	// +optional
 	ProjectID string `json:"projectId"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -166,9 +127,9 @@ type ServiceAccountSpec struct {
 
 type ServiceAccountStatus struct {
 	// ServiceAccountID is the platform-specific service account ID
-	// +required
+	// +optional
 	ServiceAccountID *string `json:"serviceAccountId"`
-	// +required
+	// +optional
 	APIKey *APIKeySpec `json:"apiKey"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -340,4 +301,82 @@ func init() {
 	SchemeBuilder.Register(&ServiceAccount{}, &ServiceAccountList{})
 	SchemeBuilder.Register(&User{}, &UserList{})
 	SchemeBuilder.Register(&RateLimit{}, &RateLimitList{})
+}
+
+const (
+	// Common condition types
+	ConditionTypeReady = "Ready"
+	ConditionTypeError = "Error"
+)
+
+// ProjectStatusReason represents the status of a project operation
+type ProjectStatusReason string
+
+const (
+	// ProjectStatusCreated indicates the project was successfully created
+	ProjectStatusCreated ProjectStatusReason = "ProjectCreated"
+	// ProjectStatusUpdated indicates the project was successfully updated
+	ProjectStatusUpdated ProjectStatusReason = "ProjectUpdated"
+	// ProjectStatusArchived indicates the project was successfully archived
+	ProjectStatusArchived ProjectStatusReason = "ProjectArchived"
+	// ProjectStatusInitError indicates an initialization error occurred
+	ProjectStatusInitError ProjectStatusReason = "InitializationError"
+	// ProjectStatusAPIError indicates an API error occurred
+	ProjectStatusAPIError ProjectStatusReason = "APIError"
+	// ProjectStatusOrgError indicates an organization-related error occurred
+	ProjectStatusOrgError ProjectStatusReason = "OrganizationError"
+)
+
+// String returns the string representation of ProjectStatusReason
+func (s ProjectStatusReason) String() string {
+	return string(s)
+}
+
+// IsError returns true if the status represents an error condition
+func (s ProjectStatusReason) IsError() bool {
+	return s == ProjectStatusInitError || s == ProjectStatusAPIError || s == ProjectStatusOrgError
+}
+
+// IsSuccess returns true if the status represents a success condition
+func (s ProjectStatusReason) IsSuccess() bool {
+	return s == ProjectStatusCreated || s == ProjectStatusUpdated || s == ProjectStatusArchived
+}
+
+// ServiceAccountStatusReason represents the status of a service account operation
+type ServiceAccountStatusReason string
+
+const (
+	// ServiceAccountStatusCreated indicates the service account was successfully created
+	ServiceAccountStatusCreated ServiceAccountStatusReason = "ServiceAccountCreated"
+	// ServiceAccountStatusDeleted indicates the service account was successfully deleted
+	ServiceAccountStatusDeleted ServiceAccountStatusReason = "ServiceAccountDeleted"
+	// ServiceAccountStatusProjectError indicates a project-related error occurred
+	ServiceAccountStatusProjectError ServiceAccountStatusReason = "ProjectError"
+	// ServiceAccountStatusInitError indicates an initialization error occurred
+	ServiceAccountStatusInitError ServiceAccountStatusReason = "InitializationError"
+	// ServiceAccountStatusAPIError indicates an API error occurred
+	ServiceAccountStatusAPIError ServiceAccountStatusReason = "APIError"
+	// ServiceAccountStatusSecretError indicates a secret-related error occurred
+	ServiceAccountStatusSecretError ServiceAccountStatusReason = "SecretError"
+	// ServiceAccountStatusConfigError indicates a configuration error occurred
+	ServiceAccountStatusConfigError ServiceAccountStatusReason = "ConfigError"
+)
+
+// String returns the string representation of ServiceAccountStatusReason
+func (s ServiceAccountStatusReason) String() string {
+	return string(s)
+}
+
+// IsError returns true if the status represents an error condition
+func (s ServiceAccountStatusReason) IsError() bool {
+	return s == ServiceAccountStatusProjectError ||
+		s == ServiceAccountStatusInitError ||
+		s == ServiceAccountStatusAPIError ||
+		s == ServiceAccountStatusSecretError ||
+		s == ServiceAccountStatusConfigError
+}
+
+// IsSuccess returns true if the status represents a success condition
+func (s ServiceAccountStatusReason) IsSuccess() bool {
+	return s == ServiceAccountStatusCreated || s == ServiceAccountStatusDeleted
 }
