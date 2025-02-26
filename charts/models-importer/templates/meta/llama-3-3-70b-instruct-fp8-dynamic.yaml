@@ -1,4 +1,4 @@
-{{- if index .Values "llama-3-3-70b-instruct" "enabled" -}}
+{{- if index .Values "llama-3-3-70b-instruct-fp8-dynamic" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
