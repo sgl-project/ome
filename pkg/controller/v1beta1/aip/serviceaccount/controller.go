@@ -3,19 +3,20 @@ package serviceaccount
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/tools/record"
+	"time"
 
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/common"
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -57,7 +58,12 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 	// Handle deletion
 	if !sa.DeletionTimestamp.IsZero() {
 		if err := resource.Delete(ctx); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to delete service account: %w", err)
+			// Log without stack trace for better readability
+			log.Info("Failed to delete service account, will retry",
+				"name", sa.Name,
+				"namespace", sa.Namespace,
+				"error", err.Error())
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 		}
 
 		controllerutil.RemoveFinalizer(sa, finalizerName)
@@ -70,14 +76,24 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 	// Handle creation/update
 	if sa.Status.ServiceAccountID == nil {
 		if err := resource.Create(ctx); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to create service account: %w", err)
+			// Log without stack trace for better readability
+			log.Info("Failed to create service account, will retry",
+				"name", sa.Name,
+				"namespace", sa.Namespace,
+				"error", err.Error())
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 		}
 		return ctrl.Result{}, nil
 	}
 
 	// Update if needed
 	if err := resource.Update(ctx, sa); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update service account: %w", err)
+		// Log without stack trace for better readability
+		log.Info("Failed to update service account, will retry",
+			"name", sa.Name,
+			"namespace", sa.Namespace,
+			"error", err.Error())
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
