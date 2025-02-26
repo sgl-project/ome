@@ -47,7 +47,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.c78ab524
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.4.post1.c78ab524
       ports:
         - containerPort: 8080
           name: http1
