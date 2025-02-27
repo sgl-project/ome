@@ -180,7 +180,8 @@ llama_3_3_70b_instruct:
 
 llama_3_3_70b_instruct_fp8_dynamic:
   enabled: false
-  labels: {}
+  labels:
+    sidecar.istio.io/inject: 'true'
   annotations: {}
   affinity:
     nodeAffinity:
