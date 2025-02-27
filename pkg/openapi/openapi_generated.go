@@ -4851,7 +4851,6 @@ func schema_pkg_apis_ome_v1beta1_OrganizationSpec(ref common.ReferenceCallback) 
 					"secretRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "SecretRef references the secret containing the API key optional",
-							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference"),
 						},
 					},

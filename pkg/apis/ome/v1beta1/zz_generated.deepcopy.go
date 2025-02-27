@@ -2019,7 +2019,11 @@ func (in *OrganizationSpec) DeepCopyInto(out *OrganizationSpec) {
 		*out = new(bool)
 		**out = **in
 	}
-	out.SecretRef = in.SecretRef
+	if in.SecretRef != nil {
+		in, out := &in.SecretRef, &out.SecretRef
+		*out = new(SecretReference)
+		**out = **in
+	}
 	if in.Config != nil {
 		in, out := &in.Config, &out.Config
 		*out = make(map[string]string, len(*in))

@@ -74,7 +74,7 @@ func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organi
 		return nil, fmt.Errorf("unsupported vendor: %s", *org.Spec.Vendor)
 	}
 
-	secret, err := r.getSecret(ctx, &org.Spec.SecretRef)
+	secret, err := r.getSecret(ctx, org.Spec.SecretRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API key secret: %w", err)
 	}

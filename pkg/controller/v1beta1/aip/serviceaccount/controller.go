@@ -3,8 +3,9 @@ package serviceaccount
 import (
 	"context"
 	"fmt"
-	"k8s.io/client-go/tools/record"
 	"time"
+
+	"k8s.io/client-go/tools/record"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"

@@ -16,6 +16,8 @@ kind: Secret
 metadata:
   name: openai-admin-key
   namespace: {{.Release.Namespace}}
+  annotations:
+    helm.sh/resource-policy: keep
 type: Opaque
 data:
   OPENAI_ADMIN_API_KEY: c2stYWRtaW4tZllfZHBwNjJCX1dhWlhBalhiUElNaVBEUUxmNUswU3c4aWh3VXRFOUVLTFNaNnU4Sy1WS0xpZ2pfZlQzQmxia0ZKWVJINk9nWHBTS3BCVTRXd1Y2MzNydFRhOTF1UmdINE5KTlV0LThPUFBwZUNLLTU0SHZqOTNvd1BFQQ==

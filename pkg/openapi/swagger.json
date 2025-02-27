@@ -2720,7 +2720,6 @@
         },
         "secretRef": {
           "description": "SecretRef references the secret containing the API key optional",
-          "default": {},
           "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
         },
         "vendor": {

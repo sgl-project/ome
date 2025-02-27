@@ -70,7 +70,7 @@ func TestOrganizationScoped(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			SecretRef: v1beta1.SecretReference{
+			SecretRef: &v1beta1.SecretReference{
 				Name:      "test-secret",
 				Namespace: "default",
 				Key:       "api-key",
@@ -178,7 +178,7 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			SecretRef: v1beta1.SecretReference{
+			SecretRef: &v1beta1.SecretReference{
 				Name:      "test-secret",
 				Namespace: "default",
 				Key:       "api-key",

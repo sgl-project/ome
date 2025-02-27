@@ -33,7 +33,7 @@ type OrganizationSpec struct {
 	OrganizationID string `json:"organizationId"`
 	// SecretRef references the secret containing the API key
 	// optional
-	SecretRef SecretReference `json:"secretRef,omitempty"`
+	SecretRef *SecretReference `json:"secretRef,omitempty"`
 	// Config contains vendor-specific configuration
 	// +optional
 	Config map[string]string `json:"config,omitempty"`

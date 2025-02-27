@@ -262,6 +262,12 @@ multinode-prober: ## 🔍 Build multinode-prober binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/multinode-prober ./cmd/multinode-prober
 	@echo "✅ Build complete"
 
+.PHONY: openai-admin-util
+openai-admin-util: ## 🔍 Build multinode-prober binary.
+	@echo "🔍 Building openai-admin-util..."
+	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)"  -o bin/openai-admin-util ./cmd/openai-admin-util
+	@echo "✅ Build complete"
+
 .PHONY: run-ome-manager
 run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "🏃‍♂️ Running ome-manager..."
@@ -302,6 +308,12 @@ run-ome-agent-training-agent: fmt vet ome-agent ## Run ome-agent binary from loc
 	@echo "🏃‍♂️ Running ome-agent training-agent..."
 	bin/ome-agent training-agent -d -c config/ome-agent/ome-agent.yaml
 
+.PHONY: run-openai-admin-util
+run-openai-admin-util: fmt vet openai-admin-util ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	@echo "🏃‍♂️ Running openai-admin-util ..."
+	bin/openai-admin-util help
+
+
 .PHONY: ome-image
 ome-image: fmt vet ## Build ome-manager image.
 	@echo "🚀 Building ome-manager image..."
@@ -330,6 +342,12 @@ multinode-prober-image: fmt vet ## Build multinode-prober image.
 ome-agent-image: fmt vet ## Build ome-agent image.
 	@echo "🚀 Building ome-agent image..."
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
+	@echo "✅ Image built"
+
+.PHONY: openai-admin-util-image
+openai-admin-util-image: fmt vet ## Build openai-admin-util image.
+	@echo "🚀 Building openai-admin-util-image image..."
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/openai-admin-util.Dockerfile -t $(REGISTRY)/openai-admin-util:$(TAG)
 	@echo "✅ Image built"
 
 .PHONY: telepresence
