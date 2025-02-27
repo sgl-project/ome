@@ -51,8 +51,8 @@ type OrganizationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope="Cluster"
-// +kubebuilder:printcolumn:name="Name",type="string",JSONPath=".spec.name"
-// +kubebuilder:printcolumn:name="ProjectID",type="boolean",JSONPath=".status.projectId"
+// +kubebuilder:printcolumn:name="ProjectName",type="string",JSONPath=".spec.name"
+// +kubebuilder:printcolumn:name="ProjectID",type="string",JSONPath=".status.projectId"
 // +kubebuilder:printcolumn:name="Organization",type="string",JSONPath=".spec.organizationRef.name"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 type Project struct {
