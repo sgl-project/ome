@@ -11,11 +11,12 @@ import (
 type Client struct {
 	Options []option.RequestOption
 
-	AdminAPIKeys    *AdminApiKeyService
-	Projects        *ProjectService
-	ProjectUsers    *ProjectUserService
-	ServiceAccounts *ProjectServiceAccountService
-	APIKeys         *ApiKeyService
+	AdminAPIKeys      *AdminApiKeyService
+	Projects          *ProjectService
+	ProjectUsers      *ProjectUserService
+	ServiceAccounts   *ProjectServiceAccountService
+	APIKeys           *ApiKeyService
+	ProjectRateLimits *ProjectRateLimitService
 }
 
 // NewClient generates a new client with the default option read from the
@@ -42,6 +43,7 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 	r.ProjectUsers = NewProjectUserService(opts...)
 	r.ServiceAccounts = NewProjectServiceAccountService(opts...)
 	r.APIKeys = NewApiKeyService(opts...)
+	r.ProjectRateLimits = NewProjectRateLimitService(opts...)
 
 	return
 }

@@ -29,4 +29,7 @@ func main() {
 
 	fmt.Println("\n=== Running Admin API Key Examples ===")
 	examples.AdminApiKeyExample()
+
+	fmt.Println("\n=== Running Project Rate Limit Examples ===")
+	examples.ProjectRateLimitExample()
 }
