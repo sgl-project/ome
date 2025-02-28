@@ -14,10 +14,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Project implements OrganizationScoped and ResourceOperation
+// Project implements OrganizationScoped, ResourceOperation, and OpenAIClientProvider
 type Project struct {
 	ResourceBase
 	Resource *v1beta1.Project
+	// For testing purposes, allows injecting a mock client
+	openAIClient *openaisdk.Client
 }
 
 // NewProject creates a new Project resource handler
@@ -47,8 +49,14 @@ func (p *Project) GetOrganization(ctx context.Context) (*v1beta1.Organization, e
 	return org, nil
 }
 
-// initializeOpenAIClient initializes the OpenAI client with proper error handling
-func (p *Project) initializeOpenAIClient(ctx context.Context) (*openaisdk.Client, error) {
+// GetOpenAIClient initializes the OpenAI client with proper error handling
+// Implements OpenAIClientProvider interface
+func (p *Project) GetOpenAIClient(ctx context.Context) (*openaisdk.Client, error) {
+	// If a client is already set (for testing), return it
+	if p.openAIClient != nil {
+		return p.openAIClient, nil
+	}
+
 	org, err := p.GetOrganization(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize client: %w", err)
@@ -60,6 +68,11 @@ func (p *Project) initializeOpenAIClient(ctx context.Context) (*openaisdk.Client
 	}
 
 	return openAIClient, nil
+}
+
+// SetOpenAIClient sets a custom OpenAI client for testing purposes
+func (p *Project) SetOpenAIClient(client *openaisdk.Client) {
+	p.openAIClient = client
 }
 
 // updateCondition adds or updates a condition in the project status
@@ -136,7 +149,7 @@ func (p *Project) getStatusMessage(status v1beta1.ProjectStatusReason) string {
 
 // Create creates a new project in OpenAI
 func (p *Project) Create(ctx context.Context) error {
-	openaiClient, err := p.initializeOpenAIClient(ctx)
+	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
 		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusInitError, err)
 	}
@@ -157,7 +170,7 @@ func (p *Project) Create(ctx context.Context) error {
 
 // Update updates the project details in OpenAI
 func (p *Project) Update(ctx context.Context) error {
-	openaiClient, err := p.initializeOpenAIClient(ctx)
+	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
 		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusInitError, err)
 	}
@@ -176,7 +189,7 @@ func (p *Project) Update(ctx context.Context) error {
 
 // GetProject fetches the project details from OpenAI
 func (p *Project) GetProject(ctx context.Context) (*openaisdk.Project, error) {
-	openaiClient, err := p.initializeOpenAIClient(ctx)
+	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize client for project %s: %w", p.Resource.Name, err)
 	}
@@ -191,7 +204,7 @@ func (p *Project) GetProject(ctx context.Context) (*openaisdk.Project, error) {
 
 // Delete archives the project in OpenAI
 func (p *Project) Delete(ctx context.Context) error {
-	openaiClient, err := p.initializeOpenAIClient(ctx)
+	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
 		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusInitError, err)
 	}

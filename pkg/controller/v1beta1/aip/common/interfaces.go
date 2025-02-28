@@ -45,6 +45,12 @@ type ClientInitializer interface {
 	InitializeClient(ctx context.Context, org *v1beta1.Organization) (*openaisdk.Client, error)
 }
 
+// OpenAIClientProvider defines an interface for providing OpenAI clients
+type OpenAIClientProvider interface {
+	// GetOpenAIClient returns an initialized OpenAI client
+	GetOpenAIClient(ctx context.Context) (*openaisdk.Client, error)
+}
+
 // ResourceBase provides common functionality for all resources
 type ResourceBase struct {
 	client.Client

@@ -22,6 +22,8 @@ import (
 type ServiceAccount struct {
 	ResourceBase
 	Resource *v1beta1.ServiceAccount
+	// For testing purposes, allows injecting a mock client
+	openAIClient *openaisdk.Client
 }
 
 // NewServiceAccount creates a new ServiceAccount resource handler
@@ -72,6 +74,32 @@ func (sa *ServiceAccount) GetOrganization(ctx context.Context) (*v1beta1.Organiz
 		return nil, fmt.Errorf("failed to get organization: %w", err)
 	}
 	return org, nil
+}
+
+// GetOpenAIClient initializes the OpenAI client with proper error handling
+// Implements OpenAIClientProvider interface
+func (sa *ServiceAccount) GetOpenAIClient(ctx context.Context) (*openaisdk.Client, error) {
+	// If a client is already set (for testing), return it
+	if sa.openAIClient != nil {
+		return sa.openAIClient, nil
+	}
+
+	org, err := sa.GetOrganization(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize client: %w", err)
+	}
+
+	openAIClient, err := sa.InitializeClient(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize OpenAI client: %w", err)
+	}
+
+	return openAIClient, nil
+}
+
+// SetOpenAIClient sets a custom OpenAI client for testing purposes
+func (sa *ServiceAccount) SetOpenAIClient(client *openaisdk.Client) {
+	sa.openAIClient = client
 }
 
 // updateServiceAccountCondition updates the status conditions for the ServiceAccount
@@ -162,12 +190,7 @@ func (sa *ServiceAccount) Create(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, v1beta1.ServiceAccountStatusProjectError, err)
 	}
 
-	org, err := sa.GetOrganization(ctx)
-	if err != nil {
-		return sa.updateServiceAccountConditionWithError(ctx, v1beta1.ServiceAccountStatusProjectError, err)
-	}
-
-	openaiClient, err := sa.InitializeClient(ctx, org)
+	openaiClient, err := sa.GetOpenAIClient(ctx)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, v1beta1.ServiceAccountStatusInitError, err)
 	}
@@ -324,12 +347,7 @@ func (sa *ServiceAccount) Delete(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, v1beta1.ServiceAccountStatusProjectError, err)
 	}
 
-	org, err := sa.GetOrganization(ctx)
-	if err != nil {
-		return sa.updateServiceAccountConditionWithError(ctx, v1beta1.ServiceAccountStatusProjectError, err)
-	}
-
-	openaiClient, err := sa.InitializeClient(ctx, org)
+	openaiClient, err := sa.GetOpenAIClient(ctx)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, v1beta1.ServiceAccountStatusInitError, err)
 	}
