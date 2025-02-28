@@ -119,7 +119,7 @@ spec:
             python3 -m vllm.entrypoints.openai.api_server \
               --port=8080 \
               --model="$MODEL_PATH" \
-              --max-log-len=1 \
+              --max-log-len=0 \
               --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
               --served-model-name=vllm-model \
               --tensor-parallel-size=8 \

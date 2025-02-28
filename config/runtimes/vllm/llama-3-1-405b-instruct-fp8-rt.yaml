@@ -48,7 +48,7 @@ spec:
     max: 410B
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.4.post1.c78ab524
       ports:
         - containerPort: 8080
           name: http1
@@ -63,7 +63,7 @@ spec:
           --port=8080 \
           --model="$MODEL_PATH" \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=1 \
+          --max-log-len=0 \
           --served-model-name=vllm-model \
           --tensor-parallel-size=8 \
           --max-model-len=131072 \

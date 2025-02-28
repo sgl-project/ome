@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-2-90b-vision-instruct-fp8
+  name: tgi-llama-3-1-405b-instruct-fp8
 spec:
   disabled: false
   annotations:
@@ -30,22 +30,21 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.46.0.dev0"
+        version: "4.43.0.dev0"
       modelFormat:
         name: safetensors
         version: "1"
-      modelArchitecture: MllamaForConditionalGeneration
-      autoSelect: true
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: false
       priority: 1
-      version: "1.0.0"
   modelSizeRange:
-    min: 85B
-    max: 95B
+    min: 400B
+    max: 410B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
+      image: ghcr.io/huggingface/text-generation-inference:3.0.0
       ports:
         - containerPort: 8080
           name: http1
@@ -56,31 +55,22 @@ spec:
         - --
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
+          /tgi-entrypoint.sh \
+          --model-id="$MODEL_PATH" \
           --port=8080 \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name=vllm-model \
-          --tensor-parallel-size=4 \
-          --max-num-seqs=32 \
-          --enforce-eager \
-          --preemption-mode=swap \
-          --limit-mm-per-prompt=image=1 \
-          --max-model-len=131072 \
-          --gpu-memory-utilization=0.99
+          --dtype=bfloat16
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 30
-          memory: 100Gi
-          nvidia.com/gpu: 4
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
         limits:
-          cpu: 30
-          memory: 100Gi
-          nvidia.com/gpu: 4
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
 
       readinessProbe:
         httpGet:
