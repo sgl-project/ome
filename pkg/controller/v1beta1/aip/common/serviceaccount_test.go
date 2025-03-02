@@ -2,13 +2,9 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
@@ -24,102 +20,13 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
+	testing_pkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 )
-
-// mockOpenAIServerForServiceAccount creates a test server that mocks OpenAI API responses for service account operations
-func mockOpenAIServerForServiceAccount() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		now := time.Now().Unix()
-
-		// Handle service account operations
-		if strings.Contains(r.URL.Path, "/organization/projects") {
-			projectID := "proj-123"
-			// Extract project ID from URL if it's in the path
-			if parts := strings.Split(r.URL.Path, "/organization/projects/"); len(parts) > 1 {
-				if idParts := strings.Split(parts[1], "/"); len(idParts) > 0 {
-					projectID = idParts[0]
-				}
-			}
-
-			// Handle service account endpoints
-			if strings.Contains(r.URL.Path, "/service_accounts") {
-				serviceAccountID := "sa-123"
-				// Extract service account ID if it's in the path
-				if parts := strings.Split(r.URL.Path, "/service_accounts/"); len(parts) > 1 {
-					if idParts := strings.Split(parts[1], "/"); len(idParts) > 0 && idParts[0] != "" {
-						serviceAccountID = idParts[0]
-					}
-				}
-
-				switch r.Method {
-				case http.MethodPost:
-					// Handle service account creation
-					var createReq openaisdk.ProjectServiceAccountCreateRequest
-					if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
-						http.Error(w, err.Error(), http.StatusBadRequest)
-						return
-					}
-
-					response := openaisdk.ProjectServiceAccountCreateResponse{
-						ProjectServiceAccount: openaisdk.ProjectServiceAccount{
-							ID:        serviceAccountID,
-							Object:    "organization.project.service_account",
-							Name:      createReq.Name,
-							Role:      "member",
-							CreatedAt: now,
-						},
-						APIKey: &openaisdk.ProjectServiceAccountAPIKey{
-							ID:        "key-123",
-							Object:    "organization.project.service_account.api_key",
-							Name:      createReq.Name,
-							Value:     "test-api-key-value",
-							CreatedAt: now,
-						},
-					}
-					if err := json.NewEncoder(w).Encode(response); err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-
-				case http.MethodGet:
-					// Handle get service account
-					response := openaisdk.ProjectServiceAccount{
-						ID:        serviceAccountID,
-						Object:    "organization.project.service_account",
-						Name:      "test-sa-name",
-						Role:      "member",
-						CreatedAt: now,
-					}
-					if err := json.NewEncoder(w).Encode(response); err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-
-				case http.MethodDelete:
-					// Handle delete service account
-					response := openaisdk.ProjectServiceAccountDeleteResponse{
-						ID:      serviceAccountID,
-						Object:  "organization.project.service_account",
-						Deleted: true,
-					}
-					if err := json.NewEncoder(w).Encode(response); err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-				}
-			} else {
-				// Use projectID in a response to avoid unused variable warning
-				w.Write([]byte(`{"project_id":"` + projectID + `"}`))
-			}
-		}
-	}))
-}
 
 // setupTestWithMockServerForServiceAccount creates a test environment with a mocked OpenAI API server for service account testing
 func setupTestWithMockServerForServiceAccount(t *testing.T) (*ServiceAccount, *httptest.Server, kubernetes.Interface) {
 	// Setup mock server
-	server := mockOpenAIServerForServiceAccount()
+	server := testing_pkg.MockOpenAIServer()
 
 	// Setup
 	scheme := runtime.NewScheme()
@@ -137,7 +44,7 @@ func setupTestWithMockServerForServiceAccount(t *testing.T) (*ServiceAccount, *h
 				Namespace: "default",
 				Key:       "api-key",
 			},
-			Vendor: stringPtr("openai"),
+			Vendor: testing_pkg.StringPtr("openai"),
 		},
 	}
 
@@ -176,7 +83,7 @@ func setupTestWithMockServerForServiceAccount(t *testing.T) (*ServiceAccount, *h
 			Generation: 1,
 		},
 		Spec: v1beta1.ServiceAccountSpec{
-			Name: stringPtr("test-sa-name"),
+			Name: testing_pkg.StringPtr("test-sa-name"),
 			ProjectRef: v1beta1.CrossReference{
 				Name: "test-project",
 			},
@@ -307,7 +214,7 @@ func TestServiceAccount_GetOrganization(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: stringPtr("openai"),
+			Vendor: testing_pkg.StringPtr("openai"),
 		},
 	}
 
@@ -484,7 +391,7 @@ func TestServiceAccount_Delete(t *testing.T) {
 	defer server.Close()
 
 	// Set up service account with an ID for deletion
-	serviceAccount.Resource.Status.ServiceAccountID = stringPtr("sa-123")
+	serviceAccount.Resource.Status.ServiceAccountID = testing_pkg.StringPtr("sa-123")
 
 	// Test
 	err := serviceAccount.Delete(context.Background())
@@ -511,7 +418,7 @@ func TestServiceAccount_Delete_Error(t *testing.T) {
 	server.Close() // Close the server to force an error
 
 	// Set up service account with an ID for deletion
-	serviceAccount.Resource.Status.ServiceAccountID = stringPtr("sa-123")
+	serviceAccount.Resource.Status.ServiceAccountID = testing_pkg.StringPtr("sa-123")
 
 	// Test
 	err := serviceAccount.Delete(context.Background())

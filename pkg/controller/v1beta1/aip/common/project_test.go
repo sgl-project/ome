@@ -2,13 +2,9 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +18,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
+	testing_pkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 )
 
 // Helper function for testing
@@ -29,125 +26,10 @@ func int64Ptr(i int64) *int64 {
 	return &i
 }
 
-// mockOpenAIServer creates a test server that mocks OpenAI API responses
-func mockOpenAIServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		now := time.Now().Unix()
-
-		// Handle project operations
-		if strings.Contains(r.URL.Path, "/organization/projects") {
-			projectID := "proj-123"
-			// Extract project ID from URL if it's in the path
-			if parts := strings.Split(r.URL.Path, "/organization/projects/"); len(parts) > 1 {
-				if idParts := strings.Split(parts[1], "/"); len(idParts) > 0 {
-					projectID = idParts[0]
-				}
-			}
-
-			// Handle archive endpoint specifically
-			if strings.HasSuffix(r.URL.Path, "/archive") && r.Method == http.MethodPost {
-				// Extract project ID from URL for archive endpoint
-				projectID := "proj-123"
-				if parts := strings.Split(r.URL.Path, "/organization/projects/"); len(parts) > 1 {
-					if idParts := strings.Split(parts[1], "/archive"); len(idParts) > 0 && idParts[0] != "" {
-						projectID = idParts[0]
-					}
-				}
-
-				response := openaisdk.Project{
-					ID:         projectID,
-					Object:     "organization.project",
-					Name:       "test-project-name",
-					CreatedAt:  now,
-					ArchivedAt: int64Ptr(now),
-					Status:     "archived",
-				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				return
-			}
-
-			switch r.Method {
-			case http.MethodPost:
-				// Handle project creation
-				var createReq openaisdk.ProjectCreateRequest
-				if err := json.NewDecoder(r.Body).Decode(&createReq); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-
-				response := openaisdk.Project{
-					ID:        projectID,
-					Object:    "organization.project",
-					Name:      createReq.Name,
-					CreatedAt: now,
-					Status:    "active",
-				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-
-			case http.MethodGet:
-				// Handle get project
-				response := openaisdk.Project{
-					ID:        projectID,
-					Object:    "organization.project",
-					Name:      "test-project-name",
-					CreatedAt: now,
-					Status:    "active",
-				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-
-			case http.MethodPatch:
-				// Handle project update
-				var updateReq openaisdk.ProjectUpdateRequest
-				if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-
-				response := openaisdk.Project{
-					ID:        projectID,
-					Object:    "organization.project",
-					Name:      updateReq.Name,
-					CreatedAt: now,
-					Status:    "active",
-				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-
-			case http.MethodDelete:
-				// Handle project archive
-				response := openaisdk.Project{
-					ID:         projectID,
-					Object:     "organization.project",
-					Name:       "test-project-name",
-					CreatedAt:  now,
-					ArchivedAt: int64Ptr(now),
-					Status:     "archived",
-				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-			}
-		}
-	}))
-}
-
 // setupTestWithMockServer creates a test environment with a mocked OpenAI API server
 func setupTestWithMockServer(t *testing.T) (*Project, *httptest.Server) {
 	// Setup mock server
-	server := mockOpenAIServer()
+	server := testing_pkg.MockOpenAIServer()
 
 	// Setup
 	scheme := runtime.NewScheme()
@@ -165,7 +47,7 @@ func setupTestWithMockServer(t *testing.T) (*Project, *httptest.Server) {
 				Namespace: "default",
 				Key:       "api-key",
 			},
-			Vendor: func(s string) *string { return &s }("openai"),
+			Vendor: testing_pkg.StringPtr("openai"),
 		},
 	}
 
@@ -258,7 +140,7 @@ func TestProject_GetOrganization(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: func(s string) *string { return &s }("openai"),
+			Vendor: testing_pkg.StringPtr("openai"),
 		},
 	}
 
