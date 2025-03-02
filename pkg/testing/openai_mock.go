@@ -11,12 +11,12 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
 )
 
-// Helper function for testing
+// Int64Ptr Helper function for testing
 func Int64Ptr(i int64) *int64 {
 	return &i
 }
 
-// Helper function for testing
+// StringPtr Helper function for testing
 func StringPtr(s string) *string {
 	return &s
 }

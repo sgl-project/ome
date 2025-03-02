@@ -1,4 +1,4 @@
-package testutils
+package testing
 
 import (
 	"io"

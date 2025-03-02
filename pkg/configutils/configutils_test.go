@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testutils"
+	testutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 )
 
 const leafConfig = `imports:

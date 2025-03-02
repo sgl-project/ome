@@ -491,26 +491,35 @@ test-cmd: fmt vet manifests envtest ## 🧪 Run cmd tests with coverage
 	@echo "🧪 Running command tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
 		./cmd/... \
-		-coverprofile=coverage-cmd.out \
+		-coverprofile=coverage-cmd.out.tmp \
 		--covermode=atomic
+	@echo "🔍 Filtering coverage report..."
+	@cat coverage-cmd.out.tmp | grep -v "pkg/testing/" | grep -v "pkg/testutils/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-cmd.out
+	@rm coverage-cmd.out.tmp
 	@echo "✅ Command tests passed"
 
 .PHONY: test-pkg
 test-pkg: fmt vet manifests envtest ## 🧪 Run pkg tests with coverage
 	@echo "🧪 Running package tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go) \
-		-coverprofile=coverage-pkg.out \
+		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing) \
+		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
+	@echo "🔍 Filtering coverage report..."
+	@cat coverage-pkg.out.tmp | grep -v "pkg/testing/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-pkg.out
+	@rm coverage-pkg.out.tmp
 	@echo "✅ Package tests passed"
 
 .PHONY: test-internal
 test-internal: fmt vet manifests envtest ## 🧪 Run internal tests with coverage
 	@echo "🧪 Running internal tests..."
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
 		./internal/... \
-		-coverprofile=coverage-internal.out \
+		-coverprofile=coverage-internal.out.tmp \
 		--covermode=atomic
+	@echo "🔍 Filtering coverage report..."
+	@cat coverage-internal.out.tmp | grep -v "pkg/testing/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-internal.out
+	@rm coverage-internal.out.tmp
 	@echo "✅ Internal tests passed"
 
 .PHONY: coverage
@@ -531,8 +540,8 @@ coverage: ## Show coverage for all packages
 	echo "Internal: $$int_cov%"; \
 	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
 	echo "\nAverage Coverage: $$avg_cov%"; \
-	if awk "BEGIN {exit !($$avg_cov < 18)}"; then \
-		echo "Average coverage $$avg_cov% is below minimum threshold of 18%"; \
+	if awk "BEGIN {exit !($$avg_cov < 20)}"; then \
+		echo "Average coverage $$avg_cov% is below minimum threshold of 20%"; \
 		exit 1; \
 	fi
 
