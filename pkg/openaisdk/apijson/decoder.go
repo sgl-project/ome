@@ -402,8 +402,11 @@ func (d *decoderBuilder) newStructTypeDecoder(t reflect.Type) decoderFunc {
 		}
 
 		for _, decoder := range anonymousDecoders {
-			// ignore errors
-			decoder.fn(node, value.FieldByIndex(decoder.idx), state)
+			// Check error but continue even if there's an error
+			if err := decoder.fn(node, value.FieldByIndex(decoder.idx), state); err != nil {
+				// Log the error but continue processing
+				fmt.Printf("Error decoding anonymous field: %v\n", err)
+			}
 		}
 
 		if inlineDecoder != nil {

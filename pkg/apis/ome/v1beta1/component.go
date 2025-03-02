@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -149,13 +150,13 @@ func validateReplicas(minReplicas *int, maxReplicas int) error {
 		minReplicas = &constants.DefaultMinReplicas
 	}
 	if *minReplicas < 0 {
-		return fmt.Errorf(MinReplicasLowerBoundExceededError)
+		return errors.New(MinReplicasLowerBoundExceededError)
 	}
 	if maxReplicas < 0 {
-		return fmt.Errorf(MaxReplicasLowerBoundExceededError)
+		return errors.New(MaxReplicasLowerBoundExceededError)
 	}
 	if *minReplicas > maxReplicas && maxReplicas != 0 {
-		return fmt.Errorf(MinReplicasShouldBeLessThanMaxError)
+		return errors.New(MinReplicasShouldBeLessThanMaxError)
 	}
 	return nil
 }
@@ -165,7 +166,7 @@ func validateContainerConcurrency(containerConcurrency *int64) error {
 		return nil
 	}
 	if *containerConcurrency < 0 {
-		return fmt.Errorf(ParallelismLowerBoundExceededError)
+		return errors.New(ParallelismLowerBoundExceededError)
 	}
 	return nil
 }
@@ -173,7 +174,7 @@ func validateContainerConcurrency(containerConcurrency *int64) error {
 func validateLogger(logger *LoggerSpec) error {
 	if logger != nil {
 		if !(logger.Mode == LogAll || logger.Mode == LogRequest || logger.Mode == LogResponse) {
-			return fmt.Errorf(InvalidLoggerType)
+			return errors.New(InvalidLoggerType)
 		}
 	}
 	return nil

@@ -105,8 +105,8 @@ func (cds *CasperDataStore) Upload(source string, target ObjectURI) error {
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", target.Namespace, target.BucketName, target.ObjectName)
 
-	var putObjectBody io.ReadCloser = nil
-	var uploadObjectSize *int64 = nil
+	var putObjectBody io.ReadCloser
+	var uploadObjectSize *int64
 
 	// When source is the path of the file which needs to be uploaded
 	if sourceFile, err := os.Open(source); err == nil {

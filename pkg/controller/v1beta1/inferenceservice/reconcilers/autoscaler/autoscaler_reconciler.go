@@ -121,7 +121,7 @@ func deleteExistingScaledObject(client client.Client, componentMeta metav1.Objec
 
 // deleteExistingHPA deletes any existing HPA for the Deployment
 func deleteExistingHPA(client client.Client, componentMeta metav1.ObjectMeta) error {
-	hpaName := fmt.Sprintf("%s", componentMeta.Name)
+	hpaName := componentMeta.Name
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{}
 	err := client.Get(context.TODO(), types.NamespacedName{
 		Namespace: componentMeta.Namespace,

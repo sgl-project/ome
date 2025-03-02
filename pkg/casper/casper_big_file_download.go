@@ -182,7 +182,7 @@ func calculateMultipartMd5(partSizeInByte int, bufferSizeInByte int, targetFileP
 	allMd5Bytes := make([]byte, 0)
 	var partMd5 []byte
 	count := 0
-	for eof == false {
+	for !eof {
 		partMd5, eof = calculateMd5(file, partSizeInByte, bufferSizeInByte)
 		allMd5Bytes = append(allMd5Bytes, partMd5...)
 		count++

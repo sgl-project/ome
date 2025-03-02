@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -126,7 +127,7 @@ func TestComponentExtensionSpec_validateLogger(t *testing.T) {
 			logger: &LoggerSpec{
 				Mode: "InvalidMode",
 			},
-			matcher: gomega.MatchError(fmt.Errorf(InvalidLoggerType)),
+			matcher: gomega.MatchError(errors.New(InvalidLoggerType)),
 		},
 		"LoggerIsNil": {
 			logger:  nil,

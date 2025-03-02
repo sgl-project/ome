@@ -74,7 +74,7 @@ func (fa *MergedFinetunedAdapterInjector) injectMergedFinetunedAdapter(pod *v1.P
 
 	modelInitMounts := fa.getVolumeMounts(pod)
 
-	finetunedWeightUri, err := fa.getFinetunedWeightUri()
+	finetunedWeightUri, _ := fa.getFinetunedWeightUri()
 
 	initEnvs, err := fa.getModelInitEnvs(pod, finetunedWeightUri)
 	if err != nil {

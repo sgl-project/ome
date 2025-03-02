@@ -108,7 +108,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 		namespacedkubeInformerFactoryOpts = append(namespacedkubeInformerFactoryOpts, kubeinformers.WithNamespace(agentNamespace))
 		namespacedkubeInformerFactory := kubeinformers.NewSharedInformerFactoryWithOptions(kubeClient, 0, namespacedkubeInformerFactoryOpts...)
 
-		controller, err := modelcontroller.NewModelController(
+		controller, _ := modelcontroller.NewModelController(
 			agentNamespace,
 			kubeClient,
 			omev1beta1ClientSet,

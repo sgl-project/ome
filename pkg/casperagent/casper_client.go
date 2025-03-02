@@ -41,7 +41,7 @@ func GetObjectStorageClientWithOboToken(configurationProvider common.Configurati
 
 // canStringBeRegion test if the string can be a region, if it can, returns the string as is, otherwise it
 // returns an error
-var blankRegex = regexp.MustCompile("\\s")
+var blankRegex = regexp.MustCompile(`\s`)
 
 func canStringBeRegion(stringRegion string) (region string, err error) {
 	if blankRegex.MatchString(stringRegion) || stringRegion == "" {

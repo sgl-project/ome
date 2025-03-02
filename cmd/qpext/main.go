@@ -274,7 +274,7 @@ func (sc *ScrapeConfigurations) handleStats(w http.ResponseWriter, r *http.Reque
 
 	// Since we convert the scraped metrics to text, set the format as text even if
 	// the content type is originally open metrics.
-	format := expfmt.FmtText
+	format := expfmt.NewFormat(expfmt.TypeTextPlain)
 	w.Header().Set("Content-Type", string(format))
 
 	if queueProxy != nil {

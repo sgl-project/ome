@@ -516,7 +516,7 @@ func (p *Predictor) createMergedPodSpec(isvc *v1beta1.InferenceService, sRuntime
 // createMergedWorkerPodSpec merges worker pod specs of the runtime and the inferenceService.
 func (p *Predictor) createMergedWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (v1.PodSpec, error) {
 	var isvcWorkerPodSpec = v1beta1.PodSpec{}
-	if isvc.Spec.Predictor.Worker != nil && &isvc.Spec.Predictor.Worker.PodSpec != nil {
+	if isvc.Spec.Predictor.Worker != nil {
 		isvcWorkerPodSpec = isvc.Spec.Predictor.Worker.PodSpec
 	}
 	mergedPodSpec, err := isvcutils.MergePodSpec(&sRuntime.WorkerPodSpec.ServingRuntimePodSpec, &isvcWorkerPodSpec)
@@ -769,7 +769,7 @@ func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.
 
 // reconcileFinetunedWeights reconciles the finetuned weights for the predictor.
 func (p *Predictor) reconcileFinetunedWeights(isvc *v1beta1.InferenceService) ([]*v1beta1.FineTunedWeight, ctrl.Result, error) {
-	if isvc.Spec.Predictor.Model.FineTunedWeights == nil || len(isvc.Spec.Predictor.Model.FineTunedWeights) == 0 {
+	if len(isvc.Spec.Predictor.Model.FineTunedWeights) == 0 {
 		return nil, ctrl.Result{}, nil
 	}
 

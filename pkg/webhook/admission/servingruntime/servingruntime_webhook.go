@@ -2,6 +2,7 @@ package servingruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -151,7 +152,7 @@ func validateServingRuntimeAnnotations(servingRuntime *v1beta1.ServingRuntimeSpe
 		return nil
 	}
 	if _, ok := servingRuntime.ServingRuntimePodSpec.Annotations[constants.ChainsawInject]; ok {
-		return fmt.Errorf(ChainsawInjectAnnotationNotAllowError)
+		return errors.New(ChainsawInjectAnnotationNotAllowError)
 	}
 	return nil
 }

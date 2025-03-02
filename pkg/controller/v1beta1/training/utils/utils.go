@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,9 +11,8 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/go-logr/logr"
-	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,7 +32,7 @@ func GetTrainingRuntime(cl client.Client, name string, namespace string) (*v1bet
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, runtime)
 	if err == nil {
 		return &runtime.Spec, nil
-	} else if !errors.IsNotFound(err) {
+	} else if !k8serrors.IsNotFound(err) {
 		return nil, err
 	}
 
@@ -40,10 +40,10 @@ func GetTrainingRuntime(cl client.Client, name string, namespace string) (*v1bet
 	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterRuntime)
 	if err == nil {
 		return &clusterRuntime.Spec, nil
-	} else if !errors.IsNotFound(err) {
+	} else if !k8serrors.IsNotFound(err) {
 		return nil, err
 	}
-	return nil, goerrors.New("No TrainingRuntime or ClusterTrainingRuntime with the name: " + name)
+	return nil, errors.New("No TrainingRuntime or ClusterTrainingRuntime with the name: " + name)
 }
 
 func CheckFailedPodFailure(tjob *v1beta1.TrainingJob, pod v1.Pod, logger logr.Logger) (error, constants.TrainingFailedReason) {
@@ -86,7 +86,7 @@ func checkPodContainerStatus(tjob *v1beta1.TrainingJob, pod v1.Pod, logger logr.
 			if containerName != constants.MainContainerName && containerStatus.State.Terminated != nil && containerStatus.State.Terminated.ExitCode != 0 {
 				logger.Info("Container terminated with non zero exit code", "tjob", tjob.Name, "podName", pod.Name, "containerName", containerName, "reason", containerStatus.State.Terminated.Reason, "message", containerStatus.State.Terminated.Message)
 				if isDataIssue(containerStatus.State.Terminated.Message) {
-					return fmt.Errorf(containerStatus.State.Terminated.Message), constants.BadTrainingData
+					return errors.New(containerStatus.State.Terminated.Message), constants.BadTrainingData
 				}
 				return fmt.Errorf("container %s terminated with exit code %d: %s", containerName, containerStatus.State.Terminated.ExitCode, containerStatus.State.Terminated.Message), constants.K8SJobFailed
 			}

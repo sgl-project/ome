@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"errors"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/onsi/gomega"
@@ -1424,7 +1426,7 @@ func TestValidateServingRuntimeAnnotations(t *testing.T) {
 					},
 				},
 			},
-			matcher: gomega.MatchError(fmt.Errorf(ChainsawInjectAnnotationNotAllowError)),
+			matcher: gomega.MatchError(errors.New(ChainsawInjectAnnotationNotAllowError)),
 		},
 		"When chainsaw inject annotation is not set then it should return nil": {
 			spec: v1beta1.ServingRuntimeSpec{

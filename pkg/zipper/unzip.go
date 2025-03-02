@@ -38,9 +38,13 @@ func Unzip(zippedFile string, extractingDir string) error {
 		path := filepath.Join(extractingDir, f.Name)
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, 0777)
+			if err := os.MkdirAll(path, 0777); err != nil {
+				return err
+			}
 		} else {
-			os.MkdirAll(filepath.Dir(path), 0777)
+			if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+				return err
+			}
 
 			_, err := os.Stat(path)
 			if err == nil {

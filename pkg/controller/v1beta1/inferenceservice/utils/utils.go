@@ -79,9 +79,7 @@ func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 
 func RemovePodAnnotations(metadata *metav1.ObjectMeta, annotationsToRemove []string) {
 	for _, annotation := range annotationsToRemove {
-		if _, ok := metadata.Annotations[annotation]; ok {
-			delete(metadata.Annotations, annotation)
-		}
+		delete(metadata.Annotations, annotation)
 	}
 }
 
@@ -237,9 +235,11 @@ func UpdateImageTag(container *v1.Container, runtimeVersion *string, servingRunt
 		}
 	} else if utils.IsGPUEnabled(container.Resources) && len(strings.Split(image, ":")) > 0 {
 		re := regexp.MustCompile(`(:([\w.\-_]*))$`)
+		// For TFServing/TorchServe the GPU image is tagged with suffix "-gpu", when the version is found in the tag
+		// and runtimeVersion is not specified, we default to append the "-gpu" suffix to the image tag
 		if len(re.FindString(image)) > 0 {
-			// For TFServing/TorchServe the GPU image is tagged with suffix "-gpu", when the version is found in the tag
-			// and runtimeVersion is not specified, we default to append the "-gpu" suffix to the image tag
+			tag := re.FindStringSubmatch(image)[2]
+			container.Image = re.ReplaceAllString(image, ":"+tag+"-gpu")
 		}
 	}
 }

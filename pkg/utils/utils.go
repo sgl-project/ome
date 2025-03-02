@@ -223,7 +223,7 @@ func SetAvailableResourcesForApi(groupVersion string, resources *metav1.APIResou
 }
 
 // IsStringEmptyOrWithWhitespaces checks if the string is empty or with whitespaces
-var blankRegex = regexp.MustCompile("\\s")
+var blankRegex = regexp.MustCompile(`\s`)
 
 func IsStringEmptyOrWithWhitespaces(input string) bool {
 	if blankRegex.MatchString(input) || input == "" {

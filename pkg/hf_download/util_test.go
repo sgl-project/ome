@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -15,7 +14,7 @@ import (
 func TestVerifyChecksum(t *testing.T) {
 	// Create a temp file with known content
 	content := []byte("test content")
-	tmpFile, err := ioutil.TempFile("", "testfile")
+	tmpFile, err := os.CreateTemp("", "testfile")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
@@ -57,7 +56,7 @@ func TestMergeFiles(t *testing.T) {
 	})
 
 	t.Run("Missing Chunk File", func(t *testing.T) {
-		tempDir, err := ioutil.TempDir("", "missing_chunk_test")
+		tempDir, err := os.MkdirTemp("", "missing_chunk_test")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
@@ -66,7 +65,7 @@ func TestMergeFiles(t *testing.T) {
 		// Create only 2 out of 3 expected chunks
 		for i := 0; i < 2; i++ {
 			tmpFilePath := path.Join(tempDir, fmt.Sprintf("output_%d.tmp", i))
-			if err := ioutil.WriteFile(tmpFilePath, []byte(fmt.Sprintf("chunk%d", i)), 0644); err != nil {
+			if err := os.WriteFile(tmpFilePath, []byte(fmt.Sprintf("chunk%d", i)), 0644); err != nil {
 				t.Fatalf("failed to write chunk %d: %v", i, err)
 			}
 		}
@@ -79,7 +78,7 @@ func TestMergeFiles(t *testing.T) {
 	})
 
 	t.Run("Partial Write Error Handling", func(t *testing.T) {
-		tempDir, err := ioutil.TempDir("", "partial_write_test")
+		tempDir, err := os.MkdirTemp("", "partial_write_test")
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
@@ -88,7 +87,7 @@ func TestMergeFiles(t *testing.T) {
 		numChunks := 3
 		for i := 0; i < numChunks; i++ {
 			tmpFilePath := path.Join(tempDir, fmt.Sprintf("output_%d.tmp", i))
-			if err := ioutil.WriteFile(tmpFilePath, []byte("chunk content"), 0644); err != nil {
+			if err := os.WriteFile(tmpFilePath, []byte("chunk content"), 0644); err != nil {
 				t.Fatalf("failed to write chunk %d: %v", i, err)
 			}
 		}
@@ -104,7 +103,7 @@ func TestMergeFiles(t *testing.T) {
 
 func TestAdjustStartByte(t *testing.T) {
 	// Create a temp file to simulate download progress
-	tmpFile, err := ioutil.TempFile("", "resume_test")
+	tmpFile, err := os.CreateTemp("", "resume_test")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
@@ -131,7 +130,7 @@ func TestAdjustStartByte(t *testing.T) {
 
 func TestNeedsDownload(t *testing.T) {
 	// Create a temp file with specific size
-	tmpFile, err := ioutil.TempFile("", "need_download_test")
+	tmpFile, err := os.CreateTemp("", "need_download_test")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
@@ -165,7 +164,7 @@ func TestWriteToFile(t *testing.T) {
 	content := "this is the content to write"
 	reader := io.NopCloser(strings.NewReader(content))
 
-	tmpFile, err := ioutil.TempFile("", "write_to_file_test")
+	tmpFile, err := os.CreateTemp("", "write_to_file_test")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
@@ -178,7 +177,7 @@ func TestWriteToFile(t *testing.T) {
 	}
 
 	// Check content
-	writtenContent, err := ioutil.ReadFile(tmpFile.Name())
+	writtenContent, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("failed to read written file: %v", err)
 	}

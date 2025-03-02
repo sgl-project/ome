@@ -223,15 +223,21 @@ func loadKubeConfig(kubeconfigPath string) (*rest.Config, error) {
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	if _, err := w.Write([]byte("ok")); err != nil {
+		logger.Errorw("Error writing response", "error", err)
+	}
 }
 
 func readinessCheck(w http.ResponseWriter, r *http.Request) {
 	if ready {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ready"))
+		if _, err := w.Write([]byte("ready")); err != nil {
+			logger.Errorw("Error writing response", "error", err)
+		}
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("not ready"))
+		if _, err := w.Write([]byte("not ready")); err != nil {
+			logger.Errorw("Error writing response", "error", err)
+		}
 	}
 }

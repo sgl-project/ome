@@ -102,8 +102,7 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, p
 
 	downloadedParts := multipartDownload(context.Background(), cds.CasperClient, downloadThreads, prepareDownloadParts)
 
-	var targetFilePath string
-	targetFilePath = filepath.Join(target, ExtractNonPrefixObjectName(source.ObjectName, prefix))
+	targetFilePath := filepath.Join(target, ExtractNonPrefixObjectName(source.ObjectName, prefix))
 
 	tempTargetFilePath := targetFilePath + ".temp"
 
@@ -117,10 +116,10 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, p
 	}
 
 	tmpFile, err := os.OpenFile(tempTargetFilePath, os.O_RDWR|os.O_CREATE, 0644)
-	defer tmpFile.Close()
 	if err != nil {
 		return err
 	}
+	defer tmpFile.Close()
 
 	for part := range downloadedParts {
 		if part.err != nil {
@@ -133,7 +132,6 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, p
 			return err
 		}
 	}
-	tmpFile.Close()
 
 	err = os.Rename(tempTargetFilePath, targetFilePath)
 	if err != nil {
@@ -161,7 +159,7 @@ func calculateMultipartMd5(partSizeInByte int, bufferSizeInByte int, targetFileP
 	allMd5Bytes := make([]byte, 0)
 	var partMd5 []byte
 	count := 0
-	for eof == false {
+	for !eof {
 		partMd5, eof = calculateMd5(file, partSizeInByte, bufferSizeInByte)
 		allMd5Bytes = append(allMd5Bytes, partMd5...)
 		count++
@@ -183,7 +181,10 @@ func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]b
 	for i := 0; i < chunkSizeInByte/bufferSizeInByte; i++ {
 		bytesRead, _ := file.Read(buf)
 		if bytesRead > 0 {
-			io.Copy(md5Calculator, bytes.NewReader(buf[:bytesRead]))
+			if _, err := io.Copy(md5Calculator, bytes.NewReader(buf[:bytesRead])); err != nil {
+				// Since this function doesn't return an error, we'll just log it
+				fmt.Printf("Error copying data to MD5 calculator: %v\n", err)
+			}
 		}
 
 		if bytesRead < bufferSizeInByte {
