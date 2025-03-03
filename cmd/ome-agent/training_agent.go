@@ -1,8 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"go.uber.org/fx"
 
 	training_agent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/training-agent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
@@ -10,68 +13,59 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
-var cmdTrainingAgent = &cobra.Command{
-	Use:   "training-agent",
-	Short: "Run OME Training Agent",
-	Long:  "OME Training Agent is dedicated for training lifecycle management, training performance metrics store",
-	Run:   runTrainingAgent,
+// TrainingAgent implements the AgentModule interface for training agent
+type TrainingAgent struct {
+	agent *training_agent.TrainingAgent
 }
 
-func runTrainingAgent(cmd *cobra.Command, args []string) {
-	app := fx.New(trainingAgentOpts(cmd))
-	app.Run()
-	err := app.Stop(context.Background())
-	if err != nil {
-		return
+// Name returns the name of the agent
+func (t *TrainingAgent) Name() string {
+	return "training-agent"
+}
+
+// ShortDescription returns a short description of the agent
+func (t *TrainingAgent) ShortDescription() string {
+	return "Run OME Training Agent"
+}
+
+// LongDescription returns a detailed description of the agent
+func (t *TrainingAgent) LongDescription() string {
+	return "OME Training Agent is dedicated for training lifecycle management, training performance metrics store"
+}
+
+// ConfigureCommand configures the agent command
+func (t *TrainingAgent) ConfigureCommand(cmd *cobra.Command) {
+	// Set the default action for this command
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		runAgentCommand(cmd, t, t.Start)
 	}
 }
 
-func trainingAgentOpts(cli *cobra.Command) fx.Option {
-	return fx.Options(
-		// Set up all config variables to viper
-		configProvider(cli),
-
-		// Inject dependency modules
+// FxModules returns the fx modules needed by this agent
+func (t *TrainingAgent) FxModules() []fx.Option {
+	return []fx.Option{
 		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
 		AuthTypeProvider(),
 		CasperDataStoreListProvider(),
-
-		// Inject main application module
 		training_agent.Module,
-
-		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, a *training_agent.TrainingAgent, l *zap.Logger, sh fx.Shutdowner) {
-			lc.Append(
-				fx.Hook{
-					OnStart: func(context.Context) error {
-						go func() {
-							a.Start()
-							if err := sh.Shutdown(); err != nil {
-								l.Error("Failed to shutdown Training Agent", zap.Error(err))
-							}
-						}()
-						return nil
-					},
-					OnStop: func(ctx context.Context) error {
-						return nil
-					},
-				})
-		}),
-	)
+		fx.Populate(&t.agent),
+	}
 }
 
-func init() {
-	cmdTrainingAgent.Flags().StringVarP(&configFilePath, "config", "c", "", "path to config file")
-	cmdTrainingAgent.Flags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
+// Start starts the agent
+func (t *TrainingAgent) Start() error {
+	t.agent.Start()
+	return nil
+}
+
+// NewTrainingAgent creates a new training agent
+func NewTrainingAgent() *TrainingAgent {
+	return &TrainingAgent{}
 }
 
 /*CasperConfigWrapper provides CasperConfig to the fx app defined in casper module (from casper pkg).

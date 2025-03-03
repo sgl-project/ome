@@ -1,76 +1,61 @@
 package main
 
 import (
-	"context"
-	"os"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hf_download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
-var configFilePath string
-var debug bool
-
-var cmdHFDownload = &cobra.Command{
-	Use:   "hf-download",
-	Short: "Run OME HuggingFace Download Agent",
-	Long:  "OME Agent HuggingFace Download Agent is dedicated for downloading any model from HF.",
-	Run:   runHFDownload,
+// HFDownloadAgent implements the AgentModule interface for HuggingFace download agent
+type HFDownloadAgent struct {
+	agent *hf_download.HFDownloadAgent
 }
 
-func runHFDownload(cmd *cobra.Command, args []string) {
-	app := fx.New(hfDownloadOpts(cmd))
-	app.Run()
-	err := app.Stop(context.Background())
-	if err != nil {
-		return
+// Name returns the name of the agent
+func (h *HFDownloadAgent) Name() string {
+	return "hf-download"
+}
+
+// ShortDescription returns a short description of the agent
+func (h *HFDownloadAgent) ShortDescription() string {
+	return "Run OME HuggingFace Download Agent"
+}
+
+// LongDescription returns a detailed description of the agent
+func (h *HFDownloadAgent) LongDescription() string {
+	return "OME Agent HuggingFace Download Agent is dedicated for downloading any model from HF."
+}
+
+// ConfigureCommand configures the agent command
+func (h *HFDownloadAgent) ConfigureCommand(cmd *cobra.Command) {
+	// Set the default action for this command
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		runAgentCommand(cmd, h, h.Start)
 	}
 }
 
-func hfDownloadOpts(cli *cobra.Command) fx.Option {
-	return fx.Options(
-		// Set up all hf_download agent config variables to viper
-		configProvider(cli),
-
-		// Inject dependency modules
+// FxModules returns the fx modules needed by this agent
+func (h *HFDownloadAgent) FxModules() []fx.Option {
+	return []fx.Option{
 		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-
-		// Inject main application module
 		hf_download.Module,
-
-		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, a *hf_download.HFDownloadAgent, l *zap.Logger, sh fx.Shutdowner) {
-			lc.Append(
-				fx.Hook{
-					OnStart: func(context.Context) error {
-						go func() {
-							if err := a.Start(); err != nil {
-								l.Error("HFDownload Agent encountered an error during Start", zap.Error(err))
-								os.Exit(1)
-							}
-							if err := sh.Shutdown(); err != nil {
-								l.Error("Failed to shutdown HFDownloadAgent", zap.Error(err))
-							}
-						}()
-						return nil
-					},
-					OnStop: func(ctx context.Context) error {
-						return nil
-					},
-				})
-		}),
-	)
+		fx.Populate(&h.agent),
+	}
 }
 
-func init() {
-	cmdHFDownload.Flags().StringVarP(&configFilePath, "config", "c", "", "path to config file")
-	cmdHFDownload.Flags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
+// Start starts the agent
+func (h *HFDownloadAgent) Start() error {
+	return h.agent.Start()
+}
+
+// NewHFDownloadAgent creates a new HuggingFace download agent
+func NewHFDownloadAgent() *HFDownloadAgent {
+	return &HFDownloadAgent{}
 }

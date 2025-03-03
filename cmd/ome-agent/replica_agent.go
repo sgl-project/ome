@@ -1,75 +1,63 @@
 package main
 
 import (
-	"context"
-	"os"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/replica"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
-var cmdReplica = &cobra.Command{
-	Use:   "replica",
-	Short: "Run OME Object Storage Replica Agent",
-	Long:  "OME Agent Object Storage Replica Agent is dedicated for replicate model weight across regions and/or tenancies.",
-	Run:   runOReplica,
+// ReplicaAgent implements the AgentModule interface for object storage replica agent
+type ReplicaAgent struct {
+	agent *replica.ReplicaAgent
 }
 
-func runOReplica(cmd *cobra.Command, args []string) {
-	app := fx.New(replicaOpts(cmd))
-	app.Run()
-	err := app.Stop(context.Background())
-	if err != nil {
-		return
+// Name returns the name of the agent
+func (r *ReplicaAgent) Name() string {
+	return "replica"
+}
+
+// ShortDescription returns a short description of the agent
+func (r *ReplicaAgent) ShortDescription() string {
+	return "Run OME Object Storage Replica Agent"
+}
+
+// LongDescription returns a detailed description of the agent
+func (r *ReplicaAgent) LongDescription() string {
+	return "OME Agent Object Storage Replica Agent is dedicated for replicate model weight across regions and/or tenancies."
+}
+
+// ConfigureCommand configures the agent command
+func (r *ReplicaAgent) ConfigureCommand(cmd *cobra.Command) {
+	// Set the default action for this command
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		runAgentCommand(cmd, r, r.Start)
 	}
 }
 
-func replicaOpts(cli *cobra.Command) fx.Option {
-	return fx.Options(
-		// Set up all hf_download agent config variables to viper
-		configProvider(cli),
-
-		// Inject dependency modules
+// FxModules returns the fx modules needed by this agent
+func (r *ReplicaAgent) FxModules() []fx.Option {
+	return []fx.Option{
 		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
 		casper.CasperDataStoreModule,
-
-		// Inject main application module
 		replica.Module,
-
-		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, a *replica.ReplicaAgent, l *zap.Logger, sh fx.Shutdowner) {
-			lc.Append(
-				fx.Hook{
-					OnStart: func(context.Context) error {
-						go func() {
-							if err := a.Start(); err != nil {
-								l.Error("Replica Agent encountered an error during Start", zap.Error(err))
-								os.Exit(1)
-							}
-							if err := sh.Shutdown(); err != nil {
-								l.Error("Failed to shutdown ReplicaAgent", zap.Error(err))
-							}
-						}()
-						return nil
-					},
-					OnStop: func(ctx context.Context) error {
-						return nil
-					},
-				})
-		}),
-	)
+		fx.Populate(&r.agent),
+	}
 }
 
-func init() {
-	cmdReplica.Flags().StringVarP(&configFilePath, "config", "c", "", "path to config file")
-	cmdReplica.Flags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
+// Start starts the agent
+func (r *ReplicaAgent) Start() error {
+	return r.agent.Start()
+}
+
+// NewReplicaAgent creates a new replica agent
+func NewReplicaAgent() *ReplicaAgent {
+	return &ReplicaAgent{}
 }

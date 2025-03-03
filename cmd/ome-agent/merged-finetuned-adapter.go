@@ -1,75 +1,63 @@
 package main
 
 import (
-	"context"
-	"os"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 
-	merged_finetuned_adapter "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/merged-finetuned-adapter"
+	mergedfinetunedadapter "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/merged-finetuned-adapter"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
-var cmdMergedFinetunedAdapter = &cobra.Command{
-	Use:   "merged-finetuned-adapter",
-	Short: "Run OME merged finetuned adapter",
-	Long:  "OME merged finetuned adapter is for downloading the merged finetuned weights and prepared for the serving container to consume",
-	Run:   runMergedFinetunedAdapter,
+// MergedFineTunedAdapterAgent implements the AgentModule interface for merged fine-tuned adapter agent
+type MergedFineTunedAdapterAgent struct {
+	agent *mergedfinetunedadapter.MergedFinetunedAdapter
 }
 
-func runMergedFinetunedAdapter(cmd *cobra.Command, args []string) {
-	app := fx.New(mergedFinetunedAdapterOpts(cmd))
-	app.Run()
-	err := app.Stop(context.Background())
-	if err != nil {
-		return
+// Name returns the name of the agent
+func (m *MergedFineTunedAdapterAgent) Name() string {
+	return "merged-fine-tuned-adapter"
+}
+
+// ShortDescription returns a short description of the agent
+func (m *MergedFineTunedAdapterAgent) ShortDescription() string {
+	return "Run OME merged fine-tuned adapter"
+}
+
+// LongDescription returns a detailed description of the agent
+func (m *MergedFineTunedAdapterAgent) LongDescription() string {
+	return "OME merged fine-tuned adapter is for downloading the merged fine-tuned weights and prepared for the serving container to consume"
+}
+
+// ConfigureCommand configures the agent command
+func (m *MergedFineTunedAdapterAgent) ConfigureCommand(cmd *cobra.Command) {
+	// Set the default action for this command
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		runAgentCommand(cmd, m, m.Start)
 	}
 }
 
-func mergedFinetunedAdapterOpts(cli *cobra.Command) fx.Option {
-	return fx.Options(
-		// Set up all config variables to viper
-		configProvider(cli),
-
-		// Inject dependency modules
+// FxModules returns the fx modules needed by this agent
+func (m *MergedFineTunedAdapterAgent) FxModules() []fx.Option {
+	return []fx.Option{
 		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
 		casper.CasperDataStoreModule,
-
-		// Inject main application module
-		merged_finetuned_adapter.Module,
-
-		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, a *merged_finetuned_adapter.MergedFinetunedAdapter, l *zap.Logger, sh fx.Shutdowner) {
-			lc.Append(
-				fx.Hook{
-					OnStart: func(context.Context) error {
-						go func() {
-							if err := a.Start(); err != nil {
-								l.Error("Merged Finetuned Adapter encountered an error during Start", zap.Error(err))
-								os.Exit(1)
-							}
-							if err := sh.Shutdown(); err != nil {
-								l.Error("Failed to shutdown Merged Finetuned Adapter", zap.Error(err))
-							}
-						}()
-						return nil
-					},
-					OnStop: func(ctx context.Context) error {
-						return nil
-					},
-				})
-		}),
-	)
+		mergedfinetunedadapter.Module,
+		fx.Populate(&m.agent),
+	}
 }
 
-func init() {
-	cmdEnigma.Flags().StringVarP(&configFilePath, "config", "c", "", "path to config file")
-	cmdEnigma.Flags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
+// Start starts the agent
+func (m *MergedFineTunedAdapterAgent) Start() error {
+	return m.agent.Start()
+}
+
+// NewMergedFineTunedAdapterAgent creates a new merged fine-tuned adapter agent
+func NewMergedFineTunedAdapterAgent() *MergedFineTunedAdapterAgent {
+	return &MergedFineTunedAdapterAgent{}
 }

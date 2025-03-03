@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
-	"os"
+	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/enigma"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
@@ -13,33 +13,39 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsvault"
 	ocisecret "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/secret"
 	ocivault "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/vault"
-	"github.com/spf13/cobra"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
-var cmdEnigma = &cobra.Command{
-	Use:   "enigma",
-	Short: "Run OME Enigma Agent",
-	Long:  "OME Agent Enigma is dedicated for model encryption and decryption.",
-	Run:   runEnigma,
+// EnigmaAgent implements the AgentModule interface for enigma agent
+type EnigmaAgent struct {
+	agent *enigma.Enigma
 }
 
-func runEnigma(cmd *cobra.Command, args []string) {
-	app := fx.New(enigmaOpts(cmd))
-	app.Run()
-	err := app.Stop(context.Background())
-	if err != nil {
-		return
+// Name returns the name of the agent
+func (e *EnigmaAgent) Name() string {
+	return "enigma"
+}
+
+// ShortDescription returns a short description of the agent
+func (e *EnigmaAgent) ShortDescription() string {
+	return "Run OME Enigma Agent"
+}
+
+// LongDescription returns a detailed description of the agent
+func (e *EnigmaAgent) LongDescription() string {
+	return "OME Agent Enigma is dedicated for model encryption and decryption."
+}
+
+// ConfigureCommand configures the agent command
+func (e *EnigmaAgent) ConfigureCommand(cmd *cobra.Command) {
+	// Set the default action for this command
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		runAgentCommand(cmd, e, e.Start)
 	}
 }
 
-func enigmaOpts(cli *cobra.Command) fx.Option {
-	return fx.Options(
-		// Set up all config variables to viper
-		configProvider(cli),
-
-		// Inject dependency modules
+// FxModules returns the fx modules needed by this agent
+func (e *EnigmaAgent) FxModules() []fx.Option {
+	return []fx.Option{
 		kmsvault.Module,
 		kmscrypto.Module,
 		kmsmgm.Module,
@@ -49,35 +55,17 @@ func enigmaOpts(cli *cobra.Command) fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-
-		// Inject main application module
 		enigma.Module,
-
-		// Start the server
-		fx.Invoke(func(lc fx.Lifecycle, a *enigma.Enigma, l *zap.Logger, sh fx.Shutdowner) {
-			lc.Append(
-				fx.Hook{
-					OnStart: func(context.Context) error {
-						go func() {
-							if err := a.Start(); err != nil {
-								l.Error("Enigma Agent encountered an error during Start", zap.Error(err))
-								os.Exit(1)
-							}
-							if err := sh.Shutdown(); err != nil {
-								l.Error("Failed to shutdown Enigma Agent", zap.Error(err))
-							}
-						}()
-						return nil
-					},
-					OnStop: func(ctx context.Context) error {
-						return nil
-					},
-				})
-		}),
-	)
+		fx.Populate(&e.agent),
+	}
 }
 
-func init() {
-	cmdEnigma.Flags().StringVarP(&configFilePath, "config", "c", "", "path to config file")
-	cmdEnigma.Flags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
+// Start starts the agent
+func (e *EnigmaAgent) Start() error {
+	return e.agent.Start()
+}
+
+// NewEnigmaAgent creates a new enigma agent
+func NewEnigmaAgent() *EnigmaAgent {
+	return &EnigmaAgent{}
 }

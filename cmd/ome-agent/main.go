@@ -21,9 +21,11 @@ func main() {
 }
 
 func init() {
-	rootCmd.AddCommand(cmdEnigma)
-	rootCmd.AddCommand(cmdHFDownload)
-	rootCmd.AddCommand(cmdReplica)
-	rootCmd.AddCommand(cmdTrainingAgent)
-	rootCmd.AddCommand(cmdServingSidecar)
+	// Register all agent commands
+	rootCmd.AddCommand(CreateAgentCommand(NewEnigmaAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewHFDownloadAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewReplicaAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewTrainingAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewServingAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewMergedFineTunedAdapterAgent()))
 }

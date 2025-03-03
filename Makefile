@@ -482,6 +482,12 @@ artifacts: kustomize ## Generate artifacts for release.
 	$(KUSTOMIZE) build config/clusterresources -o artifacts/clusterresources.yaml
 	@echo "✅ Artifacts generated"
 
+.PHONY: integration-test
+integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
+	@echo "🧪 Running integration tests..."
+	go test -v ./integration_tests/... -ginkgo.v -ginkgo.trace
+	@echo "✅ Integration tests passed"
+
 ##@ 🧪 Testing
 .PHONY: test
 test: test-cmd test-pkg test-internal ## 🧪 Run all tests
@@ -540,8 +546,8 @@ coverage: ## Show coverage for all packages
 	echo "Internal: $$int_cov%"; \
 	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
 	echo "\nAverage Coverage: $$avg_cov%"; \
-	if awk "BEGIN {exit !($$avg_cov < 20)}"; then \
-		echo "Average coverage $$avg_cov% is below minimum threshold of 20%"; \
+	if awk "BEGIN {exit !($$avg_cov < 22)}"; then \
+		echo "Average coverage $$avg_cov% is below minimum threshold of 22%"; \
 		exit 1; \
 	fi
 

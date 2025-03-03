@@ -1,4 +1,4 @@
-package serving_sidecar
+package serving_agent
 
 import (
 	"fmt"
