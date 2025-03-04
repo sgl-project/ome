@@ -56,7 +56,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_1_70b_instruct.image.repository }}:{{ .Values.llama_3_1_70b_instruct.image.tag }}
+      image: {{ .Values.llama_3_1_70b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_70b_instruct.image.tag | default .Values.vllm.latestImage.tag}}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1

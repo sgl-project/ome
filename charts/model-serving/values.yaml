@@ -2,19 +2,19 @@ vllm:
   port: 8080
   serveModelName: vllm-model
   commonImage:
-    repository: &defaultVLLMImage fra.ocir.io/idqj093njucb/official-vllm-openai
-    tag: &defaultVLLMImageTag 0.5.3.post1.7f8d612d-log
+    repository: fra.ocir.io/idqj093njucb/official-vllm-openai
+    tag: 0.5.3.post1.7f8d612d-log
   latestImage:
-    tag: &latestVLLMImageTag v0.6.4.post1.c78ab524
+    tag: v0.6.4.post1.c78ab524
   # If you need to add another image tag, please think twice about the impact, and the business justification
 
 sglang:
   port: 8080
   commonImage:
-    repository: &defaultSGLangImage fra.ocir.io/idqj093njucb/official-sgl
-    tag: &defaultSGLangImageTag v0.4.0.post1.6b67f9b-srt-cu121
+    repository: fra.ocir.io/idqj093njucb/official-sgl
+    tag: v0.4.0.post1.6b67f9b-srt-cu121
   latestImage:
-    tag: &latestSGLangImageTag v0.4.2.post1.35b88e65-cu121
+    tag: v0.4.2.post1.35b88e65-cu121
   # If you need to add another image tag, please think twice about the impact, and the business justification
 
 
@@ -148,8 +148,8 @@ llama_3_1_70b_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    repository:
+    tag:
 
 llama_3_3_70b_instruct:
   enabled: false
@@ -175,8 +175,8 @@ llama_3_3_70b_instruct:
   maxReplicas: 1
   scaleMetric: { }
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 llama_3_3_70b_instruct_fp8_dynamic:
   enabled: false
@@ -215,8 +215,8 @@ llama_3_3_70b_instruct_fp8_dynamic:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 llama_3_2_1b_instruct:
   enabled: false
@@ -240,8 +240,8 @@ llama_3_2_1b_instruct:
   maxReplicas: 1
   scaleMetric: { }
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 llama_3_2_3b_instruct:
   enabled: false
@@ -265,8 +265,8 @@ llama_3_2_3b_instruct:
   maxReplicas: 1
   scaleMetric: { }
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 # TODO: change to llama_3_1_405b_instruct_fp8
 llama_3_1_405b_instruct:
@@ -291,8 +291,8 @@ llama_3_1_405b_instruct:
   minReplicas: 1
   maxReplicas: 1
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 phi_3_vision_128k_instruct:
   enabled: false
@@ -317,8 +317,8 @@ phi_3_vision_128k_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    repository:
+    tag:
 
 e5_mistral_7b_instruct:
   enabled: false
@@ -340,8 +340,8 @@ e5_mistral_7b_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    repository:
+    tag:
 
 mixtral_8x7b_instruct_v0_1_chat:
   enabled: false
@@ -365,8 +365,8 @@ mixtral_8x7b_instruct_v0_1_chat:
   maxReplicas: 1
   scaleMetric: { }
   image:
-    repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    repository:
+    tag:
 
 mistral_7b_instruct:
   enabled: false
@@ -391,8 +391,8 @@ mistral_7b_instruct:
   maxReplicas: 1
   scaleMetric: { }
   image:
-    repository: *defaultVLLMImage
-    tag: *defaultVLLMImageTag
+    repository:
+    tag:
 
 llama_3_2_90b_vision_instruct:
   enabled: false
@@ -413,8 +413,8 @@ llama_3_2_90b_vision_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 # TODO: change to llama_3_2_90b_vision_instruct_fp8_dynamic
 llama_3_2_90b_vision_fp8_dynamic:
@@ -438,8 +438,8 @@ llama_3_2_90b_vision_fp8_dynamic:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 llama_3_2_11b_vision_instruct:
   enabled: false
@@ -461,8 +461,8 @@ llama_3_2_11b_vision_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: *defaultVLLMImage
-    tag: *latestVLLMImageTag
+    repository:
+    tag:
 
 deepseek_v3:
   enabled: false
@@ -477,8 +477,8 @@ deepseek_v3:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: fra.ocir.io/idqj093njucb/official-sgl
-    tag: v0.4.2.post1.35b88e65-cu121
+    repository:
+    tag:
 
 deepseek_r1:
   enabled: false
@@ -493,8 +493,8 @@ deepseek_r1:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository: fra.ocir.io/idqj093njucb/official-sgl
-    tag: v0.4.2.post1.35b88e65-cu121
+    repository:
+    tag:
 
 deberta_v3_base_prompt_injection_v2:
   enabled: false

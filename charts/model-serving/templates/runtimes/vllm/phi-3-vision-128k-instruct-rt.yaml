@@ -55,7 +55,7 @@ spec:
     max: 6B
   containers:
     - name: ome-container
-      image: {{ .Values.phi_3_vision_128k_instruct.image.repository }}:{{ .Values.phi_3_vision_128k_instruct.image.tag }}
+      image: {{ .Values.phi_3_vision_128k_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.phi_3_vision_128k_instruct.image.tag | default .Values.vllm.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1

@@ -51,18 +51,18 @@ spec:
     - modelFormat:
         name: safetensors
         version: "1"
+      version: "1.0.0"
       modelFramework:
         name: transformers
         version: "4.33.1"
       modelArchitecture: DeepseekV3ForCausalLM
       autoSelect: true
       priority: 1
-      version: "1.0.0"
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
+      image: {{ .Values.deepseek_v3.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.deepseek_v3.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1

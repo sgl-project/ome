@@ -72,7 +72,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_1_405b_instruct.image.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag }}
+      image: {{ .Values.llama_3_1_405b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag | default .Values.vllm.commonImage.tag }}
       env:
         - name: NCCL_NET_PLUGIN
           value: none

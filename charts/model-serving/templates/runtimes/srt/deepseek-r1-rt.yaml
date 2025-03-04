@@ -62,7 +62,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.deepseek_r1.image.repository }}:{{ .Values.deepseek_r1.image.tag }}
+      image: {{ .Values.deepseek_r1.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.deepseek_r1.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1

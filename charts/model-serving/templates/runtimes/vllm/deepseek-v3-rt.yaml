@@ -63,7 +63,7 @@ spec:
     max: 700B
   containers:
     - name: ome-container
-      image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
+      image: {{ .Values.deepseek_v3.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.deepseek_v3.image.tag | default .Values.vllm.commonImage.tag }}
       env:
         - name: VLLM_PORT
           value: "9000"

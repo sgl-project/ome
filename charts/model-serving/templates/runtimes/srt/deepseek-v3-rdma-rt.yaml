@@ -65,14 +65,14 @@ spec:
     - name: dshm
       emptyDir:
         medium: Memory
-    - hostPath:
+    - name: devinf
+      hostPath:
         path: /dev/infiniband
-      name: devinf
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
+      image: {{ .Values.deepseek_v3.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.deepseek_v3.image.tag | default .Values.sglang.commonImage.tag }}
       env:
         - name: NCCL_NET_PLUGIN
           value: none
@@ -195,12 +195,12 @@ spec:
         emptyDir:
           medium: Memory
           sizeLimit: 15Gi
-      - hostPath:
+      - name: devinf
+        hostPath:
           path: /dev/infiniband
-        name: devinf
     containers:
       - name: ome-container
-        image: {{ .Values.deepseek_v3.image.repository }}:{{ .Values.deepseek_v3.image.tag }}
+        image: {{ .Values.deepseek_v3.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.deepseek_v3.image.tag | default .Values.sglang.commonImage.tag }}
         command:
           - sh
           - -c
