@@ -53,9 +53,7 @@ func runAgentCommand(cmd *cobra.Command, module AgentModule, action func() error
 	}
 
 	// Add module-specific options
-	for _, opt := range module.FxModules() {
-		options = append(options, opt)
-	}
+	options = append(options, module.FxModules()...)
 
 	// Add lifecycle hooks
 	options = append(options, fx.Invoke(func(lc fx.Lifecycle, l *zap.Logger, sh fx.Shutdowner) {

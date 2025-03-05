@@ -83,16 +83,15 @@ func (r *ProjectServiceAccountService) Delete(ctx context.Context, projectID str
 
 // ProjectServiceAccount represents a service account
 type ProjectServiceAccount struct {
-	// The object type, which is always "organization.project.service_account"
-	Object string `json:"object,required"`
-	// The identifier of the service account
-	ID string `json:"id,required"`
-	// The name of the service account
-	Name string `json:"name,required"`
+	Object string `json:"object"`
+	// ID is the unique identifier for the service account.
+	ID string `json:"id"`
+	// Name is the name of the service account.
+	Name string `json:"name"`
 	// The role of the service account
-	Role string `json:"role,required"`
+	Role string `json:"role"`
 	// The Unix timestamp (in seconds) of when the service account was created
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at"`
 }
 
 // ProjectServiceAccountCreateRequest represents a request to create a service account
@@ -125,16 +124,16 @@ type ProjectServiceAccountAPIKey struct {
 
 // ProjectServiceAccountListResponse represents a response from listing service accounts
 type ProjectServiceAccountListResponse struct {
-	Object  string                  `json:"object,required"`
-	Data    []ProjectServiceAccount `json:"data,required"`
-	FirstID string                  `json:"first_id,required"`
-	LastID  string                  `json:"last_id,required"`
-	HasMore bool                    `json:"has_more,required"`
+	Object  string                  `json:"object"`
+	Data    []ProjectServiceAccount `json:"data"`
+	FirstID string                  `json:"first_id"`
+	LastID  string                  `json:"last_id"`
+	HasMore bool                    `json:"has_more"`
 }
 
 // ProjectServiceAccountDeleteResponse represents a response from deleting a service account
 type ProjectServiceAccountDeleteResponse struct {
-	Object  string `json:"object,required"`
-	ID      string `json:"id,required"`
-	Deleted bool   `json:"deleted,required"`
+	Object  string `json:"object"`
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }

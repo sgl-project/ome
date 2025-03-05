@@ -6,13 +6,11 @@ import (
 	"net/http"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"github.com/oracle/oci-go-sdk/v65/keymanagement"
 )
 
 type CryptoClient struct {
-	logger          logging.Interface
 	KmsCryptoClient *keymanagement.KmsCryptoClient
 	Config          *KmsConfig
 }

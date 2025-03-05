@@ -1,10 +1,6 @@
 package principals
 
 import (
-	"errors"
-
-	"github.com/oracle/oci-go-sdk/v65/common"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
@@ -31,14 +27,4 @@ func (opts Opts) factory() Factory {
 	}
 
 	return defaultFactory
-}
-
-// commonRegion returns the canonical common.Region from opts environment.
-func (opts Opts) commonRegion() (common.Region, error) {
-	region, ok := opts.Env.Region()
-	if !ok {
-		return "", errors.New("failed to resolve env.Region")
-	}
-
-	return common.StringToRegion(region), nil
 }

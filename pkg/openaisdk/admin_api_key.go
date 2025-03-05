@@ -84,7 +84,7 @@ type adminApiKeyJSON struct {
 	CreatedAt   apijson.Field
 	ID          apijson.Field
 	Owner       apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 
@@ -99,16 +99,16 @@ type AdminAPIKeyCreateRequest struct {
 
 type AdminAPIKeyCreateResponse struct {
 	AdminAPIKey
-	Value string `json:"value,required"`
+	Value string `json:"value"`
 }
 
 // APIKeyListResponse represents a response from listing API keys
 type AdminAPIKeyListResponse struct {
-	Object  string              `json:"object,required"`
-	Data    []AdminAPIKey       `json:"data,required"`
-	FirstID string              `json:"first_id,required"`
-	LastID  string              `json:"last_id,required"`
-	HasMore bool                `json:"has_more,required"`
+	Object  string              `json:"object"`
+	Data    []AdminAPIKey       `json:"data"`
+	FirstID string              `json:"first_id"`
+	LastID  string              `json:"last_id"`
+	HasMore bool                `json:"has_more"`
 	Json    adminApiKeyListJSON `json:"-"`
 }
 
@@ -118,7 +118,7 @@ type adminApiKeyListJSON struct {
 	FirstID     apijson.Field
 	LastID      apijson.Field
 	HasMore     apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 
@@ -127,7 +127,7 @@ func (r *AdminAPIKeyListResponse) UnmarshalJSON(data []byte) (err error) {
 }
 
 type AdminAPIKeyDeleteResponse struct {
-	Object  string `json:"object,required"`
-	ID      string `json:"id,required"`
-	Deleted bool   `json:"deleted,required"`
+	Object  string `json:"object"`
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }

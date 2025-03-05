@@ -12,10 +12,10 @@ import (
 // made and the API returns a response with a HTTP status code. Other errors are
 // not wrapped by this SDK.
 type Error struct {
-	Code       string    `json:"code,required,nullable"`
-	Message    string    `json:"message,required"`
-	Param      string    `json:"param,required,nullable"`
-	Type       string    `json:"type,required"`
+	Code       string    `json:"code"`
+	Message    string    `json:"message"`
+	Param      string    `json:"param"`
+	Type       string    `json:"type"`
 	JSON       errorJSON `json:"-"`
 	StatusCode int
 	Request    *http.Request
@@ -28,7 +28,7 @@ type errorJSON struct {
 	Message     apijson.Field
 	Param       apijson.Field
 	Type        apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 

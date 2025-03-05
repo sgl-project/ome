@@ -51,23 +51,23 @@ func (r *ProjectRateLimitService) Update(ctx context.Context, projectID string, 
 // ProjectRateLimit represents a project rate limit
 type ProjectRateLimit struct {
 	// The object type, which is always "project.rate_limit"
-	Object string `json:"object,required"`
+	Object string `json:"object"`
 	// The identifier of the project rate limit
-	ID string `json:"id,required"`
+	ID string `json:"id"`
 	// The model this rate limit applies to
-	Model string `json:"model,required"`
+	Model string `json:"model"`
 	// The maximum requests per minute.
-	MaxRequestsPerOneMinute int `json:"max_requests_per_1_minute,required"`
+	MaxRequestsPerOneMinute int `json:"max_requests_per_1_minute"`
 	// The maximum tokens per minute.
-	MaxTokensPerOneMinute int `json:"max_tokens_per_1_minute,required"`
+	MaxTokensPerOneMinute int `json:"max_tokens_per_1_minute"`
 	// The maximum images per minute. Only present for relevant models.
-	MaxImagesPerOneMinute int `json:"max_images_per_1_minute,required"`
+	MaxImagesPerOneMinute int `json:"max_images_per_1_minute"`
 	// The maximum audio megabytes per minute. Only present for relevant models.
-	MaxAudioMegabytesPerOneMinute int `json:"max_audio_megabytes_per_1_minute,required"`
+	MaxAudioMegabytesPerOneMinute int `json:"max_audio_megabytes_per_1_minute"`
 	// The maximum requests per day. Only present for relevant models.
-	MaxRequestsPerDay int `json:"max_requests_per_1_day,required"`
+	MaxRequestsPerDay int `json:"max_requests_per_1_day"`
 	// The maximum batch input tokens per day. Only present for relevant models.
-	BatchOneDayMaxInputTokens int                  `json:"batch_1_day_max_input_tokens,required"`
+	BatchOneDayMaxInputTokens int                  `json:"batch_1_day_max_input_tokens"`
 	JSON                      projectRateLimitJSON `json:"-"`
 }
 
@@ -81,7 +81,7 @@ type projectRateLimitJSON struct {
 	MaxAudioMegabytesPerOneMinute apijson.Field
 	MaxRequestsPerDay             apijson.Field
 	BatchOneDayMaxInputTokens     apijson.Field
-	raw                           string
+	raw                           string //nolint:unused // Used by apijson for deserialization
 	ExtraFields                   map[string]apijson.Field
 }
 
@@ -90,11 +90,11 @@ func (r *ProjectRateLimit) UnmarshalJSON(data []byte) (err error) {
 }
 
 type ProjectRateLimitListResponse struct {
-	Object  string                   `json:"object,required"`
-	Data    []ProjectRateLimit       `json:"data,required"`
-	FirstID string                   `json:"first_id,required"`
-	LastID  string                   `json:"last_id,required"`
-	HasMore bool                     `json:"has_more,required"`
+	Object  string                   `json:"object"`
+	Data    []ProjectRateLimit       `json:"data"`
+	FirstID string                   `json:"first_id"`
+	LastID  string                   `json:"last_id"`
+	HasMore bool                     `json:"has_more"`
 	Json    projectRateLimitListJSON `json:"-"`
 }
 
@@ -104,7 +104,7 @@ type projectRateLimitListJSON struct {
 	FirstID     apijson.Field
 	LastID      apijson.Field
 	HasMore     apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 

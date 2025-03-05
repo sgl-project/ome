@@ -78,17 +78,17 @@ func (r *ProjectService) Archive(ctx context.Context, projectID string, opts ...
 // Project represents an individual project.
 type Project struct {
 	// The identifier, which can be referenced in API endpoints
-	ID string `json:"id,required"`
+	ID string `json:"id"`
 	// The object type, which is always "organization.project"
-	Object string `json:"object,required"`
+	Object string `json:"object"`
 	// The name of the project
-	Name string `json:"name,required"`
+	Name string `json:"name"`
 	// The Unix timestamp (in seconds) of when the project was created
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at"`
 	// The Unix timestamp (in seconds) of when the project was archived or null
 	ArchivedAt *int64 `json:"archived_at"`
 	// Status can be 'active' or 'archived'
-	Status string      `json:"status,required"`
+	Status string      `json:"status"`
 	JSON   projectJSON `json:"-"`
 }
 
@@ -100,7 +100,7 @@ type projectJSON struct {
 	CreatedAt   apijson.Field
 	ArchivedAt  apijson.Field
 	Status      apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 
@@ -111,22 +111,22 @@ func (r *Project) UnmarshalJSON(data []byte) (err error) {
 // ProjectCreateRequest is the request struct for creating a new project
 type ProjectCreateRequest struct {
 	// The friendly name of the project
-	Name string `json:"name,required"`
+	Name string `json:"name"`
 }
 
 // ProjectUpdateRequest is the request struct for updating a project
 type ProjectUpdateRequest struct {
 	// The updated name of the project
-	Name string `json:"name,required"`
+	Name string `json:"name"`
 }
 
 // ProjectListResponse is the response struct for listing projects
 type ProjectListResponse struct {
-	Object  string          `json:"object,required"`
-	Data    []Project       `json:"data,required"`
-	FirstID string          `json:"first_id,required"`
-	LastID  string          `json:"last_id,required"`
-	HasMore bool            `json:"has_more,required"`
+	Object  string          `json:"object"`
+	Data    []Project       `json:"data"`
+	FirstID string          `json:"first_id"`
+	LastID  string          `json:"last_id"`
+	HasMore bool            `json:"has_more"`
 	JSON    projectListJSON `json:"-"`
 }
 
@@ -137,7 +137,7 @@ type projectListJSON struct {
 	FirstID     apijson.Field
 	LastID      apijson.Field
 	HasMore     apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 

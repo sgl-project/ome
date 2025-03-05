@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
@@ -100,11 +99,6 @@ func buildRayDefaultPorts() []corev1.ServicePort {
 
 // buildRayHeadSelectorLabels creates selector labels for Ray head service
 func buildRayHeadSelectorLabels(componentMeta metav1.ObjectMeta) map[string]string {
-	headLabel := fmt.Sprintf("%s-head", componentMeta.Name)
-	if len(headLabel) > 63 {
-		headLabel = headLabel[len(headLabel)-63:]
-	}
-
 	return map[string]string{
 		"app.kubernetes.io/created-by":  "kuberay-operator",
 		"app.kubernetes.io/name":        "kuberay",

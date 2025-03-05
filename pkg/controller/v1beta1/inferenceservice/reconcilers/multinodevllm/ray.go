@@ -183,7 +183,7 @@ func (r *RayReconciler) isMNPDeploymentUnavailable(rayCluster *ray.RayCluster, m
 		return false, err
 	}
 
-	if rayCluster.Status.AvailableWorkerReplicas > 0 && rayCluster.Status.State == ray.Ready {
+	if rayCluster.Status.AvailableWorkerReplicas > 0 && isRayClusterReady(rayCluster) {
 		if deployment.Status.UnavailableReplicas > 0 {
 			return r.handleUnavailableMNP(rayCluster, mnpName)
 		}
@@ -371,4 +371,14 @@ func preserveAnnotations(desired, existing *ray.RayCluster) {
 			}
 		}
 	}
+}
+
+// isRayClusterReady checks if the RayCluster is in Ready state by examining its conditions
+func isRayClusterReady(rayCluster *ray.RayCluster) bool {
+	for _, condition := range rayCluster.Status.Conditions {
+		if string(condition.Type) == string(ray.Ready) && condition.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }

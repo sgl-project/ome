@@ -14,19 +14,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	lwsSpec "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
-
-var log = ctrl.Log.WithName("MultiNodeReconciler")
 
 type MultiNodeReconciler struct {
 	client       client.Client
 	scheme       *runtime.Scheme
 	LWS          *lws.LWSReconciler
 	URL          *knapis.URL
-	componentExt *v1beta1.ComponentExtensionSpec
 	IstioSidecar *raycluster.IstioSidecarReconciler
 	Service      *service.ServiceReconciler
 }

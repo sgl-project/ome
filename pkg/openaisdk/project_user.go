@@ -65,17 +65,17 @@ func (r *ProjectUserService) Delete(ctx context.Context, projectID string, userI
 // ProjectUser represents an individual user in a project
 type ProjectUser struct {
 	// The object type, which is always "organization.project.user"
-	Object string `json:"object,required"`
+	Object string `json:"object"`
 	// The identifier, which can be referenced in API endpoints
-	ID string `json:"id,required"`
+	ID string `json:"id"`
 	// The name of the user
-	Name string `json:"name,required"`
+	Name string `json:"name"`
 	// The email address of the user
-	Email string `json:"email,required"`
+	Email string `json:"email"`
 	// Role can be 'owner' or 'member'
-	Role string `json:"role,required"`
+	Role string `json:"role"`
 	// The Unix timestamp (in seconds) of when the user was added
-	AddedAt int64           `json:"added_at,required"`
+	AddedAt int64           `json:"added_at"`
 	JSON    projectUserJSON `json:"-"`
 }
 
@@ -87,7 +87,7 @@ type projectUserJSON struct {
 	Email       apijson.Field
 	Role        apijson.Field
 	AddedAt     apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 
@@ -98,18 +98,18 @@ func (r *ProjectUser) UnmarshalJSON(data []byte) (err error) {
 // ProjectUserCreateRequest is the request struct for adding a user to a project
 type ProjectUserCreateRequest struct {
 	// The ID of the user
-	UserID string `json:"user_id,required"`
+	UserID string `json:"user_id"`
 	// Role can be 'owner' or 'member'
-	Role string `json:"role,required"`
+	Role string `json:"role"`
 }
 
 // ProjectUserListResponse is the response struct for listing project users
 type ProjectUserListResponse struct {
-	Object  string              `json:"object,required"`
-	Data    []ProjectUser       `json:"data,required"`
-	FirstID string              `json:"first_id,required"`
-	LastID  string              `json:"last_id,required"`
-	HasMore bool                `json:"has_more,required"`
+	Object  string              `json:"object"`
+	Data    []ProjectUser       `json:"data"`
+	FirstID string              `json:"first_id"`
+	LastID  string              `json:"last_id"`
+	HasMore bool                `json:"has_more"`
 	JSON    projectUserListJSON `json:"-"`
 }
 
@@ -120,7 +120,7 @@ type projectUserListJSON struct {
 	FirstID     apijson.Field
 	LastID      apijson.Field
 	HasMore     apijson.Field
-	raw         string
+	raw         string //nolint:unused // Used by apijson for deserialization
 	ExtraFields map[string]apijson.Field
 }
 
@@ -130,7 +130,7 @@ func (r *ProjectUserListResponse) UnmarshalJSON(data []byte) (err error) {
 
 // ProjectUserDeleteResponse is the response struct for deleting a project user
 type ProjectUserDeleteResponse struct {
-	Object  string `json:"object,required"`
-	ID      string `json:"id,required"`
-	Deleted bool   `json:"deleted,required"`
+	Object  string `json:"object"`
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
 }

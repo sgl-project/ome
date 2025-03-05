@@ -13,26 +13,23 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+const (
+	DefaultModelLocalMountPath = "/mnt/models"
+	DefaultHTTPPort            = 8080
+	DefaultGRPCPort            = 9000
+	DefaultWorkers             = 1
+	DefaultTimeout             = 60
+	IngressGateway             = "knative-ingress-gateway.knative-serving"
+	IngressService             = "istio-ingressgateway.istio-system.svc.cluster.local"
+	LocalGateway               = "knative-local-gateway.knative-serving"
+	LocalGatewayService        = "knative-local-gateway.istio-system.svc.cluster.local"
+	Domain                     = "example.com"
+	IngressClassName           = "nginx"
+	AdditionalDomain           = "additional-example.com"
+	AdditionalDomainExtra      = "additional-example-extra.com"
+)
+
 var (
-	IngressGateway        = "knative-serving/knative-ingress-gateway"
-	IngressService        = "test-destination"
-	LocalGateway          = "knative-serving/knative-local-gateway"
-	LocalGatewayService   = "knative-local-gateway.istio-system.svc.cluster.local"
-	Domain                = "example.com"
-	IngressClassName      = "nginx"
-	AdditionalDomain      = "additional-example.com"
-	AdditionalDomainExtra = "additional-example-extra.com"
-
-	ingressConfig = IngressConfig{
-		IngressGateway:           IngressGateway,
-		IngressServiceName:       IngressService,
-		LocalGateway:             LocalGateway,
-		LocalGatewayServiceName:  LocalGatewayService,
-		IngressDomain:            Domain,
-		IngressClassName:         &IngressClassName,
-		AdditionalIngressDomains: &[]string{AdditionalDomain, AdditionalDomainExtra},
-	}
-
 	IngressConfigData = fmt.Sprintf(`{
 		"ingressGateway":"%s",
 		"ingressService":"%s",

@@ -29,7 +29,6 @@ type MultiNodeVllmReconciler struct {
 	RawMultiNodeService *service.RayServiceReconciler
 	MultiNodeProber     *MultiNodeProberReconciler
 	IstioSidecar        *istiosidecar.IstioSidecarReconciler
-	componentExt        *v1beta1.ComponentExtensionSpec
 }
 
 func NewMultiNodeVllmReconciler(client client.Client,

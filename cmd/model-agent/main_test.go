@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"testing"
@@ -234,17 +233,6 @@ func TestCreateOmeClient(t *testing.T) {
 	}
 	client := createOmeClient(config)
 	require.NotNil(t, client)
-}
-
-type mockHealthCheck struct {
-	healthy bool
-}
-
-func (m *mockHealthCheck) Check(_ *http.Request) error {
-	if !m.healthy {
-		return fmt.Errorf("health check failed")
-	}
-	return nil
 }
 
 func TestHealthCheckEndpoint(t *testing.T) {

@@ -40,12 +40,12 @@ type DateTime struct {
 
 type AdditionalProperties struct {
 	A           bool                   `json:"a"`
-	ExtraFields map[string]interface{} `json:"-,extras"`
+	ExtraFields map[string]interface{} `json:"-,extras"` //nolint:staticcheck // Custom JSON option for our parser
 }
 
 type TypedAdditionalProperties struct {
 	A           bool           `json:"a"`
-	ExtraFields map[string]int `json:"-,extras"`
+	ExtraFields map[string]int `json:"-,extras"` //nolint:staticcheck // Custom JSON option for our parser
 }
 
 type EmbeddedStruct struct {
@@ -65,7 +65,7 @@ type EmbeddedStructJSON struct {
 type EmbeddedStructs struct {
 	EmbeddedStruct
 	A           *int                   `json:"a"`
-	ExtraFields map[string]interface{} `json:"-,extras"`
+	ExtraFields map[string]interface{} `json:"-,extras"` //nolint:staticcheck // Custom JSON option for our parser
 
 	JSON EmbeddedStructsJSON
 }
@@ -86,8 +86,8 @@ type JSONFieldStruct struct {
 	B           int64               `json:"b"`
 	C           string              `json:"c"`
 	D           string              `json:"d"`
-	ExtraFields map[string]int64    `json:"-,extras"`
-	JSON        JSONFieldStructJSON `json:"-,metadata"`
+	ExtraFields map[string]int64    `json:"-,extras"`   //nolint:staticcheck // Custom JSON option for our parser
+	JSON        JSONFieldStructJSON `json:"-,metadata"` //nolint:govet,staticcheck // Intentionally using the same JSON tag with custom option
 }
 
 type JSONFieldStructJSON struct {
@@ -113,12 +113,12 @@ type Union interface {
 
 type Inline struct {
 	InlineField Primitives `json:"-,inline"`
-	JSON        InlineJSON `json:"-,metadata"`
+	JSON        InlineJSON `json:"-,metadata"` //nolint:govet,staticcheck // Intentionally using the same JSON tag with custom option
 }
 
 type InlineArray struct {
 	InlineField []string   `json:"-,inline"`
-	JSON        InlineJSON `json:"-,metadata"`
+	JSON        InlineJSON `json:"-,metadata"` //nolint:govet,staticcheck // Intentionally using the same JSON tag with custom option
 }
 
 type InlineJSON struct {

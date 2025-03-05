@@ -4,7 +4,6 @@ import (
 	"context"
 	"strconv"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	istiov1beta1 "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
@@ -19,11 +18,10 @@ import (
 var log = ctrl.Log.WithName("IstioSidecarReconciler")
 
 type IstioSidecarReconciler struct {
-	client       kclient.Client
-	scheme       *runtime.Scheme
-	Sidecar      *istioclientv1beta1.Sidecar
-	componentExt *v1beta1.ComponentExtensionSpec
-	enabled      bool
+	client  kclient.Client
+	scheme  *runtime.Scheme
+	Sidecar *istioclientv1beta1.Sidecar
+	enabled bool
 }
 
 func NewIstioSidecarReconciler(client kclient.Client, scheme *runtime.Scheme, componentMeta metav1.ObjectMeta, enabled bool) *IstioSidecarReconciler {

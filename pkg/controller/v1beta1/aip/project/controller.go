@@ -28,8 +28,6 @@ import (
 
 // ProjectService handles OpenAI project operations
 type ProjectService struct {
-	client *openaisdk.Client
-	log    logr.Logger
 }
 
 // ProjectReconciler reconciles a Project object

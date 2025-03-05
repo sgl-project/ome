@@ -21,11 +21,6 @@ import (
 	testingpkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 )
 
-// Helper function for testing
-func int64Ptr(i int64) *int64 {
-	return &i
-}
-
 // setupTestWithMockServer creates a test environment with a mocked OpenAI API server
 func setupTestWithMockServer(t *testing.T) (*Project, *httptest.Server) {
 	// Setup mock server
