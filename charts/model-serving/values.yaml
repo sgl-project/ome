@@ -274,7 +274,10 @@ llama_3_1_405b_instruct:
   enableRDMA: false
   singleNode: true
   labels: {}
-  annotations: {}
+  annotations:
+    linkerd.io/inject: "enabled"
+    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
+    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
