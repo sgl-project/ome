@@ -33,7 +33,7 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.36.0"
+        version: "4.36.2"
       modelFormat:
         name: safetensors
         version: "1"
@@ -64,7 +64,7 @@ spec:
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
           --served-model-name=vllm-model \
-          --tensor-parallel-size=1 \
+          --tensor-parallel-size=2 \
           --preemption-mode=swap \
           --gpu-memory-utilization=0.90
       volumeMounts:
@@ -74,11 +74,11 @@ spec:
         requests:
           cpu: 10
           memory: 30Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
         limits:
           cpu: 10
           memory: 30Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:

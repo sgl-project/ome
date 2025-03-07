@@ -41,7 +41,7 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.36.0"
+        version: "4.36.2"
       modelFormat:
         name: safetensors
         version: "1"
@@ -71,7 +71,7 @@ spec:
           --port={{ .Values.sglang.port }} \
           --enable-metrics \
           --model="$MODEL_PATH"\
-          --tp 1 \
+          --tp 2 \
           --mem-frac=0.9
       volumeMounts:
         - mountPath: /dev/shm
@@ -80,11 +80,11 @@ spec:
         requests:
           cpu: 10
           memory: 30Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
         limits:
           cpu: 10
           memory: 30Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:

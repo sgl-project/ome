@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-mistral-7b-instruct
+  name: srt-mmixtral-8x7b-instruct
 spec:
   disabled: false
   annotations:
@@ -33,16 +33,16 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.36.2"
+        version: "4.36.0.dev0"
       modelFormat:
         name: safetensors
         version: "1"
-      modelArchitecture: MistralForCausalLM
+      modelArchitecture: MixtralForCausalLM
       autoSelect: false
       priority: 1
   modelSizeRange:
-    min: 5B
-    max: 9B
+    min: 45B
+    max: 50B
   protocolVersions:
     - openAI
   containers:

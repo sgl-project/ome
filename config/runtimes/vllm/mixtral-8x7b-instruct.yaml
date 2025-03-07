@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-mistral-7b-instruct
+  name: vllm-mixtral-8x7b-instruct
 spec:
   disabled: false
   annotations:
@@ -33,21 +33,21 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.36.2"
+        version: "4.36.0.dev0"
       modelFormat:
         name: safetensors
         version: "1"
-      modelArchitecture: MistralForCausalLM
-      autoSelect: false
+      modelArchitecture: MixtralForCausalLM
+      autoSelect: true
       priority: 1
   modelSizeRange:
-    min: 5B
-    max: 9B
+    min: 45B
+    max: 50B
   protocolVersions:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.6b67f9b-srt-cu121
+      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
       ports:
         - containerPort: 8080
           name: http1
@@ -58,13 +58,15 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
+          python3 -m vllm.entrypoints.openai.api_server \
           --port=8080 \
-          --enable-metrics \
-          --model="$MODEL_PATH"\
-          --tp 2 \
-          --mem-frac=0.9
+          --model="$MODEL_PATH" \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --max-log-len=0 \
+          --served-model-name=vllm-model \
+          --tensor-parallel-size=2 \
+          --preemption-mode=swap \
+          --gpu-memory-utilization=0.90
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
