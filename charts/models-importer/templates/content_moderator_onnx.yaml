@@ -1,3 +1,4 @@
+{{- if index .Values "content_moderator" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
@@ -55,3 +56,4 @@ spec:
       "use_cache": true,
       "vocab_size": 30522
     }
+{{- end }}
