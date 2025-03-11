@@ -16,7 +16,7 @@ spec:
   displayName: content-moderator
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ .Values.content_moderator.osBucket }}/o/{{ .Values.content_moderator.vendor }}/{{ .Values.content_moderator.osPrefixOverride }}"
-    path: /raid/models/olm/content_moderator
+    path: /mnt/data/models/olm/content_moderator
   vendor: {{ .Values.content_moderator.vendor }}
   version: "1.0.0"
   modelFormat:
