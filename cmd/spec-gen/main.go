@@ -50,8 +50,8 @@ func main() {
 }
 
 func swaggify(name string) string {
-	name = strings.ReplaceAll(name, "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/serving/", "")
-	name = strings.ReplaceAll(name, "./pkg/apis/serving/", "")
+	name = strings.ReplaceAll(name, "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/", "")
+	name = strings.ReplaceAll(name, "./pkg/apis/ome/", "")
 	name = strings.ReplaceAll(name, "knative.dev/pkg/apis/duck/v1.", "knative/")
 	name = strings.ReplaceAll(name, "knative.dev/pkg/apis.", "knative/")
 	name = strings.ReplaceAll(name, "k8s.io/api/core/", "")

@@ -170,6 +170,18 @@ generate: controller-gen ## 🔄 Generate code containing DeepCopy, DeepCopyInto
 	
 	@echo "\n🎉 Code generation process completed successfully!\n"
 
+.PHONY: generate-python-sdk
+generate-python-sdk: generate ## 🔄 Generate OME python SDK.
+	@echo "\n📋 Step 4: Generating Python SDK..."
+	@if ! hack/python-sdk/client-gen.sh 2>pythonclientgen.err; then \
+  		echo "❌ Error during Python SDK generation:"; \
+		cat pythonclientgen.err; \
+		rm pythonclientgen.err; \
+		exit 1; \
+	fi
+	@rm -f pythonclientgen.err
+	@echo "\n🎉 PythonSDK generation complete"
+
 .PHONY: fmt
 fmt: install-goimports ## 🧹 Run go fmt and goimports against code
 	@echo "🧹 Formatting Go code..."

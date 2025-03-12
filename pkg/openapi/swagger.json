@@ -7,7 +7,7 @@
   },
   "paths": {},
   "definitions": {
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.AIPlatformConfig": {
+    "v1beta1.AIPlatformConfig": {
       "type": "object",
       "required": [
         "secretConfig"
@@ -15,11 +15,11 @@
       "properties": {
         "secretConfig": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretConfig"
+          "$ref": "#/definitions/v1beta1.SecretConfig"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.APIKeySpec": {
+    "v1beta1.APIKeySpec": {
       "type": "object",
       "required": [
         "name",
@@ -33,7 +33,7 @@
         },
         "apiKeySecretRef": {
           "description": "APIKeySecretRef references the secret containing the API key",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
+          "$ref": "#/definitions/v1beta1.SecretReference"
         },
         "name": {
           "description": "Name is the API key name",
@@ -41,7 +41,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.AssociationUsage": {
+    "v1beta1.AssociationUsage": {
       "description": "AssociationUsage defines the usage of the association.",
       "type": "object",
       "required": [
@@ -68,7 +68,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BaseModel": {
+    "v1beta1.BaseModel": {
       "description": "BaseModel is the Schema for the basemodels API",
       "type": "object",
       "properties": {
@@ -86,15 +86,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BaseModelSpec"
+          "$ref": "#/definitions/v1beta1.BaseModelSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelStatusSpec"
+          "$ref": "#/definitions/v1beta1.ModelStatusSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BaseModelList": {
+    "v1beta1.BaseModelList": {
       "description": "BaseModelList contains a list of BaseModel",
       "type": "object",
       "required": [
@@ -109,7 +109,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BaseModel"
+            "$ref": "#/definitions/v1beta1.BaseModel"
           }
         },
         "kind": {
@@ -122,7 +122,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BaseModelSpec": {
+    "v1beta1.BaseModelSpec": {
       "description": "BaseModelSpec defines the desired state of BaseModel",
       "type": "object",
       "required": [
@@ -183,11 +183,11 @@
         },
         "modelFormat": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFormat"
+          "$ref": "#/definitions/v1beta1.ModelFormat"
         },
         "modelFramework": {
           "description": "ModelFramework of the model, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec"
+          "$ref": "#/definitions/v1beta1.ModelFrameworkSpec"
         },
         "modelParameterSize": {
           "description": "ModelParameterSize is the size of the model parameters, e.g., \"175B\"",
@@ -211,7 +211,7 @@
         },
         "storage": {
           "description": "Storage configuration for the model",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/v1beta1.StorageSpec"
         },
         "tensorRTLLMConfiguration": {
           "description": "TensorRT-LLM specific configuration, stored as generic JSON for flexibility.",
@@ -226,7 +226,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJob": {
+    "v1beta1.BenchmarkJob": {
       "description": "BenchmarkJob is the schema for the BenchmarkJobs API",
       "type": "object",
       "properties": {
@@ -244,15 +244,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobSpec"
+          "$ref": "#/definitions/v1beta1.BenchmarkJobSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobStatus"
+          "$ref": "#/definitions/v1beta1.BenchmarkJobStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobConfig": {
+    "v1beta1.BenchmarkJobConfig": {
       "type": "object",
       "required": [
         "podConfig"
@@ -261,11 +261,11 @@
         "podConfig": {
           "description": "PodConfig contains all Pod Configuration",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodConfig"
+          "$ref": "#/definitions/v1beta1.PodConfig"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobList": {
+    "v1beta1.BenchmarkJobList": {
       "description": "BenchmarkJobList contains a list of BenchmarkJob",
       "type": "object",
       "required": [
@@ -280,7 +280,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJob"
+            "$ref": "#/definitions/v1beta1.BenchmarkJob"
           }
         },
         "kind": {
@@ -293,7 +293,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobSpec": {
+    "v1beta1.BenchmarkJobSpec": {
       "description": "BenchmarkJobSpec defines the specification for a benchmark job. All fields within this specification collectively represent the desired state and configuration of a BenchmarkJob.",
       "type": "object",
       "required": [
@@ -314,16 +314,16 @@
         },
         "dataset": {
           "description": "Dataset is the dataset used for benchmarking. It is optional and only required for tasks other than \"text-to-\u003coutput-modality\u003e\".",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/v1beta1.StorageSpec"
         },
         "endpoint": {
           "description": "Endpoint is the reference to the inference service to benchmark.",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.EndpointSpec"
+          "$ref": "#/definitions/v1beta1.EndpointSpec"
         },
         "huggingFaceSecretReference": {
           "description": "HuggingFaceSecretReference is a reference to a Kubernetes Secret containing the Hugging Face API key. The referenced Secret must reside in the same namespace as the BenchmarkJob. This field replaces the raw HuggingFaceAPIKey field for improved security.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HuggingFaceSecretReference"
+          "$ref": "#/definitions/v1beta1.HuggingFaceSecretReference"
         },
         "maxRequestsPerIteration": {
           "description": "MaxRequestsPerIteration specifies the maximum number of requests for a single iteration. Each iteration runs for a specific combination of TrafficScenarios and NumConcurrency.",
@@ -347,11 +347,11 @@
         },
         "outputLocation": {
           "description": "OutputLocation specifies where the benchmark results will be stored (e.g., object storage).",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/v1beta1.StorageSpec"
         },
         "podOverride": {
           "description": "Pod defines the pod configuration for the benchmark job. This is optional, if not provided, default values will be used.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodOverride"
+          "$ref": "#/definitions/v1beta1.PodOverride"
         },
         "resultFolderName": {
           "description": "ResultFolderName specifies the name of the folder that stores the benchmark result. A default name will be assigned if not specified.",
@@ -359,7 +359,7 @@
         },
         "serviceMetadata": {
           "description": "ServiceMetadata records metadata about the backend model server or service being benchmarked. This includes details such as server engine, version, and GPU configuration for filtering experiments.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceMetadata"
+          "$ref": "#/definitions/v1beta1.ServiceMetadata"
         },
         "task": {
           "description": "Task specifies the task to benchmark, pattern: \u003cinput-modality\u003e-to-\u003coutput-modality\u003e (e.g., \"text-to-text\", \"image-to-text\").",
@@ -377,7 +377,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BenchmarkJobStatus": {
+    "v1beta1.BenchmarkJobStatus": {
       "description": "BenchmarkJobStatus reflects the state and results of the benchmark job. It will be set and updated by the controller.",
       "type": "object",
       "required": [
@@ -411,7 +411,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BuiltInAdapter": {
+    "v1beta1.BuiltInAdapter": {
       "type": "object",
       "properties": {
         "env": {
@@ -433,7 +433,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservation": {
+    "v1beta1.CapacityReservation": {
       "description": "CapacityReservation is the Schema for the capacityReservations API",
       "type": "object",
       "properties": {
@@ -451,15 +451,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationSpec"
+          "$ref": "#/definitions/v1beta1.CapacityReservationSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationStatus"
+          "$ref": "#/definitions/v1beta1.CapacityReservationStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationCondition": {
+    "v1beta1.CapacityReservationCondition": {
       "description": "CapacityReservationCondition defines health and operational status of the capacity reservation.",
       "type": "object",
       "required": [
@@ -491,7 +491,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationList": {
+    "v1beta1.CapacityReservationList": {
       "description": "CapacityReservationList contains a list of CapacityReservation.",
       "type": "object",
       "required": [
@@ -506,7 +506,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservation"
+            "$ref": "#/definitions/v1beta1.CapacityReservation"
           }
         },
         "kind": {
@@ -519,7 +519,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationReconcilePolicyConfig": {
+    "v1beta1.CapacityReservationReconcilePolicyConfig": {
       "type": "object",
       "properties": {
         "reconcileFailedLifecycleState": {
@@ -527,7 +527,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationSpec": {
+    "v1beta1.CapacityReservationSpec": {
       "description": "CapacityReservationSpec defines the desired state of Capacity Reservation.",
       "type": "object",
       "required": [
@@ -566,7 +566,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationStatus": {
+    "v1beta1.CapacityReservationStatus": {
       "description": "CapacityReservationStatus defines the observed status of CapacityReservation.",
       "type": "object",
       "properties": {
@@ -587,7 +587,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.AssociationUsage"
+            "$ref": "#/definitions/v1beta1.AssociationUsage"
           },
           "x-kubernetes-list-map-keys": [
             "name"
@@ -615,7 +615,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationCondition"
+            "$ref": "#/definitions/v1beta1.CapacityReservationCondition"
           },
           "x-kubernetes-list-map-keys": [
             "type"
@@ -630,7 +630,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterBaseModel": {
+    "v1beta1.ClusterBaseModel": {
       "description": "ClusterBaseModel is the Schema for the basemodels API",
       "type": "object",
       "properties": {
@@ -648,15 +648,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BaseModelSpec"
+          "$ref": "#/definitions/v1beta1.BaseModelSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelStatusSpec"
+          "$ref": "#/definitions/v1beta1.ModelStatusSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterBaseModelList": {
+    "v1beta1.ClusterBaseModelList": {
       "description": "ClusterBaseModelList contains a list of ClusterBaseModel",
       "type": "object",
       "required": [
@@ -671,7 +671,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterBaseModel"
+            "$ref": "#/definitions/v1beta1.ClusterBaseModel"
           }
         },
         "kind": {
@@ -684,7 +684,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterCapacityReservation": {
+    "v1beta1.ClusterCapacityReservation": {
       "description": "ClusterCapacityReservation is the Schema for the capacityReservations API",
       "type": "object",
       "properties": {
@@ -702,15 +702,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationSpec"
+          "$ref": "#/definitions/v1beta1.CapacityReservationSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CapacityReservationStatus"
+          "$ref": "#/definitions/v1beta1.CapacityReservationStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterCapacityReservationList": {
+    "v1beta1.ClusterCapacityReservationList": {
       "description": "ClusterCapacityReservationList contains a list of ClusterCapacityReservation.",
       "type": "object",
       "required": [
@@ -725,7 +725,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterCapacityReservation"
+            "$ref": "#/definitions/v1beta1.ClusterCapacityReservation"
           }
         },
         "kind": {
@@ -738,7 +738,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterServingRuntime": {
+    "v1beta1.ClusterServingRuntime": {
       "description": "ClusterServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
       "properties": {
@@ -756,15 +756,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeSpec"
+          "$ref": "#/definitions/v1beta1.ServingRuntimeSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeStatus"
+          "$ref": "#/definitions/v1beta1.ServingRuntimeStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterServingRuntimeList": {
+    "v1beta1.ClusterServingRuntimeList": {
       "description": "ClusterServingRuntimeList contains a list of ServingRuntime",
       "type": "object",
       "required": [
@@ -779,7 +779,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterServingRuntime"
+            "$ref": "#/definitions/v1beta1.ClusterServingRuntime"
           }
         },
         "kind": {
@@ -792,7 +792,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterTrainingRuntime": {
+    "v1beta1.ClusterTrainingRuntime": {
       "description": "ClusterTrainingRuntime is the Schema for the TrainingRuntimes API in cluster scope",
       "type": "object",
       "properties": {
@@ -810,11 +810,11 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeSpec"
+          "$ref": "#/definitions/v1beta1.TrainingRuntimeSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterTrainingRuntimeList": {
+    "v1beta1.ClusterTrainingRuntimeList": {
       "description": "ClusterTrainingRuntimeList contains a list of ClusterTrainingRuntime",
       "type": "object",
       "required": [
@@ -829,7 +829,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ClusterTrainingRuntime"
+            "$ref": "#/definitions/v1beta1.ClusterTrainingRuntime"
           }
         },
         "kind": {
@@ -842,7 +842,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ComponentExtensionSpec": {
+    "v1beta1.ComponentExtensionSpec": {
       "description": "ComponentExtensionSpec defines the deployment configuration for a given InferenceService component",
       "type": "object",
       "properties": {
@@ -869,7 +869,7 @@
           "$ref": "#/definitions/k8s.io.api.apps.v1.DeploymentStrategy"
         },
         "kedaConfig": {
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.KedaConfig"
+          "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
           "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -881,7 +881,7 @@
         },
         "logger": {
           "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.LoggerSpec"
+          "$ref": "#/definitions/v1beta1.LoggerSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -909,7 +909,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ComponentStatusSpec": {
+    "v1beta1.ComponentStatusSpec": {
       "description": "ComponentStatusSpec describes the state of the component",
       "type": "object",
       "properties": {
@@ -951,7 +951,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CoschedulingPodGroupPolicyConfig": {
+    "v1beta1.CoschedulingPodGroupPolicyConfig": {
       "description": "CoschedulingPodGroupPolicyConfig represents configuration for co-scheduling plugin. The number of min members in the PodGroupSpec is always equal to the number of nodes.",
       "type": "object",
       "properties": {
@@ -962,7 +962,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference": {
+    "v1beta1.CrossReference": {
       "type": "object",
       "properties": {
         "name": {
@@ -976,7 +976,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CustomPredictor": {
+    "v1beta1.CustomPredictor": {
       "description": "CustomPredictor defines arguments for configuring a custom server.",
       "type": "object",
       "required": [
@@ -1253,7 +1253,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DacReconcilePolicyConfig": {
+    "v1beta1.DacReconcilePolicyConfig": {
       "type": "object",
       "properties": {
         "reconcileFailedLifecycleState": {
@@ -1261,7 +1261,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAICluster": {
+    "v1beta1.DedicatedAICluster": {
       "description": "DedicatedAICluster is the Schema for the dedicatedaiclusters API",
       "type": "object",
       "properties": {
@@ -1279,15 +1279,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterSpec"
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterStatus"
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterList": {
+    "v1beta1.DedicatedAIClusterList": {
       "description": "DedicatedAIClusterList contains a list of DedicatedAICluster",
       "type": "object",
       "required": [
@@ -1302,7 +1302,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAICluster"
+            "$ref": "#/definitions/v1beta1.DedicatedAICluster"
           }
         },
         "kind": {
@@ -1315,7 +1315,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfile": {
+    "v1beta1.DedicatedAIClusterProfile": {
       "description": "DedicatedAIClusterProfile is the Schema for the dedicatedaiclusterprofiles API",
       "type": "object",
       "properties": {
@@ -1333,15 +1333,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfileSpec"
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterProfileSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfileStatus"
+          "$ref": "#/definitions/v1beta1.DedicatedAIClusterProfileStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfileList": {
+    "v1beta1.DedicatedAIClusterProfileList": {
       "description": "DedicatedAIClusterProfileList contains a list of DedicatedAIClusterProfile",
       "type": "object",
       "required": [
@@ -1356,7 +1356,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfile"
+            "$ref": "#/definitions/v1beta1.DedicatedAIClusterProfile"
           }
         },
         "kind": {
@@ -1369,7 +1369,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfileSpec": {
+    "v1beta1.DedicatedAIClusterProfileSpec": {
       "description": "DedicatedAIClusterProfileSpec defines the desired state of DedicatedAIClusterProfile",
       "type": "object",
       "required": [
@@ -1419,11 +1419,11 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterProfileStatus": {
+    "v1beta1.DedicatedAIClusterProfileStatus": {
       "description": "DedicatedAIClusterProfileStatus defines the observed state of DedicatedAIClusterProfile",
       "type": "object"
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterSpec": {
+    "v1beta1.DedicatedAIClusterSpec": {
       "description": "DedicatedAIClusterSpec defines the desired state of DedicatedAICluster",
       "type": "object",
       "properties": {
@@ -1476,7 +1476,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DedicatedAIClusterStatus": {
+    "v1beta1.DedicatedAIClusterStatus": {
       "description": "DedicatedAIClusterStatus defines the observed state of DedicatedAICluster",
       "type": "object",
       "properties": {
@@ -1509,7 +1509,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.DeployConfig": {
+    "v1beta1.DeployConfig": {
       "type": "object",
       "properties": {
         "defaultDeploymentMode": {
@@ -1517,7 +1517,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Endpoint": {
+    "v1beta1.Endpoint": {
       "description": "Endpoint defines a direct URL-based inference service with additional API configuration.",
       "type": "object",
       "required": [
@@ -1541,21 +1541,21 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.EndpointSpec": {
+    "v1beta1.EndpointSpec": {
       "description": "EndpointSpec defines a reference to an inference service. It supports either a Kubernetes-style reference (InferenceService) or an Endpoint struct for a direct URL. Cross-namespace references are supported for InferenceService but require appropriate RBAC permissions to access resources in the target namespace.",
       "type": "object",
       "properties": {
         "endpoint": {
           "description": "Endpoint holds the details of a direct endpoint for an external inference service, including URL and API details.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Endpoint"
+          "$ref": "#/definitions/v1beta1.Endpoint"
         },
         "inferenceService": {
           "description": "InferenceService holds a Kubernetes reference to an internal inference service.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceReference"
+          "$ref": "#/definitions/v1beta1.InferenceServiceReference"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FailureInfo": {
+    "v1beta1.FailureInfo": {
       "type": "object",
       "properties": {
         "exitCode": {
@@ -1585,7 +1585,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FineTunedWeight": {
+    "v1beta1.FineTunedWeight": {
       "description": "FineTunedWeight is the Schema for the finetunedweights API",
       "type": "object",
       "properties": {
@@ -1603,15 +1603,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FineTunedWeightSpec"
+          "$ref": "#/definitions/v1beta1.FineTunedWeightSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelStatusSpec"
+          "$ref": "#/definitions/v1beta1.ModelStatusSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FineTunedWeightList": {
+    "v1beta1.FineTunedWeightList": {
       "description": "FineTunedWeightList contains a list of FineTunedWeight",
       "type": "object",
       "required": [
@@ -1626,7 +1626,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FineTunedWeight"
+            "$ref": "#/definitions/v1beta1.FineTunedWeight"
           }
         },
         "kind": {
@@ -1639,7 +1639,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FineTunedWeightSpec": {
+    "v1beta1.FineTunedWeightSpec": {
       "description": "FineTunedWeightSpec defines the desired state of FineTunedWeight",
       "type": "object",
       "required": [
@@ -1652,7 +1652,7 @@
         "baseModelRef": {
           "description": "Reference to the base model that this weight is fine-tuned from",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ObjectReference"
+          "$ref": "#/definitions/v1beta1.ObjectReference"
         },
         "compartmentID": {
           "description": "CompartmentID is the compartment ID of the model",
@@ -1680,12 +1680,12 @@
         },
         "storage": {
           "description": "Storage configuration for the fine-tuned weight",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/v1beta1.StorageSpec"
         },
         "trainingJobRef": {
           "description": "TrainingJobID is the ID of the training job that produced this weight",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ObjectReference"
+          "$ref": "#/definitions/v1beta1.ObjectReference"
         },
         "vendor": {
           "description": "Vendor of the model, e.g., \"NVIDIA\", \"Meta\", \"HuggingFace\"",
@@ -1696,7 +1696,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HuggingFaceSecretReference": {
+    "v1beta1.HuggingFaceSecretReference": {
       "description": "HuggingFaceSecretReference defines a reference to a Kubernetes Secret containing the Hugging Face API key. This secret must reside in the same namespace as the BenchmarkJob. Cross-namespace references are not allowed for security and simplicity.",
       "type": "object",
       "properties": {
@@ -1707,7 +1707,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HyperparameterTuningConfig": {
+    "v1beta1.HyperparameterTuningConfig": {
       "type": "object",
       "required": [
         "method",
@@ -1728,7 +1728,7 @@
         "metric": {
           "description": "Metric defines the objective metric to optimize",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MetricConfig"
+          "$ref": "#/definitions/v1beta1.MetricConfig"
         },
         "parameters": {
           "description": "Parameters defines the hyperparameters and their search spaces",
@@ -1736,7 +1736,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceService": {
+    "v1beta1.InferenceService": {
       "description": "InferenceService is the Schema for the InferenceServices API",
       "type": "object",
       "properties": {
@@ -1754,15 +1754,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceSpec"
+          "$ref": "#/definitions/v1beta1.InferenceServiceSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceStatus"
+          "$ref": "#/definitions/v1beta1.InferenceServiceStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceList": {
+    "v1beta1.InferenceServiceList": {
       "description": "InferenceServiceList contains a list of Service",
       "type": "object",
       "required": [
@@ -1777,7 +1777,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceService"
+            "$ref": "#/definitions/v1beta1.InferenceService"
           },
           "x-kubernetes-list-type": "set"
         },
@@ -1791,7 +1791,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceReference": {
+    "v1beta1.InferenceServiceReference": {
       "description": "InferenceServiceReference defines the reference to a Kubernetes inference service.",
       "type": "object",
       "required": [
@@ -1811,7 +1811,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceSpec": {
+    "v1beta1.InferenceServiceSpec": {
       "description": "InferenceServiceSpec is the top level type for this resource",
       "type": "object",
       "required": [
@@ -1824,16 +1824,16 @@
         },
         "kedaConfig": {
           "description": "KedaConfig defines the autoscaling configuration for KEDA",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.KedaConfig"
+          "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "predictor": {
           "description": "Predictor defines the model serving spec",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PredictorSpec"
+          "$ref": "#/definitions/v1beta1.PredictorSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServiceStatus": {
+    "v1beta1.InferenceServiceStatus": {
       "description": "InferenceServiceStatus defines the observed state of InferenceService",
       "type": "object",
       "properties": {
@@ -1854,7 +1854,7 @@
           "type": "object",
           "additionalProperties": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ComponentStatusSpec"
+            "$ref": "#/definitions/v1beta1.ComponentStatusSpec"
           }
         },
         "conditions": {
@@ -1870,7 +1870,7 @@
         "modelStatus": {
           "description": "Model related statuses",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelStatus"
+          "$ref": "#/definitions/v1beta1.ModelStatus"
         },
         "observedGeneration": {
           "description": "ObservedGeneration is the 'Generation' of the Service that was last processed by the controller.",
@@ -1883,7 +1883,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.InferenceServicesConfig": {
+    "v1beta1.InferenceServicesConfig": {
       "type": "object",
       "required": [
         "ociEtc",
@@ -1893,16 +1893,16 @@
         "multinodeProber": {
           "description": "MultiNodeProber contains all MultiNodeProber Configuration",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MultiNodeProberConfig"
+          "$ref": "#/definitions/v1beta1.MultiNodeProberConfig"
         },
         "ociEtc": {
           "description": "OCIConfig contains all OCI Configuration",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OCIConfig"
+          "$ref": "#/definitions/v1beta1.OCIConfig"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.IngressConfig": {
+    "v1beta1.IngressConfig": {
       "type": "object",
       "properties": {
         "additionalIngressDomains": {
@@ -1947,7 +1947,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobSetTemplateSpec": {
+    "v1beta1.JobSetTemplateSpec": {
       "description": "JobSetTemplateSpec represents a template of the desired JobSet.",
       "type": "object",
       "properties": {
@@ -1963,7 +1963,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobStatus": {
+    "v1beta1.JobStatus": {
       "type": "object",
       "required": [
         "name",
@@ -2011,7 +2011,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.KedaConfig": {
+    "v1beta1.KedaConfig": {
       "description": "KedaConfig stores the configuration settings for KEDA autoscaling within the InferenceService. It includes fields like the Prometheus server address, custom query, scaling threshold, and operator.",
       "type": "object",
       "properties": {
@@ -2037,7 +2037,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.LoggerSpec": {
+    "v1beta1.LoggerSpec": {
       "description": "LoggerSpec specifies optional payload logging available for all components",
       "type": "object",
       "properties": {
@@ -2051,13 +2051,13 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MLPolicy": {
+    "v1beta1.MLPolicy": {
       "description": "MLPolicy represents configuration for the model training with ML-specific parameters.",
       "type": "object",
       "properties": {
         "mpi": {
           "description": "Configuration for the MPI Runtime.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPIMLPolicyConfig"
+          "$ref": "#/definitions/v1beta1.MPIMLPolicyConfig"
         },
         "numNodes": {
           "description": "Number of training nodes. Defaults to 1.",
@@ -2066,25 +2066,25 @@
         },
         "torch": {
           "description": "Configuration for the PyTorch runtime.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchMLPolicyConfig"
+          "$ref": "#/definitions/v1beta1.TorchMLPolicyConfig"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MLPolicyConfig": {
+    "v1beta1.MLPolicyConfig": {
       "description": "MLPolicyConfig represents the runtime-specific configuration for various technologies. One of the following specs can be set.",
       "type": "object",
       "properties": {
         "mpi": {
           "description": "Configuration for the MPI Runtime.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPIMLPolicyConfig"
+          "$ref": "#/definitions/v1beta1.MPIMLPolicyConfig"
         },
         "torch": {
           "description": "Configuration for the PyTorch runtime.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchMLPolicyConfig"
+          "$ref": "#/definitions/v1beta1.TorchMLPolicyConfig"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MPIMLPolicyConfig": {
+    "v1beta1.MPIMLPolicyConfig": {
       "description": "MPIMLPolicyConfig represents a MPI runtime configuration.",
       "type": "object",
       "properties": {
@@ -2107,7 +2107,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MetricConfig": {
+    "v1beta1.MetricConfig": {
       "description": "MetricConfig defines the metric to optimize during hyperparameter tuning",
       "type": "object",
       "required": [
@@ -2127,7 +2127,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelConfig": {
+    "v1beta1.ModelConfig": {
       "type": "object",
       "properties": {
         "inputModel": {
@@ -2136,11 +2136,11 @@
         },
         "outputModel": {
           "description": "OutputModel defines where the finetune weight (output model) stores.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/v1beta1.StorageSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelCopies": {
+    "v1beta1.ModelCopies": {
       "type": "object",
       "required": [
         "failedCopies"
@@ -2159,7 +2159,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelExtensionSpec": {
+    "v1beta1.ModelExtensionSpec": {
       "type": "object",
       "properties": {
         "compartmentID": {
@@ -2183,7 +2183,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFormat": {
+    "v1beta1.ModelFormat": {
       "type": "object",
       "properties": {
         "name": {
@@ -2197,7 +2197,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec": {
+    "v1beta1.ModelFrameworkSpec": {
       "type": "object",
       "properties": {
         "name": {
@@ -2211,7 +2211,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelRevisionStates": {
+    "v1beta1.ModelRevisionStates": {
       "type": "object",
       "required": [
         "activeModelState"
@@ -2227,7 +2227,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelSizeRangeSpec": {
+    "v1beta1.ModelSizeRangeSpec": {
       "description": "ModelSizeRangeSpec defines the range of model sizes supported by this runtime",
       "type": "object",
       "properties": {
@@ -2241,7 +2241,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelSpec": {
+    "v1beta1.ModelSpec": {
       "type": "object",
       "properties": {
         "args": {
@@ -2431,7 +2431,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelStatus": {
+    "v1beta1.ModelStatus": {
       "type": "object",
       "required": [
         "transitionStatus"
@@ -2439,15 +2439,15 @@
       "properties": {
         "lastFailureInfo": {
           "description": "Details of last failure, when load of target model is failed or blocked.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.FailureInfo"
+          "$ref": "#/definitions/v1beta1.FailureInfo"
         },
         "modelCopies": {
           "description": "Model copy information of the predictor's model.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelCopies"
+          "$ref": "#/definitions/v1beta1.ModelCopies"
         },
         "modelRevisionStates": {
           "description": "State information of the predictor's model.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelRevisionStates"
+          "$ref": "#/definitions/v1beta1.ModelRevisionStates"
         },
         "transitionStatus": {
           "description": "Whether the available predictor endpoints reflect the current Spec or is in transition",
@@ -2456,7 +2456,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelStatusSpec": {
+    "v1beta1.ModelStatusSpec": {
       "description": "ModelStatusSpec defines the observed state of Model weight",
       "type": "object",
       "required": [
@@ -2488,7 +2488,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MultiNodeProberConfig": {
+    "v1beta1.MultiNodeProberConfig": {
       "type": "object",
       "required": [
         "image",
@@ -2550,7 +2550,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OCIConfig": {
+    "v1beta1.OCIConfig": {
       "type": "object",
       "required": [
         "region",
@@ -2623,7 +2623,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ObjectReference": {
+    "v1beta1.ObjectReference": {
       "description": "ObjectReference contains enough information to let you inspect or modify the referred object.",
       "type": "object",
       "properties": {
@@ -2637,7 +2637,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Organization": {
+    "v1beta1.Organization": {
       "description": "Organization represents an AI platform organization configuration",
       "type": "object",
       "required": [
@@ -2658,15 +2658,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationSpec"
+          "$ref": "#/definitions/v1beta1.OrganizationSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationStatus"
+          "$ref": "#/definitions/v1beta1.OrganizationStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationList": {
+    "v1beta1.OrganizationList": {
       "description": "OrganizationList contains a list of Organization",
       "type": "object",
       "required": [
@@ -2681,7 +2681,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Organization"
+            "$ref": "#/definitions/v1beta1.Organization"
           }
         },
         "kind": {
@@ -2694,7 +2694,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationSpec": {
+    "v1beta1.OrganizationSpec": {
       "type": "object",
       "required": [
         "vendor",
@@ -2720,7 +2720,7 @@
         },
         "secretRef": {
           "description": "SecretRef references the secret containing the API key optional",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference"
+          "$ref": "#/definitions/v1beta1.SecretReference"
         },
         "vendor": {
           "description": "Vendor specifies the AI platform vendor (e.g., \"openai\", \"anthropic\")",
@@ -2728,7 +2728,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.OrganizationStatus": {
+    "v1beta1.OrganizationStatus": {
       "type": "object",
       "properties": {
         "conditions": {
@@ -2741,7 +2741,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodConfig": {
+    "v1beta1.PodConfig": {
       "type": "object",
       "required": [
         "image",
@@ -2773,17 +2773,17 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodGroupPolicy": {
+    "v1beta1.PodGroupPolicy": {
       "description": "PodGroupPolicy represents a PodGroup configuration for gang-scheduling.",
       "type": "object",
       "properties": {
         "coscheduling": {
           "description": "Coscheduling plugin from the Kubernetes scheduler-plugins for gang-scheduling.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CoschedulingPodGroupPolicyConfig"
+          "$ref": "#/definitions/v1beta1.CoschedulingPodGroupPolicyConfig"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodOverride": {
+    "v1beta1.PodOverride": {
       "type": "object",
       "properties": {
         "affinity": {
@@ -2860,7 +2860,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodSpec": {
+    "v1beta1.PodSpec": {
       "description": "PodSpec is a description of a pod.",
       "type": "object",
       "properties": {
@@ -3108,7 +3108,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PredictorExtensionSpec": {
+    "v1beta1.PredictorExtensionSpec": {
       "description": "PredictorExtensionSpec defines configuration shared across all predictor frameworks",
       "type": "object",
       "properties": {
@@ -3285,7 +3285,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PredictorSpec": {
+    "v1beta1.PredictorSpec": {
       "description": "PredictorSpec defines the configuration for a predictor, The following fields follow a \"1-of\" semantic. Users must specify exactly one spec.",
       "type": "object",
       "properties": {
@@ -3407,7 +3407,7 @@
           "x-kubernetes-patch-strategy": "merge"
         },
         "kedaConfig": {
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.KedaConfig"
+          "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
           "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -3419,7 +3419,7 @@
         },
         "logger": {
           "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.LoggerSpec"
+          "$ref": "#/definitions/v1beta1.LoggerSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -3433,7 +3433,7 @@
         },
         "model": {
           "description": "Model spec for any arbitrary framework.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelSpec"
+          "$ref": "#/definitions/v1beta1.ModelSpec"
         },
         "nodeName": {
           "description": "NodeName is a request to schedule this pod onto a specific node. If it is non-empty, the scheduler simply schedules this pod onto that node, assuming that it fits resource requirements.",
@@ -3598,11 +3598,11 @@
         },
         "workerSpec": {
           "description": "WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.WorkerSpec"
+          "$ref": "#/definitions/v1beta1.WorkerSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Project": {
+    "v1beta1.Project": {
       "description": "Project represents an AI platform project",
       "type": "object",
       "required": [
@@ -3623,15 +3623,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectSpec"
+          "$ref": "#/definitions/v1beta1.ProjectSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectStatus"
+          "$ref": "#/definitions/v1beta1.ProjectStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectList": {
+    "v1beta1.ProjectList": {
       "description": "ProjectList contains a list of Project",
       "type": "object",
       "required": [
@@ -3646,7 +3646,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.Project"
+            "$ref": "#/definitions/v1beta1.Project"
           }
         },
         "kind": {
@@ -3659,7 +3659,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectSpec": {
+    "v1beta1.ProjectSpec": {
       "type": "object",
       "required": [
         "name",
@@ -3686,11 +3686,11 @@
         "organizationRef": {
           "description": "OrganizationRef references the Organization",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+          "$ref": "#/definitions/v1beta1.CrossReference"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ProjectStatus": {
+    "v1beta1.ProjectStatus": {
       "type": "object",
       "properties": {
         "conditions": {
@@ -3716,7 +3716,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimit": {
+    "v1beta1.RateLimit": {
       "description": "RateLimit represents rate limit configurations for a project",
       "type": "object",
       "required": [
@@ -3737,15 +3737,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitSpec"
+          "$ref": "#/definitions/v1beta1.RateLimitSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitStatus"
+          "$ref": "#/definitions/v1beta1.RateLimitStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitConfig": {
+    "v1beta1.RateLimitConfig": {
       "type": "object",
       "required": [
         "type",
@@ -3771,7 +3771,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitList": {
+    "v1beta1.RateLimitList": {
       "description": "RateLimitList contains a list of RateLimit",
       "type": "object",
       "required": [
@@ -3786,7 +3786,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimit"
+            "$ref": "#/definitions/v1beta1.RateLimit"
           }
         },
         "kind": {
@@ -3799,7 +3799,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitSpec": {
+    "v1beta1.RateLimitSpec": {
       "type": "object",
       "required": [
         "projectRef",
@@ -3820,22 +3820,22 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitConfig"
+            "$ref": "#/definitions/v1beta1.RateLimitConfig"
           }
         },
         "projectRef": {
           "description": "ProjectRef references the Project",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+          "$ref": "#/definitions/v1beta1.CrossReference"
         },
         "targetRef": {
           "description": "TargetRef references either a service account or user",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+          "$ref": "#/definitions/v1beta1.CrossReference"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RateLimitStatus": {
+    "v1beta1.RateLimitStatus": {
       "type": "object",
       "properties": {
         "conditions": {
@@ -3848,7 +3848,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RuntimeRef": {
+    "v1beta1.RuntimeRef": {
       "description": "RuntimeRef represents the reference to the existing training runtime.",
       "type": "object",
       "properties": {
@@ -3867,7 +3867,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretConfig": {
+    "v1beta1.SecretConfig": {
       "type": "object",
       "required": [
         "writeToCommonNamespace",
@@ -3889,7 +3889,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SecretReference": {
+    "v1beta1.SecretReference": {
       "type": "object",
       "required": [
         "name",
@@ -3914,7 +3914,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccount": {
+    "v1beta1.ServiceAccount": {
       "description": "ServiceAccount represents a service account within a project",
       "type": "object",
       "properties": {
@@ -3932,15 +3932,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountSpec"
+          "$ref": "#/definitions/v1beta1.ServiceAccountSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountStatus"
+          "$ref": "#/definitions/v1beta1.ServiceAccountStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountList": {
+    "v1beta1.ServiceAccountList": {
       "description": "ServiceAccountList contains a list of ServiceAccount",
       "type": "object",
       "required": [
@@ -3955,7 +3955,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccount"
+            "$ref": "#/definitions/v1beta1.ServiceAccount"
           }
         },
         "kind": {
@@ -3968,7 +3968,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountSpec": {
+    "v1beta1.ServiceAccountSpec": {
       "type": "object",
       "required": [
         "name",
@@ -3998,7 +3998,7 @@
         "projectRef": {
           "description": "ProjectRef references the Project",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+          "$ref": "#/definitions/v1beta1.CrossReference"
         },
         "role": {
           "description": "Role defines the service account's role in the project, owner or member",
@@ -4006,11 +4006,11 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceAccountStatus": {
+    "v1beta1.ServiceAccountStatus": {
       "type": "object",
       "properties": {
         "apiKey": {
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.APIKeySpec"
+          "$ref": "#/definitions/v1beta1.APIKeySpec"
         },
         "conditions": {
           "description": "Conditions represent the latest available observations of an object's state",
@@ -4030,7 +4030,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServiceMetadata": {
+    "v1beta1.ServiceMetadata": {
       "description": "ServiceMetadata contains metadata fields for recording the backend model server's configuration and version details. This information helps track experiment context, enabling users to filter and query experiments based on server properties.",
       "type": "object",
       "required": [
@@ -4063,7 +4063,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntime": {
+    "v1beta1.ServingRuntime": {
       "description": "ServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
       "properties": {
@@ -4081,15 +4081,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeSpec"
+          "$ref": "#/definitions/v1beta1.ServingRuntimeSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeStatus"
+          "$ref": "#/definitions/v1beta1.ServingRuntimeStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeList": {
+    "v1beta1.ServingRuntimeList": {
       "description": "ServingRuntimeList contains a list of ServingRuntime",
       "type": "object",
       "required": [
@@ -4104,7 +4104,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntime"
+            "$ref": "#/definitions/v1beta1.ServingRuntime"
           }
         },
         "kind": {
@@ -4117,7 +4117,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimePodSpec": {
+    "v1beta1.ServingRuntimePodSpec": {
       "type": "object",
       "required": [
         "containers"
@@ -4207,7 +4207,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeSpec": {
+    "v1beta1.ServingRuntimeSpec": {
       "description": "ServingRuntimeSpec defines the desired state of ServingRuntime. This spec is currently provisional and are subject to change as details regarding single-model serving and multi-model serving are hammered out.",
       "type": "object",
       "required": [
@@ -4228,7 +4228,7 @@
         },
         "builtInAdapter": {
           "description": "Provide the details about built-in runtime adapter",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.BuiltInAdapter"
+          "$ref": "#/definitions/v1beta1.BuiltInAdapter"
         },
         "compartmentID": {
           "description": "The compartment ID to use for the serving runtime",
@@ -4284,7 +4284,7 @@
         },
         "modelSizeRange": {
           "description": "ModelSizeRange is the range of model sizes supported by this runtime",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelSizeRangeSpec"
+          "$ref": "#/definitions/v1beta1.ModelSizeRangeSpec"
         },
         "nodeSelector": {
           "description": "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
@@ -4320,7 +4320,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SupportedModelFormat"
+            "$ref": "#/definitions/v1beta1.SupportedModelFormat"
           },
           "x-kubernetes-list-type": "atomic"
         },
@@ -4344,15 +4344,15 @@
         },
         "workers": {
           "description": "WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.WorkerPodSpec"
+          "$ref": "#/definitions/v1beta1.WorkerPodSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeStatus": {
+    "v1beta1.ServingRuntimeStatus": {
       "description": "ServingRuntimeStatus defines the observed state of ServingRuntime",
       "type": "object"
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec": {
+    "v1beta1.StorageSpec": {
       "type": "object",
       "required": [
         "storageUri"
@@ -4384,7 +4384,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SupportedModelFormat": {
+    "v1beta1.SupportedModelFormat": {
       "type": "object",
       "required": [
         "modelFormat",
@@ -4401,11 +4401,11 @@
         },
         "modelFormat": {
           "description": "ModelFormat of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"SafeTensors\"",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFormat"
+          "$ref": "#/definitions/v1beta1.ModelFormat"
         },
         "modelFramework": {
           "description": "ModelFramework of the model, e.g., \"PyTorch\", \"TensorFlow\", \"ONNX\", \"Transformers\"",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelFrameworkSpec"
+          "$ref": "#/definitions/v1beta1.ModelFrameworkSpec"
         },
         "modelType": {
           "description": "DEPRECATED: This field is deprecated and will be removed in future releases.",
@@ -4431,7 +4431,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.SupportedRuntime": {
+    "v1beta1.SupportedRuntime": {
       "description": "SupportedRuntime is the schema for supported runtime result of automatic selection",
       "type": "object",
       "required": [
@@ -4445,11 +4445,11 @@
         },
         "Spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ServingRuntimeSpec"
+          "$ref": "#/definitions/v1beta1.ServingRuntimeSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchElasticPolicy": {
+    "v1beta1.TorchElasticPolicy": {
       "description": "TorchElasticPolicy represents a configuration for the PyTorch elastic training. If this policy is set, the `.spec.numNodes` parameter must be omitted, since min and max node is used to configure the `torchrun` CLI argument: `--nnodes=minNodes:maxNodes`. Only `c10d` backend is supported for the Rendezvous communication.",
       "type": "object",
       "properties": {
@@ -4479,13 +4479,13 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchMLPolicyConfig": {
+    "v1beta1.TorchMLPolicyConfig": {
       "description": "TorchMLPolicyConfig represents a PyTorch runtime configuration.",
       "type": "object",
       "properties": {
         "elasticPolicy": {
           "description": "Elastic policy for the PyTorch training.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TorchElasticPolicy"
+          "$ref": "#/definitions/v1beta1.TorchElasticPolicy"
         },
         "numProcPerNode": {
           "description": "Number of processes per node. This value is inserted into the `--nproc-per-node` argument of the `torchrun` CLI. Supported values: `auto`, `cpu`, `gpu`, or int value. Defaults to `auto`.",
@@ -4493,7 +4493,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainerSpec": {
+    "v1beta1.TrainerSpec": {
       "type": "object",
       "properties": {
         "args": {
@@ -4545,7 +4545,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJob": {
+    "v1beta1.TrainingJob": {
       "description": "TrainingJob is the Schema for the TrainingJobs API",
       "type": "object",
       "properties": {
@@ -4563,15 +4563,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJobSpec"
+          "$ref": "#/definitions/v1beta1.TrainingJobSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJobStatus"
+          "$ref": "#/definitions/v1beta1.TrainingJobStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJobList": {
+    "v1beta1.TrainingJobList": {
       "description": "TrainingJobList contains a list of TrainingJob",
       "type": "object",
       "required": [
@@ -4586,7 +4586,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJob"
+            "$ref": "#/definitions/v1beta1.TrainingJob"
           }
         },
         "kind": {
@@ -4599,7 +4599,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJobSpec": {
+    "v1beta1.TrainingJobSpec": {
       "description": "TrainingJobSpec defines the base job spec which various training job specs implement. It defines the desired state of a training job",
       "type": "object",
       "required": [
@@ -4623,11 +4623,11 @@
         },
         "datasets": {
           "description": "Datasets defines the datasets for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.StorageSpec"
+          "$ref": "#/definitions/v1beta1.StorageSpec"
         },
         "hyperparameterConfig": {
           "description": "HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.HyperparameterTuningConfig"
+          "$ref": "#/definitions/v1beta1.HyperparameterTuningConfig"
         },
         "labels": {
           "description": "Labels to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.",
@@ -4639,12 +4639,12 @@
         },
         "modelConfig": {
           "description": "ModelConfig defines the model configuration for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.ModelConfig"
+          "$ref": "#/definitions/v1beta1.ModelConfig"
         },
         "runtimeRef": {
           "description": "Reference to the training runtime. The field is immutable.",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.RuntimeRef"
+          "$ref": "#/definitions/v1beta1.RuntimeRef"
         },
         "suspend": {
           "description": "Whether the controller should suspend the running TrainJob. Defaults to false.",
@@ -4652,11 +4652,11 @@
         },
         "trainer": {
           "description": "Trainer defines the trainer to use for the training job.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainerSpec"
+          "$ref": "#/definitions/v1beta1.TrainerSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingJobStatus": {
+    "v1beta1.TrainingJobStatus": {
       "type": "object",
       "properties": {
         "completionTime": {
@@ -4676,7 +4676,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobStatus"
+            "$ref": "#/definitions/v1beta1.JobStatus"
           },
           "x-kubernetes-list-map-keys": [
             "name"
@@ -4698,7 +4698,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntime": {
+    "v1beta1.TrainingRuntime": {
       "description": "TrainingRuntime is the Schema for the TrainingRuntimes API",
       "type": "object",
       "properties": {
@@ -4716,11 +4716,11 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeSpec"
+          "$ref": "#/definitions/v1beta1.TrainingRuntimeSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeList": {
+    "v1beta1.TrainingRuntimeList": {
       "description": "TrainingRuntimeList contains a list of TrainingRuntime",
       "type": "object",
       "required": [
@@ -4735,7 +4735,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntime"
+            "$ref": "#/definitions/v1beta1.TrainingRuntime"
           }
         },
         "kind": {
@@ -4748,7 +4748,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.TrainingRuntimeSpec": {
+    "v1beta1.TrainingRuntimeSpec": {
       "description": "TrainingRuntimeSpec defines the desired state of TrainingRuntime",
       "type": "object",
       "required": [
@@ -4777,20 +4777,20 @@
         },
         "mlPolicy": {
           "description": "Configuration for the model training with ML-specific parameters.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.MLPolicy"
+          "$ref": "#/definitions/v1beta1.MLPolicy"
         },
         "podGroupPolicy": {
           "description": "Configuration for the PodGroup to enable gang-scheduling via supported plugins.",
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.PodGroupPolicy"
+          "$ref": "#/definitions/v1beta1.PodGroupPolicy"
         },
         "template": {
           "description": "JobSet template which will be used by TrainJob.",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.JobSetTemplateSpec"
+          "$ref": "#/definitions/v1beta1.JobSetTemplateSpec"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.User": {
+    "v1beta1.User": {
       "description": "User represents a user within a project",
       "type": "object",
       "required": [
@@ -4811,15 +4811,15 @@
         },
         "spec": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserSpec"
+          "$ref": "#/definitions/v1beta1.UserSpec"
         },
         "status": {
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserStatus"
+          "$ref": "#/definitions/v1beta1.UserStatus"
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserList": {
+    "v1beta1.UserList": {
       "description": "UserList contains a list of User",
       "type": "object",
       "required": [
@@ -4834,7 +4834,7 @@
           "type": "array",
           "items": {
             "default": {},
-            "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.User"
+            "$ref": "#/definitions/v1beta1.User"
           }
         },
         "kind": {
@@ -4847,7 +4847,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserSpec": {
+    "v1beta1.UserSpec": {
       "type": "object",
       "required": [
         "email",
@@ -4870,7 +4870,7 @@
         "projectRef": {
           "description": "ProjectRef references the Project",
           "default": {},
-          "$ref": "#/definitions/bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.CrossReference"
+          "$ref": "#/definitions/v1beta1.CrossReference"
         },
         "role": {
           "description": "Role defines the user's role in the project, owner or member",
@@ -4879,7 +4879,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.UserStatus": {
+    "v1beta1.UserStatus": {
       "type": "object",
       "required": [
         "userId"
@@ -4904,7 +4904,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.WorkerPodSpec": {
+    "v1beta1.WorkerPodSpec": {
       "type": "object",
       "required": [
         "containers"
@@ -4999,7 +4999,7 @@
         }
       }
     },
-    "bitbucket.oci.oraclecorp.com.genaicore.ome.pkg.apis.ome.v1beta1.WorkerSpec": {
+    "v1beta1.WorkerSpec": {
       "description": "WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster",
       "type": "object",
       "properties": {

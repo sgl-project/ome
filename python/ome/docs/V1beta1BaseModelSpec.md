@@ -1,0 +1,48 @@
+# V1beta1BaseModelSpec
+
+BaseModelSpec defines the desired state of BaseModel
+
+## Properties
+
+| Name                       | Type                                                                                      | Description                                                                                                                            | Notes      |
+|----------------------------|-------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|------------|
+| **additional_metadata**    | **Dict[str, str]**                                                                        | Additional metadata for the model                                                                                                      | [optional] |
+| **compartment_id**         | **str**                                                                                   | CompartmentID is the compartment ID of the model                                                                                       | [optional] |
+| **deprecation_time**       | [**V1Time**](V1Time.md)                                                                   |                                                                                                                                        | [optional] |
+| **disabled**               | **bool**                                                                                  | Whether the model is enabled or not                                                                                                    | [optional] |
+| **display_name**           | **str**                                                                                   | DisplayName is the user-friendly name of the model                                                                                     | [optional] |
+| **is_long_term_supported** | **bool**                                                                                  | LongTermSupported indicates if the model is long term supported                                                                        | [optional] |
+| **max_tokens**             | **int**                                                                                   | MaxTokens is the maximum number of tokens that can be processed by the model                                                           | [optional] |
+| **model_architecture**     | **str**                                                                                   | ModelArchitecture of the model, e.g., \&quot;LlamaForCausalLM\&quot;, \&quot;GemmaForCausalLM\&quot;, \&quot;MixtralForCausalLM\&quot; | [optional] |
+| **model_capabilities**     | **List[str]**                                                                             | ModelCapabilities of the model, e.g., \&quot;TEXT_GENERATION\&quot;, \&quot;TEXT_SUMMARIZATION\&quot;, \&quot;TEXT_EMBEDDINGS\&quot;   | [optional] |
+| **model_configuration**    | [**K8sIoApimachineryPkgRuntimeRawExtension**](K8sIoApimachineryPkgRuntimeRawExtension.md) |                                                                                                                                        | [optional] |
+| **model_format**               | [**V1beta1ModelFormat**](V1beta1ModelFormat.md)                                           |                                                                                                                                        |
+| **model_framework**            | [**V1beta1ModelFrameworkSpec**](V1beta1ModelFrameworkSpec.md)                             |                                                                                                                                        |
+| **model_parameter_size**       | **str**                                                                                   | ModelParameterSize is the size of the model parameters, e.g., \&quot;175B\&quot;                                                       | [optional] |
+| **model_type**                 | **str**                                                                                   | DEPRECATED: This field is deprecated and will be removed in future releases.                                                           | [optional] |
+| **quantization**               | **str**                                                                                   | Quantization of the model, e.g., \&quot;fp8\&quot;, \&quot;fbgemm_fp8\&quot;, \&quot;int4\&quot;                                       | [optional] |
+| **serving_mode**               | **List[str]**                                                                             |                                                                                                                                        | [optional] |
+| **storage**                    | [**V1beta1StorageSpec**](V1beta1StorageSpec.md)                                           |                                                                                                                                        |
+| **tensor_rtllm_configuration** | [**K8sIoApimachineryPkgRuntimeRawExtension**](K8sIoApimachineryPkgRuntimeRawExtension.md) |                                                                                                                                        | [optional] |
+| **vendor**                     | **str**                                                                                   | Vendor of the model, e.g., \&quot;NVIDIA\&quot;, \&quot;Meta\&quot;, \&quot;HuggingFace\&quot;                                         | [optional] |
+| **version**                    | **str**                                                                                   |                                                                                                                                        | [optional] |
+
+## Example
+
+```python
+from ome.models.v1beta1_base_model_spec import V1beta1BaseModelSpec
+
+# TODO update the JSON string below
+json = "{}"
+# create an instance of V1beta1BaseModelSpec from a JSON string
+v1beta1_base_model_spec_instance = V1beta1BaseModelSpec.from_json(json)
+# print the JSON string representation of the object
+print(V1beta1BaseModelSpec.to_json())
+
+# convert the object into a dict
+v1beta1_base_model_spec_dict = v1beta1_base_model_spec_instance.to_dict()
+# create an instance of V1beta1BaseModelSpec from a dict
+v1beta1_base_model_spec_from_dict = V1beta1BaseModelSpec.from_dict(v1beta1_base_model_spec_dict)
+```
+
+[[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
