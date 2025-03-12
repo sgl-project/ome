@@ -45,7 +45,8 @@ spec:
             HF_HUB_ENABLE_HF_TRANSFER=1 /opt/venv/bin/huggingface-cli download meta-llama/Meta-Llama-3.1-70B-Instruct \
             --token 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 \
             --local-dir /raid/models/Meta-Llama-3.1-70B-Instruct \
-            --cache-dir /raid/models/Meta-Llama-3.1-70B-Instruct
+            --cache-dir /raid/models/Meta-Llama-3.1-70B-Instruct \
+            --exclude "*.bin"
             echo "Downloaded, sleeping forever"
             sleep 999999999
         volumeMounts:
