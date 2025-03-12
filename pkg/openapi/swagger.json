@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "description": "Python SDK for KServe",
+    "description": "Python SDK for OME",
     "title": "OME",
     "version": "v0.1"
   },

@@ -36,7 +36,7 @@ func main() {
 			Info: &spec.Info{
 				InfoProps: spec.InfoProps{
 					Title:       "OME",
-					Description: "Python SDK for KServe",
+					Description: "Python SDK for OME",
 					Version:     version,
 				},
 			},
