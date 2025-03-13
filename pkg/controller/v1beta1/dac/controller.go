@@ -115,7 +115,7 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	if namespaceReconcile.Namespace != nil && !metav1.IsControlledBy(namespaceReconcile.Namespace, dac) {
-		r.Log.Info("add namespace controller")
+		r.Log.Info("add namespace controller", "namespace", namespaceReconcile.Namespace.Name)
 		if err := controllerutil.SetControllerReference(dac, namespaceReconcile.Namespace, r.Scheme); err != nil {
 			return ctrl.Result{}, errors.Wrapf(err, "failed to set namespace owner reference for dac")
 		}

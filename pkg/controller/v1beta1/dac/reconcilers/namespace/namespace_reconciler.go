@@ -2,6 +2,7 @@ package namespace
 
 import (
 	"context"
+	"reflect"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
@@ -55,19 +56,37 @@ func (r *NamespaceReconciler) checkNamespaceExist(client client.Client) (constan
 	return constants.CheckResultUpdate, existingNamespace, nil
 }
 
-// TODO: add more logic later
+// TODO: add more logic later and delete annotation compare
+// during ome migration, the namespace will contain the annotation kubectl.kubernetes.io/last-applied-configuration and desired namespace doesn't have this annotation
+// we can use this annotation to check if current namespace need to update.
+// we need to let namespace reconciler to update the namespace owned by v1alpha1 DAC.
 func namespaceEquals(desired, existing *v1.Namespace) bool {
 	// check labels. current desired namespace doesn't have labels now, everytime checking will get false
 	//if !areMapsEqual(desired.ObjectMeta.Labels, existing.ObjectMeta.Labels) {
-	//	return false
+	//	log.Info("namespace labels differ",
+	//		"namespace", desired.Name,
+	//		"desired", desired.ObjectMeta.Labels,
+	//		"existing", existing.ObjectMeta.Labels)
+	//	//return false
 	//}
+
+	// Compare annotations - may contain important configuration metadata
+	// current desired namespace doesn't have annotations now.
+	// existing v1beta1 namespace doesn't have annotations either.
+	if !reflect.DeepEqual(desired.ObjectMeta.Annotations, existing.ObjectMeta.Annotations) {
+		log.Info("namespace annotations differ",
+			"namespace", desired.Name,
+			"desired", desired.ObjectMeta.Annotations,
+			"existing", existing.ObjectMeta.Annotations)
+		return false
+	}
 	return true
 }
 
 func (r *NamespaceReconciler) Reconcile() (*v1.Namespace, error) {
 	// reconcile namespace
 	checkResult, existingNamespace, err := r.checkNamespaceExist(r.client)
-	log.Info("namespace reconcile", "checkResult", checkResult, "err", err)
+	log.Info("namespace reconcile", "checkResult", checkResult, "err", err, "existingNamespace", existingNamespace)
 	if err != nil {
 		return nil, err
 	}
