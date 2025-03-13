@@ -417,53 +417,95 @@ func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1b
 	}
 }
 
+// reconcileWorkerPodSpec reconciles the worker pod spec for the predictor.
 func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
+	// Early return if no worker specs are defined
 	if sRuntime.WorkerPodSpec == nil && isvc.Spec.Predictor.Worker == nil {
 		return v1.PodSpec{}, ctrl.Result{}, nil
 	}
 
-	var isvcWorkerOmeContainerIndex = -1
-	sRuntimeWorkerOmeContainerIndex := isvcutils.GetOmeContainerIndex(sRuntime.WorkerPodSpec.Containers)
-	if isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Containers != nil {
-		isvcWorkerOmeContainerIndex = isvcutils.GetOmeContainerIndex(isvc.Spec.Predictor.Worker.Containers)
-	}
-	workerContainer, err := p.createMergedWorkerContainer(isvc, sRuntime, isvcWorkerOmeContainerIndex, sRuntimeWorkerOmeContainerIndex)
-	if err != nil {
-		return v1.PodSpec{}, ctrl.Result{}, err
-	}
-	workerPodSpec, err := p.createMergedWorkerPodSpec(isvc, sRuntime)
-
+	// Find OME container indices in both runtime and isvc worker specs
+	containerIndices, err := p.findWorkerContainerIndices(isvc, sRuntime)
 	if err != nil {
 		return v1.PodSpec{}, ctrl.Result{}, err
 	}
 
+	// If no OME container found in either spec, return empty PodSpec
+	if containerIndices.bothMissing() {
+		return v1.PodSpec{}, ctrl.Result{}, nil
+	}
+
+	// Create merged container and pod spec
+	workerContainer, workerPodSpec, err := p.createMergedWorkerSpecs(isvc, sRuntime, containerIndices)
+	if err != nil {
+		return v1.PodSpec{}, ctrl.Result{}, err
+	}
+
+	// Update volume mounts and pod spec
 	p.updateVolumeMounts(isvc, workerContainer, objectMeta)
-	p.updateWorkerPodSpec(isvc, sRuntime, isvcWorkerOmeContainerIndex, sRuntimeWorkerOmeContainerIndex, workerContainer, &workerPodSpec, objectMeta)
+	p.updateWorkerPodSpec(
+		isvc,
+		sRuntime,
+		containerIndices.isvcIndex,
+		containerIndices.runtimeIndex,
+		workerContainer,
+		&workerPodSpec,
+		objectMeta,
+	)
 
 	return workerPodSpec, ctrl.Result{}, nil
 }
 
-// reconcilePodSpec reconciles the pod spec.
-func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
-	// find the OME container index, the container name must be ome-container; nothing else will be accepted
-	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
-	// particularly when we have multiple containers and multiple nodes in the serving runtime
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
-	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
+// workerContainerIndices holds the indices of OME containers in worker specs
+type workerContainerIndices struct {
+	isvcIndex    int
+	runtimeIndex int
+}
 
-	if err != nil {
-		return v1.PodSpec{}, ctrl.Result{}, err
+// bothMissing returns true if no OME container was found in either spec
+func (w workerContainerIndices) bothMissing() bool {
+	return w.isvcIndex == -1 && w.runtimeIndex == -1
+}
+
+// findWorkerContainerIndices finds the indices of OME containers in worker specs
+func (p *Predictor) findWorkerContainerIndices(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec) (workerContainerIndices, error) {
+	indices := workerContainerIndices{
+		isvcIndex:    -1,
+		runtimeIndex: -1,
 	}
 
-	podSpec, err := p.createMergedPodSpec(isvc, sRuntime)
-	if err != nil {
-		return v1.PodSpec{}, ctrl.Result{}, err
+	// Find OME container in runtime worker spec
+	if sRuntime.WorkerPodSpec != nil && sRuntime.WorkerPodSpec.Containers != nil {
+		indices.runtimeIndex = isvcutils.GetOmeContainerIndex(sRuntime.WorkerPodSpec.Containers)
 	}
 
-	p.updateVolumeMounts(isvc, container, objectMeta)
-	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec, objectMeta)
+	// Find OME container in isvc worker spec
+	if isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Containers != nil {
+		indices.isvcIndex = isvcutils.GetOmeContainerIndex(isvc.Spec.Predictor.Worker.Containers)
+	}
 
-	return podSpec, ctrl.Result{}, nil
+	return indices, nil
+}
+
+// createMergedWorkerSpecs creates merged container and pod spec for worker
+func (p *Predictor) createMergedWorkerSpecs(
+	isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	indices workerContainerIndices,
+) (*v1.Container, v1.PodSpec, error) {
+	// Create merged container
+	workerContainer, err := p.createMergedWorkerContainer(isvc, sRuntime, indices.isvcIndex, indices.runtimeIndex)
+	if err != nil {
+		return nil, v1.PodSpec{}, err
+	}
+
+	// Create merged pod spec
+	workerPodSpec, err := p.createMergedWorkerPodSpec(isvc, sRuntime)
+	if err != nil {
+		return nil, v1.PodSpec{}, err
+	}
+
+	return workerContainer, workerPodSpec, nil
 }
 
 // createMergedContainer merges the runtime and model containers.
@@ -807,4 +849,27 @@ func (p *Predictor) updateModelTransitionStatus(isvc *v1beta1.InferenceService, 
 		Reason:  reason,
 		Message: message,
 	})
+}
+
+// reconcilePodSpec reconciles the pod spec.
+func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
+	// find the OME container index, the container name must be ome-container; nothing else will be accepted
+	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
+	// particularly when we have multiple containers and multiple nodes in the serving runtime
+	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
+	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
+
+	if err != nil {
+		return v1.PodSpec{}, ctrl.Result{}, err
+	}
+
+	podSpec, err := p.createMergedPodSpec(isvc, sRuntime)
+	if err != nil {
+		return v1.PodSpec{}, ctrl.Result{}, err
+	}
+
+	p.updateVolumeMounts(isvc, container, objectMeta)
+	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec, objectMeta)
+
+	return podSpec, ctrl.Result{}, nil
 }
