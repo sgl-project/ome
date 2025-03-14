@@ -280,10 +280,11 @@ func main() {
 	setupLog.Info("Setting up DedicatedAICluster controller")
 	dedicatedAIClusterEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1dacccontroller.DedicatedAIClusterReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("DedicatedAICluster"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("DedicatedAICluster"),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  dedicatedAIClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, dacReconcilePolicyConfig); err != nil {
 		setupLog.Error(err, "Failed to create DedicatedAICluster controller")
 		os.Exit(1)

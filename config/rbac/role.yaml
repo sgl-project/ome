@@ -165,6 +165,7 @@ rules:
   - kueue.x-k8s.io
   resources:
   - clusterqueues
+  - localqueues
   verbs:
   - create
   - delete
@@ -177,6 +178,7 @@ rules:
   - kueue.x-k8s.io
   resources:
   - clusterqueues/finalizers
+  - localqueues/finalizers
   - resourceflavors/finalizers
   verbs:
   - update
@@ -184,10 +186,13 @@ rules:
   - kueue.x-k8s.io
   resources:
   - clusterqueues/status
+  - localqueues/status
   verbs:
   - get
+  - list
   - patch
   - update
+  - watch
 - apiGroups:
   - kueue.x-k8s.io
   resources:
@@ -197,6 +202,15 @@ rules:
   - get
   - list
   - update
+  - watch
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - workloads
+  - workloads/status
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - leaderworkerset.x-k8s.io

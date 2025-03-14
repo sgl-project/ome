@@ -19,6 +19,7 @@ const (
 	DeployConfigName                             = "deploy"
 	DacReconcilePolicyConfigName                 = "dacReconcilePolicy"
 	CapacityReservationReconcilePolicyConfigName = "capacityReservationReconcilePolicy"
+	DacReservationJobConfigName                  = "reservationJob"
 	MultiNodeProberName                          = "multinodeProber"
 	BenchmarkJobConfigName                       = "benchmarkjob"
 	AIPlatformSecretConfigName                   = "aiplatform-config"
@@ -124,11 +125,18 @@ type DeployConfig struct {
 // +kubebuilder:object:generate=false
 type DacReconcilePolicyConfig struct {
 	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
+	ReconcileWithKueue            bool `json:"reconcileWithKueue,omitempty"`
 }
 
 // +kubebuilder:object:generate=false
 type CapacityReservationReconcilePolicyConfig struct {
 	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
+}
+
+// +kubebuilder:object:generate=false
+type DacReservationWorkloadConfig struct {
+	Image                             string `json:"image"`
+	CreationFailedTimeThresholdSecond int    `json:"creationFailedTimeThresholdSecond"`
 }
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {
@@ -274,6 +282,23 @@ func NewCapacityReservationReconcilePolicyConfig(clientset kubernetes.Interface)
 		}
 	}
 	return capacityReservationPolicyConfig, nil
+}
+
+func NewDacReservationWorkloadConfig(clientset kubernetes.Interface) (*DacReservationWorkloadConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.DedicatedAIClusterConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	dacReservationWorkloadConfig := &DacReservationWorkloadConfig{}
+	for _, err := range []error{
+		getComponentConfig(DacReservationJobConfigName, configMap, &dacReservationWorkloadConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return dacReservationWorkloadConfig, nil
 }
 
 func NewMultiNodeProberConfig(clientset kubernetes.Interface) (*MultiNodeProberConfig, error) {

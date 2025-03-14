@@ -132,7 +132,8 @@ data:
     }
   dacReconcilePolicy: |-
     {
-      "reconcileFailedLifecycleState": false
+      "reconcileFailedLifecycleState": true,
+      "reconcileWithKueue": true
     }
 
 ---

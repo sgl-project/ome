@@ -22,10 +22,6 @@ import (
 
 var log = logf.Log.WithName("VolcanoJobReconciler")
 
-const (
-	mainTaskName = "reservation"
-)
-
 type ReservationJobConfig struct {
 	Image                             string `json:"image"`
 	CreationFailedTimeThresholdSecond int    `json:"creationFailedTimeThresholdSecond"`
@@ -69,7 +65,6 @@ func createReservationJob(client client.Client, jobName string, namespace string
 		panic(fmt.Errorf("missing the %v json config in the dedicatedaicluster-config ConfigMap", "reservationJob"))
 	}
 
-	var terminationGracePeriodSeconds int64 = 5
 	return &volbatchv1alpha1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -84,7 +79,7 @@ func createReservationJob(client client.Client, jobName string, namespace string
 			Tasks: []volbatchv1alpha1.TaskSpec{
 				{
 					Replicas: int32(count),
-					Name:     mainTaskName,
+					Name:     constants.DACMainTaskName,
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: map[string]string{
@@ -92,7 +87,7 @@ func createReservationJob(client client.Client, jobName string, namespace string
 							},
 						},
 						Spec: corev1.PodSpec{
-							TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+							TerminationGracePeriodSeconds: &constants.DACReservationJobTerminationGracePeriodSeconds,
 							RestartPolicy:                 corev1.RestartPolicyAlways,
 							Containers: []corev1.Container{
 								{
@@ -105,13 +100,13 @@ func createReservationJob(client client.Client, jobName string, namespace string
 										"-c",
 										"trap \"echo Shutting down; exit 0\" SIGTERM; /bin/sleep infinity & wait",
 									},
-									Name: mainTaskName,
+									Name: constants.DACMainTaskName,
 									Resources: corev1.ResourceRequirements{
 										Limits: corev1.ResourceList{
-											"nvidia.com/gpu": resources.Requests[corev1.ResourceName("nvidia.com/gpu")],
+											constants.NvidiaGPUResourceType: resources.Requests[corev1.ResourceName(constants.NvidiaGPUResourceType)],
 										},
 										Requests: corev1.ResourceList{
-											"nvidia.com/gpu": resources.Requests[corev1.ResourceName("nvidia.com/gpu")],
+											constants.NvidiaGPUResourceType: resources.Requests[corev1.ResourceName(constants.NvidiaGPUResourceType)],
 										},
 									},
 								},

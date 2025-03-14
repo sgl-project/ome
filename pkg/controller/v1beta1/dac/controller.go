@@ -7,8 +7,13 @@ import (
 	"time"
 
 	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
+	appsv1 "k8s.io/api/apps/v1"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	kueueQueueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/kueuequeue"
+	kueueWorkloadReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/kueueworkload"
 	nsreconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/namespace"
 	volcanoJobReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/volcanojob"
 	queueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/volcanoqueue"
@@ -49,9 +54,17 @@ import (
 // +kubebuilder:rbac:groups=batch.volcano.sh,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch.volcano.sh,resources=jobs/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch.volcano.sh,resources=jobs/status,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=localqueues,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues/status,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=localqueues/status,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads/status,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues/finalizers,verbs=update
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=localqueues/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusterprofiles,verbs=get;list;watch
 
-// DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
 // DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
 type DedicatedAIClusterReconciler struct {
 	client.Client
@@ -108,12 +121,21 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		mergedSpec = mergeSpecs(&profile.Spec, mergedSpec)
 	}
 
+	// Determine if reconciling with Kueue by checking both if the Volcano queue is present and if the enableKueue flag is set as true
+	isVolcanoQueuePresent, err := utils.IsVolcanoQueuePresent(r.Client, req.NamespacedName.Name)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to get volcano queue")
+	}
+	enableKueue := false
+	if r.DacReconcilePolicy.ReconcileWithKueue && !isVolcanoQueuePresent {
+		enableKueue = true
+	}
+
 	// Reconcile Namespace
-	namespaceReconcile, err := nsreconciler.NewNamespaceReconciler(r.Client, r.Scheme, req.NamespacedName.Name)
+	namespaceReconcile, err := nsreconciler.NewNamespaceReconciler(r.Client, r.Scheme, req.NamespacedName.Name, enableKueue)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
 	if namespaceReconcile.Namespace != nil && !metav1.IsControlledBy(namespaceReconcile.Namespace, dac) {
 		r.Log.Info("add namespace controller", "namespace", namespaceReconcile.Namespace.Name)
 		if err := controllerutil.SetControllerReference(dac, namespaceReconcile.Namespace, r.Scheme); err != nil {
@@ -127,57 +149,117 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Set namespace controller at the first time
 	r.Log.Info("namespace", "namespace", namespace)
 
+	// Check if DAC is supposed to be Active while it is Failed due to tight capacity
+	isCapacityReserved, _ := utils.IsCapacityReserved(dac)
+
 	queueCount := mergedSpec.Count
-	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState || !isCapacityReserved {
 		if dac.Status.DacLifecycleState == v1beta2.FAILED {
 			queueCount = 0
 		}
 	}
 
-	volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, queueCount)
+	replicaCount, err := r.GetDesiredReservationReplicaCount(dac, mergedSpec.Count, isCapacityReserved)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if volcanoQueueReconcile.Queue != nil && !metav1.IsControlledBy(volcanoQueueReconcile.Queue, dac) {
-		r.Log.Info("add queue controller")
-		if err := controllerutil.SetControllerReference(dac, volcanoQueueReconcile.Queue, r.Scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "failed to set queue owner reference for dac")
+	var volcanoQueue *schedulingv1beta1.Queue
+	var volcanoReservationJob *volbatchv1alpha1.Job
+	var kueueClusterQueue *kueuev1beta1.ClusterQueue
+	var kueueLocalQueue *kueuev1beta1.LocalQueue
+	var deployment *appsv1.Deployment
+	if !enableKueue {
+		// Reconcile Volcano queue
+		volcanoQueueReconcile, err := queueReconciler.NewQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, queueCount)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-	}
-	queue, err := volcanoQueueReconcile.Reconcile()
-	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile queue")
-	}
-
-	replicaCount, err := r.GetDesiredReservationReplicaCount(dac, mergedSpec.Count)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	reservationJobReconciler, err := volcanoJobReconciler.NewReservationJobReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, replicaCount)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if reservationJobReconciler.ReservationJob != nil && !metav1.IsControlledBy(reservationJobReconciler.ReservationJob, dac) {
-		r.Log.Info("add reservation job controller")
-		if err := controllerutil.SetControllerReference(dac, reservationJobReconciler.ReservationJob, r.Scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "failed to set reservation job owner reference for dac")
+		if volcanoQueueReconcile.Queue != nil && !metav1.IsControlledBy(volcanoQueueReconcile.Queue, dac) {
+			r.Log.Info("add queue controller")
+			if err := controllerutil.SetControllerReference(dac, volcanoQueueReconcile.Queue, r.Scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to set queue owner reference for dac")
+			}
 		}
-	}
+		volcanoQueue, err = volcanoQueueReconcile.Reconcile()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile queue")
+		}
 
-	reservationJob, err := reservationJobReconciler.Reconcile()
-	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile reservation job")
-	}
+		// Reconcile Volcano Job for reservation
+		reservationJobReconciler, err := volcanoJobReconciler.NewReservationJobReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, replicaCount)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if reservationJobReconciler.ReservationJob != nil && !metav1.IsControlledBy(reservationJobReconciler.ReservationJob, dac) {
+			r.Log.Info("add reservation job controller")
+			if err := controllerutil.SetControllerReference(dac, reservationJobReconciler.ReservationJob, r.Scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to set reservation job owner reference for dac")
+			}
+		}
+		volcanoReservationJob, err = reservationJobReconciler.Reconcile()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile reservation job")
+		}
+		// Update DAC status
+		requeue, err := r.updateDedicatedAIClusterStatus(dac, volcanoQueue, volcanoReservationJob, reservationJobReconciler.CreationFailedTimeThreshold, isCapacityReserved)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
+		}
+		if requeue {
+			return ctrl.Result{Requeue: true}, nil
+		}
+	} else {
+		// Reconcile Kueue ClusterQueue
+		kueueClusterQueueReconcile := kueueQueueReconciler.NewClusterQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, queueCount)
+		if kueueClusterQueueReconcile.ClusterQueue != nil && !metav1.IsControlledBy(kueueClusterQueueReconcile.ClusterQueue, dac) {
+			r.Log.Info("add kueue cluster queue controller")
+			if err := controllerutil.SetControllerReference(dac, kueueClusterQueueReconcile.ClusterQueue, r.Scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to set kueue cluster queue owner reference for dac")
+			}
+		}
+		kueueClusterQueue, err = kueueClusterQueueReconcile.Reconcile()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile Kueue cluster queue")
+		}
 
-	requeue, err := r.updateDedicatedAIClusterStatus(dac, queue, reservationJob, reservationJobReconciler.CreationFailedTimeThreshold)
-	if err != nil {
-		return ctrl.Result{Requeue: true}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
-	}
-	if requeue {
-		return ctrl.Result{Requeue: true}, nil
+		// Reconcile Kueue LocalQueue
+		kueueLocalQueueReconcile := kueueQueueReconciler.NewLocalQueueReconciler(r.Client, r.Scheme, req.NamespacedName.Name)
+		if kueueLocalQueueReconcile.LocalQueue != nil && !metav1.IsControlledBy(kueueLocalQueueReconcile.LocalQueue, dac) {
+			r.Log.Info("add kueue local queue controller")
+			if err := controllerutil.SetControllerReference(dac, kueueLocalQueueReconcile.LocalQueue, r.Scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to set kueue local queue owner reference for dac")
+			}
+		}
+		kueueLocalQueue, err = kueueLocalQueueReconcile.Reconcile()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile Kueue local queue")
+		}
+
+		// Reconcile Kueue deployment workload for reservation
+		kueueDeploymentReconciler, err := kueueWorkloadReconciler.NewDeploymentReconciler(r.Client, r.Clientset, r.Scheme, req.NamespacedName.Name, mergedSpec.Resources, mergedSpec.Affinity, replicaCount)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if kueueDeploymentReconciler.Deployment != nil && !metav1.IsControlledBy(kueueDeploymentReconciler.Deployment, dac) {
+			r.Log.Info("add kueue deployment controller")
+			if err := controllerutil.SetControllerReference(dac, kueueDeploymentReconciler.Deployment, r.Scheme); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "failed to set kueue deployment owner reference for dac")
+			}
+		}
+		deployment, err = kueueDeploymentReconciler.Reconcile()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile Kueue reservation deployment")
+		}
+
+		// Update DAC status
+		requeue, err := r.updateDedicatedAIClusterStatusUnderKueueCase(dac, deployment, replicaCount, kueueDeploymentReconciler.ReservationWorkloadConfig.CreationFailedTimeThresholdSecond, isCapacityReserved)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, errors.Wrapf(err, "failed to update the status of DadicatedAICluster %s", dac.Name)
+		}
+		if requeue {
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	if dac.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -203,18 +285,43 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return ctrl.Result{}, err
 			}
 		}
-		if controllerutil.ContainsFinalizer(queue, constants.DedicatedAiClusterFinalizer) {
-			r.Log.Info("remove queue finalizer")
-			controllerutil.RemoveFinalizer(queue, constants.DedicatedAiClusterFinalizer)
-			if err := r.Update(context.Background(), queue); err != nil {
-				r.Log.Error(err, "failed to remove queue finalizer")
+
+		if !enableKueue {
+			if controllerutil.ContainsFinalizer(volcanoQueue, constants.DedicatedAiClusterFinalizer) {
+				r.Log.Info("remove queue finalizer")
+				controllerutil.RemoveFinalizer(volcanoQueue, constants.DedicatedAiClusterFinalizer)
+				if err := r.Update(context.Background(), volcanoQueue); err != nil {
+					r.Log.Error(err, "failed to remove queue finalizer")
+				}
 			}
-		}
-		if controllerutil.ContainsFinalizer(reservationJob, constants.DedicatedAiClusterFinalizer) {
-			r.Log.Info("remove reservationJob finalizer")
-			controllerutil.RemoveFinalizer(reservationJob, constants.DedicatedAiClusterFinalizer)
-			if err := r.Update(context.Background(), reservationJob); err != nil {
-				r.Log.Error(err, "failed to remove reservationJob finalizer")
+			if controllerutil.ContainsFinalizer(volcanoReservationJob, constants.DedicatedAiClusterFinalizer) {
+				r.Log.Info("remove reservationJob finalizer")
+				controllerutil.RemoveFinalizer(volcanoReservationJob, constants.DedicatedAiClusterFinalizer)
+				if err := r.Update(context.Background(), volcanoReservationJob); err != nil {
+					r.Log.Error(err, "failed to remove reservationJob finalizer")
+				}
+			}
+		} else {
+			if controllerutil.ContainsFinalizer(kueueClusterQueue, constants.DedicatedAiClusterFinalizer) {
+				r.Log.Info("remove kueue cluster queue finalizer")
+				controllerutil.RemoveFinalizer(kueueClusterQueue, constants.DedicatedAiClusterFinalizer)
+				if err := r.Update(context.Background(), kueueClusterQueue); err != nil {
+					r.Log.Error(err, "failed to remove kueue cluster queue finalizer")
+				}
+			}
+			if controllerutil.ContainsFinalizer(kueueLocalQueue, constants.DedicatedAiClusterFinalizer) {
+				r.Log.Info("remove kueue local queue finalizer")
+				controllerutil.RemoveFinalizer(kueueLocalQueue, constants.DedicatedAiClusterFinalizer)
+				if err := r.Update(context.Background(), kueueLocalQueue); err != nil {
+					r.Log.Error(err, "failed to remove kueue local queue finalizer")
+				}
+			}
+			if controllerutil.ContainsFinalizer(deployment, constants.DedicatedAiClusterFinalizer) {
+				r.Log.Info("remove deployment finalizer")
+				controllerutil.RemoveFinalizer(deployment, constants.DedicatedAiClusterFinalizer)
+				if err := r.Update(context.Background(), deployment); err != nil {
+					r.Log.Error(err, "failed to remove deployment finalizer")
+				}
 			}
 		}
 	}
@@ -265,13 +372,111 @@ func mergeSpecs(profileSpec *v1beta2.DedicatedAIClusterProfileSpec, dacSpec *v1b
 	return dacSpec
 }
 
+func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatusUnderKueueCase(
+	dac *v1beta2.DedicatedAICluster,
+	deployment *appsv1.Deployment,
+	replicasCount int,
+	failureThresholdInSeconds int,
+	isCapacityReserved bool,
+) (bool, error) {
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState || !isCapacityReserved {
+		if dac.Status.DacLifecycleState == v1beta2.FAILED {
+			return false, nil
+		}
+	}
+
+	checkStatus := func() (bool, error) {
+		if int(deployment.Status.AvailableReplicas) == replicasCount {
+			dac.Status.DacLifecycleState = v1beta2.ACTIVE
+			dac.Status.LifecycleDetail = string(v1beta2.ACTIVE)
+			return false, nil
+		} else {
+			lastUpdateTimeStr, lastUpdateTimeExist := deployment.ObjectMeta.Annotations[constants.DACLastUpdateTimeAnnotationKey]
+			failureThresholdSecondsDuration := time.Duration(failureThresholdInSeconds) * time.Second
+			if !lastUpdateTimeExist {
+				lastUpdateTime := deployment.CreationTimestamp.Time
+				if time.Since(lastUpdateTime) <= failureThresholdSecondsDuration {
+					dac.Status.DacLifecycleState = v1beta2.CREATING
+					dac.Status.LifecycleDetail = string(v1beta2.CREATING)
+					return true, nil
+				}
+			} else {
+				lastUpdateTime, err := time.Parse(time.RFC3339, lastUpdateTimeStr)
+				if err != nil {
+					return false, err
+				}
+				if time.Since(lastUpdateTime) <= failureThresholdSecondsDuration {
+					dac.Status.DacLifecycleState = v1beta2.UPDATING
+					dac.Status.LifecycleDetail = string(v1beta2.UPDATING)
+					return true, nil
+				}
+			}
+			// Handle failed case
+			dac.Status.DacLifecycleState = v1beta2.FAILED
+			failureReason, err := r.getPodsFailureReason(deployment, dac.Namespace)
+			if err != nil {
+				return false, err
+			}
+			dac.Status.LifecycleDetail = failureReason
+			return false, nil
+		}
+	}
+
+	requeue, err := checkStatus()
+	if err != nil {
+		dac.Status.DacLifecycleState = v1beta2.FAILED
+		dac.Status.LifecycleDetail = err.Error()
+	}
+
+	attempt := 0
+	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		attempt++ // Increment attempt counter
+		err := r.Client.Status().Update(context.TODO(), dac)
+		if err != nil {
+			r.Log.Error(err, "Failed to update DedicatedAICluster Status",
+				"DedicatedAICluster", dac.Name,
+				"Attempt", attempt)
+		}
+		return err
+	})
+	if err != nil {
+		r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
+		return false, err
+	}
+
+	if dac.Status.DacLifecycleState == v1beta2.ACTIVE {
+		if err = r.addExtraLabels(dac); err != nil {
+			return false, err
+		}
+	}
+	return requeue, nil
+}
+
+func (r *DedicatedAIClusterReconciler) addExtraLabels(dac *v1beta2.DedicatedAICluster) error {
+	if dac.ObjectMeta.Labels == nil {
+		dac.ObjectMeta.Labels = map[string]string{
+			constants.DACCapacityReservedLabelKey: "true",
+			constants.KueueEnabledLabelKey:        "true",
+		}
+	} else {
+		dac.ObjectMeta.Labels[constants.DACCapacityReservedLabelKey] = "true"
+		dac.ObjectMeta.Labels[constants.KueueEnabledLabelKey] = "true"
+	}
+	if err := r.Update(context.TODO(), dac); err != nil {
+		r.Log.Error(err, "failed to add labels to dedicatedAiCluster", "DedicatedAICluster", dac.Name)
+		return err
+	}
+	return nil
+}
+
 func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 	dac *v1beta2.DedicatedAICluster,
 	queue *schedulingv1beta1.Queue,
 	reservationJob *volbatchv1alpha1.Job,
-	creationFailedTimeThreshold time.Duration) (bool, error) {
+	creationFailedTimeThreshold time.Duration,
+	isCapacityReserved bool) (bool, error) {
 
-	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState || !isCapacityReserved {
 		if dac.Status.DacLifecycleState == v1beta2.FAILED {
 			return false, nil
 		}
@@ -337,24 +542,16 @@ func (r *DedicatedAIClusterReconciler) updateDedicatedAIClusterStatus(
 		dac.Status.LifecycleDetail = err.Error()
 	}
 
+	attempt := 0
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		attempt++ // Increment attempt counter
 		err := r.Client.Status().Update(context.TODO(), dac)
 		if err != nil {
-			return err
+			r.Log.Error(err, "Failed to update DedicatedAICluster Status",
+				"DedicatedAICluster", dac.Name,
+				"Attempt", attempt)
 		}
-		if err != nil {
-			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
-			return err
-		}
-		err = r.Client.Status().Update(context.TODO(), dac)
-		if err != nil {
-			return err
-		}
-		if err != nil {
-			r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
-			return err
-		}
-		return nil
+		return err
 	})
 	if err != nil {
 		r.Log.Error(err, "Failed to update DedicatedAICluster Status", "DedicatedAICluster", dac.Name)
@@ -405,8 +602,8 @@ func (r *DedicatedAIClusterReconciler) getFailedReservationPodGroupCondition(
 	return nil, false, nil
 }
 
-func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1beta2.DedicatedAICluster, reservationCount int) (int, error) {
-	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState {
+func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1beta2.DedicatedAICluster, reservationCount int, isCapacityReserved bool) (int, error) {
+	if !r.DacReconcilePolicy.ReconcileFailedLifecycleState || !isCapacityReserved {
 		if dac.Status.DacLifecycleState == v1beta2.FAILED {
 			return 0, nil
 		}
@@ -448,6 +645,27 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1
 	return reservationCount - totalIsvcOccupation, nil
 }
 
+func (r *DedicatedAIClusterReconciler) getPodsFailureReason(deployment *appsv1.Deployment, namespace string) (string, error) {
+	podList := corev1.PodList{}
+	selectedLabel := deployment.Spec.Selector.MatchLabels
+	if err := r.List(context.TODO(), &podList, client.InNamespace(namespace), client.MatchingLabels(selectedLabel)); err != nil {
+		r.Log.Error(err, "Failed to list pods under reservation deployment", "with label", selectedLabel, "DedicatedAICluster", namespace)
+		return "", err
+	}
+
+	r.Log.Info("podList", "podList", podList)
+	for _, pod := range podList.Items {
+		for _, podCondition := range pod.Status.Conditions {
+			if podCondition.Type == corev1.PodScheduled && (podCondition.Status == corev1.ConditionFalse || podCondition.Status == corev1.ConditionUnknown) {
+				r.Log.Error(fmt.Errorf("reservation pod scheduling failed"), "DedicatedAICluster", namespace, "podName", pod.Name, "message", podCondition.Message)
+				return "NotEnoughResources", nil
+			}
+		}
+	}
+	// Only report back the error caused by scheduling issue due to resource shortage, other errors just return "FAILED"
+	return string(v1beta2.FAILED), nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacReconcilePolicyConfig *v1beta2.DacReconcilePolicyConfig) error {
 	r.ClientConfig = mgr.GetConfig()
@@ -477,6 +695,9 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 		Owns(&corev1.Namespace{}).
 		Owns(&schedulingv1beta1.Queue{}).
 		Owns(&volbatchv1alpha1.Job{}).
+		Owns(&kueuev1beta1.ClusterQueue{}).
+		Owns(&kueuev1beta1.LocalQueue{}).
+		Owns(&appsv1.Deployment{}).
 		Watches(
 			&v1beta2.InferenceService{},
 			eventHandler,

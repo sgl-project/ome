@@ -50,6 +50,7 @@ spec:
       priority: 1
   protocolVersions:
     - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
   modelSizeRange:
     min: 3B
     max: 6B

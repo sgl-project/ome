@@ -20,6 +20,9 @@ spec:
     - jsonPath: .spec.count
       name: Count
       type: integer
+    - jsonPath: .status.dacLifecycleState
+      name: Status
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

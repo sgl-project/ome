@@ -3,11 +3,12 @@ package volcanoqueue
 import (
 	"context"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,11 +42,11 @@ func createQueue(queueName string, resources *corev1.ResourceRequirements, affin
 
 		// Volcano need as least one pod buffer on CPU and Memory to start scheduling
 		cpuRequest := resources.Requests[corev1.ResourceCPU]
-		resourceQuantityAfterMultiply(&cpuRequest, count+1)
+		utils.ResourceQuantityAfterMultiply(&cpuRequest, count+1)
 		memoryRequest := resources.Requests[corev1.ResourceMemory]
-		resourceQuantityAfterMultiply(&memoryRequest, count+1)
+		utils.ResourceQuantityAfterMultiply(&memoryRequest, count+1)
 		gpuRequest := resources.Requests[corev1.ResourceName("nvidia.com/gpu")]
-		resourceQuantityAfterMultiply(&gpuRequest, count)
+		utils.ResourceQuantityAfterMultiply(&gpuRequest, count)
 
 		return &schedulingv1beta1.Queue{
 			ObjectMeta: metav1.ObjectMeta{
@@ -142,8 +143,4 @@ func (r *QueueReconciler) Reconcile() (*schedulingv1beta1.Queue, error) {
 	}
 
 	return r.Queue, nil
-}
-
-func resourceQuantityAfterMultiply(res *resource.Quantity, count int) {
-	res.Mul(int64(count))
 }

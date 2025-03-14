@@ -123,6 +123,7 @@ commonTolerations:
     operator: "Exists"
     effect: "NoSchedule"
 
+commonSchedulerName: "genai-kube-scheduler"
 
 llama_3_1_70b_instruct:
   enabled: false

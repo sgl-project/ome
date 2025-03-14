@@ -3,6 +3,7 @@ package namespace
 import (
 	"context"
 	"reflect"
+	"strconv"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
@@ -22,8 +23,13 @@ type NamespaceReconciler struct {
 	Namespace *v1.Namespace
 }
 
-func NewNamespaceReconciler(client client.Client, scheme *runtime.Scheme, namespaceName string) (*NamespaceReconciler, error) {
-	namespace := createNamespace(namespaceName)
+func NewNamespaceReconciler(
+	client client.Client,
+	scheme *runtime.Scheme,
+	namespaceName string,
+	enableKueue bool,
+) (*NamespaceReconciler, error) {
+	namespace := createNamespace(namespaceName, enableKueue)
 	return &NamespaceReconciler{
 		client:    client,
 		scheme:    scheme,
@@ -31,10 +37,13 @@ func NewNamespaceReconciler(client client.Client, scheme *runtime.Scheme, namesp
 	}, nil
 }
 
-func createNamespace(namespaceName string) *v1.Namespace {
+func createNamespace(namespaceName string, enableKueue bool) *v1.Namespace {
 	namespace := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespaceName,
+			Labels: map[string]string{
+				constants.KueueWorkloadNamespaceSelectorLabelKey: strconv.FormatBool(enableKueue),
+			},
 		},
 	}
 	return namespace

@@ -43,6 +43,7 @@ spec:
         medium: Memory
   protocolVersions:
     - openAI
+  schedulerName: "genai-kube-scheduler"
   modelSizeRange:
     min: 400B
     max: 410B

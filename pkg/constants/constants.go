@@ -197,6 +197,9 @@ var (
 var (
 	DedicatedAiClusterReservationPriorityClass = "volcano-reservation-low-priority"
 	DedicatedAiClusterPreemptionPriorityClass  = "volcano-scheduling-high-priority"
+
+	DedicatedAiClusterReservationWorkloadPriorityClass = "kueue-scheduling-low-priority"
+	DedicatedAiClusterPreemptionWorkloadPriorityClass  = "kueue-scheduling-high-priority"
 )
 
 // Capacity Reservation
@@ -343,9 +346,16 @@ var (
 	TrainingRuntimeValidatorWebhookName = OMEName + "-training-runtime-validator-webhook"
 )
 
-// GPU Constants
+// GPU/CPU resource constants
 const (
 	NvidiaGPUResourceType = "nvidia.com/gpu"
+	CPUResourceType       = "cpu"
+	MemoryResourceType    = "memory"
+)
+
+// Custom scheduler constants
+const (
+	CustomSchedulerName = "genai-kube-scheduler"
 )
 
 // InferenceService Environment Variables
@@ -425,7 +435,7 @@ const (
 	InferenceServiceCanary  = "canary"
 )
 
-// InferenceService/TrainingJob container names
+// DAC/InferenceService/TrainingJob container names
 const (
 	MainContainerName               = "ome-container"
 	TrainingMainContainerName       = "trainer"
@@ -434,9 +444,17 @@ const (
 	ModelInitContainerName          = "model-init"
 	ServingSidecarContainerName     = "serving-sidecar"
 	MultiNodeProberContainerPort    = 8080
+	DACMainTaskName                 = "reservation"
 
 	// TransformerContainerName transformer container name in collocation
 	TransformerContainerName = "transformer-container"
+)
+
+// DAC related variables
+var (
+	DACReservationJobTerminationGracePeriodSeconds = int64(5)
+	DACLastUpdateTimeAnnotationKey                 = "last-update-time"
+	DACCapacityReservedLabelKey                    = "capacity-reserved"
 )
 
 // Model Agents Constants
@@ -612,6 +630,14 @@ const (
 // Volcano Job Labels
 const (
 	VolcanoJobLabelName = "volcano.sh/job-name"
+)
+
+// Kueue related Labels
+const (
+	KueueQueueLabelKey                     = "kueue.x-k8s.io/queue-name"
+	KueueWorkloadPriorityClassLabelKey     = "kueue.x-k8s.io/priority-class"
+	KueueWorkloadNamespaceSelectorLabelKey = "kueue-job"
+	KueueEnabledLabelKey                   = "kueue-enabled"
 )
 
 // DatasetType represents the different types of data

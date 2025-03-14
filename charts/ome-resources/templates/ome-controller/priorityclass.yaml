@@ -14,3 +14,17 @@ metadata:
 value: 100
 globalDefault: false
 description: "The low priority pods in volcano queue that will never preempt other pods"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: kueue-scheduling-high-priority
+value: 1000000
+description: "The high priority pods in kueue queue"
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: kueue-scheduling-low-priority
+value: 100
+description: "The low priority pods in kueue queue that will never preempt other pods"

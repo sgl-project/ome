@@ -51,6 +51,7 @@ spec:
         medium: Memory
   protocolVersions:
     - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
   modelSizeRange:
     min: 400B
     max: 410B

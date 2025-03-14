@@ -53,6 +53,7 @@ spec:
     max: 9B
   protocolVersions:
     - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
       image: {{ .Values.mistral_7b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.mistral_7b_instruct.image.tag | default .Values.sglang.commonImage.tag }}

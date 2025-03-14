@@ -59,6 +59,7 @@ spec:
     max: 95B
   protocolVersions:
     - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
       image: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.tag | default .Values.vllm.latestImage.tag }}

@@ -89,6 +89,7 @@ type DedicatedAIClusterStatus struct {
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="Count",type="integer",JSONPath=".spec.count"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.dacLifecycleState"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type DedicatedAICluster struct {
 	metav1.TypeMeta   `json:",inline"`

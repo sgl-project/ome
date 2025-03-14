@@ -65,10 +65,17 @@ func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
 	// Check if the VolcanoQueue annotation exists and set the label if it does.
 	if volcanoQueue, ok := metadata.Annotations[constants.VolcanoQueue]; ok {
 		metadata.Labels[constants.VolcanoQueueName] = volcanoQueue
+		// If VolcanoQueue annotation does not exist, check and set to DedicatedAICluster name
 	} else if dac, ok := metadata.Annotations[constants.DedicatedAICluster]; ok {
-		// If VolcanoQueue annotation does not exist, check and set DedicatedAICluster.
-		metadata.Labels[constants.VolcanoQueueName] = dac
-		metadata.Labels[constants.RayPrioriyClass] = constants.DedicatedAiClusterPreemptionPriorityClass
+		if _, ok = metadata.Annotations[constants.KueueEnabledLabelKey]; ok {
+			// Kueue case
+			metadata.Labels[constants.KueueQueueLabelKey] = dac
+			metadata.Labels[constants.KueueWorkloadPriorityClassLabelKey] = constants.DedicatedAiClusterPreemptionWorkloadPriorityClass
+		} else {
+			// Volcano case
+			metadata.Labels[constants.VolcanoQueueName] = dac
+			metadata.Labels[constants.RayPrioriyClass] = constants.DedicatedAiClusterPreemptionPriorityClass
+		}
 	}
 
 	// Always set the RayScheduler label if the annotation exists.
@@ -132,6 +139,7 @@ func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpe
 		ImagePullSecrets: runtimePodSpec.ImagePullSecrets,
 		DNSPolicy:        runtimePodSpec.DNSPolicy,
 		HostNetwork:      runtimePodSpec.HostNetwork,
+		SchedulerName:    runtimePodSpec.SchedulerName,
 	})
 	if err != nil {
 		return nil, err
@@ -238,8 +246,10 @@ func UpdateImageTag(container *v1.Container, runtimeVersion *string, servingRunt
 		// For TFServing/TorchServe the GPU image is tagged with suffix "-gpu", when the version is found in the tag
 		// and runtimeVersion is not specified, we default to append the "-gpu" suffix to the image tag
 		if len(re.FindString(image)) > 0 {
-			tag := re.FindStringSubmatch(image)[2]
-			container.Image = re.ReplaceAllString(image, ":"+tag+"-gpu")
+			// TODO: RuntimeVersion is not passed at this moment and also the image tagged with "-gpu" is not ready as well, so comment these 2 lines for now.
+			//tag := re.FindStringSubmatch(image)[2]
+			//container.Image = re.ReplaceAllString(image, ":"+tag+"-gpu")
+			container.Image = image
 		}
 	}
 }

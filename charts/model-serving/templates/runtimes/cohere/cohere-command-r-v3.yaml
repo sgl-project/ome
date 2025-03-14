@@ -72,7 +72,7 @@ spec:
                   - BM.GPU4.8
   protocolVersions:
     - cohere
-  schedulerName: "genai-kube-scheduler"
+  schedulerName: {{ .Values.commonSchedulerName }}
   volumes:
     - name: shared-memory
       emptyDir:

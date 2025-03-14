@@ -68,7 +68,7 @@ spec:
                   - BM.GPU.A100-v2.8
   protocolVersions:
     - cohere
-  schedulerName: "genai-kube-scheduler"
+  schedulerName: {{ .Values.commonSchedulerName }}
   volumes:
     - name: shared-memory
       emptyDir:

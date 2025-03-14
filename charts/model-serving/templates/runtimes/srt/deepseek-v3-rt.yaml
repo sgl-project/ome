@@ -60,6 +60,7 @@ spec:
       priority: 1
   protocolVersions:
     - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
       image: {{ .Values.deepseek_v3.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.deepseek_v3.image.tag | default .Values.sglang.commonImage.tag }}
