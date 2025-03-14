@@ -1,0 +1,193 @@
+# Makefile for OME Integration and End-to-End Testing
+
+# Variables
+ENVTEST_K8S_VERSION ?= 1.26.0
+KUBEBUILDER_ASSETS ?= $(shell pwd)/bin/k8s/$(ENVTEST_K8S_VERSION)
+GINKGO ?= $(shell pwd)/bin/ginkgo
+GINKGO_ARGS ?= -v --trace --fail-fast
+INTEGRATION_TEST_DIRS ?= ./integration_tests/...
+E2E_TEST_DIRS ?= ./e2e_tests/...
+COVER_PROFILE ?= cover.out
+COVER_HTML ?= cover.html
+DOCKER_REGISTRY ?= your-registry.example.com
+IMAGE_TAG ?= latest
+KUBECONFIG_MLE ?= $(HOME)/.kube/config-mle
+KUBECONFIG_SERVICE ?= $(HOME)/.kube/config-service
+PARALLEL_WORKERS ?= 4
+
+# Integration Testing Targets
+
+## Download envtest binaries
+.PHONY: envtest-setup
+envtest-setup:
+	mkdir -p $(KUBEBUILDER_ASSETS)
+	curl -sSLo envtest-bins.tar.gz https://go.kubebuilder.io/test-tools/$(ENVTEST_K8S_VERSION)/$(shell go env GOOS)/$(shell go env GOARCH)
+	tar -C $(KUBEBUILDER_ASSETS) --strip-components=1 -zvxf envtest-bins.tar.gz
+	rm envtest-bins.tar.gz
+
+## Install ginkgo
+.PHONY: ginkgo-install
+ginkgo-install:
+	mkdir -p bin
+	GOBIN=$(shell pwd)/bin go install github.com/onsi/ginkgo/v2/ginkgo@latest
+	$(GINKGO) version
+
+## Run integration tests
+.PHONY: integration-test
+integration-test: envtest-setup ginkgo-install
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) $(GINKGO) $(GINKGO_ARGS) $(INTEGRATION_TEST_DIRS)
+
+## Run integration tests with coverage
+.PHONY: integration-test-coverage
+integration-test-coverage: envtest-setup ginkgo-install
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) $(GINKGO) $(GINKGO_ARGS) --cover --coverprofile=$(COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
+	go tool cover -html=$(COVER_PROFILE) -o $(COVER_HTML)
+
+# End-to-End Testing Targets
+
+## 1. Configuration Change Detection
+
+# Detect changes in runtime configurations
+.PHONY: detect-runtime-changes
+detect-runtime-changes:
+	@echo "Detecting changes in runtime configurations..."
+	@./scripts/detect-changes.sh --type=runtime
+
+# Detect changes in model configurations
+.PHONY: detect-model-changes
+detect-model-changes:
+	@echo "Detecting changes in model configurations..."
+	@./scripts/detect-changes.sh --type=model
+
+# Detect changes in InferenceService configurations
+.PHONY: detect-isvc-changes
+detect-isvc-changes:
+	@echo "Detecting changes in InferenceService configurations..."
+	@./scripts/detect-changes.sh --type=isvc
+
+## 2. Cluster Access Management
+
+# Fetch kubeconfig from MLE cluster
+.PHONY: fetch-mle-kubeconfig
+fetch-mle-kubeconfig:
+	@echo "Fetching kubeconfig from MLE cluster..."
+	@./scripts/fetch-kubeconfig.sh --cluster=mle --output=$(KUBECONFIG_MLE)
+
+# Fetch kubeconfig from service cluster
+.PHONY: fetch-service-kubeconfig
+fetch-service-kubeconfig:
+	@echo "Fetching kubeconfig from service cluster..."
+	@./scripts/fetch-kubeconfig.sh --cluster=service --output=$(KUBECONFIG_SERVICE)
+
+## 3. Container Image Management
+
+# Build container images
+.PHONY: build-images
+build-images:
+	@echo "Building container images..."
+	docker build -t $(DOCKER_REGISTRY)/ome-controller:$(IMAGE_TAG) -f build/controller/Dockerfile .
+	docker build -t $(DOCKER_REGISTRY)/ome-webhook:$(IMAGE_TAG) -f build/webhook/Dockerfile .
+	docker build -t $(DOCKER_REGISTRY)/ome-agent:$(IMAGE_TAG) -f build/agent/Dockerfile .
+
+# Push container images
+.PHONY: push-images
+push-images: build-images
+	@echo "Pushing container images..."
+	docker push $(DOCKER_REGISTRY)/ome-controller:$(IMAGE_TAG)
+	docker push $(DOCKER_REGISTRY)/ome-webhook:$(IMAGE_TAG)
+	docker push $(DOCKER_REGISTRY)/ome-agent:$(IMAGE_TAG)
+
+## 4. Configuration Updates
+
+# Update container image references in configuration
+.PHONY: update-image-refs
+update-image-refs:
+	@echo "Updating container image references in configuration..."
+	@./scripts/update-image-refs.sh --registry=$(DOCKER_REGISTRY) --tag=$(IMAGE_TAG)
+
+## 5. Cluster Installation
+
+# Install CRDs and controllers on MLE cluster
+.PHONY: install-mle
+install-mle:
+	@echo "Installing CRDs and controllers on MLE cluster..."
+	KUBECONFIG=$(KUBECONFIG_MLE) kubectl apply -f config/crd/bases/
+	KUBECONFIG=$(KUBECONFIG_MLE) kubectl apply -f config/controller/mle/
+
+# Install CRDs and controllers on service cluster
+.PHONY: install-service
+install-service:
+	@echo "Installing CRDs and controllers on service cluster..."
+	KUBECONFIG=$(KUBECONFIG_SERVICE) kubectl apply -f config/crd/bases/
+	KUBECONFIG=$(KUBECONFIG_SERVICE) kubectl apply -f config/controller/service/
+
+# Full installation with latest images
+.PHONY: install-all
+install-all: build-images push-images update-image-refs install-mle install-service
+	@echo "Full installation completed with latest images"
+
+## 6. Parallel Test Execution
+
+# Run end-to-end tests in parallel
+.PHONY: e2e-test
+e2e-test: ginkgo-install
+	@echo "Running end-to-end tests in parallel..."
+	KUBECONFIG=$(KUBECONFIG_MLE) $(GINKGO) $(GINKGO_ARGS) --nodes=$(PARALLEL_WORKERS) $(E2E_TEST_DIRS)
+
+# Run end-to-end tests with coverage
+.PHONY: e2e-test-coverage
+e2e-test-coverage: ginkgo-install
+	@echo "Running end-to-end tests with coverage..."
+	KUBECONFIG=$(KUBECONFIG_MLE) $(GINKGO) $(GINKGO_ARGS) --nodes=$(PARALLEL_WORKERS) --cover --coverprofile=e2e-$(COVER_PROFILE) $(E2E_TEST_DIRS)
+	go tool cover -html=e2e-$(COVER_PROFILE) -o e2e-$(COVER_HTML)
+
+# Combined Targets
+
+# Run all tests (integration and e2e)
+.PHONY: test-all
+test-all: integration-test e2e-test
+	@echo "All tests completed"
+
+# Full CI/CD pipeline
+.PHONY: ci-cd
+ci-cd: detect-runtime-changes detect-model-changes detect-isvc-changes fetch-mle-kubeconfig fetch-service-kubeconfig install-all test-all
+	@echo "CI/CD pipeline completed"
+
+# Help target
+.PHONY: help
+help:
+	@echo "OME Integration and End-to-End Testing Makefile"
+	@echo ""
+	@echo "Integration Testing Targets:"
+	@echo "  envtest-setup             - Download envtest binaries"
+	@echo "  ginkgo-install            - Install ginkgo test runner"
+	@echo "  integration-test          - Run integration tests"
+	@echo "  integration-test-coverage - Run integration tests with coverage"
+	@echo ""
+	@echo "End-to-End Testing Targets:"
+	@echo "  detect-runtime-changes    - Detect changes in runtime configurations"
+	@echo "  detect-model-changes      - Detect changes in model configurations"
+	@echo "  detect-isvc-changes       - Detect changes in InferenceService configurations"
+	@echo "  fetch-mle-kubeconfig      - Fetch kubeconfig from MLE cluster"
+	@echo "  fetch-service-kubeconfig  - Fetch kubeconfig from service cluster"
+	@echo "  build-images              - Build container images"
+	@echo "  push-images               - Push container images"
+	@echo "  update-image-refs         - Update container image references in configuration"
+	@echo "  install-mle               - Install CRDs and controllers on MLE cluster"
+	@echo "  install-service           - Install CRDs and controllers on service cluster"
+	@echo "  install-all               - Full installation with latest images"
+	@echo "  e2e-test                  - Run end-to-end tests in parallel"
+	@echo "  e2e-test-coverage         - Run end-to-end tests with coverage"
+	@echo ""
+	@echo "Combined Targets:"
+	@echo "  test-all                  - Run all tests (integration and e2e)"
+	@echo "  ci-cd                     - Full CI/CD pipeline"
+	@echo ""
+	@echo "Variables:"
+	@echo "  ENVTEST_K8S_VERSION       - Kubernetes version for envtest (default: 1.26.0)"
+	@echo "  GINKGO_ARGS               - Arguments for ginkgo (default: -v --trace --fail-fast)"
+	@echo "  DOCKER_REGISTRY           - Docker registry for images (default: your-registry.example.com)"
+	@echo "  IMAGE_TAG                 - Tag for container images (default: latest)"
+	@echo "  KUBECONFIG_MLE            - Path to MLE cluster kubeconfig (default: ~/.kube/config-mle)"
+	@echo "  KUBECONFIG_SERVICE        - Path to service cluster kubeconfig (default: ~/.kube/config-service)"
+	@echo "  PARALLEL_WORKERS          - Number of parallel test workers (default: 4)" 

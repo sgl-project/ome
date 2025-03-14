@@ -1,0 +1,23 @@
+title: Integration Testing Design for OME
+kep-number: 1032
+authors:
+  - "@simolin""
+reviewers:
+  - "TBD"
+approvers:
+  - "TBD"
+creation-date: "2023-03-13"
+last-updated: "2023-03-13"
+status: "provisional"
+see-also:
+  - "/designs/1021-dac-design"
+  - "/designs/1028-training-design"
+  - "/designs/1031-capacity-reservation-design"
+replaces:
+  - "N/A"
+superseded-by:
+  - "N/A"
+description: |
+  This design document outlines a comprehensive integration testing framework for the Oracle Machine Learning Engine (OME) system.
+  It includes both integration testing using a simulated Kubernetes environment and end-to-end testing with real clusters.
+  The framework is designed to validate the interactions between various components of the OME system and ensure that the system behaves correctly as a whole. 
