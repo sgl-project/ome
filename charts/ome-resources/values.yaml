@@ -148,3 +148,16 @@ modelAgent:
     requests:
       cpu: '10'
       memory: 100Gi
+
+trainingSidecar:
+  image:
+    repository: ap-osaka-1.ocir.io/axoxdievda5j/genai-fine-training-agent
+    tag: v1.0-73
+
+  region: ap-osaka-1
+  namespace: "idqj093njucb"
+  fineTunedModelBucket: "fine-tuned-model-weights"
+  trainingMetricsBucket: "model-training-metrics"
+
+common:
+  realmDomainComponent: "oraclecloud.com"

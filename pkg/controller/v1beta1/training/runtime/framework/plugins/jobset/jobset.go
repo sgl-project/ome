@@ -89,6 +89,7 @@ func (j *JobSet) Build(ctx context.Context, runtimeJobTemplate client.Object, in
 	jobSet := jobSetBuilder.
 		Trainer(info, trainJob).
 		PodLabels(info.PodLabels).
+		// Todo: We only support single job training (Trainer Job) for now. Support multi-job in the future.
 		Initializer(trainJob).
 		Suspend(trainJob.Spec.Suspend).
 		Build()

@@ -194,8 +194,8 @@ func isTrainJobFinished(trainJob *v1beta1.TrainingJob) bool {
 
 func runtimeRefToGroupKind(runtimeRef omev1beta1.RuntimeRef) schema.GroupKind {
 	return schema.GroupKind{
-		Group: ptr.Deref(runtimeRef.APIGroup, ""),
-		Kind:  ptr.Deref(runtimeRef.Kind, ""),
+		Group: ptr.Deref(runtimeRef.APIGroup, "ome.io"),
+		Kind:  ptr.Deref(runtimeRef.Kind, "ClusterTrainingRuntime"),
 	}
 }
 

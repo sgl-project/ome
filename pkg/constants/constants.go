@@ -428,6 +428,7 @@ const (
 // InferenceService/TrainingJob container names
 const (
 	MainContainerName               = "ome-container"
+	TrainingMainContainerName       = "trainer"
 	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
 	ModelInitContainerName          = "model-init"
@@ -707,6 +708,37 @@ var (
 	TrainingJobPodLabelKey = OMEAPIGroupName + "/" + TrainingJobName
 )
 
+// Training pod volume name constants
+const (
+	ModelStorePVCSourceName = "model-storage"
+	ModelEmptyDirName       = "model"
+	DataEmptyDirName        = "data"
+)
+
+// common used constants
+const (
+	RegionFileVolumeName = "region"
+	ADFileVolumeName     = "etc-avalability-domain"
+	RealmFileVolumeName  = "etc-identity-realm"
+
+	RegionFileVolumeMountPath = "/etc/region"
+	ADFileVolumeMountPath     = "/etc/availability-domain"
+	RealmFileVolumeMountPath  = "/etc/identity-realm"
+
+	OCIDefaultRealmEnvVarKey = "OCI_DEFAULT_REALM"
+)
+
+var (
+	TrainingSidecarInjectionKey = OMEAPIGroupName + "/inject-training-sidecar"
+)
+
+// Training sidecar env variable key names and config key names
+const (
+	NamespaceEnvVarKey             = "NAMESPACE"
+	BucketNameEnvVarKey            = "BUCKET_NAME"
+	TrainingMetricsBucketEnvVarKey = "TRAINING_METRICS_BUCKET_NAME"
+)
+
 // Peft training Constants
 const (
 	PeftTrainingModelStorePVCMountPath   = "/mnt/models"
@@ -752,6 +784,9 @@ const (
 
 	// JobTrainerNode is the Job name for the trainer node.
 	JobTrainerNode string = "trainer-node"
+
+	// JobTrainerInitContainer is the init-container name for the trainer node job.
+	JobTrainerInitContainer string = "training-init-container"
 
 	// ContainerTrainer is the container name for the trainer.
 	ContainerTrainer string = "trainer"

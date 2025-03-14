@@ -3868,7 +3868,7 @@ func schema_pkg_apis_ome_v1beta1_ModelConfig(ref common.ReferenceCallback) commo
 				Properties: map[string]spec.Schema{
 					"inputModel": {
 						SchemaProps: spec.SchemaProps{
-							Description: "InputModel defines where the input model stores. Todo: support generic model storage",
+							Description: "InputModel defines the base model name.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -6890,7 +6890,7 @@ func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common
 					},
 					"apiGroup": {
 						SchemaProps: spec.SchemaProps{
-							Description: "APIGroup of the runtime being referenced. Defaults to `kubeflow.org`.",
+							Description: "APIGroup of the runtime being referenced. Defaults to `ome.io`.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

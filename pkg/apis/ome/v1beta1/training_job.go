@@ -123,7 +123,7 @@ type MetricConfig struct {
 }
 
 type ModelConfig struct {
-	// InputModel defines where the input model stores. Todo: support generic model storage
+	// InputModel defines the base model name.
 	InputModel *string `json:"inputModel,omitempty"`
 
 	// OutputModel defines where the finetune weight (output model) stores.
@@ -188,8 +188,8 @@ type RuntimeRef struct {
 	Name string `json:"name"`
 
 	// APIGroup of the runtime being referenced.
-	// Defaults to `kubeflow.org`.
-	// +kubebuilder:default="kubeflow.org"
+	// Defaults to `ome.io`.
+	// +kubebuilder:default="ome.io"
 	APIGroup *string `json:"apiGroup,omitempty"`
 
 	// Kind of the runtime being referenced.

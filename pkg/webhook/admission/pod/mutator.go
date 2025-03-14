@@ -92,6 +92,8 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
 	servingSidecarInjector := newServingSidecarInjector(configMap)
 
+	trainingSidecarInjector := newTrainingSidecarInjector(configMap)
+
 	mutators := []func(pod *v1.Pod) error{
 		agentInjector.InjectAgent,
 		metricsAggregator.InjectMetricsAggregator,
@@ -99,6 +101,7 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 		modelInitInjector.InjectModelInit,
 		mergedFinetunedAdapterInjector.InjectMergedFinetunedAdapter,
 		servingSidecarInjector.InjectServingSidecar,
+		trainingSidecarInjector.InjectTrainingSidecar,
 	}
 
 	for _, mutator := range mutators {

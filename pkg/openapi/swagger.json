@@ -2131,7 +2131,7 @@
       "type": "object",
       "properties": {
         "inputModel": {
-          "description": "InputModel defines where the input model stores. Todo: support generic model storage",
+          "description": "InputModel defines the base model name.",
           "type": "string"
         },
         "outputModel": {
@@ -3853,7 +3853,7 @@
       "type": "object",
       "properties": {
         "apiGroup": {
-          "description": "APIGroup of the runtime being referenced. Defaults to `kubeflow.org`.",
+          "description": "APIGroup of the runtime being referenced. Defaults to `ome.io`.",
           "type": "string"
         },
         "kind": {

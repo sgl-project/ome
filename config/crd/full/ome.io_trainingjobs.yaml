@@ -110,7 +110,7 @@ spec:
               runtimeRef:
                 properties:
                   apiGroup:
-                    default: kubeflow.org
+                    default: ome.io
                     type: string
                   kind:
                     default: ClusterTrainingRuntime

@@ -43,7 +43,7 @@ func GetTrainingRuntime(cl client.Client, name string, namespace string) (*v1bet
 	} else if !k8serrors.IsNotFound(err) {
 		return nil, err
 	}
-	return nil, errors.New("No TrainingRuntime or ClusterTrainingRuntime with the name: " + name)
+	return nil, errors.New("No available TrainingRuntime or ClusterTrainingRuntime with the name: " + name)
 }
 
 func CheckFailedPodFailure(tjob *v1beta1.TrainingJob, pod v1.Pod, logger logr.Logger) (error, constants.TrainingFailedReason) {

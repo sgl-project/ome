@@ -9,7 +9,7 @@ metadata:
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "true"
     models.ome.io/internal: "false"
-    models.ome.io/lifecycle-phase: "true"
+    models.ome.io/lifecycle-phase: "ACTIVE"
     ome.io/base-model-decryption-key-name: "command_r"
     ome.io/base-model-encryption-secret-name: "command_r-dek"
 spec:

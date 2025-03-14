@@ -109,7 +109,15 @@ data:
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "region": "{{ .Values.ome.omeAgent.region }}"
     }
-
+  trainingSidecar: |-
+    {
+      "image" : "{{ .Values.trainingSidecar.image.repository }}:{{ .Values.trainingSidecar.image.tag }}",
+      "region" : "{{ .Values.trainingSidecar.region }}",
+      "namespace": "{{ .Values.trainingSidecar.namespace }}",
+      "fineTunedModelBucket": "{{ .Values.trainingSidecar.fineTunedModelBucket }}",
+      "trainingMetricsBucket": "{{ .Values.trainingSidecar.trainingMetricsBucket }}",
+      "realmDomainComponent": "{{ .Values.common.realmDomainComponent }}"
+    }
 ---
 apiVersion: v1
 kind: ConfigMap
