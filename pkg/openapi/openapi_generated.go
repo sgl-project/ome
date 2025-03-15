@@ -44,6 +44,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CrossReference":                           schema_pkg_apis_ome_v1beta1_CrossReference(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CustomPredictor":                          schema_pkg_apis_ome_v1beta1_CustomPredictor(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReconcilePolicyConfig":                 schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReservationWorkloadConfig":             schema_pkg_apis_ome_v1beta1_DacReservationWorkloadConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAICluster":                       schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterList":                   schema_pkg_apis_ome_v1beta1_DedicatedAIClusterList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfile":                schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfile(ref),
@@ -2342,7 +2343,40 @@ func schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref common.ReferenceCa
 							Format: "",
 						},
 					},
+					"reconcileWithKueue": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
 				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DacReservationWorkloadConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"creationFailedTimeThresholdSecond": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+				},
+				Required: []string{"image", "creationFailedTimeThresholdSecond"},
 			},
 		},
 	}

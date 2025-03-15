@@ -32,8 +32,8 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
+    type: "Finetuning"
     dacShapeConfigs: |-
-      type: "Finetuning"
       compatibleDACShapes:
         - name: LARGE_GENERIC
           quotaUnit: 1

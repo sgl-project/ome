@@ -7,7 +7,6 @@ spec:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
-    ome.io/inject-training-sidecar: 'true'
   labels:
     logging-forward: enabled
     sidecar.istio.io/inject: 'true'
@@ -19,9 +18,6 @@ spec:
         maxRestarts: 3
         minNodes: 1
         maxNodes: 1
-  podGroupPolicy:
-    coscheduling:
-      scheduleTimeoutSeconds: 60
   template:
     spec:
       replicatedJobs:

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	trainingruntimes "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
@@ -62,6 +64,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.Log.Info("TrainJob has already been finished", "namespace", req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
+
+	// We use these 2 annotations for every training job to inject init-container and sidecar container. The values will be passed into jobset object, then the pod underneath.
+	if trainJob.Spec.Annotations == nil {
+		trainJob.Spec.Annotations = make(map[string]string)
+	}
+	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
+	trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
 
 	runtimeRefGK := runtimeRefToGroupKind(trainJob.Spec.RuntimeRef).String()
 	runtime, ok := r.Runtimes[runtimeRefGK]
