@@ -72,6 +72,12 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
 	trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
 
+	// Specify TrainingJobPodLabelKey label so the mutator can inject both init and sidecar container
+	if trainJob.Spec.Labels == nil {
+		trainJob.Spec.Labels = make(map[string]string)
+	}
+	trainJob.Spec.Labels[constants.TrainingJobPodLabelKey] = trainJob.Name
+
 	runtimeRefGK := runtimeRefToGroupKind(trainJob.Spec.RuntimeRef).String()
 	runtime, ok := r.Runtimes[runtimeRefGK]
 	if !ok {

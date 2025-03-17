@@ -29,8 +29,10 @@ type Mutator struct {
 func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	pod := &v1.Pod{}
 
+	podName := getPodName(pod)
+
 	if err := mutator.Decoder.Decode(req, pod); err != nil {
-		log.Error(err, "Failed to decode pod", "name", pod.Labels[constants.InferenceServicePodLabelKey])
+		log.Error(err, "Failed to decode pod", "name", podName)
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
@@ -49,13 +51,13 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 	pod.Namespace = req.AdmissionRequest.Namespace
 
 	if err := mutator.mutate(pod, configMap); err != nil {
-		log.Error(err, "Failed to mutate pod", "name", pod.Labels[constants.InferenceServicePodLabelKey])
+		log.Error(err, "Failed to mutate pod", "name", podName)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	patch, err := json.Marshal(pod)
 	if err != nil {
-		log.Error(err, "Failed to marshal pod", "name", pod.Labels[constants.InferenceServicePodLabelKey])
+		log.Error(err, "Failed to marshal pod", "name", podName)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
@@ -113,8 +115,20 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 	return nil
 }
 
+func getPodName(pod *v1.Pod) string {
+	var podName string
+	_, ok := pod.Labels[constants.TrainingJobPodLabelKey]
+	if ok {
+		podName = pod.Labels[constants.TrainingJobPodLabelKey]
+	} else {
+		podName = pod.Labels[constants.InferenceServicePodLabelKey]
+	}
+	return podName
+}
+
 func needMutate(pod *v1.Pod) bool {
 	// Skip webhook if pod not managed by ome
-	_, ok := pod.Labels[constants.InferenceServicePodLabelKey]
-	return ok
+	_, inferencePodLabel := pod.Labels[constants.InferenceServicePodLabelKey]
+	_, trainingPodLabel := pod.Labels[constants.TrainingJobPodLabelKey]
+	return inferencePodLabel || trainingPodLabel
 }

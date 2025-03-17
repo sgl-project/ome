@@ -8,16 +8,14 @@ import (
 	testing2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"knative.dev/pkg/ptr"
 
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
-
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 )
 
 func TestTrainingRuntimeNewObjects(t *testing.T) {
@@ -62,10 +60,11 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 					InitContainerDatasetModelInitializer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					NumNodes(30).
 					ContainerTrainer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
+					AnnotationsTrainer("conflictAnnotation", "override").
+					LabelsTrainer("conflictLabel", "override").
 					Suspend(true).
 					Label("conflictLabel", "override").
 					Annotation("conflictAnnotation", "override").
-					PodLabel(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 				testing2.MakeSchedulerPluginsPodGroup(metav1.NamespaceDefault, "test-job").

@@ -380,6 +380,9 @@ func TestRunComponentBuilderPlugins(t *testing.T) {
 			registry:           fwkplugins.NewRegistry(),
 			runtimeJobTemplate: testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").DeepCopy(),
 			runtimeInfo: &runtime.Info{
+				Labels: map[string]string{
+					schedulerpluginsv1alpha1.PodGroupLabel: "test-job",
+				},
 				RuntimePolicy: runtime.RuntimePolicy{
 					MLPolicy: &omev1beta1.MLPolicy{
 						NumNodes: ptr.To[int32](10),
@@ -416,6 +419,9 @@ func TestRunComponentBuilderPlugins(t *testing.T) {
 				).
 				Obj(),
 			wantRuntimeInfo: &runtime.Info{
+				Labels: map[string]string{
+					schedulerpluginsv1alpha1.PodGroupLabel: "test-job",
+				},
 				RuntimePolicy: runtime.RuntimePolicy{
 					MLPolicy: &omev1beta1.MLPolicy{
 						NumNodes: ptr.To[int32](10),
@@ -456,7 +462,8 @@ func TestRunComponentBuilderPlugins(t *testing.T) {
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind("TrainingJob"), "test-job", "uid").
 					NumNodes(100).
-					PodLabel(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
+					Labels(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
+					LabelsTrainer(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
 					Obj(),
 			},

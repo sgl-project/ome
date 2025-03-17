@@ -41,6 +41,7 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 			trainJob: testing2.MakeTrainJobWrapper(metav1.NamespaceDefault, "test-job").
 				Suspend(true).
 				UID("uid").
+				SpecLabel(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 				RuntimeRef(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.ClusterTrainingRuntimeKind), "test-runtime").
 				Trainer(
 					testing2.MakeTrainJobTrainerWrapper().
@@ -52,9 +53,10 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					InitContainerDatasetModelInitializer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					NumNodes(100).
+					Labels(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
 					Suspend(true).
-					PodLabel(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
+					LabelsTrainer(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 				testing2.MakeSchedulerPluginsPodGroup(metav1.NamespaceDefault, "test-job").

@@ -162,6 +162,20 @@ func (b *Builder) Trainer(info *runtime.Info, trainJob *omev1beta1.TrainingJob) 
 			b.Spec.ReplicatedJobs[i].Template.Spec.Parallelism = info.Trainer.NumNodes
 			b.Spec.ReplicatedJobs[i].Template.Spec.Completions = info.Trainer.NumNodes
 
+			if b.Spec.ReplicatedJobs[i].Template.Spec.Template.Annotations == nil {
+				b.Spec.ReplicatedJobs[i].Template.Spec.Template.Annotations = make(map[string]string)
+			}
+			for k, v := range info.Annotations {
+				b.Spec.ReplicatedJobs[i].Template.Spec.Template.Annotations[k] = v
+			}
+
+			if b.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels == nil {
+				b.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels = make(map[string]string)
+			}
+			for k, v := range info.Labels {
+				b.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels[k] = v
+			}
+
 			// Update values for the Trainer container.
 			for j, container := range rJob.Template.Spec.Template.Spec.Containers {
 				if container.Name == constants.ContainerTrainer {
@@ -210,9 +224,6 @@ func (b *Builder) Trainer(info *runtime.Info, trainJob *omev1beta1.TrainingJob) 
 
 // TODO: Supporting merge labels would be great.
 func (b *Builder) PodLabels(labels map[string]string) *Builder {
-	for i := range b.Spec.ReplicatedJobs {
-		b.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels = labels
-	}
 	return b
 }
 
