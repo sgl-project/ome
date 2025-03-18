@@ -127,8 +127,7 @@ commonSchedulerName: "genai-kube-scheduler"
 
 llama_3_1_70b_instruct:
   enabled: false
-  annotations:
-    ome.io/autoscalerClass: "keda"
+  annotations: { }
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -155,8 +154,7 @@ llama_3_1_70b_instruct:
 llama_3_3_70b_instruct:
   enabled: false
   labels: { }
-  annotations:
-    ome.io/autoscalerClass: "keda"
+  annotations: { }
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

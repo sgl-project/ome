@@ -4,5 +4,5 @@ metadata:
   name: dac-large
 spec:
   count: 1
-  profile: large
+  profile: medium-a100v2-h100
 

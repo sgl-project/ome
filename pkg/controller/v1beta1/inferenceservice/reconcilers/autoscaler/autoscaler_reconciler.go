@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Autoscaler Interface implemented by all autoscalers
@@ -36,6 +37,8 @@ func (*NoOpAutoscaler) Reconcile() (*autoscalingv2.HorizontalPodAutoscaler, erro
 func (a *NoOpAutoscaler) SetControllerReferences(owner metav1.Object, scheme *runtime.Scheme) error {
 	return nil
 }
+
+var log = logf.Log.WithName("AutoscalerReconciler")
 
 // AutoscalerReconciler is the struct of Raw K8S Object
 type AutoscalerReconciler struct {
@@ -78,6 +81,7 @@ func createAutoscaler(client client.Client,
 	scheme *runtime.Scheme, componentMeta metav1.ObjectMeta,
 	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
 ) (Autoscaler, error) {
+	log.Info("Current Autoscaler Class Info", "componentMeta", componentMeta, "inferenceServiceSpec", inferenceServiceSpec)
 	ac := getAutoscalerClass(componentMeta)
 
 	switch ac {
