@@ -34,8 +34,60 @@ It is required to classify your PR and make the commit message concise and usefu
 * `[Docs]` for changes related to documentation.
 * `[CI/Tests]` for unittests and integration tests.
 * `[Misc]` for PRs that do not fit the above categories. Please use this sparingly.
+* `[OEP]` for OME enhancements proposals.
 
 Open source community also recommends keeping the commit message title within 52 characters and each line in the message content within 72 characters.
+
+### OME Enhancement Proposals (OEPs)
+
+An OEP (OME Enhancement Proposal) is required for substantial changes to OME. You should create an OEP when proposing:
+
+1. Any significant architectural changes
+2. Major feature additions such as new CRD
+3. Breaking API changes
+4. Changes that affect multiple components
+5. Modifications to core behaviors or interfaces
+
+#### How to Use the OEP Template
+
+1. Create a new branch for your OEP
+2. Copy the template from `oeps/NNNN-template/README.md` to a new directory:
+   ```bash
+   cp -r oeps/NNNN-template oeps/XXXX-descriptive-name
+   ```
+   where:
+   * `XXXX` is the next available number in sequence
+   * `descriptive-name` is a brief, hyphen-separated description
+
+3. Fill out each section of the template:
+   * **Title**: Clear, concise description of the enhancement
+   * **Summary**: High-level overview of the proposal
+   * **Motivation**: Why this change is needed
+   * **Goals/Non-Goals**: Specific objectives and scope boundaries
+   * **Proposal**: Detailed description of the enhancement
+   * **Design Details**: Technical implementation specifics
+   * **Alternatives**: Other approaches considered
+
+4. Submit the OEP as a PR with the `[OEP]` prefix
+5. Work with reviewers to refine the proposal
+6. Once approved, implementation PRs can reference the OEP number
+
+#### OEP Review Process
+
+1. Initial Review (<=1 week):
+   * Technical feasibility
+   * Alignment with project goals
+   * Impact assessment and Design considerations
+
+2. Feedback Integration:
+   * Address reviewer comments
+   * Clarify design decisions
+   * Update technical details
+
+3. Final Approval:
+   * Sign-off from required reviewers
+   * Merge OEP document
+   * Begin implementation phase
 
 ### Code Reviews
 
