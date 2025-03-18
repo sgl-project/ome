@@ -52,6 +52,7 @@ import (
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 const (
@@ -90,6 +91,7 @@ func init() {
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(volcanobatch.AddToScheme(scheme))
+	utilruntime.Must(volcano.AddToScheme(scheme))
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
 	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
 }
