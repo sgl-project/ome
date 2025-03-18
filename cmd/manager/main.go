@@ -10,6 +10,20 @@ import (
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/project"
+	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/serviceaccount"
+	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
+	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
+	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
+	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
+	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
+	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	zaplog "go.uber.org/zap"
@@ -38,22 +52,6 @@ import (
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
-	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/project"
-	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/serviceaccount"
-	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
-	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
-	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
-	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
-	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
-	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
 )
 
 const (
@@ -91,6 +89,9 @@ func init() {
 	utilruntime.Must(kedav1.AddToScheme(scheme))
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(volcanobatch.AddToScheme(scheme))
+	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
+	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
 }
 
 // Options defines the program-configurable options that may be passed on the command line.
@@ -232,16 +233,8 @@ func main() {
 		addToScheme  func(*runtime.Scheme) error
 	}{
 		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
-		{volcano.SchemeGroupVersion, constants.VolcanoQueueKind, volcano.AddToScheme},
-		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
 		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
-		{jobsetv1alpha2.SchemeGroupVersion, constants.JobSetKind, jobsetv1alpha2.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
-		{kueuev1beta1.SchemeGroupVersion, constants.KueueClusterQueueKind, kueuev1beta1.AddToScheme},
-		{kueuev1beta1.SchemeGroupVersion, constants.KueueLocalQueueKind, kueuev1beta1.AddToScheme},
-		{kueuev1beta1.SchemeGroupVersion, constants.KueueCohortKind, kueuev1beta1.AddToScheme},
-		{kueuev1beta1.SchemeGroupVersion, constants.KueueResourceFlavorKind, kueuev1beta1.AddToScheme},
-		{kueuev1beta1.SchemeGroupVersion, constants.KueueWorkloadKind, kueuev1beta1.AddToScheme},
 	}
 
 	for _, s := range optionalSchemes {

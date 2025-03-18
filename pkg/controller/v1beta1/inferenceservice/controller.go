@@ -379,20 +379,40 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		return err
 	}
 
+	rayFound, err := utils.IsCrdAvailable(r.ClientConfig, ray.SchemeGroupVersion.String(), constants.RayClusterKind)
+	if err != nil {
+		return err
+	}
+
+	lwsFound, err := utils.IsCrdAvailable(r.ClientConfig, lws.SchemeGroupVersion.String(), constants.LWSKind)
+	if err != nil {
+		return err
+	}
+
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta2.InferenceService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
-		Owns(&v1.PersistentVolumeClaim{}).
-		Owns(&ray.RayCluster{}).
-		Owns(&lws.LeaderWorkerSet{})
+		Owns(&v1.PersistentVolumeClaim{})
 
 	if ksvcFound {
 		ctrlBuilder = ctrlBuilder.Owns(&knservingv1.Service{})
 	} else {
 		r.Log.Info("The InferenceService controller won't watch serving.knative.dev/v1/Service resources because the CRD is not available.")
+	}
+
+	if rayFound {
+		ctrlBuilder = ctrlBuilder.Owns(&ray.RayCluster{})
+	} else {
+		r.Log.Info("The InferenceService controller won't watch ray.io/v1/RayCluster resources because the CRD is not available.")
+	}
+
+	if lwsFound {
+		ctrlBuilder = ctrlBuilder.Owns(&lws.LeaderWorkerSet{})
+	} else {
+		r.Log.Info("The InferenceService controller won't watch leaderworkerset.x-k8s.io/v1/LeaderWorkerSet resources because the CRD is not available.")
 	}
 
 	if vsFound && !ingressConfig.DisableIstioVirtualHost {
