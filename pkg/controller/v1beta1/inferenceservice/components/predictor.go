@@ -353,6 +353,10 @@ func (p *Predictor) processServingAnnotations(annotations map[string]string, isv
 		if ok {
 			annotations[constants.BaseModelDecryptionKeyName] = baseModelDecryptionKeyName
 		}
+		baseModelDecryptionSecretName, ok := baseModelMeta.Annotations[constants.BaseModelDecryptionSecretName]
+		if ok {
+			annotations[constants.BaseModelDecryptionSecretName] = baseModelDecryptionSecretName
+		}
 
 		annotations[constants.BaseModelName] = baseModelMeta.Name
 		annotations[constants.ServingRuntimeKeyName] = runtimeName

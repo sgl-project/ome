@@ -167,7 +167,7 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 		{Name: constants.AgentVaultIDEnvVarKey, Value: mi.VaultId},
 		{Name: constants.AgentModelNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelName]},
 		{Name: constants.AgentKeyNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelDecryptionKeyName]},
-		{Name: constants.AgentSecretNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelDecryptionKeyName]},
+		{Name: constants.AgentSecretNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelDecryptionSecretName]},
 		{Name: constants.AgentDisableModelDecryptionEnvVarKey, Value: mi.getAnnotationOrDefault(pod, constants.DisableModelDecryption, "false")},
 		{Name: constants.AgentBaseModelTypeEnvVarKey, Value: mi.getLabelOrDefault(pod, constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel))},
 		{Name: constants.AgentLocalPathEnvVarKey, Value: constants.InitContainerModelSourceDefaultPath},
