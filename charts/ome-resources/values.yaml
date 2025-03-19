@@ -161,3 +161,6 @@ trainingSidecar:
 
 common:
   realmDomainComponent: "oraclecloud.com"
+
+organization:
+  namespace: "generative-ai-service"
