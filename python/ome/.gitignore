@@ -70,6 +70,7 @@ tox.ini
 .github
 git_push.sh
 poetry.lock
+uv.lock
 
 #Ipython Notebook
 .ipynb_checkpoints
