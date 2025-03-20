@@ -46,6 +46,7 @@ func DefaultCanonicalRegionNames() map[string]string {
 		"cdg": "eu-paris-1",
 		"qro": "mx-queretaro-1",
 		"lke": "us-lke-1",
+		"ord": "us-chicago-1",
 
 		// oc2
 		"lfi": "us-langley-1",
@@ -149,6 +150,7 @@ func DefaultRealmConfigs() map[string]*RealmConfig {
 				"eu-paris-1",
 				"mx-queretaro-1",
 				"us-lke-1",
+				"us-chicago-1",
 			},
 		},
 
