@@ -1,3 +1,9 @@
+{{- if .Values.openai.enabled }}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{.Values.openai.namespace}}
+---
 apiVersion: ome.io/v1beta1
 kind: Organization
 metadata:
@@ -9,15 +15,16 @@ spec:
   secretRef:
     name: openai-admin-key
     key: OPENAI_ADMIN_API_KEY
-    namespace: {{.Values.organization.namespace}}
+    namespace: {{.Values.openai.namespace}}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: openai-admin-key
-  namespace: {{.Values.organization.namespace}}
+  namespace: {{.Values.openai.namespace}}
   annotations:
     helm.sh/resource-policy: keep
 type: Opaque
 data:
   OPENAI_ADMIN_API_KEY: c2stYWRtaW4tV0FlTUJoVVVhYXlRTjNCMTduRjYxdTF4MnVpMVE5aDhReDNzNzJOLVdVNkI4WkwyUmN5VENOWExWdVQzQmxia0ZKVUNMTGRwSWJ5aWN2TG5UWmdxUU9CeHdsd0VOSGRZczYwX2czNENPTnNVa2FwOHNtWWQwTGxUZVlvQQ==
+{{- end }}
