@@ -1,5 +1,5 @@
 # Build the omae qpext binary
-FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke/go-boringcrypto-4493:go1.23.5-35 AS builder
+FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke-golang-fips:go1.24.1-51 AS builder
 ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 
 # Copy in the go src
@@ -13,7 +13,7 @@ COPY cmd/    cmd/
 COPY pkg/    pkg/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -a -o qpext ./cmd/qpext
+RUN CGO_ENABLED=0 GOOS=linux GO111MODULE=on GOFIPS140=latest go build -a -o qpext ./cmd/qpext
 
 FROM ocr-docker-remote.artifactory.oci.oraclecorp.com/os/oraclelinux:8-slim-fips
 COPY --from=odo-docker-signed-local.artifactory.oci.oraclecorp.com/base-image-support/ol8:1.40 / /
