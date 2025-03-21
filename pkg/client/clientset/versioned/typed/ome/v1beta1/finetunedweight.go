@@ -16,7 +16,7 @@ import (
 // FineTunedWeightsGetter has a method to return a FineTunedWeightInterface.
 // A group's client should implement this interface.
 type FineTunedWeightsGetter interface {
-	FineTunedWeights(namespace string) FineTunedWeightInterface
+	FineTunedWeights() FineTunedWeightInterface
 }
 
 // FineTunedWeightInterface has methods to work with FineTunedWeight resources.
@@ -40,13 +40,13 @@ type fineTunedWeights struct {
 }
 
 // newFineTunedWeights returns a FineTunedWeights
-func newFineTunedWeights(c *OmeV1beta1Client, namespace string) *fineTunedWeights {
+func newFineTunedWeights(c *OmeV1beta1Client) *fineTunedWeights {
 	return &fineTunedWeights{
 		gentype.NewClientWithList[*v1beta1.FineTunedWeight, *v1beta1.FineTunedWeightList](
 			"finetunedweights",
 			c.RESTClient(),
 			scheme.ParameterCodec,
-			namespace,
+			"",
 			func() *v1beta1.FineTunedWeight { return &v1beta1.FineTunedWeight{} },
 			func() *v1beta1.FineTunedWeightList { return &v1beta1.FineTunedWeightList{} }),
 	}

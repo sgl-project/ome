@@ -11,7 +11,7 @@ spec:
     listKind: FineTunedWeightList
     plural: finetunedweights
     singular: finetunedweight
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.disabled
@@ -28,6 +28,9 @@ spec:
       type: string
     - jsonPath: .spec.modelType
       name: ModelType
+      type: string
+    - jsonPath: .status.state
+      name: Ready
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age

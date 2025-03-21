@@ -48,8 +48,8 @@ func (c *FakeOmeV1beta1) DedicatedAIClusterProfiles() v1beta1.DedicatedAICluster
 	return &FakeDedicatedAIClusterProfiles{c}
 }
 
-func (c *FakeOmeV1beta1) FineTunedWeights(namespace string) v1beta1.FineTunedWeightInterface {
-	return &FakeFineTunedWeights{c, namespace}
+func (c *FakeOmeV1beta1) FineTunedWeights() v1beta1.FineTunedWeightInterface {
+	return &FakeFineTunedWeights{c}
 }
 
 func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceServiceInterface {

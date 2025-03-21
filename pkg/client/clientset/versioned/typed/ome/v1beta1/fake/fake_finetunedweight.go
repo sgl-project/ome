@@ -16,7 +16,6 @@ import (
 // FakeFineTunedWeights implements FineTunedWeightInterface
 type FakeFineTunedWeights struct {
 	Fake *FakeOmeV1beta1
-	ns   string
 }
 
 var finetunedweightsResource = v1beta1.SchemeGroupVersion.WithResource("finetunedweights")
@@ -27,8 +26,7 @@ var finetunedweightsKind = v1beta1.SchemeGroupVersion.WithKind("FineTunedWeight"
 func (c *FakeFineTunedWeights) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.FineTunedWeight, err error) {
 	emptyResult := &v1beta1.FineTunedWeight{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(finetunedweightsResource, c.ns, name, options), emptyResult)
-
+		Invokes(testing.NewRootGetActionWithOptions(finetunedweightsResource, name, options), emptyResult)
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -39,8 +37,7 @@ func (c *FakeFineTunedWeights) Get(ctx context.Context, name string, options v1.
 func (c *FakeFineTunedWeights) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.FineTunedWeightList, err error) {
 	emptyResult := &v1beta1.FineTunedWeightList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(finetunedweightsResource, finetunedweightsKind, c.ns, opts), emptyResult)
-
+		Invokes(testing.NewRootListActionWithOptions(finetunedweightsResource, finetunedweightsKind, opts), emptyResult)
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -61,16 +58,14 @@ func (c *FakeFineTunedWeights) List(ctx context.Context, opts v1.ListOptions) (r
 // Watch returns a watch.Interface that watches the requested fineTunedWeights.
 func (c *FakeFineTunedWeights) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(finetunedweightsResource, c.ns, opts))
-
+		InvokesWatch(testing.NewRootWatchActionWithOptions(finetunedweightsResource, opts))
 }
 
 // Create takes the representation of a fineTunedWeight and creates it.  Returns the server's representation of the fineTunedWeight, and an error, if there is any.
 func (c *FakeFineTunedWeights) Create(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.CreateOptions) (result *v1beta1.FineTunedWeight, err error) {
 	emptyResult := &v1beta1.FineTunedWeight{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(finetunedweightsResource, c.ns, fineTunedWeight, opts), emptyResult)
-
+		Invokes(testing.NewRootCreateActionWithOptions(finetunedweightsResource, fineTunedWeight, opts), emptyResult)
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -81,8 +76,7 @@ func (c *FakeFineTunedWeights) Create(ctx context.Context, fineTunedWeight *v1be
 func (c *FakeFineTunedWeights) Update(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (result *v1beta1.FineTunedWeight, err error) {
 	emptyResult := &v1beta1.FineTunedWeight{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(finetunedweightsResource, c.ns, fineTunedWeight, opts), emptyResult)
-
+		Invokes(testing.NewRootUpdateActionWithOptions(finetunedweightsResource, fineTunedWeight, opts), emptyResult)
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -94,8 +88,7 @@ func (c *FakeFineTunedWeights) Update(ctx context.Context, fineTunedWeight *v1be
 func (c *FakeFineTunedWeights) UpdateStatus(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (result *v1beta1.FineTunedWeight, err error) {
 	emptyResult := &v1beta1.FineTunedWeight{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(finetunedweightsResource, "status", c.ns, fineTunedWeight, opts), emptyResult)
-
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(finetunedweightsResource, "status", fineTunedWeight, opts), emptyResult)
 	if obj == nil {
 		return emptyResult, err
 	}
@@ -105,14 +98,13 @@ func (c *FakeFineTunedWeights) UpdateStatus(ctx context.Context, fineTunedWeight
 // Delete takes name of the fineTunedWeight and deletes it. Returns an error if one occurs.
 func (c *FakeFineTunedWeights) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(finetunedweightsResource, c.ns, name, opts), &v1beta1.FineTunedWeight{})
-
+		Invokes(testing.NewRootDeleteActionWithOptions(finetunedweightsResource, name, opts), &v1beta1.FineTunedWeight{})
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeFineTunedWeights) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(finetunedweightsResource, c.ns, opts, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(finetunedweightsResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.FineTunedWeightList{})
 	return err
@@ -122,8 +114,7 @@ func (c *FakeFineTunedWeights) DeleteCollection(ctx context.Context, opts v1.Del
 func (c *FakeFineTunedWeights) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.FineTunedWeight, err error) {
 	emptyResult := &v1beta1.FineTunedWeight{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(finetunedweightsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(finetunedweightsResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
 		return emptyResult, err
 	}

@@ -26,33 +26,32 @@ type FineTunedWeightInformer interface {
 type fineTunedWeightInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
-	namespace        string
 }
 
 // NewFineTunedWeightInformer constructs a new informer for FineTunedWeight type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFineTunedWeightInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredFineTunedWeightInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewFineTunedWeightInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredFineTunedWeightInformer(client, resyncPeriod, indexers, nil)
 }
 
 // NewFilteredFineTunedWeightInformer constructs a new informer for FineTunedWeight type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredFineTunedWeightInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredFineTunedWeightInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().FineTunedWeights(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().FineTunedWeights().List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().FineTunedWeights(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().FineTunedWeights().Watch(context.TODO(), options)
 			},
 		},
 		&omev1beta1.FineTunedWeight{},
@@ -62,7 +61,7 @@ func NewFilteredFineTunedWeightInformer(client versioned.Interface, namespace st
 }
 
 func (f *fineTunedWeightInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredFineTunedWeightInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewFilteredFineTunedWeightInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
 func (f *fineTunedWeightInformer) Informer() cache.SharedIndexInformer {

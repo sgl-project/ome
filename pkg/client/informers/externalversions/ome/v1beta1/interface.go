@@ -106,7 +106,7 @@ func (v *version) DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer
 
 // FineTunedWeights returns a FineTunedWeightInformer.
 func (v *version) FineTunedWeights() FineTunedWeightInformer {
-	return &fineTunedWeightInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &fineTunedWeightInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // InferenceServices returns a InferenceServiceInformer.

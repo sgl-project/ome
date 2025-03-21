@@ -329,13 +329,16 @@ type ClusterBaseModelList struct {
 // FineTunedWeight is the Schema for the finetunedweights API
 // +k8s:openapi-gen=true
 // +genclient
+// +genclient:nonNamespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:printcolumn:name="Disabled",type="boolean",JSONPath=".spec.disabled"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version"
 // +kubebuilder:printcolumn:name="Vendor",type="string",JSONPath=".spec.vendor"
 // +kubebuilder:printcolumn:name="CompartmentID",type="string",JSONPath=".spec.compartmentID"
 // +kubebuilder:printcolumn:name="ModelType",type="string",JSONPath=".spec.modelType"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type FineTunedWeight struct {
 	metav1.TypeMeta   `json:",inline"`

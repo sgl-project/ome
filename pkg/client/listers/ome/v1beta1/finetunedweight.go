@@ -15,8 +15,9 @@ type FineTunedWeightLister interface {
 	// List lists all FineTunedWeights in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1beta1.FineTunedWeight, err error)
-	// FineTunedWeights returns an object that can list and get FineTunedWeights.
-	FineTunedWeights(namespace string) FineTunedWeightNamespaceLister
+	// Get retrieves the FineTunedWeight from the index for a given name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1beta1.FineTunedWeight, error)
 	FineTunedWeightListerExpansion
 }
 
@@ -28,27 +29,4 @@ type fineTunedWeightLister struct {
 // NewFineTunedWeightLister returns a new FineTunedWeightLister.
 func NewFineTunedWeightLister(indexer cache.Indexer) FineTunedWeightLister {
 	return &fineTunedWeightLister{listers.New[*v1beta1.FineTunedWeight](indexer, v1beta1.Resource("finetunedweight"))}
-}
-
-// FineTunedWeights returns an object that can list and get FineTunedWeights.
-func (s *fineTunedWeightLister) FineTunedWeights(namespace string) FineTunedWeightNamespaceLister {
-	return fineTunedWeightNamespaceLister{listers.NewNamespaced[*v1beta1.FineTunedWeight](s.ResourceIndexer, namespace)}
-}
-
-// FineTunedWeightNamespaceLister helps list and get FineTunedWeights.
-// All objects returned here must be treated as read-only.
-type FineTunedWeightNamespaceLister interface {
-	// List lists all FineTunedWeights in the indexer for a given namespace.
-	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.FineTunedWeight, err error)
-	// Get retrieves the FineTunedWeight from the indexer for a given namespace and name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.FineTunedWeight, error)
-	FineTunedWeightNamespaceListerExpansion
-}
-
-// fineTunedWeightNamespaceLister implements the FineTunedWeightNamespaceLister
-// interface.
-type fineTunedWeightNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.FineTunedWeight]
 }
