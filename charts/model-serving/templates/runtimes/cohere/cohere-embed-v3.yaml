@@ -77,7 +77,7 @@ spec:
       emptyDir:
         medium: Memory
   containers:
-    - name: genai-container
+    - name: ome-container
       image: "{{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.embedv3Image.tag }}"
       ports:
         - containerPort: 8080

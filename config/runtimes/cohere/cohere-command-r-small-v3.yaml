@@ -50,7 +50,7 @@ spec:
       emptyDir:
         medium: Memory
   containers:
-    - name: genai-container
+    - name: ome-container
       image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.7.4-100124
       ports:
         - containerPort: 8080

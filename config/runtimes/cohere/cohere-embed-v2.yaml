@@ -78,7 +78,7 @@ spec:
       emptyDir:
         medium: Memory
   containers:
-    - name: genai-container
+    - name: ome-container
       image: us-chicago-1.ocir.io/idqj093njucb/oracle-serving:v0.3.4-ffa7943
       ports:
         - containerPort: 8080
