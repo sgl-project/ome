@@ -180,6 +180,8 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: constants.TensorRTLLM})
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentTensorRTLLMVersionsEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelFormatVersion]})
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentNumOfGPUEnvVarKey, Value: mi.getGPUCount(pod)})
+	} else {
+		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: modelFormat})
 	}
 
 	return envVars, nil
