@@ -1,8 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: DedicatedAICluster
 metadata:
-  name: dac-large
+  name: dac-training-test
 spec:
   count: 1
-  profile: medium-a100v2-h100
-
+  profile: large-a100v2-h100

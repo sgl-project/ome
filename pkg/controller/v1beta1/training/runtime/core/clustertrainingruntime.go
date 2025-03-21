@@ -36,12 +36,12 @@ func NewClusterTrainingRuntime(context.Context, client.Client, client.FieldIndex
 	}, nil
 }
 
-func (r *ClusterTrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob) ([]client.Object, error) {
+func (r *ClusterTrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string) ([]client.Object, error) {
 	var clTrainingRuntime omev1beta1.ClusterTrainingRuntime
 	if err := r.client.Get(ctx, client.ObjectKey{Name: trainJob.Spec.RuntimeRef.Name}, &clTrainingRuntime); err != nil {
 		return nil, fmt.Errorf("%w: %w", errorNotFoundSpecifiedClusterTrainingRuntime, err)
 	}
-	return r.buildObjects(ctx, trainJob, clTrainingRuntime.Spec.Template, clTrainingRuntime.Spec.MLPolicy, clTrainingRuntime.Spec.PodGroupPolicy)
+	return r.buildObjects(ctx, trainJob, clTrainingRuntime.Spec.Template, clTrainingRuntime.Spec.MLPolicy, clTrainingRuntime.Spec.PodGroupPolicy, vendor)
 }
 
 func (r *ClusterTrainingRuntime) TerminalCondition(ctx context.Context, trainJob *omev1beta1.TrainingJob) (*metav1.Condition, error) {

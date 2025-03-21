@@ -63,6 +63,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 					AnnotationsTrainer("conflictAnnotation", "override").
 					LabelsTrainer("conflictLabel", "override").
 					Suspend(true).
+					Volumes("meta").
 					Label("conflictLabel", "override").
 					Annotation("conflictAnnotation", "override").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
@@ -140,6 +141,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 						},
 					).
+					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 			},
@@ -232,6 +234,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 						},
 					}).
+					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 			},
@@ -287,6 +290,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 						},
 					).
+					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 			},
@@ -376,6 +380,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 						},
 					).
+					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
 			},
@@ -413,7 +418,8 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			objs, err := trainingRuntime.NewObjects(ctx, tc.trainJob)
+			vendor := "meta"
+			objs, err := trainingRuntime.NewObjects(ctx, tc.trainJob, &vendor)
 			if diff := cmp.Diff(tc.wantError, err, cmpopts.EquateErrors()); len(diff) != 0 {
 				t.Errorf("Unexpected error (-want,+got):\n%s", diff)
 			}

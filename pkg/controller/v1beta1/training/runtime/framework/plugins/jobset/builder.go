@@ -3,6 +3,8 @@ package jobset
 import (
 	"maps"
 
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +20,8 @@ import (
 type Builder struct {
 	jobsetv1alpha2.JobSet
 }
+
+var log = logf.Log.WithName("JobSetBuilder")
 
 func NewBuilder(objectKey client.ObjectKey, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec) *Builder {
 	return &Builder{
@@ -175,6 +179,13 @@ func (b *Builder) Trainer(info *runtime.Info, trainJob *omev1beta1.TrainingJob) 
 			for k, v := range info.Labels {
 				b.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels[k] = v
 			}
+
+			log.Info("Pod spec overrides", "volumes", info.Volumes, "affinity", info.Affinity)
+
+			b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Volumes = append(b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Volumes, info.Volumes...)
+			b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Affinity = info.Affinity
+
+			log.Info("Added pod spec overrides", "podspec", b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec)
 
 			// Update values for the Trainer container.
 			for j, container := range rJob.Template.Spec.Template.Spec.Containers {

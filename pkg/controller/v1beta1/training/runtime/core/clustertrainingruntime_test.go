@@ -26,6 +26,7 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 	cases := map[string]struct {
 		trainJob               *omev1beta1.TrainingJob
 		clusterTrainingRuntime *omev1beta1.ClusterTrainingRuntime
+		baseModelSpec          *omev1beta1.BaseModelSpec
 		wantObjs               []client.Object
 		wantError              error
 	}{
@@ -56,6 +57,7 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 					Labels(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
 					Suspend(true).
+					Volumes("meta").
 					LabelsTrainer(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
@@ -111,7 +113,8 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			objs, err := clTrainingRuntime.NewObjects(ctx, tc.trainJob)
+			vendor := "meta"
+			objs, err := clTrainingRuntime.NewObjects(ctx, tc.trainJob, &vendor)
 			if diff := cmp.Diff(tc.wantError, err, cmpopts.EquateErrors()); len(diff) != 0 {
 				t.Errorf("Unexpected error (-want,+got):\n%s", diff)
 			}

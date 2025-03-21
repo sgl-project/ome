@@ -471,7 +471,7 @@ const (
 	OutputBlocklistMountPath     = "/usr/bin/output.txt"
 )
 
-// Cohere volumn mount paths
+// Cohere volume mount paths
 const (
 	EmptyDirVolumeSourceName               = "model-empty-dir"
 	InitContainerModelSourceDefaultPath    = "/mnt/model"
@@ -625,6 +625,7 @@ const (
 	KueueCohortKind         = "Cohort"
 	KueueResourceFlavorKind = "ResourceFlavor"
 	KueueWorkloadKind       = "Workload"
+	TrainingJobKind         = "TrainingJob"
 )
 
 // Volcano Job Labels
@@ -765,9 +766,9 @@ const (
 	TrainingMetricsBucketEnvVarKey = "TRAINING_METRICS_BUCKET_NAME"
 )
 
-// Peft training Constants
+// training Constants
 const (
-	PeftTrainingModelStorePVCMountPath   = "/mnt/models"
+	ModelStorePVCMountPath               = "/mnt/models"
 	PeftTrainingDataEmptyDirMountPath    = "/mnt/data"
 	PeftTrainingOutputModelDirectoryName = "output"
 	PeftTrainingMergedModelWeightSuffix  = "-merged-weight"
@@ -781,7 +782,6 @@ const (
 const (
 	CohereTrainingRuntimePrefix                             = "cohere-finetuning"
 	CohereStorePathPrefix                                   = "/mnt/cohere/"
-	CohereTrainingInitModelStorePVCMountPath                = "/mnt/models"
 	CohereTrainingInitModelEmptyDirMountPathFastTransformer = "/model/fastertransformer"
 	CohereTrainingInitModelEmptyDirMountPathTensorRT        = "/model/tensorrtllm"
 	CohereTrainingInitDataEmptyDirMountPath                 = "/input"

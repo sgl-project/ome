@@ -31,6 +31,8 @@ type Trainer struct {
 	// TODO. Potentially, we can use map for env and sort it to improve code.
 	Env           []corev1.EnvVar
 	ContainerPort *corev1.ContainerPort
+	Volumes       []corev1.Volume
+	Affinity      *corev1.Affinity
 }
 
 // TODO: Potentially, we can add ScheduleTimeoutSeconds to the Scheduler for consistency.
@@ -49,6 +51,8 @@ type InfoOptions struct {
 	annotations     map[string]string
 	runtimePolicy   RuntimePolicy
 	podSpecReplicas []podSpecReplica
+	volumes         []corev1.Volume
+	affinity        *corev1.Affinity
 }
 
 type InfoOption func(options *InfoOptions)
@@ -95,6 +99,18 @@ func WithPodSpecReplicas(replicaName string, replicas int32, podSpec corev1.PodS
 	}
 }
 
+func WithVolumes(volumes []corev1.Volume) InfoOption {
+	return func(o *InfoOptions) {
+		o.volumes = volumes
+	}
+}
+
+func WithAffinity(affinity *corev1.Affinity) InfoOption {
+	return func(o *InfoOptions) {
+		o.affinity = affinity
+	}
+}
+
 func NewInfo(opts ...InfoOption) *Info {
 	options := defaultOptions
 	for _, opt := range opts {
@@ -122,6 +138,12 @@ func NewInfo(opts ...InfoOption) *Info {
 	}
 	if options.annotations != nil {
 		info.Annotations = options.annotations
+	}
+	if options.volumes != nil {
+		info.Volumes = options.volumes
+	}
+	if options.affinity != nil {
+		info.Affinity = options.affinity
 	}
 
 	return info

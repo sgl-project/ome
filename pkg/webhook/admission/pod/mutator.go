@@ -16,6 +16,7 @@ import (
 )
 
 // +kubebuilder:webhook:path=/mutate-pods,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create,versions=v1,name=inferenceservice.ome-webhook-server.pod-mutator,reinvocationPolicy=IfNeeded
+// +kubebuilder:webhook:path=/mutate-training-pods,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create,versions=v1,name=trainingjob.ome-webhook-server.pod-mutator,reinvocationPolicy=IfNeeded
 var log = logf.Log.WithName(constants.PodMutatorWebhookName)
 
 // Mutator is a webhook that injects incoming pods
@@ -40,6 +41,8 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 		return admission.ValidationResponse(true, "")
 	}
 
+	log.Info("mutating pod", "name", podName)
+
 	configMap, err := mutator.Clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(),
 		constants.InferenceServiceConfigMapName, metav1.GetOptions{})
 	if err != nil {
@@ -55,11 +58,15 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
+	log.Info("mutating pod completed", "pod", pod)
+
 	patch, err := json.Marshal(pod)
 	if err != nil {
 		log.Error(err, "Failed to marshal pod", "name", podName)
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
+
+	log.Info("parsing pod completed", "name", podName)
 
 	return admission.PatchResponseFromRaw(req.AdmissionRequest.Object.Raw, patch)
 }

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
+
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -367,8 +369,13 @@ func main() {
 		setupLog.Info("Configuring webhook server", "port", options.webhookPort)
 		hookServer := mgr.GetWebhookServer()
 
-		setupLog.Info("Registering webhooks to the webhook server")
+		setupLog.Info("Registering InferenceService webhook to the webhook server")
 		hookServer.Register("/mutate-pods", &webhook.Admission{
+			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering TrainingJob webhook to the webhook server")
+		hookServer.Register("/mutate-training-pods", &webhook.Admission{
 			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
@@ -392,7 +399,16 @@ func main() {
 			WithDefaulter(&v1beta1.InferenceServiceDefaulter{}).
 			WithValidator(&v1beta1.InferenceServiceValidator{}).
 			Complete(); err != nil {
-			setupLog.Error(err, "Failed to create webhook", "webhook", "v1beta1")
+			setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
+			os.Exit(1)
+		}
+
+		if err = ctrl.NewWebhookManagedBy(mgr).
+			For(&v1beta1.TrainingJob{}).
+			WithDefaulter(&training.TrainingJobDefaulter{}).
+			WithValidator(&training.TrainingjobValidator{}).
+			Complete(); err != nil {
+			setupLog.Error(err, "Failed to create TrainingJob webhook", "webhook", "v1beta1")
 			os.Exit(1)
 		}
 	}

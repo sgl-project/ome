@@ -26,7 +26,7 @@ const (
 
 var (
 	// logger for the validation webhook.
-	validatorLogger = logf.Log.WithName("inferenceservice-v1beta1-validation-webhook")
+	inferenceServiceValidatorLogger = logf.Log.WithName("inferenceservice-v1beta1-validation-webhook")
 	// IsvcRegexp regular expressions for validation of isvc name
 	IsvcRegexp = regexp.MustCompile("^" + IsvcNameFmt + "$")
 )
@@ -47,10 +47,10 @@ var _ webhook.CustomValidator = &InferenceServiceValidator{}
 func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	isvc, err := convertToInferenceService(obj)
 	if err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		inferenceServiceValidatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return nil, err
 	}
-	validatorLogger.Info("validate create", "name", isvc.Name)
+	inferenceServiceValidatorLogger.Info("validate create", "name", isvc.Name)
 	return validateInferenceService(isvc)
 }
 
@@ -58,10 +58,10 @@ func (v *InferenceServiceValidator) ValidateCreate(ctx context.Context, obj runt
 func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	isvc, err := convertToInferenceService(newObj)
 	if err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		inferenceServiceValidatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return nil, err
 	}
-	validatorLogger.Info("validate update", "name", isvc.Name)
+	inferenceServiceValidatorLogger.Info("validate update", "name", isvc.Name)
 
 	return validateInferenceService(isvc)
 }
@@ -70,10 +70,10 @@ func (v *InferenceServiceValidator) ValidateUpdate(ctx context.Context, oldObj, 
 func (v *InferenceServiceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	isvc, err := convertToInferenceService(obj)
 	if err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		inferenceServiceValidatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return nil, err
 	}
-	validatorLogger.Info("validate delete", "name", isvc.Name)
+	inferenceServiceValidatorLogger.Info("validate delete", "name", isvc.Name)
 	return nil, nil
 }
 

@@ -2,12 +2,12 @@ apiVersion: ome.io/v1beta1
 kind: TrainingJob
 metadata:
   name: "ft-llama-3-3-70b-instruct"
-  namespace: "dac-large-test"
+  namespace: "dac-training-test"
 spec:
   runtimeRef:
     name: llama-3-3-70b-instruct-ft
   trainer:
-    image: ap-osaka-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.15
+    image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.15
   modelConfig:
     inputModel: llama-3-3-70b-instruct-ft
   datasets:

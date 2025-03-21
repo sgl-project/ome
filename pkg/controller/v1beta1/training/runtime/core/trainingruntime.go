@@ -5,18 +5,23 @@ import (
 	"errors"
 	"fmt"
 
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
+
+	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
+	fwkcore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework/core"
+	fwkplugins "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework/plugins"
+	idxer "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/indexer"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
-
-	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
-	fwkcore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework/core"
-	fwkplugins "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/framework/plugins"
-	idxer "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/indexer"
 )
 
 var (
@@ -34,6 +39,8 @@ var TrainingRuntimeGroupKind = schema.GroupKind{
 }.String()
 
 var _ runtime.Runtime = (*TrainingRuntime)(nil)
+
+var log = logf.Log.WithName("TrainingRuntimeBuilder")
 
 var trainingRuntimeFactory *TrainingRuntime
 
@@ -55,18 +62,17 @@ func NewTrainingRuntime(ctx context.Context, c client.Client, indexer client.Fie
 	return trainingRuntimeFactory, nil
 }
 
-func (r *TrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob) ([]client.Object, error) {
+func (r *TrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string) ([]client.Object, error) {
 	var trainingRuntime omev1beta1.TrainingRuntime
 	err := r.client.Get(ctx, client.ObjectKey{Namespace: trainJob.Namespace, Name: trainJob.Spec.RuntimeRef.Name}, &trainingRuntime)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errorNotFoundSpecifiedTrainingRuntime, err)
 	}
-	return r.buildObjects(ctx, trainJob, trainingRuntime.Spec.Template, trainingRuntime.Spec.MLPolicy, trainingRuntime.Spec.PodGroupPolicy)
+	return r.buildObjects(ctx, trainJob, trainingRuntime.Spec.Template, trainingRuntime.Spec.MLPolicy, trainingRuntime.Spec.PodGroupPolicy, vendor)
 }
 
 func (r *TrainingRuntime) buildObjects(
-	ctx context.Context, trainJob *omev1beta1.TrainingJob, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec, mlPolicy *omev1beta1.MLPolicy, podGroupPolicy *omev1beta1.PodGroupPolicy,
-) ([]client.Object, error) {
+	ctx context.Context, trainJob *omev1beta1.TrainingJob, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec, mlPolicy *omev1beta1.MLPolicy, podGroupPolicy *omev1beta1.PodGroupPolicy, vendor *string) ([]client.Object, error) {
 	propagationLabels := jobSetTemplateSpec.Labels
 	if propagationLabels == nil && trainJob.Spec.Labels != nil {
 		propagationLabels = make(map[string]string, len(trainJob.Spec.Labels))
@@ -95,6 +101,23 @@ func (r *TrainingRuntime) buildObjects(
 		opts = append(opts, runtime.WithPodSpecReplicas(rJob.Name, 1, rJob.Template.Spec.Template.Spec))
 	}
 
+	var trainingPodVolumes = r.getPodVolumes(trainJob, vendor)
+	var podAffinity *corev1.Affinity
+	// Set node affinity from DAC if necessary
+	dedicatedAiClusterResource, err := utils.GetDedicatedAIClusterResource(r.client, &corev1.ObjectReference{
+		Name: trainJob.Namespace,
+	})
+	if err == nil && dedicatedAiClusterResource != nil {
+		if dedicatedAiClusterResource.Spec.Affinity != nil {
+			podAffinity = dedicatedAiClusterResource.Spec.Affinity.DeepCopy()
+		}
+	}
+
+	log.Info("Pod spec override", "podVolumes", trainingPodVolumes, "affinity", podAffinity)
+
+	opts = append(opts, runtime.WithVolumes(trainingPodVolumes))
+	opts = append(opts, runtime.WithAffinity(podAffinity))
+
 	info := runtime.NewInfo(opts...)
 
 	if err := r.framework.RunEnforceMLPolicyPlugins(info, trainJob); err != nil {
@@ -108,6 +131,8 @@ func (r *TrainingRuntime) buildObjects(
 	jobSetTemplate := jobsetv1alpha2.JobSet{
 		Spec: jobSetTemplateSpec.Spec,
 	}
+
+	log.Info("Checking runtime info", "runtime.info", info)
 
 	return r.framework.RunComponentBuilderPlugins(ctx, jobSetTemplate.DeepCopy(), info, trainJob)
 }
@@ -135,4 +160,81 @@ func (r *TrainingRuntime) ValidateObjects(ctx context.Context, old, new *omev1be
 		}
 	}
 	return r.framework.RunCustomValidationPlugins(old, new)
+}
+
+func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor *string) []corev1.Volume {
+	var podVolumes []corev1.Volume
+
+	pvcSourceVolume := corev1.Volume{
+		Name: constants.ModelStorePVCSourceName,
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: constants.GetPvcName(trainJob.Namespace),
+			},
+		},
+	}
+	podVolumes = append(podVolumes, pvcSourceVolume)
+
+	emptyDirDataVolume := corev1.Volume{
+		Name: constants.DataEmptyDirName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+	podVolumes = append(podVolumes, emptyDirDataVolume)
+
+	// Create EmptyDir volume for model, only for cohere training init container
+	if *vendor == "cohere" {
+		emptyDirModelVolume := corev1.Volume{
+			Name: constants.EmptyDirVolumeSourceName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium: corev1.StorageMediumMemory,
+				},
+			},
+		}
+		podVolumes = append(podVolumes, emptyDirModelVolume)
+
+		baseModelNameVolume := corev1.Volume{
+			Name: *trainJob.Spec.ModelConfig.InputModel,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: constants.GetPvcName(trainJob.Namespace),
+				},
+			},
+		}
+		podVolumes = append(podVolumes, baseModelNameVolume)
+	}
+
+	regionFileVolume := corev1.Volume{
+		Name: constants.RegionFileVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: constants.RegionFileVolumeMountPath,
+			},
+		},
+	}
+	podVolumes = append(podVolumes, regionFileVolume)
+
+	adFileVolume := corev1.Volume{
+		Name: constants.ADFileVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: constants.ADFileVolumeMountPath,
+			},
+		},
+	}
+	podVolumes = append(podVolumes, adFileVolume)
+
+	realmFileVolume := corev1.Volume{
+		Name: constants.RealmFileVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: constants.RealmFileVolumeMountPath,
+			},
+		},
+	}
+	podVolumes = append(podVolumes, realmFileVolume)
+
+	return podVolumes
 }

@@ -129,11 +129,11 @@ func (mi *ModelInitInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMount {
 // getMainContainerSecurityContext finds and returns the security context of the main container.
 func (mi *ModelInitInjector) getMainContainerSecurityContext(pod *v1.Pod) (*v1.SecurityContext, error) {
 	for _, container := range pod.Spec.Containers {
-		if container.Name == constants.MainContainerName {
+		if container.Name == constants.MainContainerName || container.Name == constants.TrainingMainContainerName {
 			return container.SecurityContext.DeepCopy(), nil
 		}
 	}
-	return nil, fmt.Errorf("no main container %s specified", constants.MainContainerName)
+	return nil, fmt.Errorf("no main container %s or %s specified", constants.MainContainerName, constants.TrainingMainContainerName)
 }
 
 // createInitContainer constructs the init container configuration.

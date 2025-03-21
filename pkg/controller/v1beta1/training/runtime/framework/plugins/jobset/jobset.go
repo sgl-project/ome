@@ -84,7 +84,7 @@ func (j *JobSet) Build(ctx context.Context, runtimeJobTemplate client.Object, in
 		}
 	}
 
-	// TODO: Add support for the PodSpecOverride.
+	// TODO: Add support for the PodSpecOverride for other pod specs.
 	// TODO: Refactor the builder with wrappers for PodSpec.
 	jobSet := jobSetBuilder.
 		Trainer(info, trainJob).

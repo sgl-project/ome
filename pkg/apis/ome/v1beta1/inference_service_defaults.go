@@ -60,7 +60,7 @@ func setResourceRequirementDefaults(requirements *v1.ResourceRequirements) {
 func (d *InferenceServiceDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	isvc, err := convertToInferenceService(obj)
 	if err != nil {
-		validatorLogger.Error(err, "Unable to convert object to InferenceService")
+		inferenceServiceValidatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return err
 	}
 	mutatorLogger.Info("Defaulting InferenceService", "namespace", isvc.Namespace, "isvc", isvc.Spec.Predictor)

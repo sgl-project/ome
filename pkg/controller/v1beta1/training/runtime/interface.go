@@ -16,7 +16,7 @@ import (
 type ReconcilerBuilder func(*builder.Builder, client.Client, cache.Cache) *builder.Builder
 
 type Runtime interface {
-	NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob) ([]client.Object, error)
+	NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string) ([]client.Object, error)
 	TerminalCondition(ctx context.Context, trainJob *omev1beta1.TrainingJob) (*metav1.Condition, error)
 	EventHandlerRegistrars() []ReconcilerBuilder
 	ValidateObjects(ctx context.Context, old, new *omev1beta1.TrainingJob) (admission.Warnings, field.ErrorList)

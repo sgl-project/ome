@@ -88,6 +88,14 @@ func (tsi *TrainingSidecarInjector) validate() error {
 
 func (tsi *TrainingSidecarInjector) getVolumeMounts() []v1.VolumeMount {
 	var trainingSidecarMounts []v1.VolumeMount
+	// model-storage PVC volume mount for sidecar container
+	modelPVCSourceVolumeMount := v1.VolumeMount{
+		Name:      constants.ModelStorePVCSourceName,
+		MountPath: constants.ModelStorePVCMountPath,
+		ReadOnly:  false,
+	}
+	trainingSidecarMounts = append(trainingSidecarMounts, modelPVCSourceVolumeMount)
+
 	// data empty dir volume mount for sidecar container
 	dataEmptyDirVolumeMount := v1.VolumeMount{
 		Name:      constants.DataEmptyDirName,

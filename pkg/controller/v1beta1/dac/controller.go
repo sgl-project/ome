@@ -44,6 +44,7 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusters/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ome.io,resources=inferenceservices,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ome.io,resources=trainingjobs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=namespaces/finalizers,verbs=create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.volcano.sh,resources=queues,verbs=get;list;watch;create;update;patch;delete
@@ -627,11 +628,20 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1
 
 	isvcList := &v1beta2.InferenceServiceList{}
 	if err := r.List(context.TODO(), isvcList, client.InNamespace(dac.Name)); err != nil {
-		return 0, err
+		return reservationCount, err
 	}
 
 	if len(isvcList.Items) == 0 {
-		return reservationCount, nil
+		// check if training job existing
+		trainingPodList := &v1beta2.TrainingJobList{}
+		if err := r.List(context.TODO(), trainingPodList, client.InNamespace(dac.Name)); err != nil {
+			return reservationCount, err
+		}
+		if len(trainingPodList.Items) == 0 {
+			return reservationCount, nil
+		} else {
+			return 0, nil
+		}
 	}
 
 	var totalIsvcOccupation int = 0
@@ -700,6 +710,10 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 		Owns(&appsv1.Deployment{}).
 		Watches(
 			&v1beta2.InferenceService{},
+			eventHandler,
+			builder.WithPredicates(predicates)).
+		Watches(
+			&v1beta2.TrainingJob{},
 			eventHandler,
 			builder.WithPredicates(predicates)).
 		Complete(r)

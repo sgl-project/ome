@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -52,31 +54,36 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var trainJob v1beta1.TrainingJob
 	if err := r.Client.Get(ctx, req.NamespacedName, &trainJob); err != nil {
 		if apierr.IsNotFound(err) {
-			r.Log.Error(err, "TrainingJob not found", "namespace", req.NamespacedName)
+			r.Log.Error(err, "TrainingJob not found", "namespace", req.NamespacedName, "name", trainJob.Name)
 			return ctrl.Result{}, nil
 		}
-		r.Log.Error(err, "Error getting TrainingJob", "namespace", req.NamespacedName)
+		r.Log.Error(err, "Error getting TrainingJob", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	r.Log.Info("Reconciling training job", "namespace", req.NamespacedName)
+	r.Log.Info("Reconciling training job", "namespace", req.NamespacedName, "name", trainJob.Name)
 	if isTrainJobFinished(&trainJob) {
-		r.Log.Info("TrainJob has already been finished", "namespace", req.NamespacedName)
+		r.Log.Info("TrainJob has already been finished", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return ctrl.Result{}, nil
 	}
 
-	// We use these 2 annotations for every training job to inject init-container and sidecar container. The values will be passed into jobset object, then the pod underneath.
+	r.Log.Info("Getting base model for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
+	baseModelSpec, _, err := utils.GetBaseModel(r.Client, *trainJob.Spec.ModelConfig.InputModel, trainJob.Namespace)
+	if err != nil {
+		r.Log.Error(err, "Error getting model", "namespace", req.NamespacedName, "name", trainJob.Name, "basemodel", trainJob.Spec.ModelConfig.InputModel)
+		return ctrl.Result{}, nil
+	}
+
+	// We use these 2 annotations for every training job to inject init-container and sidecar container.
+	// The values will be passed into jobset object, then the pod underneath.
+	// Only cohere model needs model init container.
 	if trainJob.Spec.Annotations == nil {
 		trainJob.Spec.Annotations = make(map[string]string)
 	}
-	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
-	trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
-
-	// Specify TrainingJobPodLabelKey label so the mutator can inject both init and sidecar container
-	if trainJob.Spec.Labels == nil {
-		trainJob.Spec.Labels = make(map[string]string)
+	if *baseModelSpec.Vendor == "cohere" {
+		trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
 	}
-	trainJob.Spec.Labels[constants.TrainingJobPodLabelKey] = trainJob.Name
+	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
 
 	runtimeRefGK := runtimeRefToGroupKind(trainJob.Spec.RuntimeRef).String()
 	runtime, ok := r.Runtimes[runtimeRefGK]
@@ -84,7 +91,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
 	}
 
-	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req)
+	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req, baseModelSpec.Vendor)
 
 	originStatus := trainJob.Status.DeepCopy()
 	updateSuspendedCondition(&trainJob)
@@ -99,8 +106,8 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime trainingruntimes.Runtime, trainJob *v1beta1.TrainingJob, req ctrl.Request) (ObjectOperationState, error) {
-	objs, err := runtime.NewObjects(ctx, trainJob)
+func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime trainingruntimes.Runtime, trainJob *v1beta1.TrainingJob, req ctrl.Request, vendor *string) (ObjectOperationState, error) {
+	objs, err := runtime.NewObjects(ctx, trainJob, vendor)
 	if err != nil {
 		return BuildObjectFailed, err
 	}

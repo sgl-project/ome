@@ -92,6 +92,93 @@ func MakeJobSetWrapper(namespace, name string) *JobSetWrapper {
 	}
 }
 
+func (j *JobSetWrapper) Volumes(vendor string) *JobSetWrapper {
+	var vendorPtr = &vendor
+	for idx := range j.Spec.ReplicatedJobs {
+		if j.Spec.ReplicatedJobs[idx].Name == constants.JobTrainerNode {
+			j.Spec.ReplicatedJobs[idx].Template.Spec.Template.Spec.Volumes = append(j.Spec.ReplicatedJobs[idx].Template.Spec.Template.Spec.Volumes, getPodVolumes(vendorPtr)...)
+		}
+	}
+	return j
+}
+
+func getPodVolumes(vendor *string) []corev1.Volume {
+	var podVolumes []corev1.Volume
+
+	pvcSourceVolume := corev1.Volume{
+		Name: constants.ModelStorePVCSourceName,
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: constants.GetPvcName(metav1.NamespaceDefault),
+			},
+		},
+	}
+	podVolumes = append(podVolumes, pvcSourceVolume)
+
+	emptyDirDataVolume := corev1.Volume{
+		Name: constants.DataEmptyDirName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+	podVolumes = append(podVolumes, emptyDirDataVolume)
+
+	// Create EmptyDir volume for model, only for cohere training init container
+	if *vendor == "cohere" {
+		emptyDirModelVolume := corev1.Volume{
+			Name: constants.EmptyDirVolumeSourceName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium: corev1.StorageMediumMemory,
+				},
+			},
+		}
+		podVolumes = append(podVolumes, emptyDirModelVolume)
+
+		baseModelNameVolume := corev1.Volume{
+			Name: "test-input-model",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: constants.GetPvcName(metav1.NamespaceDefault),
+				},
+			},
+		}
+		podVolumes = append(podVolumes, baseModelNameVolume)
+	}
+
+	regionFileVolume := corev1.Volume{
+		Name: constants.RegionFileVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: constants.RegionFileVolumeMountPath,
+			},
+		},
+	}
+	podVolumes = append(podVolumes, regionFileVolume)
+
+	adFileVolume := corev1.Volume{
+		Name: constants.ADFileVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: constants.ADFileVolumeMountPath,
+			},
+		},
+	}
+	podVolumes = append(podVolumes, adFileVolume)
+
+	realmFileVolume := corev1.Volume{
+		Name: constants.RealmFileVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: constants.RealmFileVolumeMountPath,
+			},
+		},
+	}
+	podVolumes = append(podVolumes, realmFileVolume)
+
+	return podVolumes
+}
+
 func (j *JobSetWrapper) Replicas(replicas int32) *JobSetWrapper {
 	for idx := range j.Spec.ReplicatedJobs {
 		j.Spec.ReplicatedJobs[idx].Replicas = replicas
