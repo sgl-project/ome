@@ -12,7 +12,7 @@ metadata:
     models.ome.io/internal: "{{ index .Values "cohere-embed-english-light-v3-0" "isInternal" }}"
     models.ome.io/lifecycle-phase: "{{ index .Values "cohere-embed-english-light-v3-0" "lifecyclePhase" }}"
     ome.io/base-model-decryption-key-name: "embed"
-    ome.io/base-model-encryption-secret-name: "embed-dek"
+    ome.io/base-model-decryption-secret-name: "embed-dek"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false

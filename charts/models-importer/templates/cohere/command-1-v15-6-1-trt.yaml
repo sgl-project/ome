@@ -12,7 +12,7 @@ metadata:
     models.ome.io/internal: "{{ index .Values "cohere-command-1-v15-6-1-trt" "isInternal" }}"
     models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-1-v15-6-1-trt" "lifecyclePhase" }}"
     ome.io/base-model-decryption-key-name: "command_52b"
-    ome.io/base-model-encryption-secret-name: "command_52b-dek"
+    ome.io/base-model-decryption-secret-name: "command_52b-dek"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false

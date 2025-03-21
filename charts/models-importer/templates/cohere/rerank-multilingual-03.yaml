@@ -12,7 +12,7 @@ metadata:
     models.ome.io/internal: "{{ index .Values "cohere-rerank-multilingual-03" "isInternal" }}"
     models.ome.io/lifecycle-phase: "{{ index .Values "cohere-rerank-multilingual-03" "lifecyclePhase" }}"
     ome.io/base-model-decryption-key-name: "rerank"
-    ome.io/base-model-encryption-secret-name: "rerank-dek"
+    ome.io/base-model-decryption-secret-name: "rerank-dek"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false

@@ -12,7 +12,7 @@ metadata:
     models.ome.io/internal: "{{ index .Values "cohere-command-r-plus-v1-2-chat" "isInternal" }}"
     models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-r-plus-v1-2-chat" "lifecyclePhase" }}"
     ome.io/base-model-decryption-key-name: "command_r"
-    ome.io/base-model-encryption-secret-name: "command_r-dek"
+    ome.io/base-model-decryption-secret-name: "command_r-dek"
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
