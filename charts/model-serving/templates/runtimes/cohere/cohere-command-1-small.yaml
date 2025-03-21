@@ -90,11 +90,11 @@ spec:
           value: "DEV"
       resources:
         limits:
-          nvidia.com/gpu: "4"
+          nvidia.com/gpu: "1"
         requests:
           cpu: 8
           memory: 120Gi
-          nvidia.com/gpu: "4"
+          nvidia.com/gpu: "1"
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
