@@ -49,6 +49,8 @@ const (
 // +kubebuilder:rbac:groups=ome.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=trainingjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=trainingjobs/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=finetunedweights/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=finetunedweights;finetunedweights/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var trainJob v1beta1.TrainingJob

@@ -286,6 +286,8 @@ rules:
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
   - dedicatedaiclusters
+  - finetunedweights
+  - finetunedweights/finalizers
   - inferenceservices
   - inferenceservices/finalizers
   - projects
@@ -312,6 +314,7 @@ rules:
   - clustercapacityreservations/status
   - clusterservingruntimes/status
   - dedicatedaiclusters/status
+  - finetunedweights/status
   - inferenceservices/status
   - projects/finalizers
   - projects/status
