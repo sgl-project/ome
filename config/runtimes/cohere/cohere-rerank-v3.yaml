@@ -18,7 +18,7 @@ spec:
       effect: "NoSchedule"
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
+      modelArchitecture: CohereForCausalLM
       version: "3.1"
       modelFormat:
         name: python
@@ -27,7 +27,7 @@ spec:
         name: python
         version: '1'
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
+      modelArchitecture: CohereForCausalLM
       version: "3.5"
       modelFormat:
         name: python

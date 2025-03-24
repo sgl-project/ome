@@ -27,7 +27,7 @@ spec:
   modelFramework:
     name: onnxruntime
     version: '1'
-  modelArchitecture: CohereForCasualLM
+  modelArchitecture: CohereForCausalLM
   modelParameterSize: 33M
   modelCapabilities:
     - "TEXT_EMBEDDINGS"

@@ -28,7 +28,7 @@ spec:
   modelFramework:
     name: tensorrtllm
     version: 'v0.11.0'
-  modelArchitecture: CohereForCasualLM
+  modelArchitecture: CohereForCausalLM
   modelParameterSize: 16.05B
   modelCapabilities:
     - "CHAT"

@@ -17,7 +17,7 @@ spec:
   {{- end }}
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
+      modelArchitecture: CohereForCausalLM
       version: "1.2"
       modelFormat:
         name: tensorrtllm

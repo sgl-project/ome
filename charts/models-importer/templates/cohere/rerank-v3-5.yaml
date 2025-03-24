@@ -28,7 +28,7 @@ spec:
   modelFramework:
     name: python
     version: '1'
-  modelArchitecture: CohereForCasualLM
+  modelArchitecture: CohereForCausalLM
   modelParameterSize: 33M
   modelCapabilities:
     - "TEXT_RERANK"

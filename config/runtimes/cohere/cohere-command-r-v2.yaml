@@ -18,7 +18,7 @@ spec:
       effect: "NoSchedule"
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
+      modelArchitecture: CohereForCausalLM
       version: "1.6"
       modelFormat:
         name: tensorrtllm
@@ -27,7 +27,7 @@ spec:
         name: tensorrtllm
         version: 'v0.11.0'
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
+      modelArchitecture: CohereForCausalLM
       version: "1.2"
       modelFormat:
         name: tensorrtllm

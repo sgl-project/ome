@@ -17,7 +17,7 @@ spec:
   {{- end }}
   supportedModelFormats:
     - autoSelect: true
-      modelArchitecture: CohereForCasualLM
+      modelArchitecture: CohereForCausalLM
       version: "2.0"
       modelFormat:
         name: onnx
