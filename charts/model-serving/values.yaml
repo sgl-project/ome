@@ -77,6 +77,15 @@ cohere:
   command1TRTv2Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.6.0"
+
+  commandAImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.8.1-03192025"
+
+  command_a_032025:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 1
   
   readinessProbe:
     httpGet:
