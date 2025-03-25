@@ -164,4 +164,12 @@ common:
 
 openai:
   enabled: false
-  namespace: "generative-ai-service"
+  namespace: "genai-openai"
+
+xai:
+  enabled: false
+  namespace: "genai-xai"
+
+google:
+  enabled: false
+  namespace: "genai-google"

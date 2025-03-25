@@ -7,7 +7,7 @@ metadata:
 apiVersion: ome.io/v1beta1
 kind: Organization
 metadata:
-    name: generative-ai-service
+  name: genai-openai-0001
 spec:
   organizationId: {{.Values.ome.ociETC.serviceCompartmentId}}
   vendor: openai
