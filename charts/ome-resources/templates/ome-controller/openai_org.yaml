@@ -1,4 +1,4 @@
-{{- if .Values.openai.enabled }}}
+{{- if .Values.openai.enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:

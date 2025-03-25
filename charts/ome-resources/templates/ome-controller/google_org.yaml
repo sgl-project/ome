@@ -1,4 +1,4 @@
-{{- if .Values.google.enabled }}}
+{{- if .Values.google.enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:

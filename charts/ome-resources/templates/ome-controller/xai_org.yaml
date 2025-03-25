@@ -1,4 +1,4 @@
-{{- if .Values.xai.enabled }}}
+{{- if .Values.xai.enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:
