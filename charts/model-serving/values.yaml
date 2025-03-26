@@ -68,15 +68,15 @@ cohere:
 
   command1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.4.4-2302"
+    tag: "v0.4.6-ms-1112-2302"
   
   command1TRTImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.5.0"
+    tag: "v0.5.0-ms-1345"
   
   command1TRTv2Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.6.0"
+    tag: "v0.5.0-ms-1345"
 
   commandAImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all

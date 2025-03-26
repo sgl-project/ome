@@ -17,12 +17,15 @@ spec:
   disabled: false
   displayName: cohere.command-r-plus
   storage:
-    storageUri: "oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command-r-plus-v1.6-128k"
-    path: /raid/models/cohere/command-r-plus-v1.6-128k
+    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/command-r-plus-v1.6-128k"
+    path: /mnt/data/models/cohere/command-r-plus-v1.6-128k
   vendor: cohere
   version: "1.6"
   modelFormat:
-    name: tensorrt_llm
+    name: tensorrtllm
+    version: 'v0.11.0'
+  modelFramework:
+    name: tensorrtllm
     version: 'v0.11.0'
   modelArchitecture: CohereForCausalLM
   modelParameterSize: 101.32B

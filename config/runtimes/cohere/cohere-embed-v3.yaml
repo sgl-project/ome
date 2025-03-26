@@ -28,7 +28,7 @@ spec:
         version: '1'
   modelSizeRange:
     min: 10M
-    max: 1B
+    max: 600M
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -96,7 +96,8 @@ spec:
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
-        - mountPath: /opt/ml/model
+        - mountPath: /opt/ml/model/onnxruntime
+          subPath: onnxruntime
           name: model-empty-dir
       readinessProbe:
         httpGet:

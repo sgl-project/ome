@@ -27,7 +27,7 @@ spec:
         name: onnxruntime
         version: '1'
   modelSizeRange:
-    min: 10M
+    min: 700M
     max: 1B
   affinity:
     nodeAffinity:

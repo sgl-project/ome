@@ -62,7 +62,7 @@ spec:
         medium: Memory
   containers:
     - name: ome-container
-      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.5.0
+      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.5.0-ms-1345
       ports:
         - containerPort: 8080
           name: http1

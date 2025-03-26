@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "cohere-command-r-v2"
+    models.ome.io/runtime: "cohere-command-r-v3"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "isInternal" }}"

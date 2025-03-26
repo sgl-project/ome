@@ -4,7 +4,7 @@ kind: ClusterServingRuntime
 metadata:
   name: cohere-command-r-small-v1
 spec:
-  disabled: true
+  disabled: false
   annotations:
     prometheus.io/port: '8081'
     prometheus.io/scrape: 'true'
@@ -17,6 +17,18 @@ spec:
     - key: "nvidia.com/gpu"
       operator: "Exists"
       effect: "NoSchedule"
+  supportedModelFormats:
+    - autoSelect: true
+      modelArchitecture: CohereForCasualLM
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.9.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.9.0'
+  modelSizeRange:
+    min: 15B
+    max: 20B
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

@@ -140,6 +140,8 @@ func (m *ModelSpec) RuntimeSupportsModel(srSpec *ServingRuntimeSpec, modelSpec *
 		modelSize := parseModelSize(*modelSpec.ModelParameterSize)
 		if modelSize >= parseModelSize(*srSpec.ModelSizeRange.Min) && modelSize <= parseModelSize(*srSpec.ModelSizeRange.Max) {
 			return true
+		} else {
+			return false
 		}
 	}
 
@@ -226,7 +228,7 @@ func sortClusterServingRuntimeList(runtimes *ClusterServingRuntimeList) {
 }
 
 // Updated sort function to prioritize runtimes with a matching size range
-func sortSupportedRuntimeByPriority(runtimes []SupportedRuntime, modelFormat ModelFormat, modelSize int64) {
+func sortSupportedRuntimeByPriority(runtimes []SupportedRuntime, modelFormat ModelFormat, modelSize float64) {
 	sort.Slice(runtimes, func(i, j int) bool {
 		p1 := runtimes[i].Spec.GetPriority(modelFormat.Name)
 		p2 := runtimes[j].Spec.GetPriority(modelFormat.Name)
@@ -270,9 +272,9 @@ func sortSupportedRuntimeByPriority(runtimes []SupportedRuntime, modelFormat Mod
 	})
 }
 
-func parseModelSize(sizeStr string) int64 {
+func parseModelSize(sizeStr string) float64 {
 	// Define multipliers for different size suffixes
-	var multiplier int64 = 1
+	var multiplier float64 = 1
 
 	switch {
 	case strings.HasSuffix(sizeStr, "T"):
@@ -286,7 +288,7 @@ func parseModelSize(sizeStr string) int64 {
 		sizeStr = strings.TrimSuffix(sizeStr, "M")
 	}
 
-	size, err := strconv.ParseInt(sizeStr, 10, 64)
+	size, err := strconv.ParseFloat(sizeStr, 64)
 	if err != nil {
 		return 0 // Handle the error or return a default value
 	}
