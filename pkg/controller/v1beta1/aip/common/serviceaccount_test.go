@@ -24,7 +24,7 @@ import (
 )
 
 // setupTestWithMockServerForServiceAccount creates a test environment with a mocked OpenAI API server for service account testing
-func setupTestWithMockServerForServiceAccount(t *testing.T) (*ServiceAccount, *httptest.Server, kubernetes.Interface) {
+func setupTestWithMockServerForServiceAccount(t *testing.T) (*OpenAIServiceAccount, *httptest.Server, kubernetes.Interface) {
 	// Setup mock server
 	server := testing_pkg.MockOpenAIServer()
 
@@ -44,7 +44,7 @@ func setupTestWithMockServerForServiceAccount(t *testing.T) (*ServiceAccount, *h
 				Namespace: "default",
 				Key:       "api-key",
 			},
-			Vendor: testing_pkg.StringPtr("openai"),
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 		},
 	}
 
@@ -118,7 +118,7 @@ func setupTestWithMockServerForServiceAccount(t *testing.T) (*ServiceAccount, *h
 	})
 
 	// Create service account handler
-	serviceAccount := NewServiceAccount(
+	serviceAccount := NewOpenAIServiceAccount(
 		fakeClient,
 		fakeClientset,
 		logr.Discard(),
@@ -167,7 +167,7 @@ func TestServiceAccount_GetProject(t *testing.T) {
 		WithObjects(testProject).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	project, err := serviceAccount.GetProject(context.Background())
@@ -194,7 +194,7 @@ func TestServiceAccount_GetProject_Error(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	_, err := serviceAccount.GetProject(context.Background())
@@ -214,7 +214,7 @@ func TestServiceAccount_GetOrganization(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: testing_pkg.StringPtr("openai"),
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 		},
 	}
 
@@ -242,13 +242,13 @@ func TestServiceAccount_GetOrganization(t *testing.T) {
 		WithObjects(testOrg, testProject).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	org, err := serviceAccount.GetOrganization(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "test-org", org.Name)
-	assert.Equal(t, "openai", *org.Spec.Vendor)
+	assert.Equal(t, v1beta1.VendorOpenAI, *org.Spec.Vendor)
 }
 
 // TestServiceAccount_GetOrganization_Error tests the error case for GetOrganization
@@ -282,7 +282,7 @@ func TestServiceAccount_GetOrganization_Error(t *testing.T) {
 		WithObjects(testProject).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	_, err := serviceAccount.GetOrganization(context.Background())
@@ -308,7 +308,7 @@ func TestServiceAccount_GetOpenAIClient_Error(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	_, err := serviceAccount.GetOpenAIClient(context.Background())
@@ -319,7 +319,7 @@ func TestServiceAccount_GetOpenAIClient_Error(t *testing.T) {
 // TestServiceAccount_SetOpenAIClient tests the SetOpenAIClient method
 func TestServiceAccount_SetOpenAIClient(t *testing.T) {
 	// Setup
-	serviceAccount := NewServiceAccount(nil, nil, logr.Discard(), nil, &v1beta1.ServiceAccount{})
+	serviceAccount := NewOpenAIServiceAccount(nil, nil, logr.Discard(), nil, &v1beta1.ServiceAccount{})
 	mockClient := &openaisdk.Client{}
 
 	// Test
@@ -457,7 +457,7 @@ func TestServiceAccount_updateServiceAccountCondition(t *testing.T) {
 		WithStatusSubresource(testServiceAccount).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	err := serviceAccount.updateServiceAccountCondition(context.Background(), v1beta1.ServiceAccountStatusCreated)
@@ -495,7 +495,7 @@ func TestServiceAccount_updateServiceAccountConditionWithError(t *testing.T) {
 		WithStatusSubresource(testServiceAccount).
 		Build()
 
-	serviceAccount := NewServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
+	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
 	originalErr := errors.New("original error")
@@ -519,7 +519,7 @@ func TestServiceAccount_updateServiceAccountConditionWithError(t *testing.T) {
 // TestServiceAccount_getStatusMessage tests the getStatusMessage method
 func TestServiceAccount_getStatusMessage(t *testing.T) {
 	// Setup
-	serviceAccount := NewServiceAccount(nil, nil, logr.Discard(), nil, &v1beta1.ServiceAccount{})
+	serviceAccount := NewOpenAIServiceAccount(nil, nil, logr.Discard(), nil, &v1beta1.ServiceAccount{})
 
 	// Test
 	tests := []struct {

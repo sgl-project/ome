@@ -7,7 +7,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/common"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"github.com/go-logr/logr"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,13 +53,22 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	log.Info("Reconciling project", "name", proj.Spec.Name, "organization", proj.Spec.OrganizationRef.Name)
 
 	// Initialize project resource
-	project := common.NewProject(
+	project, err := common.NewProject(
+		ctx,
 		r.Client,
 		r.Clientset,
 		log.WithName("project"),
 		r.Scheme,
 		proj,
 	)
+	if err != nil {
+		log.Error(err, "failed to create project operation")
+		if common.ShouldRetry(err) {
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		} else {
+			return ctrl.Result{}, nil
+		}
+	}
 
 	// Handle deletion
 	if !proj.DeletionTimestamp.IsZero() {
@@ -105,22 +113,12 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	}
 
 	// Only attempt to get the project if we have a project ID
-	var existingProject *openaisdk.Project
-	var err error
 	if proj.Status.ProjectID != "" {
-		existingProject, err = project.GetProject(ctx)
+		// Update project
+		err := project.Update(ctx)
 		if err != nil {
-			log.Error(err, "failed to get project")
+			log.Error(err, "failed to update project")
 			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-		}
-
-		if proj.Spec.Name != existingProject.Name {
-			// Update project
-			err := project.Update(ctx)
-			if err != nil {
-				log.Error(err, "failed to update project")
-				return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-			}
 		}
 	}
 

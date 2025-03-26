@@ -2011,7 +2011,7 @@ func (in *OrganizationSpec) DeepCopyInto(out *OrganizationSpec) {
 	*out = *in
 	if in.Vendor != nil {
 		in, out := &in.Vendor, &out.Vendor
-		*out = new(string)
+		*out = new(Vendor)
 		**out = **in
 	}
 	if in.Disabled != nil {

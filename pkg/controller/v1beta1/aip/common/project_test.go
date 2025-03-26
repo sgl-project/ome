@@ -22,7 +22,7 @@ import (
 )
 
 // setupTestWithMockServer creates a test environment with a mocked OpenAI API server
-func setupTestWithMockServer(t *testing.T) (*Project, *httptest.Server) {
+func setupTestWithMockServer(t *testing.T) (*OpenAIProject, *httptest.Server) {
 	// Setup mock server
 	server := testingpkg.MockOpenAIServer()
 
@@ -42,7 +42,7 @@ func setupTestWithMockServer(t *testing.T) (*Project, *httptest.Server) {
 				Namespace: "default",
 				Key:       "api-key",
 			},
-			Vendor: testingpkg.StringPtr("openai"),
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 		},
 	}
 
@@ -82,7 +82,7 @@ func setupTestWithMockServer(t *testing.T) (*Project, *httptest.Server) {
 		Build()
 
 	// Create project handler
-	project := NewProject(
+	project := NewOpenAIProject(
 		fakeClient,
 		nil,
 		logr.Discard(),
@@ -116,7 +116,7 @@ func TestProject_GetOrganizationRef(t *testing.T) {
 		},
 	}
 
-	project := NewProject(nil, nil, logr.Discard(), nil, testProject)
+	project := NewOpenAIProject(nil, nil, logr.Discard(), nil, testProject)
 
 	// Test
 	ref := project.GetOrganizationRef()
@@ -135,7 +135,7 @@ func TestProject_GetOrganization(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: testingpkg.StringPtr("openai"),
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 		},
 	}
 
@@ -152,13 +152,13 @@ func TestProject_GetOrganization(t *testing.T) {
 		WithObjects(testOrg).
 		Build()
 
-	project := NewProject(fakeClient, nil, logr.Discard(), scheme, testProject)
+	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
 	org, err := project.GetOrganization(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "test-org", org.Name)
-	assert.Equal(t, "openai", *org.Spec.Vendor)
+	assert.Equal(t, v1beta1.VendorOpenAI, *org.Spec.Vendor)
 }
 
 // TestProject_GetOrganization_Error tests the error case for GetOrganization
@@ -179,7 +179,7 @@ func TestProject_GetOrganization_Error(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	project := NewProject(fakeClient, nil, logr.Discard(), scheme, testProject)
+	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
 	_, err := project.GetOrganization(context.Background())
@@ -205,7 +205,7 @@ func TestProject_GetOpenAIClient_Error(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	project := NewProject(fakeClient, nil, logr.Discard(), scheme, testProject)
+	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
 	_, err := project.GetOpenAIClient(context.Background())
@@ -216,7 +216,7 @@ func TestProject_GetOpenAIClient_Error(t *testing.T) {
 // TestProject_SetOpenAIClient tests the SetOpenAIClient method
 func TestProject_SetOpenAIClient(t *testing.T) {
 	// Setup
-	project := NewProject(nil, nil, logr.Discard(), nil, &v1beta1.Project{})
+	project := NewOpenAIProject(nil, nil, logr.Discard(), nil, &v1beta1.Project{})
 	mockClient := &openaisdk.Client{}
 
 	// Test
@@ -286,7 +286,7 @@ func TestProject_Update(t *testing.T) {
 	defer server.Close()
 
 	// Test
-	err := project.Update(context.Background())
+	err := project.updateInternal(context.Background())
 	require.NoError(t, err)
 
 	// Verify the project status was updated
@@ -313,7 +313,7 @@ func TestProject_Update_Error(t *testing.T) {
 	server.Close() // Close the server to force an error
 
 	// Test
-	err := project.Update(context.Background())
+	err := project.updateInternal(context.Background())
 	require.Error(t, err)
 
 	// Verify the project status was updated with error condition
@@ -421,7 +421,7 @@ func TestProject_updateCondition(t *testing.T) {
 		WithStatusSubresource(testProject).
 		Build()
 
-	project := NewProject(fakeClient, nil, logr.Discard(), scheme, testProject)
+	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
 	err := project.updateCondition(context.Background(), v1beta1.ProjectStatusCreated)
@@ -459,7 +459,7 @@ func TestProject_updateConditionWithError(t *testing.T) {
 		WithStatusSubresource(testProject).
 		Build()
 
-	project := NewProject(fakeClient, nil, logr.Discard(), scheme, testProject)
+	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
 	originalErr := errors.New("original error")
@@ -483,7 +483,7 @@ func TestProject_updateConditionWithError(t *testing.T) {
 // TestProject_getStatusMessage tests the getStatusMessage method
 func TestProject_getStatusMessage(t *testing.T) {
 	// Setup
-	project := NewProject(nil, nil, logr.Discard(), nil, &v1beta1.Project{})
+	project := NewOpenAIProject(nil, nil, logr.Discard(), nil, &v1beta1.Project{})
 
 	// Test
 	tests := []struct {

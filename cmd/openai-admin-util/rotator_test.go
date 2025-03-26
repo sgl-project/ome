@@ -87,7 +87,6 @@ func TestProcessOrganizationNoSecret(t *testing.T) {
 
 func TestProcessOrganizationSecretNotFound(t *testing.T) {
 	// Create test organization with a secret reference to a non-existent secret
-	vendor := "openai"
 	secretName := "non-existent-secret"
 	secretNamespace := "default"
 	org := &v1beta1.Organization{
@@ -95,7 +94,7 @@ func TestProcessOrganizationSecretNotFound(t *testing.T) {
 			Name: "test-org-secret-not-found",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: &vendor,
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 			SecretRef: &v1beta1.SecretReference{
 				Name:      secretName,
 				Namespace: secretNamespace,
@@ -128,7 +127,6 @@ func TestProcessOrganization(t *testing.T) {
 	t.Skip("Skipping this test as it requires more complex mocking")
 
 	// Create test organization
-	vendor := "openai"
 	secretName := "test-secret"
 	secretNamespace := "default"
 	org := &v1beta1.Organization{
@@ -136,7 +134,7 @@ func TestProcessOrganization(t *testing.T) {
 			Name: "test-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: &vendor,
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 			SecretRef: &v1beta1.SecretReference{
 				Name:      secretName,
 				Namespace: secretNamespace,

@@ -39,6 +39,13 @@ type ResourceOperation interface {
 	Delete(ctx context.Context) error
 }
 
+// ServiceAccountOperation defines operations for a service account
+type ServiceAccountOperation interface {
+	Create(ctx context.Context) error
+	Update(ctx context.Context, sa *v1beta1.ServiceAccount) error
+	Delete(ctx context.Context) error
+}
+
 // ClientInitializer provides methods to initialize vendor clients
 type ClientInitializer interface {
 	// InitializeClient initializes a vendor client using organization credentials

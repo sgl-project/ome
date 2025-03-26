@@ -49,7 +49,15 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 	log.Info("Reconciling service account", "name", sa.Spec.Name, "project", sa.Spec.ProjectRef.Name)
 
 	// Initialize resource handler
-	resource := common.NewServiceAccount(r.Client, r.Clientset, log, r.Scheme, sa)
+	resource, err := common.NewServiceAccount(ctx, r.Client, r.Clientset, log, r.Scheme, sa)
+	if err != nil {
+		log.Error(err, "failed to create service account operation")
+		if common.ShouldRetry(err) {
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		} else {
+			return ctrl.Result{}, nil
+		}
+	}
 
 	// Ensure finalizer
 	if err := r.ensureFinalizer(ctx, sa); err != nil {

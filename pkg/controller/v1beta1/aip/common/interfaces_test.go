@@ -183,7 +183,7 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 				Namespace: "default",
 				Key:       "api-key",
 			},
-			Vendor: stringPtr("openai"),
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 		},
 	}
 
@@ -237,13 +237,13 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 	t.Run("InitializeClient_UnsupportedVendor", func(t *testing.T) {
 		// Create org with unsupported vendor
 		orgUnsupported := testOrg.DeepCopy()
-		orgUnsupported.Spec.Vendor = stringPtr("unsupported")
+		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
 
 		_, err := rb.InitializeClient(context.Background(), orgUnsupported)
 		assert.Error(t, err)
 	})
 }
 
-func stringPtr(s string) *string {
-	return &s
+func vendorPtr(v v1beta1.Vendor) *v1beta1.Vendor {
+	return &v
 }

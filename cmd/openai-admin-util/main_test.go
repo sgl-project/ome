@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
@@ -149,4 +150,8 @@ func TestMain(m *testing.M) {
 	// Teardown code
 
 	os.Exit(code)
+}
+
+func vendorPtr(v v1beta1.Vendor) *v1beta1.Vendor {
+	return &v
 }

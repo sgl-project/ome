@@ -32,17 +32,13 @@ func TestNewOrgWatcher(t *testing.T) {
 }
 
 func TestListOrganizations(t *testing.T) {
-	// Create test organizations
-	vendor := "openai"
-	otherVendor := "other"
-
 	// Create OpenAI org with secret
 	openAIOrg1 := &v1beta1.Organization{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "openai-org-1",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: &vendor,
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 			SecretRef: &v1beta1.SecretReference{
 				Name:      "secret-1",
 				Namespace: "default",
@@ -56,7 +52,7 @@ func TestListOrganizations(t *testing.T) {
 			Name: "openai-org-2",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: &vendor,
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 			SecretRef: &v1beta1.SecretReference{
 				Name:      "secret-2",
 				Namespace: "default",
@@ -70,7 +66,7 @@ func TestListOrganizations(t *testing.T) {
 			Name: "other-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: &otherVendor,
+			Vendor: vendorPtr(v1beta1.VendorGemini),
 		},
 	}
 
@@ -80,7 +76,7 @@ func TestListOrganizations(t *testing.T) {
 			Name: "openai-org-no-secret",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: &vendor,
+			Vendor: vendorPtr(v1beta1.VendorOpenAI),
 		},
 	}
 

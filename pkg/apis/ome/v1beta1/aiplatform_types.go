@@ -21,10 +21,20 @@ type Organization struct {
 	Status OrganizationStatus `json:"status,omitempty"`
 }
 
+// Vendor represents the vendors like OpenAI, Gemini or xAI
+type Vendor string
+
+const (
+	VendorOpenAI      Vendor = "openai"
+	VendorGemini      Vendor = "gemini"
+	VendorXAI         Vendor = "xai"
+	VendorUnsupported Vendor = "unsupported"
+)
+
 type OrganizationSpec struct {
 	// Vendor specifies the AI platform vendor (e.g., "openai", "anthropic")
 	// +required
-	Vendor *string `json:"vendor"`
+	Vendor *Vendor `json:"vendor"`
 	// Disabled indicates whether the organization is disabled
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
