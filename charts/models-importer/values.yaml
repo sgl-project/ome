@@ -184,6 +184,10 @@ cohere-command-1-52b-v15-6-0:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
 
+cohere-command-1-52b-v16-0-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
 cohere-command-1-v15-6-0-trt:
   enabled: false
   lifecyclePhase: "ACTIVE"
