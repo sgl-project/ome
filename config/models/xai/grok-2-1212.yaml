@@ -24,7 +24,7 @@ spec:
   modelFramework:
     name: transformer
     version: "1"
-  modelArchitecture: xAiForCasualLM
+  modelArchitecture: xAiForCausalLM
   modelParameterSize: 314B
   modelCapabilities:
     - "CHAT"

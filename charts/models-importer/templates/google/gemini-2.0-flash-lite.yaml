@@ -25,7 +25,7 @@ spec:
   modelFramework:
     name: transformer
     version: "1"
-  modelArchitecture: GeminiForCasualLM
+  modelArchitecture: GeminiForCausalLM
   modelParameterSize: 1.8T
   modelCapabilities:
     - "CHAT"

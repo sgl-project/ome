@@ -24,7 +24,7 @@ spec:
   modelFramework:
     name: transformer
     version: "1"
-  modelArchitecture: OpenAIForCasualLM
+  modelArchitecture: OpenAIForCausalLM
   modelParameterSize: 200B
   modelCapabilities:
     - "CHAT"
