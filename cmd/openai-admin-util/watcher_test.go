@@ -66,7 +66,7 @@ func TestListOrganizations(t *testing.T) {
 			Name: "other-org",
 		},
 		Spec: v1beta1.OrganizationSpec{
-			Vendor: vendorPtr(v1beta1.VendorGemini),
+			Vendor: vendorPtr(v1beta1.VendorGoogle),
 		},
 	}
 

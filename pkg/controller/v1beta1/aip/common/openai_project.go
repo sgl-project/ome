@@ -35,20 +35,6 @@ type OpenAIProject struct {
 	openAIClient *openaisdk.Client
 }
 
-// GetOrganizationRef implements OrganizationScoped
-func (p *OpenAIProject) GetOrganizationRef() *v1beta1.CrossReference {
-	return &p.Resource.Spec.OrganizationRef
-}
-
-// GetOrganization fetches the organization for the project
-func (p *OpenAIProject) GetOrganization(ctx context.Context) (*v1beta1.Organization, error) {
-	org := &v1beta1.Organization{}
-	if err := p.Client.Get(ctx, client.ObjectKey{Name: p.Resource.Spec.OrganizationRef.Name}, org); err != nil {
-		return nil, fmt.Errorf("failed to get organization %s: %w", p.Resource.Spec.OrganizationRef.Name, err)
-	}
-	return org, nil
-}
-
 // GetOpenAIClient initializes the OpenAI client with proper error handling
 // Implements OpenAIClientProvider interface
 func (p *OpenAIProject) GetOpenAIClient(ctx context.Context) (*openaisdk.Client, error) {
@@ -57,7 +43,7 @@ func (p *OpenAIProject) GetOpenAIClient(ctx context.Context) (*openaisdk.Client,
 		return p.openAIClient, nil
 	}
 
-	org, err := p.GetOrganization(ctx)
+	org, err := p.GetOrganizationFromProject(ctx, p.Resource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize client: %w", err)
 	}
@@ -75,88 +61,16 @@ func (p *OpenAIProject) SetOpenAIClient(client *openaisdk.Client) {
 	p.openAIClient = client
 }
 
-// updateCondition adds or updates a condition in the project status
-func (p *OpenAIProject) updateCondition(ctx context.Context, status v1beta1.ProjectStatusReason) error {
-	now := v1.NewTime(time.Now())
-	conditionType := v1beta1.ConditionTypeReady
-	conditionStatus := v1.ConditionTrue
-
-	if status.IsError() {
-		conditionType = v1beta1.ConditionTypeError
-		conditionStatus = v1.ConditionFalse
-	}
-
-	condition := v1.Condition{
-		Type:               conditionType,
-		Status:             conditionStatus,
-		Reason:             string(status),
-		Message:            p.getStatusMessage(status),
-		LastTransitionTime: now,
-		ObservedGeneration: p.Resource.Generation,
-	}
-
-	// Update or append the condition
-	found := false
-	for i, c := range p.Resource.Status.Conditions {
-		if c.Type == conditionType {
-			p.Resource.Status.Conditions[i] = condition
-			found = true
-			break
-		}
-	}
-	if !found {
-		p.Resource.Status.Conditions = append(p.Resource.Status.Conditions, condition)
-	}
-
-	if err := p.Client.Status().Update(ctx, p.Resource); err != nil {
-		return fmt.Errorf("failed to update project status: %w", err)
-	}
-	return nil
-}
-
-// updateConditionWithError updates the status condition and returns the original error
-// to ensure proper error propagation for reconciliation requeuing
-func (p *OpenAIProject) updateConditionWithError(ctx context.Context, status v1beta1.ProjectStatusReason, originalErr error) error {
-	// Update the status
-	if err := p.updateCondition(ctx, status); err != nil {
-		// If status update fails, log it but return the original error as that's more important
-		p.Log.Error(err, "Failed to update project status", "name", p.Resource.Name)
-	}
-
-	// Always return the original error to ensure reconciliation is requeued
-	return originalErr
-}
-
-// getStatusMessage returns a human-readable message for a given status
-func (p *OpenAIProject) getStatusMessage(status v1beta1.ProjectStatusReason) string {
-	switch status {
-	case v1beta1.ProjectStatusCreated:
-		return "Project successfully created"
-	case v1beta1.ProjectStatusUpdated:
-		return "Project successfully updated"
-	case v1beta1.ProjectStatusArchived:
-		return "Project successfully archived"
-	case v1beta1.ProjectStatusInitError:
-		return "Failed to initialize project"
-	case v1beta1.ProjectStatusAPIError:
-		return "API operation failed"
-	case v1beta1.ProjectStatusOrgError:
-		return "Organization operation failed"
-	default:
-		return "Unknown status"
-	}
-}
-
 // Create creates a new project in OpenAI
 func (p *OpenAIProject) Create(ctx context.Context) error {
 	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
-		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusInitError, err)
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
 	}
 
 	resp, err := openaiClient.Projects.Create(ctx, openaisdk.ProjectCreateRequest{Name: p.Resource.Spec.Name})
 	if err != nil {
-		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusAPIError, err)
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
 	// Update project status
@@ -165,7 +79,7 @@ func (p *OpenAIProject) Create(ctx context.Context) error {
 	p.Resource.Status.CreationTime = &creationTime
 	p.Resource.Status.LastUpdatedTime = &creationTime
 
-	return p.updateCondition(ctx, v1beta1.ProjectStatusCreated)
+	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusCreated)
 }
 
 // Update updates the project details in OpenAI
@@ -189,19 +103,19 @@ func (p *OpenAIProject) Update(ctx context.Context) error {
 func (p *OpenAIProject) updateInternal(ctx context.Context) error {
 	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
-		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusInitError, err)
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
 	}
 
 	resp, err := openaiClient.Projects.Update(ctx, p.Resource.Status.ProjectID, openaisdk.ProjectUpdateRequest{Name: p.Resource.Spec.Name})
 	if err != nil {
-		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusAPIError, err)
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
 	// Update status
 	updateTime := v1.NewTime(time.Unix(resp.CreatedAt, 0))
 	p.Resource.Status.LastUpdatedTime = &updateTime
 
-	return p.updateCondition(ctx, v1beta1.ProjectStatusUpdated)
+	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusUpdated)
 }
 
 // GetProject fetches the project details from OpenAI
@@ -222,12 +136,12 @@ func (p *OpenAIProject) GetProject(ctx context.Context) (*openaisdk.Project, err
 func (p *OpenAIProject) Delete(ctx context.Context) error {
 	openaiClient, err := p.GetOpenAIClient(ctx)
 	if err != nil {
-		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusInitError, err)
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
 	}
 
 	if _, err := openaiClient.Projects.Archive(ctx, p.Resource.Status.ProjectID); err != nil {
-		return p.updateConditionWithError(ctx, v1beta1.ProjectStatusAPIError, err)
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 
-	return p.updateCondition(ctx, v1beta1.ProjectStatusArchived)
+	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusArchived)
 }

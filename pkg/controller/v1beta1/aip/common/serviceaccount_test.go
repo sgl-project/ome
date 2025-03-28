@@ -170,7 +170,7 @@ func TestServiceAccount_GetProject(t *testing.T) {
 	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
-	project, err := serviceAccount.GetProject(context.Background())
+	project, err := serviceAccount.GetProject(context.Background(), serviceAccount.Resource)
 	require.NoError(t, err)
 	assert.Equal(t, "test-project", project.Name)
 	assert.Equal(t, "test-project-name", project.Spec.Name)
@@ -197,7 +197,7 @@ func TestServiceAccount_GetProject_Error(t *testing.T) {
 	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
-	_, err := serviceAccount.GetProject(context.Background())
+	_, err := serviceAccount.GetProject(context.Background(), serviceAccount.Resource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get project")
 }
@@ -245,7 +245,7 @@ func TestServiceAccount_GetOrganization(t *testing.T) {
 	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
-	org, err := serviceAccount.GetOrganization(context.Background())
+	org, err := serviceAccount.GetOrganization(context.Background(), serviceAccount.Resource)
 	require.NoError(t, err)
 	assert.Equal(t, "test-org", org.Name)
 	assert.Equal(t, v1beta1.VendorOpenAI, *org.Spec.Vendor)
@@ -285,7 +285,7 @@ func TestServiceAccount_GetOrganization_Error(t *testing.T) {
 	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
-	_, err := serviceAccount.GetOrganization(context.Background())
+	_, err := serviceAccount.GetOrganization(context.Background(), serviceAccount.Resource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get organization")
 }
@@ -460,7 +460,7 @@ func TestServiceAccount_updateServiceAccountCondition(t *testing.T) {
 	serviceAccount := NewOpenAIServiceAccount(fakeClient, nil, logr.Discard(), scheme, testServiceAccount)
 
 	// Test
-	err := serviceAccount.updateServiceAccountCondition(context.Background(), v1beta1.ServiceAccountStatusCreated)
+	err := serviceAccount.updateServiceAccountCondition(context.Background(), serviceAccount.Resource, v1beta1.ServiceAccountStatusCreated)
 	require.NoError(t, err)
 
 	// Verify the condition was added
@@ -499,7 +499,7 @@ func TestServiceAccount_updateServiceAccountConditionWithError(t *testing.T) {
 
 	// Test
 	originalErr := errors.New("original error")
-	err := serviceAccount.updateServiceAccountConditionWithError(context.Background(), v1beta1.ServiceAccountStatusAPIError, originalErr)
+	err := serviceAccount.updateServiceAccountConditionWithError(context.Background(), serviceAccount.Resource, v1beta1.ServiceAccountStatusAPIError, originalErr)
 	require.Error(t, err)
 	assert.Equal(t, originalErr, err)
 
@@ -538,7 +538,7 @@ func TestServiceAccount_getStatusMessage(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(string(test.status), func(t *testing.T) {
-			message := serviceAccount.getStatusMessage(test.status)
+			message := serviceAccount.getServiceAccountStatusMessage(test.status)
 			assert.Equal(t, test.expected, message)
 		})
 	}

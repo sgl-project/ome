@@ -26,7 +26,7 @@ type Vendor string
 
 const (
 	VendorOpenAI      Vendor = "openai"
-	VendorGemini      Vendor = "gemini"
+	VendorGoogle      Vendor = "google"
 	VendorXAI         Vendor = "xai"
 	VendorUnsupported Vendor = "unsupported"
 )

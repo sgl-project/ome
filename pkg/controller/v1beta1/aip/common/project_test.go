@@ -119,7 +119,7 @@ func TestProject_GetOrganizationRef(t *testing.T) {
 	project := NewOpenAIProject(nil, nil, logr.Discard(), nil, testProject)
 
 	// Test
-	ref := project.GetOrganizationRef()
+	ref := project.GetOrganizationRef(project.Resource)
 	assert.Equal(t, "test-org", ref.Name)
 }
 
@@ -155,7 +155,7 @@ func TestProject_GetOrganization(t *testing.T) {
 	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
-	org, err := project.GetOrganization(context.Background())
+	org, err := project.GetOrganizationFromProject(context.Background(), project.Resource)
 	require.NoError(t, err)
 	assert.Equal(t, "test-org", org.Name)
 	assert.Equal(t, v1beta1.VendorOpenAI, *org.Spec.Vendor)
@@ -182,7 +182,7 @@ func TestProject_GetOrganization_Error(t *testing.T) {
 	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
-	_, err := project.GetOrganization(context.Background())
+	_, err := project.GetOrganizationFromProject(context.Background(), project.Resource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get organization")
 }
@@ -424,7 +424,7 @@ func TestProject_updateCondition(t *testing.T) {
 	project := NewOpenAIProject(fakeClient, nil, logr.Discard(), scheme, testProject)
 
 	// Test
-	err := project.updateCondition(context.Background(), v1beta1.ProjectStatusCreated)
+	err := project.updateCondition(context.Background(), project.Resource, v1beta1.ProjectStatusCreated)
 	require.NoError(t, err)
 
 	// Verify the condition was added
@@ -463,7 +463,7 @@ func TestProject_updateConditionWithError(t *testing.T) {
 
 	// Test
 	originalErr := errors.New("original error")
-	err := project.updateConditionWithError(context.Background(), v1beta1.ProjectStatusAPIError, originalErr)
+	err := project.updateConditionWithError(context.Background(), project.Resource, v1beta1.ProjectStatusAPIError, originalErr)
 	require.Error(t, err)
 	assert.Equal(t, originalErr, err)
 
