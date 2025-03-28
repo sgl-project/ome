@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: cohere-rerank-v3
+  name: cohere-rerank-v3-5
 spec:
   {{- with .Values.cohere.commonAnnotations }}
   annotations:
@@ -18,13 +18,13 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCausalLM
-      version: "3.1"
+      version: "3.5"
       modelFormat:
         name: python
-        version: '3.1'
+        version: '3.5'
       modelFramework:
         name: python
-        version: '3.1'
+        version: '3.5'
   modelSizeRange:
     min: 10M
     max: 1B
@@ -78,7 +78,7 @@ spec:
         medium: Memory
   containers:
     - name: ome-container
-      image: "{{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3Image.tag }}"
+      image: "{{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3_5Image.tag }}"
       ports:
         - containerPort: 8080
           name: http1

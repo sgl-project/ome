@@ -1,30 +1,31 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: cohere-rerank-v3
+  name: cohere-rerank-v3-5
 spec:
-  {{- with .Values.cohere.commonAnnotations }}
+  disabled: false
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .Values.cohere.commonLabels }}
+    prometheus.io/port: '8081'
+    prometheus.io/scrape: 'true'
+    ome.io/disable-blocklist: 'true'
+    ome.io/inject-model-init: 'true'
   labels:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with .Values.commonTolerations }}
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   tolerations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCausalLM
-      version: "3.1"
+      version: "3.5"
       modelFormat:
         name: python
-        version: '3.1'
+        version: '3.5'
       modelFramework:
         name: python
-        version: '3.1'
+        version: '3.5'
   modelSizeRange:
     min: 10M
     max: 1B
@@ -67,7 +68,7 @@ spec:
                   - BM.GPU.H100.8
   protocolVersions:
     - cohere
-  schedulerName: {{ .Values.commonSchedulerName }}
+  schedulerName: "genai-kube-scheduler"
   volumes:
     - name: shared-memory
       emptyDir:
@@ -78,7 +79,7 @@ spec:
         medium: Memory
   containers:
     - name: ome-container
-      image: "{{ .Values.cohere.embedv3Image.repository }}:{{ .Values.cohere.rerankv3Image.tag }}"
+      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.7.6-01172025
       ports:
         - containerPort: 8080
           name: http1
@@ -95,8 +96,27 @@ spec:
         - mountPath: /opt/ml/model/python
           name: model-empty-dir
       readinessProbe:
-        {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 10
+        timeoutSeconds: 20
       livenessProbe:
-        {{- toYaml .Values.cohere.livenessProbe | nindent 8 }}
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 10
+        timeoutSeconds: 20
       startupProbe:
-        {{- toYaml .Values.cohere.startupProbe | nindent 8 }}
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 100
+        successThreshold: 1
+        periodSeconds: 3
+        initialDelaySeconds: 60
+        timeoutSeconds: 5

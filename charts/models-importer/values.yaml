@@ -208,6 +208,10 @@ cohere-rerank-multilingual-03:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
 
+cohere-rerank:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 cohere-rerank-v3-5:
   enabled: false
   lifecyclePhase: "ACTIVE"

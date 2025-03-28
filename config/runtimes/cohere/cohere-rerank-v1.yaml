@@ -17,6 +17,16 @@ spec:
     - key: "nvidia.com/gpu"
       operator: "Exists"
       effect: "NoSchedule"
+  supportedModelFormats:
+    - autoSelect: true
+      modelArchitecture: CohereForCausalLM
+      modelFormat:
+        name: onnxruntime
+        version: '1'
+      modelFramework:
+        name: onnxruntime
+        version: '1'
+      version: '1'
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -84,9 +94,11 @@ spec:
           memory: 120Gi
           nvidia.com/gpu: "1"
       volumeMounts:
-        - mountPath: /dev/shm
-          name: shared-memory
-        - mountPath: /opt/ml/model
+        - mountPath: /opt/ml/model/python
+          subPath: python
+          name: model-empty-dir
+        - mountPath: /opt/ml/model/onnxruntime
+          subPath: onnxruntime
           name: model-empty-dir
       readinessProbe:
         httpGet:

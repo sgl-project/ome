@@ -94,7 +94,11 @@ spec:
       volumeMounts:
         - mountPath: /dev/shm
           name: shared-memory
-        - mountPath: /opt/ml/model
+        - mountPath: /opt/ml/model/python
+          subPath: python
+          name: model-empty-dir
+        - mountPath: /opt/ml/model/onnxruntime
+          subPath: onnxruntime
           name: model-empty-dir
       readinessProbe:
         {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}

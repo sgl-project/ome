@@ -64,7 +64,15 @@ cohere:
   
   rerankv1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.4.4-2302"
+    tag: "v0.4.6-ms-1112-2302"
+
+  rerankv3Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.7.3-082724"
+
+  rerankv3_5Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.7.6-02132025"
 
   command1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
@@ -83,6 +91,11 @@ cohere:
     tag: "v0.8.1-03192025"
 
   command_a_032025:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 1
+
+  cohere_rerank:
     enabled: false
     minReplicas: 1
     maxReplicas: 1

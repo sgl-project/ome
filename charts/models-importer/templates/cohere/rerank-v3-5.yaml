@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "cohere-rerank-v3"
+    models.ome.io/runtime: "cohere-rerank-v3-5"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "cohere-rerank-v3-5" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "cohere-rerank-v3-5" "isInternal" }}"
@@ -24,10 +24,10 @@ spec:
   version: "3.5"
   modelFormat:
     name: python
-    version: '1'
+    version: '3.5'
   modelFramework:
     name: python
-    version: '1'
+    version: '3.5'
   modelArchitecture: CohereForCausalLM
   modelParameterSize: 33M
   modelCapabilities:
