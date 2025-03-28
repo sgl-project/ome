@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: google.gemini-2-0-flash-lite
+  displayName: google.gemini-2.0-flash-lite
   storage:
     storageUri: "vendor://google/models/{{ index .Values "gemini-2-0-flash-lite" "osPrefixOverride" }}"
   vendor: {{ index .Values "gemini-2-0-flash-lite" "vendor" }}
