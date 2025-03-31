@@ -16,7 +16,6 @@ import (
 	"knative.dev/pkg/network"
 
 	batchv1 "k8s.io/api/batch/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -641,14 +640,6 @@ const (
 	KueueEnabledLabelKey                   = "kueue-enabled"
 )
 
-// DatasetType represents the different types of data
-type DatasetType string
-
-const (
-	Training   DatasetType = "training"
-	Evaluation DatasetType = "evaluation"
-)
-
 // Model Agent & Model Controller
 var (
 	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"
@@ -661,7 +652,6 @@ var (
 type TrainingStrategy string
 
 const (
-	UnknownTraningStrategy  TrainingStrategy = ""
 	TFewTrainingStrategy    TrainingStrategy = "tfew"
 	VanillaTrainingStrategy TrainingStrategy = "vanilla"
 	LoraTrainingStrategy    TrainingStrategy = "lora"
@@ -676,30 +666,12 @@ const (
 
 // Default training job constants
 const (
-	TrainingJobName                         = "trainingjob"
-	TrainingJobNameLabelKey                 = "job-name"
-	TrainingJobNamePrefix                   = "ft-"
-	TrainingJobContainerName                = "genai-container"
-	TrainingInitContainerName               = "training-init"
-	TrainingSidecarContainerName            = "training-sidecar"
-	TrainingInitAuthtypeOKEWorkloadIdentity = "OkeWorkloadIdentity"
-	RegionEnvVarKey                         = "REGION"
-	TrainingJobConfigMapName                = "trainingjob-config"
-	TrainingInitConfigMapKeyName            = "trainingInit"
-	TrainingSidecarConfigMapKeyName         = "trainingSidecar"
-	TrainingFineTunedModelLabelKey          = "finetunedmodel-name"
-	TrainingReplicaTypeLabelKey             = "replica-type"
-	TrainingReplicaNumLabelKey              = "replica-num"
-	TrainingBaseModelNameLabelKey           = "base-model-name"
-	TrainingBaseModelSizeLabelKey           = "base-model-size"
-	TrainingMaxSchedulingTimeoutDuration    = 10 * time.Minute
-	TrainingK8SJobCreationTimeoutDuration   = 3 * time.Minute
-	TrainingK8SJobStartingTimeoutDuration   = 10 * time.Minute
-	TrainingK8SJobRetryTimeoutDuration      = 15 * time.Minute
-	TrainingK8SJobRetryMaxAttempts          = 5
-	DefaultTrainingLauncherReplicas         = 1
-	MergedModelWeightZippedFileSuffix       = "-merged-weight"
-	DefaultTrainingZippedModelDirectory     = "/mnt/ft/output"
+	TrainingJobName                     = "trainingjob"
+	TrainingSidecarContainerName        = "training-sidecar"
+	TrainingSidecarConfigMapKeyName     = "trainingSidecar"
+	MergedModelWeightZippedFileSuffix   = "-merged-weight"
+	DefaultTrainingZippedModelDirectory = "/mnt/ft/output"
+	TrainingJobNamePrefix               = "ft-"
 )
 
 type TrainingSidecarRuntime string
@@ -710,29 +682,97 @@ const (
 	CohereCommandRTrainingSidecar TrainingSidecarRuntime = "cohere-commandr"
 )
 
-// Training init env variable key names
-const (
-	ModelNameEnvVarKey        = "MODEL_NAME"
-	ModelStorePathEnvVarKey   = "MODEL_STORE_PATH"
-	CompartmentIdEnvVarKey    = "COMPARTMENT_ID"
-	VaultIdEnvVarKey          = "VAULT_ID"
-	ModelServingPathEnvVarKey = "MODEL_SERVING_PATH"
+// Training sidecar env variable key names and config key names
 
-	TrainingDataPathEnvVarKey              = "TRAINING_DATA_PATH"
-	DisableModelDecryptionEnvVarKey        = "DISABLE_MODEL_DECRYPTION"
-	EnableOboTokenEnvVarKey                = "ENABLE_OBO_TOKEN"
-	OboTokenEnvVarKey                      = "OBO_TOKEN"
-	TrainingDataBucketNameEnvVarKey        = "TRAINING_DATA_BUCKET_NAME"
-	TrainingDataObjectNameEnvVarKey        = "TRAINING_DATA_OBJECT_NAME"
-	TrainingDataObjectNamespaceEnvVarKey   = "TRAINING_DATA_OBJECT_NAMESPACE"
-	EvaluationDataBucketNameEnvVarKey      = "EVALUATION_DATA_BUCKET_NAME"
-	EvaluationDataObjectNameEnvVarKey      = "EVALUATION_DATA_OBJECT_NAME"
-	EvaluationDataObjectNamespaceEnvVarKey = "EVALUATION_DATA_OBJECT_NAMESPACE"
-	KeyNameEnvVarKey                       = "KEY_NAME"
+var (
+	TrainingSidecarInjectionKey         = OMEAPIGroupName + "/inject-training-sidecar"
+	TrainingJobPodLabelKey              = OMEAPIGroupName + "/" + TrainingJobName
+	TrainingSidecarRuntimeAnnotationKey = OMEAPIGroupName + "/training-sidecar-runtime"
 )
 
 var (
-	TrainingJobPodLabelKey = OMEAPIGroupName + "/" + TrainingJobName
+	CompartmentEnvVarKey              = AgentAppName + "_" + "COMPARTMENT_ID"
+	NamespaceEnvVarKey                = AgentAppName + "_" + "NAMESPACE"
+	OboTokenEnvVarKey                 = AgentAppName + "_" + "INPUT_OBJECT_STORE_OBO_TOKEN"
+	OboTokenConfigKey                 = "obo_token"
+	EnableOboTokenEnvVarKey           = AgentAppName + "_" + "INPUT_OBJECT_STORE_ENABLE_OBO_TOKEN"
+	BucketNameEnvVarKey               = AgentAppName + "_" + "BUCKET_NAME"
+	TrainingDataBucketNameEnvVarKey   = AgentAppName + "_" + "TRAINING_DATA_BUCKET_NAME"
+	TrainingDataBucketConfigKey       = "training_data_bucket_config_key"
+	TrainingDataNamespaceEnvVarKey    = AgentAppName + "_" + "TRAINING_DATA_NAMESPACE"
+	TrainingDataNamespaceConfigKey    = "training_data_namespace_config_key"
+	TrainingDataFileNameEnvVarKey     = AgentAppName + "_" + "TRAINING_DATA_OBJECT_NAME"
+	TrainingDataFileNameConfigKey     = "trainingDataFileName"
+	TrainingMetricsBucketEnvVarKey    = AgentAppName + "_" + "TRAINING_METRICS_BUCKET_NAME"
+	TrainingMetricsNamespaceEnvVarKey = AgentAppName + "_" + "TRAINING_METRICS_NAMESPACE"
+	TrainingMetricsObjectEnvVarKey    = AgentAppName + "_" + "TRAINING_METRICS_OBJECT_NAME"
+	BatchSizeConfigKey                = "trainingBatchSize"
+	EarlyStoppingPatienceConfigKey    = "earlyStoppingPatience"
+	EarlyStoppingThresholdConfigKey   = "earlyStoppingThreshold"
+	EpochsConfigKey                   = "totalTrainingEpochs"
+	LearningRateConfigKey             = "learningRate"
+	ModelDirectoryEnvVarKey           = AgentAppName + "_" + "MODEL_DIRECTORY"
+	ZippedModelPathEnvVarKey          = "ZIPPED_MODEL_PATH"
+	ZippedMergedModelPathEnvVarKey    = "ZIPPED_MERGED_MODEL_PATH"
+	LoraTrainingConfig                = "lora"
+	RuntimeEnvVarKey                  = AgentAppName + "_" + "RUNTIME"
+	LoraConfigRankConfigKey           = "loraR"
+	ModelVendorConfigKey              = "vendor"
+	TrainingNameEnvVarKey             = AgentAppName + "_" + "TRAINING_NAME"
+
+	/*
+	 * Constants specific to cohere training sidecar
+	 */
+	CohereLogTrainStatusEveryStepEnvVarKey = AgentAppName + "_" + "COHERE_FT_LOG_TRAIN_STATUS_EVERY_STEPS"
+	LogTrainStatusEveryStepConfigKey       = "logModelMetricsIntervalInSteps"
+	CohereNLastLayersEnvVarKey             = AgentAppName + "_" + "COHERE_FT_N_LAST_LAYERS"
+	NLastLayersConfigKey                   = "nLastLayers"
+	ModelSizeEnvVarKey                     = AgentAppName + "_" + "COHERE_FT_SIZE"
+	ModelSizeConfigKey                     = "modelSize"
+	StrategyEnvVarKey                      = AgentAppName + "_" + "COHERE_FT_STRATEGY"
+	StrategyConfigKey                      = "strategy"
+	TrainingConfigTypeConfigKey            = "trainingConfigType"
+	CohereTrainingSidecarNameEnvVarKey     = AgentAppName + "_" + "COHERE_FT_NAME"
+	CohereLearningRateEnvVarKey            = AgentAppName + "_" + "COHERE_FT_LEARNING_RATE"
+	CohereBatchSizeEnvVarKey               = AgentAppName + "_" + "COHERE_FT_TRAIN_BATCH_SIZE"
+	CohereEarlyStoppingPatienceEnvVarKey   = AgentAppName + "_" + "COHERE_FT_EARLY_STOPPING_PATIENCE"
+	CohereEarlyStoppingThresholdEnvVarKey  = AgentAppName + "_" + "COHERE_FT_EARLY_STOPPING_THRESHOLD"
+	CohereModelNameEnvVarKey               = AgentAppName + "_" + "COHERE_FT_BASE_MODEL"
+	CohereLoraConfigAlphaEnvVarKey         = AgentAppName + "_" + "COHERE_FT_LORA_CONFIG_ALPHA"
+	CohereEpochsEnvVarKey                  = AgentAppName + "_" + "COHERE_FT_TRAIN_EPOCHS"
+
+	/*
+	 * Constants specific to cohere command R training sidecar
+	 */
+	CohereTensorParallelEnvVarKey = AgentAppName + "_" + "COHERE_FT_TENSOR_PARALLEL_SIZE"
+	TensorParallelConfigKey       = "tensor_parallel"
+	BaseModelEnvVarKey            = AgentAppName + "_" + "BASE_MODEL"
+	BaseModelConfigKey            = "base_model"
+	ServingStrategyEnvVarKey      = AgentAppName + "_" + "COHERE_FT_SERVING_STRATEGY"
+
+	/*
+	 *Constants specific to peft training sidecar
+	 */
+
+	PeftEpochsEnvVarKey                = AgentAppName + "_" + "PEFT_FT_NUM_TRAIN_EPOCHS"
+	PeftBatchSizeEnvVarKey             = AgentAppName + "_" + "PEFT_FT_TRAIN_BATCH_SIZE"
+	PeftEarlyStoppingPatienceEnvVarKey = AgentAppName + "_" + "PEFT_FT_EARLY_STOPPING_PATIENCE"
+
+	PeftEarlyStoppingThresholdEnvVarKey = AgentAppName + "_" + "PEFT_FT_EARLY_STOPPING_THRESHOLD"
+	PeftTrainingDataSetFileEnvVarKey    = AgentAppName + "_" + "PEFT_FT_TRAIN_DATASET_FILE"
+	PeftLoraREnvVarKey                  = AgentAppName + "_" + "PEFT_FT_LORA_R"
+	LogMetricsIntervalInStepsEnvVarKey  = AgentAppName + "_" + "PEFT_FT_LOG_MODEL_METRICS_INTERNAL_IN_STEPS"
+	CohereLoraConfigRankEnvVarKey       = AgentAppName + "_" + "COHERE_FT_LORA_CONFIG_RANK"
+	PeftLoraConfigAlphaEnvVarKey        = AgentAppName + "_" + "PEFT_FT_LORA_ALPHA"
+	PeftLearningRateEnvVarKey           = AgentAppName + "_" + "PEFT_FT_LEARNING_RATE"
+
+	LoraAlphaConfigKey                      = "loraAlpha"
+	LoraDropoutEnvVarKey                    = AgentAppName + "_" + "PEFT_FT_LORA_DROPOUT"
+	LoraDropoutConfigKey                    = "loraDropout"
+	PeftModelNameEnvVarKey                  = AgentAppName + "_" + "PEFT_FT_MODEL_NAME"
+	ModelNameConfigKey                      = "modelName"
+	LogModelMetricsIntervalInStepsEnvVarKey = AgentAppName + "_" + "LOG_MODEL_METRICS_INTERVAL_IN_STEPS"
+	PeftTypeEnvVarKey                       = AgentAppName + "_" + "PEFT_FT_PEFT_TYPE"
 )
 
 // Training pod volume name constants
@@ -751,31 +791,19 @@ const (
 	RegionFileVolumeMountPath = "/etc/region"
 	ADFileVolumeMountPath     = "/etc/availability-domain"
 	RealmFileVolumeMountPath  = "/etc/identity-realm"
-
-	OCIDefaultRealmEnvVarKey = "OCI_DEFAULT_REALM"
-)
-
-var (
-	TrainingSidecarInjectionKey = OMEAPIGroupName + "/inject-training-sidecar"
-)
-
-// Training sidecar env variable key names and config key names
-const (
-	NamespaceEnvVarKey             = "NAMESPACE"
-	BucketNameEnvVarKey            = "BUCKET_NAME"
-	TrainingMetricsBucketEnvVarKey = "TRAINING_METRICS_BUCKET_NAME"
 )
 
 // training Constants
 const (
+	ModelDirectoryPrefix                 = "/mnt/data/models"
 	ModelStorePVCMountPath               = "/mnt/models"
-	PeftTrainingDataEmptyDirMountPath    = "/mnt/data"
+	TrainingDataEmptyDirMountPath        = "/mnt/data"
 	PeftTrainingOutputModelDirectoryName = "output"
 	PeftTrainingMergedModelWeightSuffix  = "-merged-weight"
 	PeftFineTunedWeightsDirectory        = "fine-tuned-weights"
 	PeftMergedWeightsDirectory           = "base-peft-merged"
-	PeftTrainingPathPrefixEnvVarKey      = "PATH_PREFIX"
-	PeftTrainingBaselineModelEnvVarKey   = "BASELINE_MODEL"
+	TrainingPathPrefixEnvVarKey          = "PATH_PREFIX"
+	TrainingBaselineModelEnvVarKey       = "BASELINE_MODEL"
 )
 
 // Cohere training constants
@@ -848,26 +876,6 @@ const (
 
 	// TorchEnvMasterPort is the env name for the master node port.
 	TorchEnvMasterPort string = "PET_MASTER_PORT"
-
-	// TrainJobJobsCreationSucceededMessage is status condition message for the
-	// {"type": "Created", "status": "True", "reason": "JobsCreationSucceeded"} condition.
-	TrainJobJobsCreationSucceededMessage = "Succeeded to create Jobs"
-
-	// TrainJobJobsBuildFailedMessage is status condition message for the
-	// {"type": "Created", "status": "True", "reason": "JobsBuildFailed"} condition.
-	TrainJobJobsBuildFailedMessage = "Failed to build Jobs"
-
-	// TrainJobJobsCreationFailedMessage is status condition message for the
-	// {"type": "Created", "status": "True", "reason": "JobsCreationFailed"} condition.
-	TrainJobJobsCreationFailedMessage = "Failed to create Jobs"
-
-	// TrainJobSuspendedMessage is status condition message for the
-	// {"type": "Suspended", "status": "True", "reason": "Suspended"} condition.
-	TrainJobSuspendedMessage = "TrainJob is suspended"
-
-	// TrainJobResumedMessage is status condition message for the
-	// {"type": "Suspended", "status": "True", "reason": "Resumed"} condition.
-	TrainJobResumedMessage = "TrainJob is resumed"
 )
 
 var (
@@ -887,24 +895,6 @@ type CommandRBaseModelVersion string
 const (
 	CommandRBaseModelV1 CommandRBaseModelVersion = "command_r"
 	CommandRBaseModelV2 CommandRBaseModelVersion = "command_r_v2"
-)
-
-type TrainingFailedReason string
-
-const (
-	TrainerReconcileFailed          TrainingFailedReason = "TrainerReconcileFailed"
-	ModelUpdateFailed               TrainingFailedReason = "ModelUpdateFailed"
-	TrainingJobStatusUpdateFailed   TrainingFailedReason = "TrainingJobStatusUpdateFailed"
-	ModelCreationOrFetchFailed      TrainingFailedReason = "ModelCreationOrFetchFailed"
-	K8SJobFetchFailed               TrainingFailedReason = "K8SJobFetchFailed"
-	K8SJobCreationTimeout           TrainingFailedReason = "K8SJobCreationTimeout"
-	K8SJobUnexpectedAdmissionError  TrainingFailedReason = "K8SJobUnexpectedAdmissionError"
-	K8SJobFailed                    TrainingFailedReason = "K8SJobFailed"
-	BadTrainingData                 TrainingFailedReason = "BadTrainingData"
-	K8SJobPodFetchFailed            TrainingFailedReason = "K8SJobPodFetchFailed"
-	K8SJobSchedulingFailed          TrainingFailedReason = "K8SJobSchedulingFailed"
-	K8SJobStartingTimeout           TrainingFailedReason = "K8SJobStartingTimeout"
-	TrainingContainerStartingFailed TrainingFailedReason = "TrainingContainerStartingFailed"
 )
 
 // constants related to training endpoint call
@@ -1020,15 +1010,6 @@ func LWSName(isvcName string) string {
 	return fmt.Sprintf("lws-%s", isvcName)
 }
 
-// nolint: unused
-func isEnvVarMatched(envVar, matchtedValue string) bool {
-	return getEnvOrDefault(envVar, "") == matchtedValue
-}
-
-func InferenceServiceURL(scheme, name, namespace, domain string) string {
-	return fmt.Sprintf("%s://%s.%s.%s%s", scheme, name, namespace, domain, InferenceServicePrefix(name))
-}
-
 func InferenceServiceHostName(name string, namespace string, domain string) string {
 	return fmt.Sprintf("%s.%s.%s", name, namespace, domain)
 }
@@ -1039,45 +1020,6 @@ func DefaultPredictorServiceName(name string) string {
 
 func PredictorServiceName(name string) string {
 	return name
-}
-
-func CanaryPredictorServiceName(name string) string {
-	return name + "-" + string(Predictor) + "-" + InferenceServiceCanary
-}
-
-func DefaultServiceName(name string, component InferenceServiceComponent) string {
-	return name + "-" + component.String() + "-" + InferenceServiceDefault
-}
-
-func CanaryServiceName(name string, component InferenceServiceComponent) string {
-	return name + "-" + component.String() + "-" + InferenceServiceCanary
-}
-
-func InferenceServicePrefix(name string) string {
-	return fmt.Sprintf("/v1/models/%s", name)
-}
-
-func PredictPath(name string, protocol InferenceServiceProtocol) string {
-	path := ""
-	if protocol == OpenInferenceProtocolV1 {
-		path = fmt.Sprintf("/v1/models/%s:predict", name)
-	} else if protocol == OpenInferenceProtocolV2 {
-		path = fmt.Sprintf("/v2/models/%s/infer", name)
-	}
-	return path
-}
-
-func VirtualServiceHostname(name string, predictorHostName string) string {
-	index := strings.Index(predictorHostName, ".")
-	return name + predictorHostName[index:]
-}
-
-func PredictorURL(metadata metav1.ObjectMeta, isCanary bool) string {
-	serviceName := DefaultPredictorServiceName(metadata.Name)
-	if isCanary {
-		serviceName = CanaryPredictorServiceName(metadata.Name)
-	}
-	return fmt.Sprintf("%s.%s", serviceName, metadata.Namespace)
 }
 
 // Should only match 1..65535, but for simplicity it matches 0-99999.
@@ -1108,6 +1050,32 @@ func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
 }
 
-func GetPvcName(baseName string) string {
-	return "pvc-" + baseName
+func GetPvName(trainjobName string, trainjobNamespace string, baseModelName string) string {
+	var maxSubLen = 16
+	if len(trainjobNamespace) > maxSubLen {
+		trainjobNamespace = trainjobNamespace[len(trainjobNamespace)-maxSubLen:]
+	}
+	if len(trainjobName) > maxSubLen {
+		trainjobName = trainjobName[len(trainjobName)-maxSubLen:]
+	}
+
+	if len(baseModelName) > maxSubLen {
+		baseModelName = baseModelName[len(baseModelName)-maxSubLen:]
+	}
+	return fmt.Sprintf("pv-%s-%s-%s", trainjobNamespace, baseModelName, trainjobName)
+}
+
+func GetPvcName(trainjobName string, trainjobNamespace string, baseModelName string) string {
+	var maxSubLen = 25
+	if len(trainjobNamespace) > maxSubLen {
+		trainjobNamespace = trainjobNamespace[len(trainjobNamespace)-maxSubLen:]
+	}
+	if len(trainjobName) > maxSubLen {
+		trainjobName = trainjobName[len(trainjobName)-maxSubLen:]
+	}
+
+	if len(baseModelName) > maxSubLen {
+		baseModelName = baseModelName[len(baseModelName)-maxSubLen:]
+	}
+	return fmt.Sprintf("pvc-%s-%s-%s", trainjobNamespace, baseModelName, trainjobName)
 }

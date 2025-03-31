@@ -1,9 +1,13 @@
 package testing
 
 import (
+	"encoding/json"
+	"path/filepath"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -109,7 +113,7 @@ func getPodVolumes(vendor *string) []corev1.Volume {
 		Name: constants.ModelStorePVCSourceName,
 		VolumeSource: corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: constants.GetPvcName(metav1.NamespaceDefault),
+				ClaimName: constants.GetPvcName("test-job", metav1.NamespaceDefault, "test-input-model"),
 			},
 		},
 	}
@@ -139,7 +143,7 @@ func getPodVolumes(vendor *string) []corev1.Volume {
 			Name: "test-input-model",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: constants.GetPvcName(metav1.NamespaceDefault),
+					ClaimName: constants.GetPvcName("test-job", metav1.NamespaceDefault, "test-input-model"),
 				},
 			},
 		}
@@ -232,11 +236,39 @@ func (j *JobSetWrapper) ContainerTrainer(image string, command []string, args []
 					j.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[k].Command = command
 					j.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[k].Args = args
 					j.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[k].Resources.Requests = res
+					j.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[k].Env = getEnvs()
+					j.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[k].VolumeMounts = append(j.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[k].VolumeMounts, getVolumeMounts()...)
 				}
 			}
 		}
 	}
 	return j
+}
+
+func getEnvs() []corev1.EnvVar {
+	envs := make([]corev1.EnvVar, 0)
+	envs = append(envs, corev1.EnvVar{
+		Name:  constants.TrainingPathPrefixEnvVarKey,
+		Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+	})
+
+	envs = append(envs, corev1.EnvVar{
+		Name:  constants.TrainingBaselineModelEnvVarKey,
+		Value: constants.ModelStorePVCMountPath,
+	})
+
+	return envs
+}
+
+func getVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{Name: "model-storage", MountPath: "/mnt/models"},
+		{Name: "model", MountPath: "/model/tensorrtllm"},
+		{Name: "data", MountPath: "/input"},
+		{Name: "region", MountPath: "/etc/region"},
+		{Name: "etc-avalability-domain", MountPath: "/etc/availability-domain"},
+		{Name: "etc-identity-realm", MountPath: "/etc/identity-realm"},
+	}
 }
 
 func (j *JobSetWrapper) ContainerTrainerPorts(ports []corev1.ContainerPort) *JobSetWrapper {
@@ -469,6 +501,11 @@ func (t *TrainJobWrapper) ModelConfig(modelConfig *omev1beta1.ModelConfig) *Trai
 	return t
 }
 
+func (t *TrainJobWrapper) HyperParameterTuningConfig(hyperParameterTuningConfig *omev1beta1.HyperparameterTuningConfig) *TrainJobWrapper {
+	t.Spec.HyperParameterTuningConfig = hyperParameterTuningConfig
+	return t
+}
+
 func (t *TrainJobWrapper) Obj() *omev1beta1.TrainingJob {
 	return &t.TrainingJob
 }
@@ -573,6 +610,39 @@ func (t *TrainJobModelConfigWrapper) OutputModel(outputModel *omev1beta1.Storage
 
 func (t *TrainJobModelConfigWrapper) Obj() *omev1beta1.ModelConfig {
 	return &t.ModelConfig
+}
+
+type HyperparameterTuningConfigWrapper struct {
+	omev1beta1.HyperparameterTuningConfig
+}
+
+func MakeTrainJobHyperparameterTuningConfigWrapper() *HyperparameterTuningConfigWrapper {
+	return &HyperparameterTuningConfigWrapper{
+		HyperparameterTuningConfig: omev1beta1.HyperparameterTuningConfig{},
+	}
+}
+
+func (h *HyperparameterTuningConfigWrapper) TrainJobHyperparameterTuningConfig() *HyperparameterTuningConfigWrapper {
+	hyperparameters := make(map[string]interface{})
+	hyperparameters[constants.BatchSizeConfigKey] = 8
+	hyperparameters[constants.LoraTrainingConfig] = "lora"
+	hyperparametersRaw, _ := json.Marshal(hyperparameters)
+
+	h.HyperparameterTuningConfig = omev1beta1.HyperparameterTuningConfig{
+		Method: "bayes",
+		Metric: omev1beta1.MetricConfig{
+			Name: "test-metric",
+			Goal: "maximize",
+		},
+		Parameters: runtime.RawExtension{
+			Raw: hyperparametersRaw,
+		},
+	}
+	return h
+}
+
+func (h *HyperparameterTuningConfigWrapper) Obj() *omev1beta1.HyperparameterTuningConfig {
+	return &h.HyperparameterTuningConfig
 }
 
 type TrainingRuntimeWrapper struct {

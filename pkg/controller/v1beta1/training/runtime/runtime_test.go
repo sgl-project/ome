@@ -23,6 +23,17 @@ func TestNewInfo(t *testing.T) {
 				WithLabels(map[string]string{
 					"labelKey": "labelValue",
 				}),
+				WithVolumes([]corev1.Volume{
+					{
+						Name: "test-volume",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				}),
+				WithAffinity(&corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{},
+				}),
 				WithAnnotations(map[string]string{
 					"annotationKey": "annotationValue",
 				}),
@@ -67,6 +78,19 @@ func TestNewInfo(t *testing.T) {
 				},
 				Annotations: map[string]string{
 					"annotationKey": "annotationValue",
+				},
+				Trainer: Trainer{
+					Volumes: []corev1.Volume{
+						{
+							Name: "test-volume",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{},
+					},
 				},
 				Scheduler: &Scheduler{
 					TotalRequests: map[string]TotalResourceRequest{

@@ -49,7 +49,7 @@ func CreateAgentCommand(module AgentModule) *cobra.Command {
 func runAgentCommand(cmd *cobra.Command, module AgentModule, action func() error) {
 	options := []fx.Option{
 		// Set up all config variables to viper
-		configProvider(cmd),
+		configProvider(cmd, module),
 	}
 
 	// Add module-specific options

@@ -151,16 +151,13 @@ modelAgent:
 
 trainingSidecar:
   image:
-    repository: ap-osaka-1.ocir.io/axoxdievda5j/genai-fine-training-agent
-    tag: v1.0-73
+    repository: us-chicago-1.ocir.io/axoxdievda5j/genai-ome-agent
+    tag: v1.1-322
 
-  region: ap-osaka-1
+  region: us-chicago-1
   namespace: "idqj093njucb"
   fineTunedModelBucket: "fine-tuned-model-weights"
   trainingMetricsBucket: "model-training-metrics"
-
-common:
-  realmDomainComponent: "oraclecloud.com"
 
 openai:
   enabled: false

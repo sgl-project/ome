@@ -169,7 +169,7 @@ func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor
 		Name: constants.ModelStorePVCSourceName,
 		VolumeSource: corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: constants.GetPvcName(trainJob.Namespace),
+				ClaimName: constants.GetPvcName(trainJob.Name, trainJob.Namespace, *trainJob.Spec.ModelConfig.InputModel),
 			},
 		},
 	}
@@ -199,7 +199,7 @@ func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor
 			Name: *trainJob.Spec.ModelConfig.InputModel,
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: constants.GetPvcName(trainJob.Namespace),
+					ClaimName: constants.GetPvcName(trainJob.Name, trainJob.Namespace, *trainJob.Spec.ModelConfig.InputModel),
 				},
 			},
 		}

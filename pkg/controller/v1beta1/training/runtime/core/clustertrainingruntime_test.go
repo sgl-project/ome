@@ -49,10 +49,25 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 						Container("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
 						Obj(),
 				).
+				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
+					InputModel("test-input-model").
+					OutputModel(&omev1beta1.StorageSpec{}).
+					Obj(),
+				).
+				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
+					TrainJobHyperparameterTuningConfig().
+					Obj(),
+				).
 				Obj(),
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					InitContainerDatasetModelInitializer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
+					InitContainerModelInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "MODEL_NAME",
+							Value: "test-input-model",
+						},
+					}).
 					NumNodes(100).
 					Labels(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).

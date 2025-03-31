@@ -70,6 +70,7 @@ func (d *TrainingAgent) Start() {
 func (d *TrainingAgent) downloadData() {
 	d.logger.Infof("Start downloading data")
 	d.logger.Infof("Training data store url: %+v", *d.Config.TrainingDataObjectStoreURI)
+	d.logger.Infof("Training data local store path: %+v", d.Config.TrainingDataStoreDirectory)
 
 	if err := d.Config.InputObjectStorageDataStore.DownloadBasedOnObjectSize(
 		*d.Config.TrainingDataObjectStoreURI,
@@ -118,7 +119,7 @@ func (d *TrainingAgent) startTraining() {
 		d.logger.Errorf("/finetune - StatusCode: %d, Response: %s", response.StatusCode, string(responseBody))
 
 		/*
-		 * For llama3 peft, data validation processed synchronously in its /fintune API.
+		 * For llama3 peft, data validation processed synchronously in its /finetune API.
 		 * (while for cohere ft, data validation processed by an async way and all these preprocessing errors being got via /status)
 		 */
 		if d.Config.Runtime == constants.PeftTrainingSidecar {
@@ -274,7 +275,9 @@ func (d *TrainingAgent) terminateTrainingInstance() {
 
 func (d *TrainingAgent) prepareFTDetailsPayload() []byte {
 	fineTuneDetails, err := NewFineTuneDetails(&d.Config)
+	d.logger.Infof("Finetune details: %+v", fineTuneDetails)
 	if err != nil {
+		d.logger.Errorf("Error preparing fine tune details: %+v", err)
 		panic(err)
 	}
 	jsonPayload, err := ConvertFTDetailsToJSON(fineTuneDetails)

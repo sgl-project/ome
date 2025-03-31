@@ -111,12 +111,12 @@ data:
     }
   trainingSidecar: |-
     {
-      "image" : "{{ .Values.trainingSidecar.image.repository }}:{{ .Values.trainingSidecar.image.tag }}",
+      "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
       "region" : "{{ .Values.trainingSidecar.region }}",
       "namespace": "{{ .Values.trainingSidecar.namespace }}",
       "fineTunedModelBucket": "{{ .Values.trainingSidecar.fineTunedModelBucket }}",
       "trainingMetricsBucket": "{{ .Values.trainingSidecar.trainingMetricsBucket }}",
-      "realmDomainComponent": "{{ .Values.common.realmDomainComponent }}"
+      "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}"
     }
 ---
 apiVersion: v1

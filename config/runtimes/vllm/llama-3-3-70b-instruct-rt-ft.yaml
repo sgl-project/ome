@@ -7,6 +7,7 @@ spec:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
+    ome.io/training-sidecar-runtime: peft
   labels:
     logging-forward: enabled
     sidecar.istio.io/inject: 'true'
@@ -29,7 +30,7 @@ spec:
                 spec:
                   containers:
                     - name: "trainer"
-                      image: ap-osaka-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.15
+                      image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.15
                       imagePullPolicy: Always
                       resources:
                         limits:

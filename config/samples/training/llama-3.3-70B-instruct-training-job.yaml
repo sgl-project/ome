@@ -7,11 +7,11 @@ spec:
   runtimeRef:
     name: llama-3-3-70b-instruct-ft
   trainer:
-    image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.15
+    image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.2.16
   modelConfig:
-    inputModel: llama-3-3-70b-instruct-ft
+    inputModel: llama-3-3-70b-instruct
   datasets:
-    storageUri: oci://n/id2imsfqczrq/b/genai-test/o/sales_pitch_generation_train.jsonl
+    storageUri: oci://n/idqj093njucb/b/beiwen_test/o/sales_pitch_generation_train.jsonl
   hyperparameterConfig:
     method: "bayes"
     metric:
@@ -19,13 +19,14 @@ spec:
       goal: maximize
     parameters:
       {
-        "trainingBatchSize": 16,
-        "totalTrainingEpochs": 1,
-        "earlyStoppingPatience": 6,
+        "strategy": "lora",
+        "trainingBatchSize": "16",
+        "totalTrainingEpochs": "1",
+        "earlyStoppingPatience": "6",
         "earlyStoppingThreshold": "0.01",
         "learningRate": "0.01",
-        "logModelMetricsIntervalInSteps": 10,
-        "loraR": 8,
-        "loraAlpha": 32,
+        "logModelMetricsIntervalInSteps": "10",
+        "loraR": "8",
+        "loraAlpha": "32",
         "loraDropout": "0.1"
       }

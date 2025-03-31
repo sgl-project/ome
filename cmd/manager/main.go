@@ -325,11 +325,12 @@ func main() {
 	setupLog.Info("Setting up TrainingJob controller")
 	trainingJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
 	if err = (&v1beta1trainingcontroller.TrainingJobReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("TrainingJob"),
-		Scheme:   mgr.GetScheme(),
-		Recorder: trainingJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
-		Runtimes: trainingRuntimes,
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("TrainingJob"),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  trainingJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+		Runtimes:  trainingRuntimes,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create Training Job controller")
 		os.Exit(1)

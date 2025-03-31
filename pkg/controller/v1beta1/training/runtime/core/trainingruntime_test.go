@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	testing2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
@@ -54,6 +55,15 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 						NumNodes(30).
 						Obj(),
 				).
+				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
+					InputModel("test-input-model").
+					OutputModel(&omev1beta1.StorageSpec{}).
+					Obj(),
+				).
+				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
+					TrainJobHyperparameterTuningConfig().
+					Obj(),
+				).
 				Obj(),
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
@@ -64,6 +74,12 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 					LabelsTrainer("conflictLabel", "override").
 					Suspend(true).
 					Volumes("meta").
+					InitContainerModelInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "MODEL_NAME",
+							Value: "test-input-model",
+						},
+					}).
 					Label("conflictLabel", "override").
 					Annotation("conflictAnnotation", "override").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
@@ -120,6 +136,15 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 						).
 						Obj(),
 				).
+				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
+					InputModel("test-input-model").
+					OutputModel(&omev1beta1.StorageSpec{}).
+					Obj(),
+				).
+				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
+					TrainJobHyperparameterTuningConfig().
+					Obj(),
+				).
 				Obj(),
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
@@ -139,8 +164,22 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 								Name:  "RUNTIME",
 								Value: "test:runtime",
 							},
+							{
+								Name:  constants.TrainingPathPrefixEnvVarKey,
+								Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+							},
+							{
+								Name:  constants.TrainingBaselineModelEnvVarKey,
+								Value: constants.ModelStorePVCMountPath,
+							},
 						},
 					).
+					InitContainerModelInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "MODEL_NAME",
+							Value: "test-input-model",
+						},
+					}).
 					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
@@ -172,7 +211,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				).
 				ModelConfig(
 					testing2.MakeTrainJobModelConfigWrapper().
-						InputModel("hf://trainjob-model").
+						InputModel("test-input-model").
 						OutputModel(&omev1beta1.StorageSpec{
 							StorageUri: ptr.String("hf://output-model"),
 							StorageKey: ptr.String("model-key"),
@@ -181,6 +220,10 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 						}).
 						Obj(),
+				).
+				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
+					TrainJobHyperparameterTuningConfig().
+					Obj(),
 				).
 				Obj(),
 			wantObjs: []client.Object{
@@ -216,7 +259,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 						},
 						{
 							Name:  "MODEL_NAME",
-							Value: "hf://trainjob-model",
+							Value: "test-input-model",
 						},
 						{
 							Name:  "param1",
@@ -256,6 +299,15 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 						NumProcPerNode("3").
 						Obj(),
 				).
+				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
+					InputModel("test-input-model").
+					OutputModel(&omev1beta1.StorageSpec{}).
+					Obj(),
+				).
+				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
+					TrainJobHyperparameterTuningConfig().
+					Obj(),
+				).
 				Obj(),
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
@@ -288,8 +340,22 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 								Name:  constants.TorchEnvMasterPort,
 								Value: fmt.Sprintf("%d", constants.ContainerTrainerPort),
 							},
+							{
+								Name:  constants.TrainingPathPrefixEnvVarKey,
+								Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+							},
+							{
+								Name:  constants.TrainingBaselineModelEnvVarKey,
+								Value: constants.ModelStorePVCMountPath,
+							},
 						},
 					).
+					InitContainerModelInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "MODEL_NAME",
+							Value: "test-input-model",
+						},
+					}).
 					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
@@ -333,6 +399,15 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 						).
 						Obj(),
+				).
+				ModelConfig(testing2.MakeTrainJobModelConfigWrapper().
+					InputModel("test-input-model").
+					OutputModel(&omev1beta1.StorageSpec{}).
+					Obj(),
+				).
+				HyperParameterTuningConfig(testing2.MakeTrainJobHyperparameterTuningConfigWrapper().
+					TrainJobHyperparameterTuningConfig().
+					Obj(),
 				).
 				Obj(),
 			wantObjs: []client.Object{
@@ -378,8 +453,22 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 								Name:  "RUNTIME",
 								Value: "test:runtime",
 							},
+							{
+								Name:  constants.TrainingPathPrefixEnvVarKey,
+								Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+							},
+							{
+								Name:  constants.TrainingBaselineModelEnvVarKey,
+								Value: constants.ModelStorePVCMountPath,
+							},
 						},
 					).
+					InitContainerModelInitializerEnv([]corev1.EnvVar{
+						{
+							Name:  "MODEL_NAME",
+							Value: "test-input-model",
+						},
+					}).
 					Volumes("meta").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),

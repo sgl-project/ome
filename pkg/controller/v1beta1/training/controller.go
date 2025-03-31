@@ -2,10 +2,17 @@ package training
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	v1 "k8s.io/api/core/v1"
+
+	trainjobpv "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/pv"
+	trainjobpvc "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/pvc"
+	"k8s.io/client-go/kubernetes"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 
@@ -28,11 +35,22 @@ import (
 
 // TrainingJobReconciler reconciles a TrainingJob object
 type TrainingJobReconciler struct {
-	Client   client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Runtimes map[string]trainingruntimes.Runtime
+	Client    client.Client
+	Clientset kubernetes.Interface
+	Log       logr.Logger
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	Runtimes  map[string]trainingruntimes.Runtime
+}
+
+// TrainingSidecarConfig represents configuration parameters for the training sidecar container.
+type TrainingSidecarConfig struct {
+	Image                 string `json:"image" validate:"required"`
+	Region                string `json:"region"`
+	Namespace             string `json:"namespace"`
+	FineTunedModelBucket  string `json:"fineTunedModelBucket"`
+	TrainingMetricsBucket string `json:"trainingMetricsBucket"`
+	CompartmentId         string `json:"compartmentId"`
 }
 
 type ObjectOperationState string
@@ -40,10 +58,11 @@ type ObjectOperationState string
 var errorUnsupportedRuntime = errors.New("the specified runtime is not supported")
 
 const (
-	CreateObjectSucceeded ObjectOperationState = "CreateObjectSucceeded"
-	BuildObjectFailed     ObjectOperationState = "BuildObjectFailed"
-	CreateObjectFailed    ObjectOperationState = "CreateObjectFailed"
-	UpdateObjectFailed    ObjectOperationState = "UpdateObjectFailed"
+	CreateObjectSucceeded       ObjectOperationState = "CreateObjectSucceeded"
+	BuildObjectFailed           ObjectOperationState = "BuildObjectFailed"
+	CreateObjectFailed          ObjectOperationState = "CreateObjectFailed"
+	UpdateObjectFailed          ObjectOperationState = "UpdateObjectFailed"
+	CreateFinetuneWeightsFailed ObjectOperationState = "CreateFinetuneWeightsFailed"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
@@ -70,22 +89,68 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	r.Log.Info("Getting base model for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
-	baseModelSpec, _, err := utils.GetBaseModel(r.Client, *trainJob.Spec.ModelConfig.InputModel, trainJob.Namespace)
+	baseModel, err := utils.GetClusterBaseModel(r.Client, *trainJob.Spec.ModelConfig.InputModel)
+
 	if err != nil {
 		r.Log.Error(err, "Error getting model", "namespace", req.NamespacedName, "name", trainJob.Name, "basemodel", trainJob.Spec.ModelConfig.InputModel)
 		return ctrl.Result{}, nil
 	}
 
-	// We use these 2 annotations for every training job to inject init-container and sidecar container.
-	// The values will be passed into jobset object, then the pod underneath.
-	// Only cohere model needs model init container.
-	if trainJob.Spec.Annotations == nil {
-		trainJob.Spec.Annotations = make(map[string]string)
+	configMap, err := r.Clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		r.Log.Error(err, "Failed to find config map", "name", constants.InferenceServiceConfigMapName)
+		return ctrl.Result{}, nil
 	}
-	if *baseModelSpec.Vendor == "cohere" {
-		trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
+
+	finetuneWeights := &v1beta1.FineTunedWeight{}
+	if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: utils.GetFineTunedModelName(trainJob.Name)}, finetuneWeights); err != nil {
+		if apierr.IsNotFound(err) {
+			// Finetune weights not found, create a new one
+			finetuneWeights = r.createFinetuneWeights(&trainJob, *configMap)
+			if err = r.Client.Create(ctx, finetuneWeights); err != nil {
+				if apierr.IsAlreadyExists(err) {
+					// Requeue it when model already exists
+					return ctrl.Result{}, nil
+				} else {
+					r.Log.Error(err, "Failed to create Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
+					updateCreatedCondition(&trainJob, CreateFinetuneWeightsFailed)
+				}
+			} else {
+				r.Log.Info("Finetune weights created", "tjob", trainJob.Name, "model", finetuneWeights.Name)
+				finetuneWeights.Status.State = v1beta1.LifeCycleStateCreating
+			}
+		} else {
+			r.Log.Error(err, "Failed to get Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
+			return ctrl.Result{}, err
+		}
 	}
-	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
+
+	for _, condition := range trainJob.Status.Conditions {
+		if condition.Type == v1beta1.TrainJobComplete {
+			finetuneWeights.Status.State = v1beta1.LifeCycleStateReady
+			return ctrl.Result{}, err
+		}
+		if condition.Type == v1beta1.TrainJobFailed {
+			finetuneWeights.Status.State = v1beta1.LifeCycleStateFailed
+			return ctrl.Result{}, err
+		}
+	}
+
+	if result, err := r.reconcilePVPVC(&trainJob, baseModel.Spec); err != nil {
+		r.Log.Error(err, "Error reconciling PV/PVC for train job", "namespace", req.NamespacedName, "name", trainJob.Name)
+		return result, err
+	}
+
+	trainingRuntime, err := utils.GetTrainingRuntime(r.Client, trainJob.Spec.RuntimeRef.Name, trainJob.Namespace)
+	if err != nil {
+		r.Log.Error(err, "Error getting training runtime", "namespace", req.NamespacedName, "name", trainJob.Name, "training runtime", trainJob.Spec.RuntimeRef.Name)
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.prepareJobAnnotations(&trainJob, baseModel, trainingRuntime); err != nil {
+		r.Log.Error(err, "Error preparing training job annotations", "namespace", req.NamespacedName, "name", trainJob.Name)
+		return ctrl.Result{}, nil
+	}
 
 	runtimeRefGK := runtimeRefToGroupKind(trainJob.Spec.RuntimeRef).String()
 	runtime, ok := r.Runtimes[runtimeRefGK]
@@ -93,7 +158,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
 	}
 
-	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req, baseModelSpec.Vendor)
+	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req, baseModel.Spec.Vendor)
 
 	originStatus := trainJob.Status.DeepCopy()
 	updateSuspendedCondition(&trainJob)
@@ -171,6 +236,13 @@ func updateCreatedCondition(trainJob *v1beta1.TrainingJob, opState ObjectOperati
 			Message: v1beta1.TrainJobJobsCreationFailedMessage,
 			Reason:  v1beta1.TrainJobJobsCreationFailedReason,
 		}
+	case CreateFinetuneWeightsFailed:
+		newCond = metav1.Condition{
+			Type:    v1beta1.TrainJobFailed,
+			Status:  metav1.ConditionFalse,
+			Message: v1beta1.TrainJobJobsCreationFailedMessage,
+			Reason:  v1beta1.TrainJobJobsCreationFailedReason,
+		}
 	default:
 		return
 	}
@@ -223,6 +295,21 @@ func runtimeRefToGroupKind(runtimeRef omev1beta1.RuntimeRef) schema.GroupKind {
 	}
 }
 
+// reconcilePVPVC reconciles the PersistentVolume and PersistentVolumeClaim for the training job.
+func (r *TrainingJobReconciler) reconcilePVPVC(trainjob *omev1beta1.TrainingJob, baseModel v1beta1.BaseModelSpec) (ctrl.Result, error) {
+	pvReconciler := trainjobpv.NewTrainingPVReconciler(r.Client, r.Clientset, r.Scheme)
+	pvcReconciler := trainjobpvc.NewTrainingPVCReconciler(r.Client, r.Clientset, r.Scheme)
+
+	if result, err := pvReconciler.Reconcile(trainjob, &baseModel); err != nil {
+		return result, err
+	}
+
+	if result, err := pvcReconciler.Reconcile(trainjob); err != nil {
+		return result, err
+	}
+	return ctrl.Result{}, nil
+}
+
 func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.TrainingJob{})
@@ -234,4 +321,188 @@ func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 	}
 	return b.Complete(r)
+}
+
+func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.TrainingJob, baseModel *v1beta1.ClusterBaseModel, trainingRuntime *v1beta1.TrainingRuntimeSpec) error {
+	// We use these 2 annotations for every training job to inject init-container and sidecar container.
+	// The values will be passed into jobset object, then the pod underneath.
+	// Only cohere model needs model init container.
+	if trainJob.Spec.Annotations == nil {
+		trainJob.Spec.Annotations = make(map[string]string)
+	}
+	if *baseModel.Spec.Vendor == "cohere" {
+		trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
+	}
+	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
+
+	trainingSidecarRuntime := trainingRuntime.Annotations[constants.TrainingSidecarRuntimeAnnotationKey]
+	trainJob.Spec.Annotations[constants.TrainingSidecarRuntimeAnnotationKey] = trainingSidecarRuntime
+
+	if trainJob.Spec.Datasets.Parameters != nil {
+		params := *trainJob.Spec.Datasets.Parameters
+		if obo_token, ok := params["obo_token"]; ok {
+			trainJob.Spec.Annotations[constants.OboTokenConfigKey] = obo_token
+		}
+	}
+
+	v, err := utils.GetHyperparameterValueByKey(constants.EpochsConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.EpochsConfigKey)
+		return err
+	}
+	trainJob.Spec.Annotations[constants.EpochsConfigKey] = v.(string)
+
+	v, err = utils.GetHyperparameterValueByKey(constants.LearningRateConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LearningRateConfigKey)
+		return err
+	}
+	trainJob.Spec.Annotations[constants.LearningRateConfigKey] = v.(string)
+
+	v, err = utils.GetHyperparameterValueByKey(constants.BatchSizeConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.BatchSizeConfigKey)
+		return err
+	}
+	trainJob.Spec.Annotations[constants.BatchSizeConfigKey] = v.(string)
+
+	v, err = utils.GetHyperparameterValueByKey(constants.EarlyStoppingPatienceConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.EarlyStoppingPatienceConfigKey)
+		return err
+	}
+	trainJob.Spec.Annotations[constants.EarlyStoppingPatienceConfigKey] = v.(string)
+
+	v, err = utils.GetHyperparameterValueByKey(constants.EarlyStoppingThresholdConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.EarlyStoppingThresholdConfigKey)
+		return err
+	}
+	trainJob.Spec.Annotations[constants.EarlyStoppingThresholdConfigKey] = v.(string)
+
+	bucketName := utils.ExtractBucketNameFromObjectStorageUri(*trainJob.Spec.Datasets.StorageUri)
+	trainJob.Spec.Annotations[constants.TrainingDataBucketConfigKey] = bucketName
+
+	namespace := utils.ExtractNamespaceFromObjectStorageUri(*trainJob.Spec.Datasets.StorageUri)
+	trainJob.Spec.Annotations[constants.TrainingDataNamespaceConfigKey] = namespace
+
+	objectName := utils.ExtractObjectFileNameFromObjectStorageUri(*trainJob.Spec.Datasets.StorageUri)
+	trainJob.Spec.Annotations[constants.TrainingDataFileNameConfigKey] = objectName
+
+	if trainingSidecarRuntime == "peft" {
+		trainJob.Spec.Annotations[constants.ModelNameConfigKey] = baseModel.Name
+		trainJob.Spec.Annotations[constants.ModelVendorConfigKey] = *baseModel.Spec.Vendor
+
+		v, err = utils.GetHyperparameterValueByKey(constants.LoraConfigRankConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+		if err != nil {
+			r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LoraConfigRankConfigKey)
+			return err
+		}
+		trainJob.Spec.Annotations[constants.LoraConfigRankConfigKey] = v.(string)
+
+		v, err = utils.GetHyperparameterValueByKey(constants.LoraAlphaConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+		if err != nil {
+			r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LoraAlphaConfigKey)
+			return err
+		}
+		trainJob.Spec.Annotations[constants.LoraAlphaConfigKey] = v.(string)
+
+		v, err = utils.GetHyperparameterValueByKey(constants.LoraDropoutConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+		if err != nil {
+			r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LoraDropoutConfigKey)
+			return err
+		}
+		trainJob.Spec.Annotations[constants.LoraDropoutConfigKey] = v.(string)
+
+	} else {
+		trainJob.Spec.Annotations[constants.BaseModelConfigKey] = baseModel.Name
+		trainJob.Spec.Annotations[constants.ModelSizeConfigKey] = *baseModel.Spec.ModelParameterSize
+
+		strategy, err := utils.GetHyperparameterValueByKey(constants.StrategyConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+		if err != nil {
+			r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.StrategyConfigKey)
+			return err
+		}
+		trainJob.Spec.Annotations[constants.StrategyConfigKey] = strategy.(string)
+
+		if trainingSidecarRuntime == "cohere" {
+			v, err = utils.GetHyperparameterValueByKey(constants.LogTrainStatusEveryStepConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+			if err != nil {
+				r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LogTrainStatusEveryStepConfigKey)
+				return err
+			}
+			trainJob.Spec.Annotations[constants.LogTrainStatusEveryStepConfigKey] = v.(string)
+
+			v, err = utils.GetHyperparameterValueByKey(constants.NLastLayersConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+			if err != nil {
+				r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.NLastLayersConfigKey)
+				return err
+			}
+			trainJob.Spec.Annotations[constants.NLastLayersConfigKey] = v.(string)
+		} else {
+			tensorParallel, err := utils.GetTensorParallelSize(baseModel)
+			if err != nil {
+				return err
+			}
+			trainJob.Spec.Annotations[constants.TensorParallelConfigKey] = tensorParallel
+
+			if strategy == "lora" {
+				v, err = utils.GetHyperparameterValueByKey(constants.LoraConfigRankConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+				if err != nil {
+					r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LoraConfigRankConfigKey)
+					return err
+				}
+				trainJob.Spec.Annotations[constants.LoraConfigRankConfigKey] = v.(string)
+
+				v, err = utils.GetHyperparameterValueByKey(constants.LoraAlphaConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+				if err != nil {
+					r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LoraAlphaConfigKey)
+					return err
+				}
+				trainJob.Spec.Annotations[constants.LoraAlphaConfigKey] = v.(string)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.TrainingJob, configMap v1.ConfigMap) *v1beta1.FineTunedWeight {
+	strategy, err := utils.GetHyperparameterValueByKey(constants.StrategyConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		strategy = "lora"
+	}
+	// Todo: Now we just put training strategy as the model type.
+	modelType := strategy.(string)
+
+	trainingSidecarConfig := &TrainingSidecarConfig{}
+	if trainingSidecarConfigVal, ok := configMap.Data[constants.TrainingSidecarConfigMapKeyName]; ok {
+		if err := json.Unmarshal([]byte(trainingSidecarConfigVal), trainingSidecarConfig); err != nil {
+			panic(fmt.Errorf("unable to unmarshal %v json string: %w", constants.TrainingSidecarConfigMapKeyName, err))
+		}
+	}
+
+	storageUri := "oci://n/" + trainingSidecarConfig.Namespace + "/b/" + trainingSidecarConfig.FineTunedModelBucket + "/o/" + trainJob.Name
+	return &v1beta1.FineTunedWeight{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "FineTunedWeight",
+			APIVersion: constants.OMEAPIGroupName + "/" + v1beta1.APIVersion,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: utils.GetFineTunedModelName(trainJob.Name),
+		},
+		Spec: v1beta1.FineTunedWeightSpec{
+			BaseModelRef: v1beta1.ObjectReference{
+				Name: trainJob.Spec.ModelConfig.InputModel,
+			},
+			ModelType:       &modelType,
+			HyperParameters: trainJob.Spec.HyperParameterTuningConfig.Parameters,
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: &storageUri,
+			},
+			TrainingJobRef: v1beta1.ObjectReference{
+				Name: &trainJob.Name,
+			},
+		},
+	}
 }

@@ -14,10 +14,10 @@ metadata:
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
-  displayName: meta.llama-3-70b-instruct
+  displayName: meta.llama-3.3-70b-instruct-ft
   storage:
-    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-70b-instruct
-    path: /raid/models/meta/Llama-3.3-70B-Instruct
+    storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-3-70b-instruct
+    path: /mnt/data/models/meta/llama-3-3-70b-instruct-ft
   vendor: meta
   version: "1.0.0"
   modelFramework:

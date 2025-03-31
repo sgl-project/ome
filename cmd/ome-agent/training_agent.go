@@ -15,6 +15,14 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 )
 
+type Runtime string
+
+const (
+	Cohere         Runtime = "cohere"
+	CohereCommandR Runtime = "cohere-commandr"
+	Peft           Runtime = "peft"
+)
+
 // TrainingAgent implements the AgentModule interface for training agent
 type TrainingAgent struct {
 	agent *training_agent.TrainingAgent
@@ -105,6 +113,11 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 	inputCasperConfig.AnotherLogger = logger
 	inputCasperConfig.Name = training_agent.InputCasperConfigName
 	inputCasperConfig.AuthType = &authType
+
+	compartmentId := v.GetString("compartment_id")
+	inputCasperConfig.CompartmentId = &compartmentId
+	inputCasperConfig.OboToken = v.GetString("obo_token")
+
 	return CasperConfigWrapper{
 		CasperConfig: inputCasperConfig,
 	}

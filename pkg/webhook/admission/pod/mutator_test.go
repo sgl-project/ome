@@ -207,13 +207,122 @@ func TestMutator_Handle(t *testing.T) {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						constants.InferenceServicePodLabelKey: "",
+						constants.InferenceServicePodLabelKey: "isvc-pod",
 					},
 				},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
 							Name: constants.MainContainerName,
+						},
+					},
+				},
+			},
+			matcher: gomega.BeEquivalentTo(admission.Response{
+				Patches: []jsonpatch.JsonPatchOperation{
+					{
+						Operation: "add",
+						Path:      "/metadata/annotations",
+						Value: map[string]interface{}{
+							"ome.io/enable-metric-aggregation":  "",
+							"ome.io/enable-prometheus-scraping": "",
+						},
+					},
+					{
+						Operation: "add",
+						Path:      "/metadata/namespace",
+						Value:     "default",
+					},
+				},
+				AdmissionResponse: admissionv1.AdmissionResponse{
+					UID:              "",
+					Allowed:          true,
+					Result:           nil,
+					Patch:            nil,
+					PatchType:        (*admissionv1.PatchType)(proto.String(string(admissionv1.PatchTypeJSONPatch))),
+					AuditAnnotations: nil,
+					Warnings:         nil,
+				},
+			}),
+		},
+		"should mutate training pods": {
+			configMap: v1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      constants.InferenceServiceConfigMapName,
+					Namespace: constants.OMENamespace,
+				},
+				Immutable: nil,
+				Data: map[string]string{
+					LoggerConfigMapKeyName: `{
+        				"image" : "ome/agent:latest",
+        				"memoryRequest": "100Mi",
+        				"memoryLimit": "1Gi",
+        				"cpuRequest": "100m",
+        				"cpuLimit": "1",
+        				"defaultUrl": "http://default-broker"
+    				}`,
+					constants.AgentConfigMapKeyName: `{
+        				"image" : "ome/agent:latest",
+        				"memoryRequest": "100Mi",
+        				"memoryLimit": "1Gi",
+        				"cpuRequest": "100m",
+        				"cpuLimit": "1"
+    				}`,
+				},
+				BinaryData: nil,
+			},
+			request: admission.Request{
+				AdmissionRequest: admissionv1.AdmissionRequest{
+					UID: types.UID(uuid.NewString()),
+					Kind: metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+					Resource: metav1.GroupVersionResource{
+						Group:    "",
+						Version:  "v1",
+						Resource: "pods",
+					},
+					SubResource: "",
+					RequestKind: &metav1.GroupVersionKind{
+						Group:   "",
+						Version: "v1",
+						Kind:    "Pod",
+					},
+					RequestResource: &metav1.GroupVersionResource{
+						Group:    "",
+						Version:  "v1",
+						Resource: "pods",
+					},
+					RequestSubResource: "",
+					Name:               "",
+					Namespace:          "default",
+					Operation:          admissionv1.Create,
+					Object:             runtime.RawExtension{},
+					OldObject:          runtime.RawExtension{},
+					DryRun:             nil,
+					Options:            runtime.RawExtension{},
+				},
+			},
+			pod: v1.Pod{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Pod",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						constants.TrainingJobPodLabelKey: "trainingjob",
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "trainer",
 						},
 					},
 				},

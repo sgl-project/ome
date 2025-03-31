@@ -16,7 +16,7 @@ import (
 const (
 	InputCasperConfigName      = "input"
 	OutputCasperConfigName     = "output"
-	TrainingDataStoreDirectory = "/input/data/training/"
+	TrainingDataStoreDirectory = "/mnt/data"
 )
 
 type Config struct {
@@ -122,7 +122,7 @@ func setZippedModelPath(c *Config) {
 	case constants.CohereCommand1TrainingSidecar, constants.CohereCommandRTrainingSidecar:
 		c.ZippedModelPath = filepath.Join(constants.CohereStorePathPrefix, c.TrainingName, c.TrainingName)
 	case constants.PeftTrainingSidecar:
-		c.ZippedModelPath = filepath.Join(constants.PeftTrainingDataEmptyDirMountPath, constants.PeftTrainingOutputModelDirectoryName, c.TrainingName)
+		c.ZippedModelPath = filepath.Join(constants.TrainingDataEmptyDirMountPath, constants.PeftTrainingOutputModelDirectoryName, c.TrainingName)
 	default:
 		c.ZippedModelPath = filepath.Join(constants.DefaultTrainingZippedModelDirectory, c.TrainingName)
 	}
