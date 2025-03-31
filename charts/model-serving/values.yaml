@@ -49,10 +49,6 @@ cohere:
   commandRSmallv1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.5.12"
-
-  commandRv1Image:
-    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.5.9"
   
   embedv3Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
