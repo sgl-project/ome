@@ -8,22 +8,18 @@ spec:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
+    {{- if .Values.linkerdAnnotations }}
+    {{ toYaml .Values.linkerdAnnotations | nindent 4 }}
+    {{- end }}
     {{- if .Values.llama_3_1_405b_instruct.annotations }}
     {{ toYaml .Values.llama_3_1_405b_instruct.annotations | nindent 4 }}
     {{- end }}
-    linkerd.io/inject: "enabled"
-    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
-    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
     ome.io/deploymentMode: MultiNodeRayVLLM
-  {{- if or .Values.commonLabels .Values.llama_3_1_405b_instruct.labels }}
   labels:
-    {{- if .Values.commonLabels }}
-    {{ toYaml .Values.commonLabels | nindent 6 }}
-    {{- end }}
+    logging-forward: enabled
     {{- if .Values.llama_3_1_405b_instruct.labels }}
     {{ toYaml .Values.llama_3_1_405b_instruct.labels | nindent 6 }}
     {{- end }}
-  {{- end }}
   {{- if or .Values.commonTolerations .Values.llama_3_1_405b_instruct.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}

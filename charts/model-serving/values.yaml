@@ -130,11 +130,14 @@ commonAnnotations:
   chainsaw.k8s-integration.oracle.com/compartmentId: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva" # hardcode to dev tenancy compartment id
   chainsaw.k8s-integration.oracle.com/logPath: "vllm"
   chainsaw.k8s-integration.oracle.com/namespace: "vllm"
+linkerdAnnotations:
+  linkerd.io/inject: "enabled"
+  config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
+  config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
 
 commonLabels:
   logging-forward: enabled
-  # TODO, disable istio sidecar injection for now, re-enable after network instability is fixed
-#  sidecar.istio.io/inject: 'true'
+  sidecar.istio.io/inject: 'true'
 
 commonTolerations:
   - key: "nvidia.com/gpu"
@@ -197,8 +200,7 @@ llama_3_3_70b_instruct:
 
 llama_3_3_70b_instruct_fp8_dynamic:
   enabled: false
-  labels:
-    sidecar.istio.io/inject: 'true'
+  labels: {}
   annotations: {}
   affinity:
     nodeAffinity:
@@ -291,10 +293,7 @@ llama_3_1_405b_instruct:
   enableRDMA: false
   singleNode: true
   labels: {}
-  annotations:
-    linkerd.io/inject: "enabled"
-    config.linkerd.io/skip-inbound-ports: "1-8079,8081-65535"
-    config.linkerd.io/skip-outbound-ports: "1-8079,8081-65535"
+  annotations: {}
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

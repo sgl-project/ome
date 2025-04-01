@@ -14,6 +14,7 @@ spec:
     prometheus.io/path: "/metrics"
   labels:
     logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"

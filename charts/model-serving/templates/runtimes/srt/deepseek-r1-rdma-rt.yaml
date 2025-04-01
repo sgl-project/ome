@@ -13,15 +13,11 @@ spec:
     {{ toYaml .Values.deepseek_r1.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.deepseek_r1.labels }}
   labels:
-    {{- if .Values.commonLabels }}
-    {{ toYaml .Values.commonLabels | nindent 6 }}
-    {{- end }}
+    logging-forward: enabled
     {{- if .Values.deepseek_r1.labels }}
     {{ toYaml .Values.deepseek_r1.labels | nindent 6 }}
     {{- end }}
-  {{- end }}
   {{- if or .Values.commonTolerations .Values.deepseek_r1.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
