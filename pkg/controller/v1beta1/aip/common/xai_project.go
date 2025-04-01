@@ -2,6 +2,9 @@ package common
 
 import (
 	"context"
+	"time"
+
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"github.com/go-logr/logr"
@@ -31,8 +34,14 @@ func NewXAIProject(c client.Client, cs kubernetes.Interface, log logr.Logger, sc
 
 // Create creates a new project
 func (p *XAIProject) Create(ctx context.Context) error {
-	// TODO: implementation
-	return nil
+	projectName := p.Resource.Spec.Name
+
+	creationTime := v1.NewTime(time.Now())
+	p.Resource.Status.ProjectID = projectName
+	p.Resource.Status.CreationTime = &creationTime
+	p.Resource.Status.LastUpdatedTime = &creationTime
+
+	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusCreated)
 }
 
 // Update updates the existing project
@@ -41,8 +50,7 @@ func (p *XAIProject) Update(ctx context.Context) error {
 	return nil
 }
 
-// Delete delelts the existing project
+// Delete deletes the existing project
 func (p *XAIProject) Delete(ctx context.Context) error {
-	// TODO: implementation
-	return nil
+	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusArchived)
 }
