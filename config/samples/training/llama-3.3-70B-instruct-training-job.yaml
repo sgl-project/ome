@@ -6,8 +6,7 @@ metadata:
 spec:
   runtimeRef:
     name: llama-3-3-70b-instruct-ft
-  trainer:
-    image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.2.16
+  trainer: {}
   modelConfig:
     inputModel: llama-3-3-70b-instruct
   datasets:
@@ -15,7 +14,7 @@ spec:
   hyperparameterConfig:
     method: "bayes"
     metric:
-      name: test-metric
+      name: hyperparameter-metric
       goal: maximize
     parameters:
       {

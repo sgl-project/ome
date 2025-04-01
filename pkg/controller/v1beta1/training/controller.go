@@ -335,8 +335,8 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	}
 	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
 
-	trainingSidecarRuntime := trainingRuntime.Annotations[constants.TrainingSidecarRuntimeAnnotationKey]
-	trainJob.Spec.Annotations[constants.TrainingSidecarRuntimeAnnotationKey] = trainingSidecarRuntime
+	trainingSidecarRuntime := trainingRuntime.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
+	trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey] = trainingSidecarRuntime
 
 	if trainJob.Spec.Datasets.Parameters != nil {
 		params := *trainJob.Spec.Datasets.Parameters

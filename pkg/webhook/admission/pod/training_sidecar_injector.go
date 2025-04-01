@@ -117,7 +117,7 @@ func (tsi *TrainingSidecarInjector) getVolumeMounts() []v1.VolumeMount {
 func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.EnvVar {
 	trainingSidecarEnvVars := make([]v1.EnvVar, 0)
 
-	sidecarRuntime := pod.ObjectMeta.Annotations[constants.TrainingSidecarRuntimeAnnotationKey]
+	sidecarRuntime := pod.ObjectMeta.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
 	trainingName := pod.ObjectMeta.Labels[constants.TrainingJobPodLabelKey]
 	// Set env vars from values set in trainingSidecar config map
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{

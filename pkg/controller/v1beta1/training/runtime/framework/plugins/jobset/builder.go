@@ -225,12 +225,12 @@ func (b *Builder) Trainer(info *runtime.Info, trainJob *omev1beta1.TrainingJob) 
 						b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].Env = trainerEnvs
 					}
 
-					pathPrefixEnv := getPathPrefixEnv(trainJob.Spec.Annotations[constants.TrainingSidecarRuntimeAnnotationKey], trainJob.Name)
-					baselineModelEnv := getBaselineModelEnv(trainJob.Spec.Annotations[constants.TrainingSidecarRuntimeAnnotationKey])
+					pathPrefixEnv := getPathPrefixEnv(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey], trainJob.Name)
+					baselineModelEnv := getBaselineModelEnv(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey])
 
 					b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].Env = append(b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].Env, pathPrefixEnv, baselineModelEnv)
 
-					volumeMounts := getVolumeMounts(trainJob.Spec.Annotations[constants.TrainingSidecarRuntimeAnnotationKey], trainJob)
+					volumeMounts := getVolumeMounts(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey], trainJob)
 					b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].VolumeMounts = append(b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].VolumeMounts, volumeMounts...)
 
 					// Update the Trainer container port.

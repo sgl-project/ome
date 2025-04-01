@@ -685,9 +685,9 @@ const (
 // Training sidecar env variable key names and config key names
 
 var (
-	TrainingSidecarInjectionKey         = OMEAPIGroupName + "/inject-training-sidecar"
-	TrainingJobPodLabelKey              = OMEAPIGroupName + "/" + TrainingJobName
-	TrainingSidecarRuntimeAnnotationKey = OMEAPIGroupName + "/training-sidecar-runtime"
+	TrainingSidecarInjectionKey      = OMEAPIGroupName + "/inject-training-sidecar"
+	TrainingJobPodLabelKey           = OMEAPIGroupName + "/" + TrainingJobName
+	TrainingRuntimeTypeAnnotationKey = OMEAPIGroupName + "/training-runtime-type"
 )
 
 var (
