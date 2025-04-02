@@ -61,6 +61,8 @@ func DefaultTrainingJob(tjob *v1beta1.TrainingJob) {
 	if tjob.Spec.Labels == nil {
 		tjob.Spec.Labels = make(map[string]string)
 	}
+
+	tjob.Name = trimTrainJobName(tjob)
 	tjob.Spec.Labels[constants.TrainingJobPodLabelKey] = tjob.Name
 
 	if tjob.APIVersion != "ome.io/v1beta1" {
@@ -70,4 +72,12 @@ func DefaultTrainingJob(tjob *v1beta1.TrainingJob) {
 	if tjob.Kind != "TrainingJob" {
 		tjob.Kind = "TrainingJob"
 	}
+}
+
+func trimTrainJobName(tjob *v1beta1.TrainingJob) string {
+	// The train job name will be reused for jobset/pod name, which cannot exceed 63 characters. Use first 20 characters for pod name and trainer node name prefix/suffix buffer
+	if len(tjob.Name) >= 20 {
+		return tjob.Name[:20]
+	}
+	return tjob.Name
 }

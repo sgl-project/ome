@@ -118,6 +118,10 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			} else {
 				r.Log.Info("Finetune weights created", "tjob", trainJob.Name, "model", finetuneWeights.Name)
 				finetuneWeights.Status.State = v1beta1.LifeCycleStateCreating
+				err = r.updateFinetunedWeight(ctx, finetuneWeights)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		} else {
 			r.Log.Error(err, "Failed to get Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
@@ -128,10 +132,12 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	for _, condition := range trainJob.Status.Conditions {
 		if condition.Type == v1beta1.TrainJobComplete {
 			finetuneWeights.Status.State = v1beta1.LifeCycleStateReady
+			err = r.updateFinetunedWeight(ctx, finetuneWeights)
 			return ctrl.Result{}, err
 		}
 		if condition.Type == v1beta1.TrainJobFailed {
 			finetuneWeights.Status.State = v1beta1.LifeCycleStateFailed
+			err = r.updateFinetunedWeight(ctx, finetuneWeights)
 			return ctrl.Result{}, err
 		}
 	}
@@ -210,6 +216,14 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 		}
 	}
 	return CreateObjectSucceeded, nil
+}
+
+func (r *TrainingJobReconciler) updateFinetunedWeight(ctx context.Context, ftWeight *v1beta1.FineTunedWeight) error {
+	if err := r.Client.Update(ctx, ftWeight); err != nil {
+		r.Log.Info("Warning: failed to update FineTunedWeight status, will retry", "FineTunedWeight", ftWeight.Name)
+		return err
+	}
+	return nil
 }
 
 func updateCreatedCondition(trainJob *v1beta1.TrainingJob, opState ObjectOperationState) {
@@ -389,8 +403,10 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	objectName := utils.ExtractObjectFileNameFromObjectStorageUri(*trainJob.Spec.Datasets.StorageUri)
 	trainJob.Spec.Annotations[constants.TrainingDataFileNameConfigKey] = objectName
 
+	baseModelName := utils.ExtractObjectFileNameFromObjectStorageUri(*baseModel.Spec.Storage.StorageUri)
+	trainJob.Spec.Annotations[constants.ModelNameConfigKey] = baseModelName
+
 	if trainingSidecarRuntime == "peft" {
-		trainJob.Spec.Annotations[constants.ModelNameConfigKey] = baseModel.Name
 		trainJob.Spec.Annotations[constants.ModelVendorConfigKey] = *baseModel.Spec.Vendor
 
 		v, err = utils.GetHyperparameterValueByKey(constants.LoraConfigRankConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
