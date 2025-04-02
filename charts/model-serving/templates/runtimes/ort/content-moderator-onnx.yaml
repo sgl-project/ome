@@ -27,6 +27,8 @@ spec:
   containers:
     - name: ome-container
       image: "{{ .Values.content_moderator.image.repository }}:{{ .Values.content_moderator.image.tag }}"
+      args:
+        - '--model-path=/model/gais-contentmoderate/'
       ports:
         - containerPort: 8080
           name: http

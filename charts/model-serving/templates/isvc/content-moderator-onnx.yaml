@@ -3,7 +3,7 @@ apiVersion: ome.io/v1beta1
 kind: "InferenceService"
 metadata:
   name: gais-contentmoderate
-  namespace: content-moderator
+  namespace: gais-contentmoderate
 spec:
   predictor:
     model:
@@ -15,5 +15,5 @@ spec:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: content-moderator
+  name: gais-contentmoderate
 {{- end }}
