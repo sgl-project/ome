@@ -17,7 +17,7 @@ spec:
   displayName: meta.llama-3.3-70b-instruct
   storage:
     storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-3-70b-instruct
-    path: /mnt/data/models/meta/llama-3-3-70b-instruct
+    path: /raid/models/meta/llama-3-3-70b-instruct
   vendor: meta
   version: "1.0.0"
   modelFramework:

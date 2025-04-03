@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.rerank-english-v3.1
   storage:
-    storageUri: "oci://n/idlsnvn0f2is/b/partner-models/o/cohere/rerank-english-v3.1"
-    path: /mnt/data/models/cohere/rerank-english-v3.1
+    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/rerank-english-v3.1"
+    path: /raid/models/cohere/rerank-english-v3.1
   vendor: cohere
   version: "3.1"
   modelFormat:

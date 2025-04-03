@@ -15,7 +15,7 @@ spec:
   disabled: false
   displayName: olm.mistral-7b-instruct-v0.2-ft-thought
   storage:
-    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/olm/thought-mistral-7b-v0.2-finetuned-model-v0.0
+    storageUri: oci://n/idqj093njucb/b/model-store/o/olm/thought-mistral-7b-v0.2-finetuned-model-v0.0
     path: /raid/models/olm/thought-mistral-7b-v0.2-finetuned-model-v0.0
   vendor: olm
   version: "0.0"

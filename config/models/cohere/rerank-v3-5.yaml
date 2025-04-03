@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.rerank
   storage:
-    storageUri: "oci://n/idlsnvn0f2is/b/partner-models/o/cohere/rerank-v3-5"
-    path: /mnt/data/models/cohere/rerank-v3-5
+    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/rerank-v3-5"
+    path: /raid/models/cohere/rerank-v3-5
   vendor: cohere
   version: "3.5"
   modelFormat:

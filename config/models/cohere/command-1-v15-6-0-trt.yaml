@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.command.trt
   storage:
-    storageUri: "oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command_52b_v15.6.0_qa9cubq7_op_trt"
-    path: /mnt/data/models/cohere/command_52b_v15.6.0_qa9cubq7_op_trt
+    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/command_52b_v15.6.0_qa9cubq7_op_trt"
+    path: /raid/models/cohere/command_52b_v15.6.0_qa9cubq7_op_trt
   vendor: cohere
   version: "15.6"
   modelFormat:

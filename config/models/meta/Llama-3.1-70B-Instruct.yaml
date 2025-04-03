@@ -18,7 +18,7 @@ spec:
   modelCapabilities:
     - "TEXT_GENERATION"
   storage:
-    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-1-70b-instruct
+    storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-1-70b-instruct
     path: /raid/models/meta/Llama-3.1-70B-Instruct
   modelConfiguration:
     {

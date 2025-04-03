@@ -17,7 +17,7 @@ spec:
   disabled: false
   displayName: cohere.command-r
   storage:
-    storageUri: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command-r-bs128-16k
+    storageUri: oci://n/idqj093njucb/b/partner-models/o/cohere/command-r-bs128-16k
     path: /raid/models/cohere/command-r-bs128-16k
   vendor: cohere
   version: "1.0-16k"

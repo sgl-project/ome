@@ -17,8 +17,8 @@ spec:
   disabled: false
   displayName: cohere.command
   storage:
-    storageUri: "oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command_52b_v14.2.0_llh_tokenizers_jul23_md080abg_pref"
-    path: /mnt/data/models/cohere/command_52b_v14.2.0_llh_tokenizers_jul23_md080abg_pref
+    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/command_52b_v14.2.0_llh_tokenizers_jul23_md080abg_pref"
+    path: /raid/models/cohere/command_52b_v14.2.0_llh_tokenizers_jul23_md080abg_pref
   vendor: cohere
   version: "14.2"
   modelFormat:

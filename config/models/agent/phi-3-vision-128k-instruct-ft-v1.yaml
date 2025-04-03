@@ -15,7 +15,7 @@ spec:
   disabled: false
   displayName: olm.phi-3-vision-128k-instruct-ft-v1
   storage:
-    storageUri: oci://n/idlsnvn0f2is/b/model-store/o/olm/phi-3-vision-128k-instruct-ft-v1
+    storageUri: oci://n/idqj093njucb/b/model-store/o/olm/phi-3-vision-128k-instruct-ft-v1
     path: /raid/models/olm/phi-3-vision-128k-instruct-ft-v1
   vendor: olm
   version: "1.0"

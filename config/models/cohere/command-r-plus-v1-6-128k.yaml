@@ -18,7 +18,7 @@ spec:
   displayName: cohere.command-r-plus
   storage:
     storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/command-r-plus-v1.6-128k"
-    path: /mnt/data/models/cohere/command-r-plus-v1.6-128k
+    path: /raid/models/cohere/command-r-plus-v1.6-128k
   vendor: cohere
   version: "1.6"
   modelFormat:

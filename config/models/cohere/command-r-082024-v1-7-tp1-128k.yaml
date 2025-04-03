@@ -17,7 +17,7 @@ spec:
   disabled: false
   displayName: cohere.command-r-08-2024
   storage:
-    storageUri: oci://n/idlsnvn0f2is/b/partner-models/o/cohere/command-r-082024-v1.7-tp1-128k
+    storageUri: oci://n/idqj093njucb/b/partner-models/o/cohere/command-r-082024-v1.7-tp1-128k
     path: /raid/models/cohere/command-r-082024-v1.7-tp1-128k
   vendor: cohere
   version: "1.7"
