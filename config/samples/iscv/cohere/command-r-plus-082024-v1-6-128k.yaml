@@ -11,7 +11,7 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: command-r-plus-082024-v1-6-128k
+      runtime: cohere-command-r-v3
       baseModel: command-r-plus-082024-v1-6-128k
       protocolVersion: openAI
     minReplicas: 1
