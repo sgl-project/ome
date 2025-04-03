@@ -83,10 +83,6 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	r.Log.Info("Reconciling training job", "namespace", req.NamespacedName, "name", trainJob.Name)
-	if isTrainJobFinished(&trainJob) {
-		r.Log.Info("TrainJob has already been finished", "namespace", req.NamespacedName, "name", trainJob.Name)
-		return ctrl.Result{}, nil
-	}
 
 	r.Log.Info("Getting base model for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
 	baseModel, err := utils.GetClusterBaseModel(r.Client, *trainJob.Spec.ModelConfig.InputModel)
@@ -114,11 +110,11 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				} else {
 					r.Log.Error(err, "Failed to create Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
 					updateCreatedCondition(&trainJob, CreateFinetuneWeightsFailed)
+					return ctrl.Result{}, err
 				}
 			} else {
 				r.Log.Info("Finetune weights created", "tjob", trainJob.Name, "model", finetuneWeights.Name)
-				finetuneWeights.Status.State = v1beta1.LifeCycleStateCreating
-				err = r.updateFinetunedWeight(ctx, finetuneWeights)
+				err = r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateCreating)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -129,17 +125,20 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	for _, condition := range trainJob.Status.Conditions {
-		if condition.Type == v1beta1.TrainJobComplete {
-			finetuneWeights.Status.State = v1beta1.LifeCycleStateReady
-			err = r.updateFinetunedWeight(ctx, finetuneWeights)
+	if isTrainJobFinished(&trainJob) {
+		r.Log.Info("TrainJob has finished, updating FineTuneWeights", "namespace", req.NamespacedName, "name", trainJob.Name, "FineTuneWeights", finetuneWeights)
+		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobFailed) {
+			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateFailed)
 			return ctrl.Result{}, err
 		}
-		if condition.Type == v1beta1.TrainJobFailed {
-			finetuneWeights.Status.State = v1beta1.LifeCycleStateFailed
-			err = r.updateFinetunedWeight(ctx, finetuneWeights)
-			return ctrl.Result{}, err
+
+		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobComplete) {
+			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateReady)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 		}
+		return ctrl.Result{}, nil
 	}
 
 	if result, err := r.reconcilePVPVC(&trainJob, baseModel.Spec); err != nil {
@@ -218,9 +217,13 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 	return CreateObjectSucceeded, nil
 }
 
-func (r *TrainingJobReconciler) updateFinetunedWeight(ctx context.Context, ftWeight *v1beta1.FineTunedWeight) error {
-	if err := r.Client.Update(ctx, ftWeight); err != nil {
-		r.Log.Info("Warning: failed to update FineTunedWeight status, will retry", "FineTunedWeight", ftWeight.Name)
+func (r *TrainingJobReconciler) updateFineTunedWeight(ctx context.Context, fineTuneWeights *v1beta1.FineTunedWeight, state v1beta1.LifeCycleState) error {
+	fineTuneWeights.Status.State = state
+
+	r.Log.Info("Updating FineTuneWeights status", "FineTunedWeight", fineTuneWeights)
+
+	if err := r.Client.Status().Update(ctx, fineTuneWeights); err != nil {
+		r.Log.Error(err, "Failed to update FineTunedWeight status", "FineTunedWeight", fineTuneWeights)
 		return err
 	}
 	return nil
@@ -520,5 +523,6 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 				Name: &trainJob.Name,
 			},
 		},
+		Status: v1beta1.ModelStatusSpec{},
 	}
 }
