@@ -1,13 +1,15 @@
 package common
 
 import (
+	"encoding/base64"
 	"errors"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-// shouldRetry returns true if the error should be retried
+// ShouldRetry returns true if the error should be retried
 func ShouldRetry(err error) bool {
 	if errors.Unwrap(err) != nil {
 		return true
@@ -26,4 +28,10 @@ func ShouldRetry(err error) bool {
 	}
 
 	return false
+}
+
+// GenerateId returns a base64 encoded UUID with a prefix.
+func GenerateId(prefix string, uid types.UID) string {
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(uid))
+	return prefix + encoded
 }

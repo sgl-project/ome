@@ -73,6 +73,7 @@ func setupTestXAIServiceAccount(t *testing.T) (*XAIServiceAccount, kubernetes.In
 	testServiceAccount := &v1beta1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-sa",
+			UID:        "e89674fe-af27-4fdd-91ed-34087115d191",
 			Generation: 1,
 		},
 		Spec: v1beta1.ServiceAccountSpec{
@@ -290,7 +291,7 @@ func TestXAIServiceAccount_Create(t *testing.T) {
 
 	// Check status fields
 	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountID)
-	assert.Equal(t, "user-testing-xai", *updatedServiceAccount.Status.ServiceAccountID)
+	assert.Equal(t, "user_ZTg5Njc0ZmUtYWYyNy00ZmRkLTkxZWQtMzQwODcxMTVkMTkx", *updatedServiceAccount.Status.ServiceAccountID)
 	assert.NotNil(t, updatedServiceAccount.Status.CreationTime)
 	assert.Nil(t, updatedServiceAccount.Status.APIKey)
 

@@ -10,6 +10,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	cfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -54,6 +55,7 @@ func setupTestXAIProject(t *testing.T) *XAIProject {
 	testProject := &v1beta1.Project{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-project",
+			UID:        types.UID("e89674fe-af27-4fdd-91ed-34087115d191"),
 			Generation: 1,
 		},
 		Spec: v1beta1.ProjectSpec{
@@ -122,7 +124,7 @@ func TestXAIProject_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.Equal(t, "test-project-name", updatedProject.Status.ProjectID)
+	assert.Equal(t, "proj_ZTg5Njc0ZmUtYWYyNy00ZmRkLTkxZWQtMzQwODcxMTVkMTkx", updatedProject.Status.ProjectID)
 	assert.NotNil(t, updatedProject.Status.CreationTime)
 	assert.NotNil(t, updatedProject.Status.LastUpdatedTime)
 

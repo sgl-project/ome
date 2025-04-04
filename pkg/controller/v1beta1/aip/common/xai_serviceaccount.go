@@ -77,12 +77,11 @@ func (sa *XAIServiceAccount) Create(ctx context.Context) error {
 		commonSecret.StringData = map[string]string{}
 	}
 
-	// For testing, we already manually set up this secret user-xaitest
-	keyId := "user-testing-xai"
+	serviceAccountID := GenerateId("user_", sa.Resource.UID)
 	// Update status
 	creationTime := metav1.NewTime(time.Now())
 	sa.Resource.Status = v1beta1.ServiceAccountStatus{
-		ServiceAccountID: &keyId,
+		ServiceAccountID: &serviceAccountID,
 		CreationTime:     &creationTime,
 	}
 	return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusCreated)
