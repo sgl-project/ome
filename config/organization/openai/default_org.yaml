@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: Organization
 metadata:
-    name: generative-ai-service
+    name: genai-openai-0001
 spec:
   organizationId: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   vendor: openai
@@ -9,21 +9,21 @@ spec:
   secretRef:
     name: openai-admin-key
     key: OPENAI_ADMIN_API_KEY
-    namespace: generative-ai-service
+    namespace: genai-openai
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: openai-admin-key
-  namespace: generative-ai-service
+  namespace: genai-openai
   annotations:
     kubectl.kubernetes.io/last-applied-configuration: ""
 type: Opaque
 immutable: true
 data:
-  OPENAI_ADMIN_API_KEY: c2stYWRtaW4tZllfZHBwNjJCX1dhWlhBalhiUElNaVBEUUxmNUswU3c4aWh3VXRFOUVLTFNaNnU4Sy1WS0xpZ2pfZlQzQmxia0ZKWVJINk9nWHBTS3BCVTRXd1Y2MzNydFRhOTF1UmdINE5KTlV0LThPUFBwZUNLLTU0SHZqOTNvd1BFQQ==
+  OPENAI_ADMIN_API_KEY: c2stYWRtaW4teS16WV9STkpjLXpVaVFuM3hjelpNcXFjZlFNdlZ6NFdLSUdkWWk4dkpNd0gxYVRBaFBrYVBUYjFNNlQzQmxia0ZKa2NXeHlYUmVmUHdZMXVZMExnaXk5X18xSVFtbzZoMGFZVW9sMGtvQjRrYUQ0dkJwcEotZHdYa1hnQQ==
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: generative-ai-service
+  name: genai-openai
