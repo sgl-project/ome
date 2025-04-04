@@ -34,10 +34,6 @@ func NewClusterQueueReconciler(client client.Client, scheme *runtime.Scheme, que
 }
 
 func createClusterQueue(queueName string, resources *corev1.ResourceRequirements, count int) *kueuev1beta1.ClusterQueue {
-	cpuRequest := resources.Requests[corev1.ResourceCPU]
-	utils.ResourceQuantityAfterMultiply(&cpuRequest, count)
-	memoryRequest := resources.Requests[corev1.ResourceMemory]
-	utils.ResourceQuantityAfterMultiply(&memoryRequest, count)
 	gpuRequest := resources.Requests[corev1.ResourceName(constants.NvidiaGPUResourceType)]
 	utils.ResourceQuantityAfterMultiply(&gpuRequest, count)
 
@@ -56,8 +52,6 @@ func createClusterQueue(queueName string, resources *corev1.ResourceRequirements
 				{
 					CoveredResources: []corev1.ResourceName{
 						constants.NvidiaGPUResourceType,
-						constants.CPUResourceType,
-						constants.MemoryResourceType,
 					},
 					Flavors: []kueuev1beta1.FlavorQuotas{
 						{
@@ -66,14 +60,6 @@ func createClusterQueue(queueName string, resources *corev1.ResourceRequirements
 								{
 									Name:         constants.NvidiaGPUResourceType,
 									NominalQuota: gpuRequest,
-								},
-								{
-									Name:         constants.CPUResourceType,
-									NominalQuota: cpuRequest,
-								},
-								{
-									Name:         constants.MemoryResourceType,
-									NominalQuota: memoryRequest,
 								},
 							},
 						},

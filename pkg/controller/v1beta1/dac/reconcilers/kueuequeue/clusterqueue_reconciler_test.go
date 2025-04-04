@@ -169,8 +169,6 @@ func createTestClusterQueue(clusterQueueName string, cpuRequest string, memoryRe
 				{
 					CoveredResources: []corev1.ResourceName{
 						constants.NvidiaGPUResourceType,
-						constants.CPUResourceType,
-						constants.MemoryResourceType,
 					},
 					Flavors: []kueuev1beta1.FlavorQuotas{
 						{
@@ -179,14 +177,6 @@ func createTestClusterQueue(clusterQueueName string, cpuRequest string, memoryRe
 								{
 									Name:         constants.NvidiaGPUResourceType,
 									NominalQuota: resource.MustParse(gpuRequest),
-								},
-								{
-									Name:         constants.CPUResourceType,
-									NominalQuota: resource.MustParse(cpuRequest),
-								},
-								{
-									Name:         constants.MemoryResourceType,
-									NominalQuota: resource.MustParse(memoryRequest),
 								},
 							},
 						},
