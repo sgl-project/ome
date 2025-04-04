@@ -63,16 +63,13 @@ func (ss *ServingSidecarInjector) injectServingSidecar(pod *v1.Pod) error {
 		return err
 	}
 
-	finetunedModelStrategy, err := ss.getFinetunedModelStrategy(pod)
+	fineTunedWeightFTStrategy, err := ss.getFineTunedWeightFTStrategy(pod)
 	if err != nil {
 		return err
 	}
 
-	servingSidecarMounts := ss.getVolumeMounts(pod, finetunedModelStrategy)
-	initEnvs := ss.getServingSidecarEnvs(finetunedModelStrategy)
-	if err != nil {
-		return err
-	}
+	servingSidecarMounts := ss.getVolumeMounts(pod, fineTunedWeightFTStrategy)
+	initEnvs := ss.getServingSidecarEnvs(fineTunedWeightFTStrategy)
 
 	securityContext, err := ss.getMainContainerSecurityContext(pod)
 	if err != nil {
@@ -117,44 +114,44 @@ func (ss *ServingSidecarInjector) validateAuth(pod *v1.Pod) error {
 }
 
 // getVolumeMounts defines and returns volume mounts for the Model Init container.
-func (ss *ServingSidecarInjector) getFinetunedModelStrategy(pod *v1.Pod) (string, error) {
-	if finetunedModelStrategy, ok := pod.ObjectMeta.Annotations[constants.ServingFinetunedModelStrategyKey]; ok {
-		return finetunedModelStrategy, nil
+func (ss *ServingSidecarInjector) getFineTunedWeightFTStrategy(pod *v1.Pod) (string, error) {
+	if fineTunedWeightFTStrategy, ok := pod.ObjectMeta.Annotations[constants.FineTunedWeightFTStrategyKey]; ok {
+		return fineTunedWeightFTStrategy, nil
 	}
-	return "", fmt.Errorf("failed to get the finetuned model strategy for the serving sidecar")
+	return "", fmt.Errorf("failed to get the fine-tuned weight FT strategy for the serving sidecar")
 }
 
 // getVolumeMounts defines and returns volume mounts for the Model Init container.
-func (ss *ServingSidecarInjector) getVolumeMounts(pod *v1.Pod, finetunedModelStrategy string) []v1.VolumeMount {
+func (ss *ServingSidecarInjector) getVolumeMounts(pod *v1.Pod, fineTunedWeightFTStrategy string) []v1.VolumeMount {
 	servingSidecarMounts := []v1.VolumeMount{}
 
-	ftModelMountPath := filepath.Join(constants.FineTunedModelDefaultPathPrefix, finetunedModelStrategy)
-	finetunedModelsVolumeMount := v1.VolumeMount{
+	fineTunedWeightMountPath := filepath.Join(constants.FineTunedModelDefaultPathPrefix, fineTunedWeightFTStrategy)
+	fineTunedWeightVolumeMount := v1.VolumeMount{
 		Name:      constants.EmptyDirVolumeSourceName,
-		MountPath: ftModelMountPath,
+		MountPath: fineTunedWeightMountPath,
 		ReadOnly:  false,
 		SubPath:   constants.FineTunedModelFinalDefaultSubPath,
 	}
-	finetunedDownloadMount := v1.VolumeMount{
+	fineTunedWeightDownloadMount := v1.VolumeMount{
 		Name:      constants.EmptyDirVolumeSourceName,
 		MountPath: constants.FineTunedModelDownloadDefaultMountPath,
 		ReadOnly:  false,
 		SubPath:   constants.FineTunedModelDownloadDefaultSubPath,
 	}
 
-	servingSidecarMounts = append(servingSidecarMounts, finetunedDownloadMount)
-	servingSidecarMounts = append(servingSidecarMounts, finetunedModelsVolumeMount)
+	servingSidecarMounts = append(servingSidecarMounts, fineTunedWeightDownloadMount)
+	servingSidecarMounts = append(servingSidecarMounts, fineTunedWeightVolumeMount)
 	return servingSidecarMounts
 }
 
-func (ss *ServingSidecarInjector) getServingSidecarEnvs(finetunedModelStrategy string) []v1.EnvVar {
+func (ss *ServingSidecarInjector) getServingSidecarEnvs(fineTunedWeightFTStrategy string) []v1.EnvVar {
 	envVars := []v1.EnvVar{
 		{Name: constants.AgentAuthTypeEnvVarKey, Value: ss.AuthType},
 		{Name: constants.AgentCompartmentIDEnvVarKey, Value: ss.CompartmentId},
 		{Name: constants.AgentRegionEnvVarKey, Value: ss.Region},
-		{Name: constants.AgentFinetunedModelInfoFilePath, Value: constants.AgentFinetunedModelInfoFilePath},
-		{Name: constants.AgentUnzippedFinetunedModelDirectory, Value: filepath.Join(constants.FineTunedModelDefaultPathPrefix, finetunedModelStrategy)},
-		{Name: constants.AgentZippedFinetunedModelDirectory, Value: constants.FineTunedModelDownloadDefaultMountPath},
+		{Name: constants.AgentFineTunedWeightInfoFilePath, Value: constants.AgentFineTunedWeightInfoFilePath},
+		{Name: constants.AgentUnzippedFineTunedWeightDirectory, Value: filepath.Join(constants.FineTunedModelDefaultPathPrefix, fineTunedWeightFTStrategy)},
+		{Name: constants.AgentZippedFineTunedWeightDirectory, Value: constants.FineTunedModelDownloadDefaultMountPath},
 	}
 
 	return envVars
@@ -168,7 +165,7 @@ func (ss *ServingSidecarInjector) createServingSidecarContainer(envs []v1.EnvVar
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      envs,
 		VolumeMounts:             mounts,
-		Args:                     []string{"serving-sidecar", "--config", "/ome-agent.yaml", "--debug"},
+		Args:                     []string{"serving-agent", "--config", "/ome-agent.yaml", "--debug"},
 		Resources: v1.ResourceRequirements{
 			Limits: map[v1.ResourceName]resource.Quantity{
 				v1.ResourceCPU:    resource.MustParse(ss.CpuLimit),

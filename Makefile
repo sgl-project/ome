@@ -320,6 +320,11 @@ run-ome-agent-training-agent: fmt vet ome-agent ## Run ome-agent binary from loc
 	@echo "🏃‍♂️ Running ome-agent training-agent..."
 	bin/ome-agent training-agent -d -c config/ome-agent/ome-agent.yaml
 
+.PHONY: run-ome-agent-fine-tuned-adapter
+run-ome-agent-fine-tuned-adapter: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	@echo "🏃‍♂️ Running ome-agent fine-tuned-adapter..."
+	bin/ome-agent fine-tuned-adapter -d -c config/ome-agent/ome-agent.yaml
+
 .PHONY: run-openai-admin-util
 run-openai-admin-util: fmt vet openai-admin-util ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "🏃‍♂️ Running openai-admin-util ..."

@@ -176,10 +176,10 @@ debug: true
 model_id: gpt2
 port: 8080
 `
-	case "merged-fine-tuned-adapter":
+	case "fine-tuned-adapter":
 		content = `
 debug: true
-# Mock merged fine-tuned adapter config
+# Mock fine-tuned adapter config
 base_model: /path/to/base
 adapter: /path/to/adapter
 output: /path/to/output
@@ -266,10 +266,10 @@ cache_dir: %s/cache
 max_batch_size: 4
 `, mockDataDir, mockDataDir)
 
-	case "merged-fine-tuned-adapter":
+	case "fine-tuned-adapter":
 		content = fmt.Sprintf(`
 debug: true
-# Detailed mock merged fine-tuned adapter config
+# Detailed mock fine-tuned adapter config
 base_model: %s/base
 adapter: %s/adapter
 output: %s/output
@@ -303,7 +303,7 @@ func SetupMockDataForAgent(agentType string, mockDataDir string) {
 		// Create a mock model file
 		CreateFileInDir(modelDir, "config.json", `{"model_type": "gpt2", "vocab_size": 50257}`)
 
-	case "merged-fine-tuned-adapter":
+	case "fine-tuned-adapter":
 		// Create mock base model and adapter directories
 		baseDir := filepath.Join(mockDataDir, "base")
 		adapterDir := filepath.Join(mockDataDir, "adapter")

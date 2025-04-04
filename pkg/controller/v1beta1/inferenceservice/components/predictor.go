@@ -62,8 +62,8 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	// Reconcile the finetuned weights
-	finetunedWeights, result, err := p.reconcileFinetunedWeights(isvc)
+	// Reconcile the fine-tuned weights
+	fineTunedWeights, result, err := p.reconcileFineTunedWeights(isvc)
 	if err != nil {
 		return result, err
 	}
@@ -84,7 +84,7 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 	}
 
 	// Reconcile object metadata and pod spec
-	objectMeta, result, err := p.reconcileObjectMeta(isvc, sRuntime, runtimeName, baseModel, baseModelMeta, finetunedWeights)
+	objectMeta, result, err := p.reconcileObjectMeta(isvc, sRuntime, runtimeName, baseModel, baseModelMeta, fineTunedWeights)
 	if err != nil {
 		return result, err
 	}
@@ -306,8 +306,8 @@ func (p *Predictor) setMultiNodeMReferences(isvc *v1beta1.InferenceService, mnr 
 }
 
 // reconcileObjectMeta reconciles the object metadata.
-func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, finetunedWeights []*v1beta1.FineTunedWeight) (metav1.ObjectMeta, ctrl.Result, error) {
-	annotations, err := p.processAnnotations(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, finetunedWeights)
+func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, fineTunedWeights []*v1beta1.FineTunedWeight) (metav1.ObjectMeta, ctrl.Result, error) {
+	annotations, err := p.processAnnotations(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
 	if err != nil {
 		return metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
@@ -327,7 +327,7 @@ func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime
 }
 
 // processAnnotations processes the annotations for the predictor.
-func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, finetunedWeights []*v1beta1.FineTunedWeight) (map[string]string, error) {
+func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, fineTunedWeights []*v1beta1.FineTunedWeight) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
@@ -336,18 +336,18 @@ func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime 
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
-	p.processServingAnnotations(annotations, isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, finetunedWeights)
+	p.processServingAnnotations(annotations, isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
 
 	return utils.Union(sRuntimeAnnotations, annotations, isvc.Spec.Predictor.Annotations), nil
 }
 
 // processServingAnnotations processes the annotations for the predictor.
-func (p *Predictor) processServingAnnotations(annotations map[string]string, isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, finetunedWeights []*v1beta1.FineTunedWeight) {
-	if isvcutils.LoadingMergedFinetunedWeights(finetunedWeights) {
+func (p *Predictor) processServingAnnotations(annotations map[string]string, isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, fineTunedWeights []*v1beta1.FineTunedWeight) {
+	if isvcutils.LoadingMergedFineTunedWeights(fineTunedWeights) {
 		// Delete the original model init injection
 		delete(annotations, constants.ModelInitInjectionKey)
 
-		annotations[constants.MergedFinetunedWeightsInjectionKey] = finetunedWeights[0].Name
+		annotations[constants.FineTunedAdapterInjectionKey] = fineTunedWeights[0].Name
 	} else {
 		baseModelDecryptionKeyName, ok := baseModelMeta.Annotations[constants.BaseModelDecryptionKeyName]
 		if ok {
@@ -577,7 +577,7 @@ func (p *Predictor) createMergedWorkerPodSpec(isvc *v1beta1.InferenceService, sR
 func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta) {
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
 
-	if isvcutils.IsOriginalModelVolumnMountNecessary(objectMeta.Annotations) {
+	if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
 		modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
 		vm := v1.VolumeMount{
 			Name:      *isvc.Spec.Predictor.Model.BaseModel,
@@ -813,28 +813,28 @@ func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.
 	return baseModel, baseModelMeta, ctrl.Result{}, nil
 }
 
-// reconcileFinetunedWeights reconciles the finetuned weights for the predictor.
-func (p *Predictor) reconcileFinetunedWeights(isvc *v1beta1.InferenceService) ([]*v1beta1.FineTunedWeight, ctrl.Result, error) {
+// reconcileFineTunedWeights reconciles the fine-tuned weights for the predictor.
+func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([]*v1beta1.FineTunedWeight, ctrl.Result, error) {
 	if len(isvc.Spec.Predictor.Model.FineTunedWeights) == 0 {
 		return nil, ctrl.Result{}, nil
 	}
 
 	if len(isvc.Spec.Predictor.Model.FineTunedWeights) > 1 {
-		return nil, ctrl.Result{}, fmt.Errorf("Stacked finetuned weights serving is not supported yet")
+		return nil, ctrl.Result{}, fmt.Errorf("stacked fine-tuned serving is not supported yet")
 	}
 
-	allFinetunedWeights := make([]*v1beta1.FineTunedWeight, 0)
+	allFineTunedWeights := make([]*v1beta1.FineTunedWeight, 0)
 
-	for _, finetunedWeightName := range isvc.Spec.Predictor.Model.FineTunedWeights {
-		finetunedWeight, err := isvcutils.GetFinetunedWeight(p.client, finetunedWeightName, isvc.Namespace)
+	for _, fineTunedWeightName := range isvc.Spec.Predictor.Model.FineTunedWeights {
+		fineTunedWeight, err := isvcutils.GetFineTunedWeight(p.client, fineTunedWeightName)
 		if err != nil {
 			return make([]*v1beta1.FineTunedWeight, 0), ctrl.Result{}, err
 		}
 
-		allFinetunedWeights = append(allFinetunedWeights, finetunedWeight)
+		allFineTunedWeights = append(allFineTunedWeights, fineTunedWeight)
 	}
 
-	return allFinetunedWeights, ctrl.Result{}, nil
+	return allFineTunedWeights, ctrl.Result{}, nil
 }
 
 // getBaseModelSpec retrieves the base model spec.

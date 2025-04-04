@@ -1,4 +1,4 @@
-package merged_finetuned_adapter
+package fine_tuned_adapter
 
 import (
 	"fmt"
@@ -14,10 +14,10 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	FineTunedWeightURI              *casper.ObjectURI       `mapstructure:"model" validate:"required"`
-	unzippedFinetunedModelDirectory string                  `mapstructure:"unzipped_finetuned_model_directory" validate:"required"`
-	zippedFinetunedModelDirectory   string                  `mapstructure:"zipped_finetuned_model_directory" validate:"required"`
-	ObjectStorageDataStore          *casper.CasperDataStore `validate:"required"`
+	FineTunedWeightURI               *casper.ObjectURI       `mapstructure:"model" validate:"required"`
+	unzippedFineTunedWeightDirectory string                  `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
+	zippedFineTunedWeightDirectory   string                  `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
+	ObjectStorageDataStore           *casper.CasperDataStore `validate:"required"`
 }
 
 type Option func(*Config) error
@@ -41,8 +41,8 @@ func defaultConfig() *Config {
 	return &Config{}
 }
 
-// NewMergedFinetunedAdapterConfig builds and returns a new configuration from the given options.
-func NewMergedFinetunedAdapterConfig(opts ...Option) (*Config, error) {
+// NewFineTunedAdapterConfig builds and returns a new configuration from the given options.
+func NewFineTunedAdapterConfig(opts ...Option) (*Config, error) {
 	c := &Config{}
 	if err := c.Apply(opts...); err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func NewMergedFinetunedAdapterConfig(opts ...Option) (*Config, error) {
 }
 
 // WithAppParams attempts to resolve the required client objects using injected named parameters
-func WithAppParams(params mergedFinetunedAdapterParams) Option {
+func WithAppParams(params fineTunedAdapterParams) Option {
 	return func(c *Config) error {
 		c.ObjectStorageDataStore = params.ObjectStorageDataStores
 		return nil

@@ -27,5 +27,5 @@ func init() {
 	rootCmd.AddCommand(CreateAgentCommand(NewReplicaAgent()))
 	rootCmd.AddCommand(CreateAgentCommand(NewTrainingAgent()))
 	rootCmd.AddCommand(CreateAgentCommand(NewServingAgent()))
-	rootCmd.AddCommand(CreateAgentCommand(NewMergedFineTunedAdapterAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewFineTunedAdapterAgent()))
 }

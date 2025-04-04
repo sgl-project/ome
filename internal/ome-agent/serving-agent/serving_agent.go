@@ -53,7 +53,7 @@ func (s *ServingSidecar) Start() error {
 
 	// ConfigMap never update the file. It creats as a tmp file and delete the old file, and then being renamed.
 	// Use the mount dir to work around
-	fileChangeDetected := s.watchFileChanges(watcher, filepath.Dir(s.Config.FinetunedModelInfoFilePath))
+	fileChangeDetected := s.watchFileChanges(watcher, filepath.Dir(s.Config.FineTunedWeightInfoFilePath))
 
 	// Create the channle to receive termination signals
 	teminationSignalCh := make(chan os.Signal, 1)
@@ -76,9 +76,9 @@ OuterLoop:
 }
 
 func (s *ServingSidecar) applyFinetunedModelChanges() {
-	ftModelInfofilePath := s.Config.FinetunedModelInfoFilePath
-	unzippedFtModelDir := s.Config.unzippedFinetunedModelDirectory
-	zippedFtModelDir := s.Config.zippedFinetunedModelDirectory
+	ftModelInfofilePath := s.Config.FineTunedWeightInfoFilePath
+	unzippedFtModelDir := s.Config.unzippedFineTunedWeightDirectory
+	zippedFtModelDir := s.Config.zippedFineTunedWeightDirectory
 
 	// Step 1: Get the list of fine-tune models info
 	objectURIs, ftModelNames, err := readObjectURIsFromFile(ftModelInfofilePath)

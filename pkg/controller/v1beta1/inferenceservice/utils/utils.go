@@ -50,15 +50,15 @@ func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 	return ok && inject == "true"
 }
 
-func IsOriginalModelVolumnMountNecessary(annotations map[string]string) bool {
+func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
 	inject, ok := annotations[constants.ModelInitInjectionKey]
 	return !ok || inject != "true"
 }
 
-func LoadingMergedFinetunedWeights(finetunedWeights []*v1beta1.FineTunedWeight) bool {
-	// TODO: FinetunedWeight should have a indicator about if it is a merged weights
+func LoadingMergedFineTunedWeights(fineTunedWeights []*v1beta1.FineTunedWeight) bool {
+	// TODO: FineTunedWeight should have a indicator about if it is a merged weights
 	// TODO: The webhook should validate if only one merged weights is attached
-	return len(finetunedWeights) == 1
+	return len(fineTunedWeights) == 1
 }
 
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
@@ -204,16 +204,16 @@ func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.Bas
 	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
 }
 
-// GetFinetunedWeight Get the finetuned weight from the given finetuned weight name.
-func GetFinetunedWeight(cl client.Client, name string, namespace string) (*v1beta1.FineTunedWeight, error) {
-	finetunedWeight := &v1beta1.FineTunedWeight{}
-	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, finetunedWeight)
+// GetFineTunedWeight Get the fine-tuned weight from the given fine-tuned weight name.
+func GetFineTunedWeight(cl client.Client, name string) (*v1beta1.FineTunedWeight, error) {
+	fineTunedWeight := &v1beta1.FineTunedWeight{}
+	err := cl.Get(context.TODO(), client.ObjectKey{Name: name}, fineTunedWeight)
 	if err == nil {
-		return finetunedWeight, nil
+		return fineTunedWeight, nil
 	} else if !errors.IsNotFound(err) {
 		return nil, err
 	}
-	return nil, goerrors.New("No FinetunedWeight with the name: " + name + " in namespace: " + namespace)
+	return nil, goerrors.New("No FineTunedWeight with the name: " + name)
 }
 
 // ReplacePlaceholders Replace placeholders in runtime container by values from inferenceservice metadata

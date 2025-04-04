@@ -1,4 +1,4 @@
-package merged_finetuned_adapter
+package fine_tuned_adapter
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/fx"
 )
 
-type mergedFinetunedAdapterParams struct {
+type fineTunedAdapterParams struct {
 	fx.In
 
 	AnotherLogger           logging.Interface `name:"another_log"`
@@ -18,15 +18,15 @@ type mergedFinetunedAdapterParams struct {
 }
 
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params mergedFinetunedAdapterParams) (*MergedFinetunedAdapter, error) {
-		config, err := NewMergedFinetunedAdapterConfig(
+	func(v *viper.Viper, e *env.Environment, params fineTunedAdapterParams) (*FineTunedAdapter, error) {
+		config, err := NewFineTunedAdapterConfig(
 			WithViper(v),
 			WithEnv(e),
 			WithAnotherLog(params.AnotherLogger),
 			WithAppParams(params),
 		)
 		if err != nil {
-			return nil, fmt.Errorf("error creating serving sidecar config: %+v", err)
+			return nil, fmt.Errorf("error creating fine-tuned adapter config: %+v", err)
 		}
-		return NewMergedFinetunedAdapter(config)
+		return NewFineTunedAdapter(config)
 	})

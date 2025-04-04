@@ -5,7 +5,7 @@
 Currently, the OME Agent has multiple entry points:
 - `enigma_agent.go`
 - `hf_download_agent.go`
-- `merged-finetuned-adapter.go`
+- `fine_tuned_adapter.go`
 - `replica_agent.go`
 - `serving_sidecar.go`
 - `training_agent.go`
@@ -332,7 +332,7 @@ func init() {
     rootCmd.AddCommand(CreateAgentCommand(NewReplicaAgent()))
     rootCmd.AddCommand(CreateAgentCommand(NewTrainingAgent()))
     rootCmd.AddCommand(CreateAgentCommand(NewServingSidecarAgent()))
-    rootCmd.AddCommand(CreateAgentCommand(NewMergedFinetunedAdapterAgent()))
+    rootCmd.AddCommand(CreateAgentCommand(NewFineTunedAdapterAgent()))
 }
 ```
 

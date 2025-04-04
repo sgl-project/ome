@@ -68,7 +68,7 @@ var _ = Describe("OME Agent Framework", Ordered, func() {
 			Expect(stdout).To(ContainSubstring("replica"))
 			Expect(stdout).To(ContainSubstring("training-agent"))
 			Expect(stdout).To(ContainSubstring("serving-agent"))
-			Expect(stdout).To(ContainSubstring("merged-fine-tuned-adapter"))
+			Expect(stdout).To(ContainSubstring("fine-tuned-adapter"))
 		})
 
 		// Version flag test removed as it might not be implemented
@@ -125,12 +125,12 @@ var _ = Describe("OME Agent Framework", Ordered, func() {
 			Expect(stdout).To(ContainSubstring("--debug"))
 		})
 
-		It("should display the merged-fine-tuned-adapter help", func() {
-			stdout, stderr, err := RunAgent(binaryPath, "merged-fine-tuned-adapter", "--help")
+		It("should display the fine-tuned-adapter help", func() {
+			stdout, stderr, err := RunAgent(binaryPath, "fine-tuned-adapter", "--help")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stderr).To(BeEmpty())
 
-			Expect(stdout).To(ContainSubstring("OME merged fine-tuned adapter"))
+			Expect(stdout).To(ContainSubstring("OME fine-tuned adapter"))
 			Expect(stdout).To(ContainSubstring("--config"))
 			Expect(stdout).To(ContainSubstring("--debug"))
 		})
@@ -172,8 +172,8 @@ var _ = Describe("OME Agent Framework", Ordered, func() {
 			Expect(stderr).To(ContainSubstring("no config file provided"))
 		})
 
-		It("should report an error for merged-fine-tuned-adapter", func() {
-			_, stderr, err := RunAgent(binaryPath, "merged-fine-tuned-adapter")
+		It("should report an error for fine-tuned-adapter", func() {
+			_, stderr, err := RunAgent(binaryPath, "fine-tuned-adapter")
 
 			Expect(err).To(HaveOccurred())
 			Expect(stderr).To(ContainSubstring("no config file provided"))
@@ -307,7 +307,7 @@ debug: false
 				"replica",
 				"training-agent",
 				"serving-agent",
-				"merged-fine-tuned-adapter",
+				"fine-tuned-adapter",
 			}
 
 			for _, agentType := range agentTypes {
@@ -325,15 +325,15 @@ output_dir: ` + mockDataDir + `
 `
 			configPaths["hf-download-with-paths"] = CreateTempConfig(hfConfig)
 
-			// Update the merged-fine-tuned-adapter config to use the mock data directory
+			// Update the fine-tuned-adapter config to use the mock data directory
 			mergedConfig := `
 debug: true
-# Mock merged fine-tuned adapter config with real paths
+# Mock fine-tuned adapter config with real paths
 base_model: ` + mockDataDir + `/base
 adapter: ` + mockDataDir + `/adapter
 output: ` + mockDataDir + `/output
 `
-			configPaths["merged-fine-tuned-adapter-with-paths"] = CreateTempConfig(mergedConfig)
+			configPaths["fine-tuned-adapter-with-paths"] = CreateTempConfig(mergedConfig)
 		})
 
 		AfterEach(func() {
@@ -395,13 +395,13 @@ output: ` + mockDataDir + `/output
 			Expect(stdout).To(ContainSubstring("Serving sidecar started"))
 		})
 
-		XIt("should start the merged-fine-tuned-adapter", func() {
-			stdout, _, err := RunAgent(binaryPath, "merged-fine-tuned-adapter", "--config", configPaths["merged-fine-tuned-adapter"])
+		XIt("should start the fine-tuned-adapter", func() {
+			stdout, _, err := RunAgent(binaryPath, "fine-tuned-adapter", "--config", configPaths["fine-tuned-adapter"])
 
 			// In a real test, you would need to mock the dependencies
 			// This is just an example of how to structure the test
 			Expect(err).NotTo(HaveOccurred())
-			Expect(stdout).To(ContainSubstring("Merged fine-tuned adapter started"))
+			Expect(stdout).To(ContainSubstring("Fine-tuned adapter started"))
 		})
 	})
 

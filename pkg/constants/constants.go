@@ -105,12 +105,13 @@ var (
 	AgentSecretNameEnvVarKey    = AgentAppName + "_" + "SECRET_NAME"
 
 	// Serving Sidecar Configuration
-	AgentFinetunedModelInfoFilePath      = AgentAppName + "_" + "FINETUNED_MODEL_INFO_FILE_PATH"
-	AgentUnzippedFinetunedModelDirectory = AgentAppName + "_" + "UNZIPPED_FINETUNED_MODEL_DIRECTORY"
-	AgentZippedFinetunedModelDirectory   = AgentAppName + "_" + "ZIPPED_FINETUNED_MODEL_DIRECTORY"
+	AgentFineTunedWeightInfoFilePath      = AgentAppName + "_" + "FINE_TUNED_WEIGHT_INFO_FILE_PATH"
+	AgentUnzippedFineTunedWeightDirectory = AgentAppName + "_" + "UNZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"
+	AgentZippedFineTunedWeightDirectory   = AgentAppName + "_" + "ZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"
 )
 
 // InferenceService MultiModel Constants
+
 var (
 	ModelConfigFileName = "models.json"
 )
@@ -143,9 +144,9 @@ var (
 	Scheduler                                = OMEAPIGroupName + "/scheduler"
 	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
 	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
-	MergedFinetunedWeightsInjectionKey       = OMEAPIGroupName + "/inject-merged-finetuned-weight"
+	FineTunedAdapterInjectionKey             = OMEAPIGroupName + "/inject-fine-tuned-adapter"
 	ServingSidecarInjectionKey               = OMEAPIGroupName + "/inject-serving-sidecar"
-	ServingFinetunedModelStrategyKey         = OMEAPIGroupName + "/finetuned-model-strategy"
+	FineTunedWeightFTStrategyKey             = OMEAPIGroupName + "/fine-tuned-weight-ft-strategy"
 	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
 	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
 	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"

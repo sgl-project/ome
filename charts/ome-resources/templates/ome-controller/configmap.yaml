@@ -98,7 +98,7 @@ data:
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "region": "{{ .Values.ome.omeAgent.region }}"
     }
-  mergedFinetunedAdapter: |-
+  fineTunedAdapter: |-
     {
         "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
         "memoryRequest": "320Gi",
