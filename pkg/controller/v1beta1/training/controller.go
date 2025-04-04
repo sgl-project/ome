@@ -501,7 +501,7 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 		}
 	}
 
-	storageUri := "oci://n/" + trainingSidecarConfig.Namespace + "/b/" + trainingSidecarConfig.FineTunedModelBucket + "/o/" + trainJob.Name
+	storageUri := "oci://n/" + trainingSidecarConfig.Namespace + "/b/" + trainingSidecarConfig.FineTunedModelBucket + "/o/" + utils.GetFineTunedModelName(trainJob.Name)
 	return &v1beta1.FineTunedWeight{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "FineTunedWeight",

@@ -1,6 +1,7 @@
 package jobset
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 	"context"
 	"fmt"
 	"maps"
@@ -66,7 +67,8 @@ func (j *JobSet) Build(ctx context.Context, runtimeJobTemplate client.Object, in
 
 	var jobSetBuilder *Builder
 	oldJobSet := &jobsetv1alpha2.JobSet{}
-	if err := j.client.Get(ctx, client.ObjectKeyFromObject(trainJob), oldJobSet); err != nil {
+	oldJobSetName := utils.GetShortTrainJobName(trainJob.Name)
+	if err := j.client.Get(ctx, client.ObjectKey{Name: oldJobSetName, Namespace: trainJob.Namespace}, oldJobSet); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
@@ -115,7 +117,8 @@ func jobSetIsSuspended(jobSet *jobsetv1alpha2.JobSet) bool {
 
 func (j *JobSet) TerminalCondition(ctx context.Context, trainJob *omev1beta1.TrainingJob) (*metav1.Condition, error) {
 	jobSet := &jobsetv1alpha2.JobSet{}
-	if err := j.client.Get(ctx, client.ObjectKeyFromObject(trainJob), jobSet); err != nil {
+	jobSetName := utils.GetShortTrainJobName(trainJob.Name)
+	if err := j.client.Get(ctx, client.ObjectKey{Name: jobSetName, Namespace: trainJob.Namespace}, jobSet); err != nil {
 		return nil, err
 	}
 	if completed := meta.FindStatusCondition(jobSet.Status.Conditions, string(jobsetv1alpha2.JobSetCompleted)); completed != nil && completed.Status == metav1.ConditionTrue {

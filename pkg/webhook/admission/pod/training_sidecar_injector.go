@@ -139,12 +139,12 @@ func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.En
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
 		Name:  constants.TrainingNameEnvVarKey,
-		Value: trainingName,
+		Value: utils.GetFineTunedModelName(trainingName),
 	})
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
 		Name:  constants.AgentModelObjectName,
-		Value: trainingName,
+		Value: utils.GetFineTunedModelName(trainingName),
 	})
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
@@ -154,7 +154,7 @@ func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.En
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
 		Name:  constants.TrainingMetricsObjectEnvVarKey,
-		Value: trainingName,
+		Value: utils.GetFineTunedModelName(trainingName),
 	})
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{

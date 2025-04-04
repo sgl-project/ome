@@ -131,3 +131,12 @@ func ExtractNamespaceFromObjectStorageUri(uri string) string {
 func GetFineTunedModelName(trainingJobName string) string {
 	return trainingJobName[len(constants.TrainingJobNamePrefix):]
 }
+
+// GetShortTrainJobName Get the first 20 characters of training job name.
+func GetShortTrainJobName(name string) string {
+	// The train job name will be reused for jobset/pod name, which cannot exceed 63 characters. Use first 20 characters for pod name and trainer node name prefix/suffix buffer
+	if len(name) >= 20 {
+		return name[:20]
+	}
+	return name
+}

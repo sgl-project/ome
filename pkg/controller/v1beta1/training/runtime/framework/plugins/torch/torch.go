@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -74,7 +76,7 @@ func (t *Torch) EnforceMLPolicy(info *runtime.Info, trainJob *omev1beta1.Trainin
 		},
 		{
 			Name:  constants.TorchEnvMasterAddr,
-			Value: fmt.Sprintf("%s-%s-0-0.%s", trainJob.Name, constants.JobTrainerNode, trainJob.Name),
+			Value: fmt.Sprintf("%s-%s-0-0.%s", utils.GetShortTrainJobName(trainJob.Name), constants.JobTrainerNode, utils.GetShortTrainJobName(trainJob.Name)),
 		},
 		{
 			Name:  constants.TorchEnvMasterPort,

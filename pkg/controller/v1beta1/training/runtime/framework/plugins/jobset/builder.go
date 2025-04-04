@@ -27,6 +27,7 @@ type Builder struct {
 var log = logf.Log.WithName("JobSetBuilder")
 
 func NewBuilder(objectKey client.ObjectKey, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec) *Builder {
+	keyName := utils.GetShortTrainJobName(objectKey.Name)
 	return &Builder{
 		JobSet: jobsetv1alpha2.JobSet{
 			TypeMeta: metav1.TypeMeta{
@@ -35,7 +36,7 @@ func NewBuilder(objectKey client.ObjectKey, jobSetTemplateSpec omev1beta1.JobSet
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:   objectKey.Namespace,
-				Name:        objectKey.Name,
+				Name:        keyName,
 				Labels:      maps.Clone(jobSetTemplateSpec.Labels),
 				Annotations: maps.Clone(jobSetTemplateSpec.Annotations),
 			},
