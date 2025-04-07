@@ -38,14 +38,15 @@ spec:
             apt update && \
             apt install -y python3-pip python3.12-venv
 
-            rm -rf /raid/models/Meta-Llama-3.1-70B-Instruct
-            mkdir -p /raid/models/e5-mistral-7b-instruct
+            export MODEL_ID="meta-llama/Llama-4-Scout-17B-16E-Instruct"
+            rm -rf /raid/models/${MODEL_ID}
+            mkdir -p /raid/models/${MODEL_ID}
 
             python3 -m venv /opt/venv && source /opt/venv/bin/activate && pip install huggingface_hub[hf_transfer]
-            HF_HUB_ENABLE_HF_TRANSFER=1 /opt/venv/bin/huggingface-cli download meta-llama/Meta-Llama-3.1-70B-Instruct \
-            --token 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 \
-            --local-dir /raid/models/Meta-Llama-3.1-70B-Instruct \
-            --cache-dir /raid/models/Meta-Llama-3.1-70B-Instruct \
+            HF_HUB_ENABLE_HF_TRANSFER=1 /opt/venv/bin/huggingface-cli download ${MODEL_ID} \
+            --token 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 \
+            --local-dir /raid/models/${MODEL_ID} \
+            --cache-dir /raid/models/${MODEL_ID} \
             --exclude "*.bin"
             echo "Downloaded, sleeping forever"
             sleep 999999999

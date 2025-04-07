@@ -13,6 +13,8 @@ resources:
   - vllm/llama-3-2-90b-vision-instruct-fp8-tp8-rt.yaml
   - vllm/llama-3-3-70b-instruct-rt.yaml
   - vllm/llama-3-3-70b-instruct-fp8-dynamic-rt.yaml
+  - vllm/llama-4-maverick-17b-128e-instruct-fp8.yaml
+  - vllm/llama-4-scout-17b-16e-instruct.yaml
   - vllm/mistral-7b-instruct.yaml
   - vllm/deepseek-v3-rt.yaml
   - vllm/deepseek-v3-rdma-rt.yaml
