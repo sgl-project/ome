@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "srt-e5-mistral-7b-instruct"
+    models.ome.io/runtime: "vllm-e5-mistral-7b-instruct"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "e5-mistral-7b-instruct" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "e5-mistral-7b-instruct" "isInternal" }}"

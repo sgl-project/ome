@@ -128,7 +128,7 @@ data:
   reservationJob: |-
     {
       "image": "{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}",
-      "creationFailedTimeThresholdSecond" : 30
+      "creationFailedTimeThresholdSecond" : 60
     }
   dacReconcilePolicy: |-
     {

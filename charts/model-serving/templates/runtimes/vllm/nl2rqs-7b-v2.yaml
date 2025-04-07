@@ -1,51 +1,51 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-mistral-7b-instruct
+  name: vllm-nl2rqs-7b-v2
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.mistral_7b_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.nl2rqs_7b_v2.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.mistral_7b_instruct.annotations }}
-    {{ toYaml .Values.mistral_7b_instruct.annotations | nindent 6 }}
+    {{- if .Values.nl2rqs_7b_v2.annotations }}
+    {{ toYaml .Values.nl2rqs_7b_v2.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.mistral_7b_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.nl2rqs_7b_v2.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.mistral_7b_instruct.labels }}
-    {{ toYaml .Values.mistral_7b_instruct.labels | nindent 6 }}
+    {{- if .Values.nl2rqs_7b_v2.labels }}
+    {{ toYaml .Values.nl2rqs_7b_v2.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.mistral_7b_instruct.tolerations }}
+  {{- if or .Values.commonTolerations .Values.nl2rqs_7b_v2.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.mistral_7b_instruct.tolerations }}
-    {{ toYaml .Values.mistral_7b_instruct.tolerations | nindent 6 }}
+    {{- if .Values.nl2rqs_7b_v2.tolerations }}
+    {{ toYaml .Values.nl2rqs_7b_v2.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
     - name: dshm
       emptyDir:
         medium: Memory
-  {{ with .Values.mistral_7b_instruct }}
+  {{ with .Values.nl2rqs_7b_v2 }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.36.2"
+        version: "4.44.2"
       modelFormat:
         name: safetensors
         version: "1"
-      modelArchitecture: MistralForCausalLM
+      modelArchitecture: LlamaForCausalLM
       autoSelect: true
       priority: 1
   modelSizeRange:
@@ -56,7 +56,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.mistral_7b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.mistral_7b_instruct.image.tag | default .Values.vllm.commonImage.tag }}
+      image: {{ .Values.nl2rqs_7b_v2.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.nl2rqs_7b_v2.image.tag | default .Values.vllm.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1
@@ -73,7 +73,7 @@ spec:
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
           --served-model-name={{ .Values.vllm.serveModelName }} \
-          --tensor-parallel-size=2 \
+          --tensor-parallel-size=1 \
           --gpu-memory-utilization=0.90
       volumeMounts:
         - mountPath: /dev/shm

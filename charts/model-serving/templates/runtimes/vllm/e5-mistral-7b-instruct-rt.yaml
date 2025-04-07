@@ -76,6 +76,7 @@ spec:
           --served-model-name={{ .Values.vllm.serveModelName }} \
           --tensor-parallel-size=1 \
           --gpu-memory-utilization=0.8 \
+          --embedding-mode \
           --enforce-eager \
       volumeMounts:
         - mountPath: /dev/shm

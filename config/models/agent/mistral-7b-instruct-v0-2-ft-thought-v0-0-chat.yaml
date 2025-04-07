@@ -5,7 +5,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "vllm-one-card-chat"
+    models.ome.io/runtime: "vllm-mistral-7b-instruct"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "True"
     models.ome.io/internal: "True"

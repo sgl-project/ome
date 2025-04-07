@@ -48,6 +48,15 @@ spec:
       modelArchitecture: Phi3VForCausalLM
       autoSelect: true
       priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.41.2"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: Phi3VForCausalLM
+      autoSelect: true
+      priority: 1
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
