@@ -291,7 +291,7 @@ func TestXAIServiceAccount_Create(t *testing.T) {
 
 	// Check status fields
 	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountID)
-	assert.Equal(t, "user_ZTg5Njc0ZmUtYWYyNy00ZmRkLTkxZWQtMzQwODcxMTVkMTkx", *updatedServiceAccount.Status.ServiceAccountID)
+	assert.Equal(t, "user_74syguzYwy34fGSeK7uaS9", *updatedServiceAccount.Status.ServiceAccountID)
 	assert.NotNil(t, updatedServiceAccount.Status.CreationTime)
 	assert.Nil(t, updatedServiceAccount.Status.APIKey)
 

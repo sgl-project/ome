@@ -11,5 +11,5 @@ import (
 func TestUtils_GenerateId(t *testing.T) {
 	uid := types.UID("e89674fe-af27-4fdd-91ed-34087115d191")
 	projectId := GenerateId("proj_", uid)
-	assert.Equal(t, "proj_ZTg5Njc0ZmUtYWYyNy00ZmRkLTkxZWQtMzQwODcxMTVkMTkx", projectId)
+	assert.Equal(t, "proj_74syguzYwy34fGSeK7uaS9", projectId)
 }
