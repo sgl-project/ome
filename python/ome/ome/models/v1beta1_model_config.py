@@ -27,7 +27,7 @@ class V1beta1ModelConfig(BaseModel):
     """
     V1beta1ModelConfig
     """ # noqa: E501
-    input_model: Optional[StrictStr] = Field(default=None, description="InputModel defines where the input model stores. Todo: support generic model storage", alias="inputModel")
+    input_model: Optional[StrictStr] = Field(default=None, description="InputModel defines the base model name.", alias="inputModel")
     output_model: Optional[V1beta1StorageSpec] = Field(default=None, alias="outputModel")
     __properties: ClassVar[List[str]] = ["inputModel", "outputModel"]
 

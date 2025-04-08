@@ -1,6 +1,7 @@
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,BuiltInAdapter,Env
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ComponentStatusSpec,Traffic
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServiceList,Items
+API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ModelRef,FineTunedWeights
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ModelSpec,FineTunedWeights
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ModelStatusSpec,NodesFailed
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ModelStatusSpec,NodesReady

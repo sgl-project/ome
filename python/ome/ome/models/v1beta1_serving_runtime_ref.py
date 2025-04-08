@@ -17,18 +17,19 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1DacReconcilePolicyConfig(BaseModel):
+class V1beta1ServingRuntimeRef(BaseModel):
     """
-    V1beta1DacReconcilePolicyConfig
+    V1beta1ServingRuntimeRef
     """ # noqa: E501
-    reconcile_failed_lifecycle_state: Optional[StrictBool] = Field(default=None, alias="reconcileFailedLifecycleState")
-    reconcile_with_kueue: Optional[StrictBool] = Field(default=None, alias="reconcileWithKueue")
-    __properties: ClassVar[List[str]] = ["reconcileFailedLifecycleState", "reconcileWithKueue"]
+    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the resource being referenced Defaults to `ome.io`", alias="apiGroup")
+    kind: Optional[StrictStr] = Field(default=None, description="Kind of the runtime being referenced Defaults to ClusterServingRuntime")
+    name: Optional[StrictStr] = Field(default='', description="Name of the runtime being referenced")
+    __properties: ClassVar[List[str]] = ["apiGroup", "kind", "name"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -48,7 +49,7 @@ class V1beta1DacReconcilePolicyConfig(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1DacReconcilePolicyConfig from a JSON string"""
+        """Create an instance of V1beta1ServingRuntimeRef from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,7 +74,7 @@ class V1beta1DacReconcilePolicyConfig(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1DacReconcilePolicyConfig from a dict"""
+        """Create an instance of V1beta1ServingRuntimeRef from a dict"""
         if obj is None:
             return None
 
@@ -81,8 +82,9 @@ class V1beta1DacReconcilePolicyConfig(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "reconcileFailedLifecycleState": obj.get("reconcileFailedLifecycleState"),
-            "reconcileWithKueue": obj.get("reconcileWithKueue")
+            "apiGroup": obj.get("apiGroup"),
+            "kind": obj.get("kind"),
+            "name": obj.get("name") if obj.get("name") is not None else ''
         })
         return _obj
 

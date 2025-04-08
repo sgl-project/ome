@@ -147,6 +147,13 @@ type ServingRuntimeSpec struct {
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
 
+	// Engine configuration for this runtime
+	// +optional
+	EngineConfig *EngineSpec `json:"engineConfig,omitempty"`
+	// Decoder configuration for this runtime
+	// +optional
+	DecoderConfig *DecoderSpec `json:"decoderConfig,omitempty"`
+
 	// Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)
 	// +optional
 	ProtocolVersions []constants.InferenceServiceProtocol `json:"protocolVersions,omitempty"`

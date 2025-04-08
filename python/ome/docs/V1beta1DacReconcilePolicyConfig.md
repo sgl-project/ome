@@ -5,6 +5,7 @@
 | Name                                 | Type     | Description | Notes      |
 |--------------------------------------|----------|-------------|------------|
 | **reconcile_failed_lifecycle_state** | **bool** |             | [optional] |
+| **reconcile_with_kueue**             | **bool** |             | [optional] |
 
 ## Example
 

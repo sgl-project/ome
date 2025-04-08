@@ -26,7 +26,7 @@ class V1beta1RuntimeRef(BaseModel):
     """
     RuntimeRef represents the reference to the existing training runtime.
     """ # noqa: E501
-    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the runtime being referenced. Defaults to `kubeflow.org`.", alias="apiGroup")
+    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the runtime being referenced. Defaults to `ome.io`.", alias="apiGroup")
     kind: Optional[StrictStr] = Field(default=None, description="Kind of the runtime being referenced. Defaults to ClusterTrainingRuntime.")
     name: Optional[StrictStr] = Field(default='', description="Name of the runtime being referenced. When namespaced-scoped TrainingRuntime is used, the TrainJob must have the same namespace as the deployed runtime.")
     __properties: ClassVar[List[str]] = ["apiGroup", "kind", "name"]

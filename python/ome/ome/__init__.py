@@ -62,6 +62,8 @@ from ome.models.v1beta1_coscheduling_pod_group_policy_config import V1beta1Cosch
 from ome.models.v1beta1_cross_reference import V1beta1CrossReference
 from ome.models.v1beta1_custom_predictor import V1beta1CustomPredictor
 from ome.models.v1beta1_dac_reconcile_policy_config import V1beta1DacReconcilePolicyConfig
+from ome.models.v1beta1_dac_reservation_workload_config import V1beta1DacReservationWorkloadConfig
+from ome.models.v1beta1_decoder_spec import V1beta1DecoderSpec
 from ome.models.v1beta1_dedicated_ai_cluster import V1beta1DedicatedAICluster
 from ome.models.v1beta1_dedicated_ai_cluster_list import V1beta1DedicatedAIClusterList
 from ome.models.v1beta1_dedicated_ai_cluster_profile import V1beta1DedicatedAIClusterProfile
@@ -72,6 +74,7 @@ from ome.models.v1beta1_dedicated_ai_cluster_status import V1beta1DedicatedAIClu
 from ome.models.v1beta1_deploy_config import V1beta1DeployConfig
 from ome.models.v1beta1_endpoint import V1beta1Endpoint
 from ome.models.v1beta1_endpoint_spec import V1beta1EndpointSpec
+from ome.models.v1beta1_engine_spec import V1beta1EngineSpec
 from ome.models.v1beta1_failure_info import V1beta1FailureInfo
 from ome.models.v1beta1_fine_tuned_weight import V1beta1FineTunedWeight
 from ome.models.v1beta1_fine_tuned_weight_list import V1beta1FineTunedWeightList
@@ -88,6 +91,7 @@ from ome.models.v1beta1_ingress_config import V1beta1IngressConfig
 from ome.models.v1beta1_job_set_template_spec import V1beta1JobSetTemplateSpec
 from ome.models.v1beta1_job_status import V1beta1JobStatus
 from ome.models.v1beta1_keda_config import V1beta1KedaConfig
+from ome.models.v1beta1_leader_spec import V1beta1LeaderSpec
 from ome.models.v1beta1_logger_spec import V1beta1LoggerSpec
 from ome.models.v1beta1_ml_policy import V1beta1MLPolicy
 from ome.models.v1beta1_ml_policy_config import V1beta1MLPolicyConfig
@@ -98,6 +102,7 @@ from ome.models.v1beta1_model_copies import V1beta1ModelCopies
 from ome.models.v1beta1_model_extension_spec import V1beta1ModelExtensionSpec
 from ome.models.v1beta1_model_format import V1beta1ModelFormat
 from ome.models.v1beta1_model_framework_spec import V1beta1ModelFrameworkSpec
+from ome.models.v1beta1_model_ref import V1beta1ModelRef
 from ome.models.v1beta1_model_revision_states import V1beta1ModelRevisionStates
 from ome.models.v1beta1_model_size_range_spec import V1beta1ModelSizeRangeSpec
 from ome.models.v1beta1_model_spec import V1beta1ModelSpec
@@ -125,6 +130,7 @@ from ome.models.v1beta1_rate_limit_config import V1beta1RateLimitConfig
 from ome.models.v1beta1_rate_limit_list import V1beta1RateLimitList
 from ome.models.v1beta1_rate_limit_spec import V1beta1RateLimitSpec
 from ome.models.v1beta1_rate_limit_status import V1beta1RateLimitStatus
+from ome.models.v1beta1_runner_spec import V1beta1RunnerSpec
 from ome.models.v1beta1_runtime_ref import V1beta1RuntimeRef
 from ome.models.v1beta1_secret_config import V1beta1SecretConfig
 from ome.models.v1beta1_secret_reference import V1beta1SecretReference
@@ -136,6 +142,7 @@ from ome.models.v1beta1_service_metadata import V1beta1ServiceMetadata
 from ome.models.v1beta1_serving_runtime import V1beta1ServingRuntime
 from ome.models.v1beta1_serving_runtime_list import V1beta1ServingRuntimeList
 from ome.models.v1beta1_serving_runtime_pod_spec import V1beta1ServingRuntimePodSpec
+from ome.models.v1beta1_serving_runtime_ref import V1beta1ServingRuntimeRef
 from ome.models.v1beta1_serving_runtime_spec import V1beta1ServingRuntimeSpec
 from ome.models.v1beta1_storage_spec import V1beta1StorageSpec
 from ome.models.v1beta1_supported_model_format import V1beta1SupportedModelFormat

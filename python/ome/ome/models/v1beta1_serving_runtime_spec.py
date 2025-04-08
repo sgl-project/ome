@@ -20,6 +20,8 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from ome.models.v1beta1_built_in_adapter import V1beta1BuiltInAdapter
+from ome.models.v1beta1_decoder_spec import V1beta1DecoderSpec
+from ome.models.v1beta1_engine_spec import V1beta1EngineSpec
 from ome.models.v1beta1_model_size_range_spec import V1beta1ModelSizeRangeSpec
 from ome.models.v1beta1_supported_model_format import V1beta1SupportedModelFormat
 from ome.models.v1beta1_worker_pod_spec import V1beta1WorkerPodSpec
@@ -35,8 +37,10 @@ class V1beta1ServingRuntimeSpec(BaseModel):
     built_in_adapter: Optional[V1beta1BuiltInAdapter] = Field(default=None, alias="builtInAdapter")
     compartment_id: Optional[StrictStr] = Field(default=None, description="The compartment ID to use for the serving runtime", alias="compartmentID")
     containers: List[V1Container] = Field(description="List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.")
+    decoder_config: Optional[V1beta1DecoderSpec] = Field(default=None, alias="decoderConfig")
     disabled: Optional[StrictBool] = Field(default=None, description="Set to true to disable use of this runtime")
     dns_policy: Optional[StrictStr] = Field(default=None, description="Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.", alias="dnsPolicy")
+    engine_config: Optional[V1beta1EngineSpec] = Field(default=None, alias="engineConfig")
     host_ipc: Optional[StrictBool] = Field(default=None, description="Use the host's ipc namespace. Optional: Default to false.", alias="hostIPC")
     host_network: Optional[StrictBool] = Field(default=None, description="Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.", alias="hostNetwork")
     http_data_endpoint: Optional[StrictStr] = Field(default=None, description="HTTP endpoint for inferencing", alias="httpDataEndpoint")
@@ -52,7 +56,7 @@ class V1beta1ServingRuntimeSpec(BaseModel):
     tolerations: Optional[List[V1Toleration]] = Field(default=None, description="If specified, the pod's tolerations.")
     volumes: Optional[List[V1Volume]] = Field(default=None, description="List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes")
     workers: Optional[V1beta1WorkerPodSpec] = None
-    __properties: ClassVar[List[str]] = ["affinity", "annotations", "builtInAdapter", "compartmentID", "containers", "disabled", "dnsPolicy", "hostIPC", "hostNetwork", "httpDataEndpoint", "imagePullSecrets", "labels", "modelSizeRange", "nodeSelector", "pipelineParallelism", "protocolVersions", "replicas", "schedulerName", "supportedModelFormats", "tolerations", "volumes", "workers"]
+    __properties: ClassVar[List[str]] = ["affinity", "annotations", "builtInAdapter", "compartmentID", "containers", "decoderConfig", "disabled", "dnsPolicy", "engineConfig", "hostIPC", "hostNetwork", "httpDataEndpoint", "imagePullSecrets", "labels", "modelSizeRange", "nodeSelector", "pipelineParallelism", "protocolVersions", "replicas", "schedulerName", "supportedModelFormats", "tolerations", "volumes", "workers"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -106,6 +110,12 @@ class V1beta1ServingRuntimeSpec(BaseModel):
                 if _item_containers:
                     _items.append(_item_containers.to_dict())
             _dict['containers'] = _items
+        # override the default output from pydantic by calling `to_dict()` of decoder_config
+        if self.decoder_config:
+            _dict['decoderConfig'] = self.decoder_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of engine_config
+        if self.engine_config:
+            _dict['engineConfig'] = self.engine_config.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in image_pull_secrets (list)
         _items = []
         if self.image_pull_secrets:
@@ -157,8 +167,10 @@ class V1beta1ServingRuntimeSpec(BaseModel):
             "builtInAdapter": V1beta1BuiltInAdapter.from_dict(obj["builtInAdapter"]) if obj.get("builtInAdapter") is not None else None,
             "compartmentID": obj.get("compartmentID"),
             "containers": [V1Container.from_dict(_item) for _item in obj["containers"]] if obj.get("containers") is not None else None,
+            "decoderConfig": V1beta1DecoderSpec.from_dict(obj["decoderConfig"]) if obj.get("decoderConfig") is not None else None,
             "disabled": obj.get("disabled"),
             "dnsPolicy": obj.get("dnsPolicy"),
+            "engineConfig": V1beta1EngineSpec.from_dict(obj["engineConfig"]) if obj.get("engineConfig") is not None else None,
             "hostIPC": obj.get("hostIPC"),
             "hostNetwork": obj.get("hostNetwork"),
             "httpDataEndpoint": obj.get("httpDataEndpoint"),

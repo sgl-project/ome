@@ -45,6 +45,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.CustomPredictor":                          schema_pkg_apis_ome_v1beta1_CustomPredictor(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReconcilePolicyConfig":                 schema_pkg_apis_ome_v1beta1_DacReconcilePolicyConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DacReservationWorkloadConfig":             schema_pkg_apis_ome_v1beta1_DacReservationWorkloadConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec":                              schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAICluster":                       schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterList":                   schema_pkg_apis_ome_v1beta1_DedicatedAIClusterList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DedicatedAIClusterProfile":                schema_pkg_apis_ome_v1beta1_DedicatedAIClusterProfile(ref),
@@ -56,6 +57,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DeployConfig":                             schema_pkg_apis_ome_v1beta1_DeployConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.Endpoint":                                 schema_pkg_apis_ome_v1beta1_Endpoint(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EndpointSpec":                             schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec":                               schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FailureInfo":                              schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeight":                          schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":                      schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
@@ -72,6 +74,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec":                       schema_pkg_apis_ome_v1beta1_JobSetTemplateSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus":                                schema_pkg_apis_ome_v1beta1_JobStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                               schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec":                               schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec":                               schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy":                                 schema_pkg_apis_ome_v1beta1_MLPolicy(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicyConfig":                           schema_pkg_apis_ome_v1beta1_MLPolicyConfig(ref),
@@ -82,6 +85,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":                       schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat":                              schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":                       schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRef":                                 schema_pkg_apis_ome_v1beta1_ModelRef(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":                      schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":                       schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec":                                schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
@@ -109,6 +113,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RateLimitList":                            schema_pkg_apis_ome_v1beta1_RateLimitList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RateLimitSpec":                            schema_pkg_apis_ome_v1beta1_RateLimitSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RateLimitStatus":                          schema_pkg_apis_ome_v1beta1_RateLimitStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec":                               schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef":                               schema_pkg_apis_ome_v1beta1_RuntimeRef(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretConfig":                             schema_pkg_apis_ome_v1beta1_SecretConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SecretReference":                          schema_pkg_apis_ome_v1beta1_SecretReference(ref),
@@ -120,6 +125,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntime":                           schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":                       schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":                    schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":                        schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":                       schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":                     schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec":                              schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
@@ -2382,6 +2388,571 @@ func schema_pkg_apis_ome_v1beta1_DacReservationWorkloadConfig(ref common.Referen
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"volumes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Volume"),
+									},
+								},
+							},
+						},
+					},
+					"initContainers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of initialization containers belonging to the pod. Init containers are executed in order prior to containers being started. If any init container fails, the pod is considered to have failed and is handled according to its restartPolicy. The name for an init container or normal container must be unique among all containers. Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes. The resourceRequirements of an init container are taken into account during scheduling by finding the highest request/limit for each resource type, and then using the max of of that value or the sum of the normal containers. Limits are applied to init containers in a similar fashion. Init containers cannot currently be added or removed. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Container"),
+									},
+								},
+							},
+						},
+					},
+					"containers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Container"),
+									},
+								},
+							},
+						},
+					},
+					"ephemeralContainers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of ephemeral containers run in this pod. Ephemeral containers may be run in an existing pod to perform user-initiated actions such as debugging. This list cannot be specified when creating a pod, and it cannot be modified by updating the pod spec. In order to add an ephemeral container to an existing pod, use the pod's ephemeralcontainers subresource. This field is beta-level and available on clusters that haven't disabled the EphemeralContainers feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EphemeralContainer"),
+									},
+								},
+							},
+						},
+					},
+					"restartPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Restart policy for all containers within the pod. One of Always, OnFailure, Never. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"terminationGracePeriodSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"activeDeadlineSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"dnsPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"nodeSelector": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"serviceAccountName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceAccount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DeprecatedServiceAccount is a depreciated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"automountServiceAccountToken": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeName is a request to schedule this pod onto a specific node. If it is non-empty, the scheduler simply schedules this pod onto that node, assuming that it fits resource requirements.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hostNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"hostPID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's pid namespace. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"hostIPC": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's ipc namespace. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"shareProcessNamespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"securityContext": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecurityContext holds pod-level security attributes and common container settings. Optional: Defaults to empty.  See type description for default values of each field.",
+							Ref:         ref("k8s.io/api/core/v1.PodSecurityContext"),
+						},
+					},
+					"imagePullSecrets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.LocalObjectReference"),
+									},
+								},
+							},
+						},
+					},
+					"hostname": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the hostname of the Pod If not specified, the pod's hostname will be set to a system-defined value.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"subdomain": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the fully qualified Pod hostname will be \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\". If not specified, the pod will not have a domainname at all.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's scheduling constraints",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"schedulerName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"tolerations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's tolerations.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"hostAliases": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "ip",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified. This is only valid for non-hostNetwork pods.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.HostAlias"),
+									},
+								},
+							},
+						},
+					},
+					"priorityClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"priority": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"dnsConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the DNS parameters of a pod. Parameters specified here will be merged to the generated DNS configuration based on DNSPolicy.",
+							Ref:         ref("k8s.io/api/core/v1.PodDNSConfig"),
+						},
+					},
+					"readinessGates": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, all readiness gates will be evaluated for pod readiness. A pod is ready when all its containers are ready AND all conditions specified in the readiness gates have status equal to \"True\" More info: https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodReadinessGate"),
+									},
+								},
+							},
+						},
+					},
+					"runtimeClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the \"legacy\" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class This is a beta feature as of Kubernetes v1.14.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"enableServiceLinks": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnableServiceLinks indicates whether information about services should be injected into pod's environment variables, matching the syntax of Docker links. Optional: Defaults to true.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"preemptionPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset. This field is beta-level, gated by the NonPreemptingPriority feature-gate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"overhead": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Overhead represents the resource overhead associated with running a pod for a given RuntimeClass. This field will be autopopulated at admission time by the RuntimeClass admission controller. If the RuntimeClass admission controller is enabled, overhead must not be set in Pod create requests. The RuntimeClass admission controller will reject Pod create requests which have the overhead already set. If RuntimeClass is configured and selected in the PodSpec, Overhead will be set to the value defined in the corresponding RuntimeClass, otherwise it will remain unset and treated as zero. More info: https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md This field is beta-level as of Kubernetes v1.18, and is only honored by servers that enable the PodOverhead feature.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+					"topologySpreadConstraints": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"topologyKey",
+									"whenUnsatisfiable",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "topologyKey",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.TopologySpreadConstraint"),
+									},
+								},
+							},
+						},
+					},
+					"setHostnameAsFQDN": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"os": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set.\n\nIf the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions\n\nIf the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup This is an alpha field and requires the IdentifyPodOS feature",
+							Ref:         ref("k8s.io/api/core/v1.PodOS"),
+						},
+					},
+					"hostUsers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new userns is created for the pod. Setting false is useful for mitigating container breakout vulnerabilities even allowing users to run their containers as root without actually having root privileges on the host. This field is alpha-level and is only honored by servers that enable the UserNamespacesSupport feature.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"schedulingGates": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.\n\nSchedulingGates can only be set at pod creation time, and be removed only afterwards.\n\nThis is a beta feature enabled by the PodSchedulingReadiness feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodSchedulingGate"),
+									},
+								},
+							},
+						},
+					},
+					"resourceClaims": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name.\n\nThis is an alpha field and requires enabling the DynamicResourceAllocation feature gate.\n\nThis field is immutable.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodResourceClaim"),
+									},
+								},
+							},
+						},
+					},
+					"minReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Maximum number of replicas for autoscaling.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scaleTarget": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scaleMetric": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"containerConcurrency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"timeoutSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"canaryTrafficPercent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"logger": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Activate request/response logging and logger configurations",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
+						},
+					},
+					"labels": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"deploymentStrategy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.",
+							Ref:         ref("k8s.io/api/apps/v1.DeploymentStrategy"),
+						},
+					},
+					"kedaConfig": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig"),
+						},
+					},
+					"runner": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
+						},
+					},
+					"leader": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Leader node configuration (only used for MultiNode deployment)",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec"),
+						},
+					},
+					"worker": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Worker nodes configuration (only used for MultiNode deployment)",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_DedicatedAICluster(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2913,6 +3484,571 @@ func schema_pkg_apis_ome_v1beta1_EndpointSpec(ref common.ReferenceCallback) comm
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"volumes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Volume"),
+									},
+								},
+							},
+						},
+					},
+					"initContainers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of initialization containers belonging to the pod. Init containers are executed in order prior to containers being started. If any init container fails, the pod is considered to have failed and is handled according to its restartPolicy. The name for an init container or normal container must be unique among all containers. Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes. The resourceRequirements of an init container are taken into account during scheduling by finding the highest request/limit for each resource type, and then using the max of of that value or the sum of the normal containers. Limits are applied to init containers in a similar fashion. Init containers cannot currently be added or removed. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Container"),
+									},
+								},
+							},
+						},
+					},
+					"containers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Container"),
+									},
+								},
+							},
+						},
+					},
+					"ephemeralContainers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of ephemeral containers run in this pod. Ephemeral containers may be run in an existing pod to perform user-initiated actions such as debugging. This list cannot be specified when creating a pod, and it cannot be modified by updating the pod spec. In order to add an ephemeral container to an existing pod, use the pod's ephemeralcontainers subresource. This field is beta-level and available on clusters that haven't disabled the EphemeralContainers feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EphemeralContainer"),
+									},
+								},
+							},
+						},
+					},
+					"restartPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Restart policy for all containers within the pod. One of Always, OnFailure, Never. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"terminationGracePeriodSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"activeDeadlineSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"dnsPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"nodeSelector": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"serviceAccountName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceAccount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DeprecatedServiceAccount is a depreciated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"automountServiceAccountToken": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeName is a request to schedule this pod onto a specific node. If it is non-empty, the scheduler simply schedules this pod onto that node, assuming that it fits resource requirements.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hostNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"hostPID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's pid namespace. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"hostIPC": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's ipc namespace. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"shareProcessNamespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"securityContext": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecurityContext holds pod-level security attributes and common container settings. Optional: Defaults to empty.  See type description for default values of each field.",
+							Ref:         ref("k8s.io/api/core/v1.PodSecurityContext"),
+						},
+					},
+					"imagePullSecrets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.LocalObjectReference"),
+									},
+								},
+							},
+						},
+					},
+					"hostname": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the hostname of the Pod If not specified, the pod's hostname will be set to a system-defined value.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"subdomain": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the fully qualified Pod hostname will be \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\". If not specified, the pod will not have a domainname at all.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's scheduling constraints",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"schedulerName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"tolerations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's tolerations.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"hostAliases": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "ip",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified. This is only valid for non-hostNetwork pods.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.HostAlias"),
+									},
+								},
+							},
+						},
+					},
+					"priorityClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"priority": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"dnsConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the DNS parameters of a pod. Parameters specified here will be merged to the generated DNS configuration based on DNSPolicy.",
+							Ref:         ref("k8s.io/api/core/v1.PodDNSConfig"),
+						},
+					},
+					"readinessGates": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, all readiness gates will be evaluated for pod readiness. A pod is ready when all its containers are ready AND all conditions specified in the readiness gates have status equal to \"True\" More info: https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodReadinessGate"),
+									},
+								},
+							},
+						},
+					},
+					"runtimeClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the \"legacy\" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class This is a beta feature as of Kubernetes v1.14.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"enableServiceLinks": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnableServiceLinks indicates whether information about services should be injected into pod's environment variables, matching the syntax of Docker links. Optional: Defaults to true.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"preemptionPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset. This field is beta-level, gated by the NonPreemptingPriority feature-gate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"overhead": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Overhead represents the resource overhead associated with running a pod for a given RuntimeClass. This field will be autopopulated at admission time by the RuntimeClass admission controller. If the RuntimeClass admission controller is enabled, overhead must not be set in Pod create requests. The RuntimeClass admission controller will reject Pod create requests which have the overhead already set. If RuntimeClass is configured and selected in the PodSpec, Overhead will be set to the value defined in the corresponding RuntimeClass, otherwise it will remain unset and treated as zero. More info: https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md This field is beta-level as of Kubernetes v1.18, and is only honored by servers that enable the PodOverhead feature.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+					"topologySpreadConstraints": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"topologyKey",
+									"whenUnsatisfiable",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "topologyKey",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.TopologySpreadConstraint"),
+									},
+								},
+							},
+						},
+					},
+					"setHostnameAsFQDN": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"os": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set.\n\nIf the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions\n\nIf the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup This is an alpha field and requires the IdentifyPodOS feature",
+							Ref:         ref("k8s.io/api/core/v1.PodOS"),
+						},
+					},
+					"hostUsers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new userns is created for the pod. Setting false is useful for mitigating container breakout vulnerabilities even allowing users to run their containers as root without actually having root privileges on the host. This field is alpha-level and is only honored by servers that enable the UserNamespacesSupport feature.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"schedulingGates": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.\n\nSchedulingGates can only be set at pod creation time, and be removed only afterwards.\n\nThis is a beta feature enabled by the PodSchedulingReadiness feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodSchedulingGate"),
+									},
+								},
+							},
+						},
+					},
+					"resourceClaims": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name.\n\nThis is an alpha field and requires enabling the DynamicResourceAllocation feature gate.\n\nThis field is immutable.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodResourceClaim"),
+									},
+								},
+							},
+						},
+					},
+					"minReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Maximum number of replicas for autoscaling.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scaleTarget": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scaleMetric": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"containerConcurrency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"timeoutSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"canaryTrafficPercent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"logger": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Activate request/response logging and logger configurations",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
+						},
+					},
+					"labels": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"deploymentStrategy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.",
+							Ref:         ref("k8s.io/api/apps/v1.DeploymentStrategy"),
+						},
+					},
+					"kedaConfig": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig"),
+						},
+					},
+					"runner": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Runner container override for customizing the engine container This is essentially a container spec that can override the default container",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
+						},
+					},
+					"leader": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Leader node configuration (only used for MultiNode deployment)",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec"),
+						},
+					},
+					"worker": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Worker nodes configuration (only used for MultiNode deployment)",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_FailureInfo(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3362,6 +4498,30 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec"),
 						},
 					},
+					"engine": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Engine defines the serving engine spec This will be used to replace the predictor",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec"),
+						},
+					},
+					"decoder": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Decoder defines the decoder spec This will be used as decode server for prefill-decode disaggregated deployment",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec"),
+						},
+					},
+					"model": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Model specification moved out of predictor for flexibility",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRef"),
+						},
+					},
+					"runtime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Runtime specification moved out of predictor for flexibility",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef"),
+						},
+					},
 					"compartmentID": {
 						SchemaProps: spec.SchemaProps{
 							Description: "The compartment ID to use for the inference service",
@@ -3380,7 +4540,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRef", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef"},
 	}
 }
 
@@ -3735,6 +4895,461 @@ func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LeaderSpec defines the configuration for a leader node in a multi-node component",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"volumes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Volume"),
+									},
+								},
+							},
+						},
+					},
+					"initContainers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of initialization containers belonging to the pod. Init containers are executed in order prior to containers being started. If any init container fails, the pod is considered to have failed and is handled according to its restartPolicy. The name for an init container or normal container must be unique among all containers. Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes. The resourceRequirements of an init container are taken into account during scheduling by finding the highest request/limit for each resource type, and then using the max of of that value or the sum of the normal containers. Limits are applied to init containers in a similar fashion. Init containers cannot currently be added or removed. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Container"),
+									},
+								},
+							},
+						},
+					},
+					"containers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Container"),
+									},
+								},
+							},
+						},
+					},
+					"ephemeralContainers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of ephemeral containers run in this pod. Ephemeral containers may be run in an existing pod to perform user-initiated actions such as debugging. This list cannot be specified when creating a pod, and it cannot be modified by updating the pod spec. In order to add an ephemeral container to an existing pod, use the pod's ephemeralcontainers subresource. This field is beta-level and available on clusters that haven't disabled the EphemeralContainers feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EphemeralContainer"),
+									},
+								},
+							},
+						},
+					},
+					"restartPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Restart policy for all containers within the pod. One of Always, OnFailure, Never. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"terminationGracePeriodSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"activeDeadlineSeconds": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"dnsPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"nodeSelector": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"serviceAccountName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceAccount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DeprecatedServiceAccount is a depreciated alias for ServiceAccountName. Deprecated: Use serviceAccountName instead.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"automountServiceAccountToken": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeName is a request to schedule this pod onto a specific node. If it is non-empty, the scheduler simply schedules this pod onto that node, assuming that it fits resource requirements.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hostNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"hostPID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's pid namespace. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"hostIPC": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's ipc namespace. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"shareProcessNamespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"securityContext": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecurityContext holds pod-level security attributes and common container settings. Optional: Defaults to empty.  See type description for default values of each field.",
+							Ref:         ref("k8s.io/api/core/v1.PodSecurityContext"),
+						},
+					},
+					"imagePullSecrets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.LocalObjectReference"),
+									},
+								},
+							},
+						},
+					},
+					"hostname": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the hostname of the Pod If not specified, the pod's hostname will be set to a system-defined value.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"subdomain": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the fully qualified Pod hostname will be \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\". If not specified, the pod will not have a domainname at all.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's scheduling constraints",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"schedulerName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"tolerations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's tolerations.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"hostAliases": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "ip",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts file if specified. This is only valid for non-hostNetwork pods.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.HostAlias"),
+									},
+								},
+							},
+						},
+					},
+					"priorityClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, indicates the pod's priority. \"system-node-critical\" and \"system-cluster-critical\" are two special keywords which indicate the highest priorities with the former being the highest priority. Any other name must be defined by creating a PriorityClass object with that name. If not specified, the pod priority will be default or zero if there is no default.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"priority": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The priority value. Various system components use this field to find the priority of the pod. When Priority Admission Controller is enabled, it prevents users from setting this field. The admission controller populates this field from PriorityClassName. The higher the value, the higher the priority.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"dnsConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the DNS parameters of a pod. Parameters specified here will be merged to the generated DNS configuration based on DNSPolicy.",
+							Ref:         ref("k8s.io/api/core/v1.PodDNSConfig"),
+						},
+					},
+					"readinessGates": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, all readiness gates will be evaluated for pod readiness. A pod is ready when all its containers are ready AND all conditions specified in the readiness gates have status equal to \"True\" More info: https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodReadinessGate"),
+									},
+								},
+							},
+						},
+					},
+					"runtimeClassName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the \"legacy\" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class This is a beta feature as of Kubernetes v1.14.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"enableServiceLinks": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnableServiceLinks indicates whether information about services should be injected into pod's environment variables, matching the syntax of Docker links. Optional: Defaults to true.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"preemptionPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreemptionPolicy is the Policy for preempting pods with lower priority. One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset. This field is beta-level, gated by the NonPreemptingPriority feature-gate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"overhead": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Overhead represents the resource overhead associated with running a pod for a given RuntimeClass. This field will be autopopulated at admission time by the RuntimeClass admission controller. If the RuntimeClass admission controller is enabled, overhead must not be set in Pod create requests. The RuntimeClass admission controller will reject Pod create requests which have the overhead already set. If RuntimeClass is configured and selected in the PodSpec, Overhead will be set to the value defined in the corresponding RuntimeClass, otherwise it will remain unset and treated as zero. More info: https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead/README.md This field is beta-level as of Kubernetes v1.18, and is only honored by servers that enable the PodOverhead feature.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+									},
+								},
+							},
+						},
+					},
+					"topologySpreadConstraints": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"topologyKey",
+									"whenUnsatisfiable",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "topologyKey",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.TopologySpreadConstraint"),
+									},
+								},
+							},
+						},
+					},
+					"setHostnameAsFQDN": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"os": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Specifies the OS of the containers in the pod. Some pod and container fields are restricted if this is set.\n\nIf the OS field is set to linux, the following fields must be unset: -securityContext.windowsOptions\n\nIf the OS field is set to windows, following fields must be unset: - spec.hostPID - spec.hostIPC - spec.securityContext.seLinuxOptions - spec.securityContext.seccompProfile - spec.securityContext.fsGroup - spec.securityContext.fsGroupChangePolicy - spec.securityContext.sysctls - spec.shareProcessNamespace - spec.securityContext.runAsUser - spec.securityContext.runAsGroup - spec.securityContext.supplementalGroups - spec.containers[*].securityContext.seLinuxOptions - spec.containers[*].securityContext.seccompProfile - spec.containers[*].securityContext.capabilities - spec.containers[*].securityContext.readOnlyRootFilesystem - spec.containers[*].securityContext.privileged - spec.containers[*].securityContext.allowPrivilegeEscalation - spec.containers[*].securityContext.procMount - spec.containers[*].securityContext.runAsUser - spec.containers[*].securityContext.runAsGroup This is an alpha field and requires the IdentifyPodOS feature",
+							Ref:         ref("k8s.io/api/core/v1.PodOS"),
+						},
+					},
+					"hostUsers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new userns is created for the pod. Setting false is useful for mitigating container breakout vulnerabilities even allowing users to run their containers as root without actually having root privileges on the host. This field is alpha-level and is only honored by servers that enable the UserNamespacesSupport feature.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"schedulingGates": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.\n\nSchedulingGates can only be set at pod creation time, and be removed only afterwards.\n\nThis is a beta feature enabled by the PodSchedulingReadiness feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodSchedulingGate"),
+									},
+								},
+							},
+						},
+					},
+					"resourceClaims": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceClaims defines which ResourceClaims must be allocated and reserved before the Pod is allowed to start. The resources will be made available to those containers which consume them by name.\n\nThis is an alpha field and requires enabling the DynamicResourceAllocation feature gate.\n\nThis field is immutable.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.PodResourceClaim"),
+									},
+								},
+							},
+						},
+					},
+					"runner": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_LoggerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4041,6 +5656,55 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 							Description: "Version of the library. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the model being referenced",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the model being referenced Defaults to ClusterBaseModel",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiGroup": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIGroup of the resource being referenced Defaults to `ome.io`",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"fineTunedWeights": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional FineTunedWeights references",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
 						},
 					},
 				},
@@ -6907,6 +8571,304 @@ func schema_pkg_apis_ome_v1beta1_RateLimitStatus(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RunnerSpec defines container configuration plus additional config settings",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the container specified as a DNS_LABEL. Each container in a pod must have a unique name (DNS_LABEL). Cannot be updated.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Container image name. More info: https://kubernetes.io/docs/concepts/containers/images This field is optional to allow higher level config management to default or override container images in workload controllers like Deployments and StatefulSets.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"command": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Entrypoint array. Not executed within a shell. The container image's ENTRYPOINT is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"args": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Arguments to the entrypoint. The container image's CMD is used if this is not provided. Variable references $(VAR_NAME) are expanded using the container's environment. If a variable cannot be resolved, the reference in the input string will be unchanged. Double $$ are reduced to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e. \"$$(VAR_NAME)\" will produce the string literal \"$(VAR_NAME)\". Escaped references will never be expanded, regardless of whether the variable exists or not. Cannot be updated. More info: https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#running-a-command-in-a-shell",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"workingDir": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Container's working directory. If not specified, the container runtime's default will be used, which might be configured in the container image. Cannot be updated.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ports": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"containerPort",
+									"protocol",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "containerPort",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of ports to expose from the container. Not specifying a port here DOES NOT prevent that port from being exposed. Any port which is listening on the default \"0.0.0.0\" address inside a container will be accessible from the network. Modifying this array with strategic merge patch may corrupt the data. For more information See https://github.com/kubernetes/kubernetes/issues/108255. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.ContainerPort"),
+									},
+								},
+							},
+						},
+					},
+					"envFrom": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of sources to populate environment variables in the container. The keys defined within a source must be a C_IDENTIFIER. All invalid keys will be reported as an event when the container is starting. When a key exists in multiple sources, the value associated with the last source will take precedence. Values defined by an Env with a duplicate key will take precedence. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EnvFromSource"),
+									},
+								},
+							},
+						},
+					},
+					"env": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of environment variables to set in the container. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
+									},
+								},
+							},
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Compute Resources required by this container. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"resizePolicy": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Resources resize policy for the container.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.ContainerResizePolicy"),
+									},
+								},
+							},
+						},
+					},
+					"restartPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RestartPolicy defines the restart behavior of individual containers in a pod. This field may only be set for init containers, and the only allowed value is \"Always\". For non-init containers or when this field is not specified, the restart behavior is defined by the Pod's restart policy and the container type. Setting the RestartPolicy as \"Always\" for the init container will have the following effect: this init container will be continually restarted on exit until all regular containers have terminated. Once all regular containers have completed, all init containers with restartPolicy \"Always\" will be shut down. This lifecycle differs from normal init containers and is often referred to as a \"sidecar\" container. Although this init container still starts in the init container sequence, it does not wait for the container to complete before proceeding to the next init container. Instead, the next init container starts immediately after this init container is started, or after any startupProbe has successfully completed.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"volumeMounts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"mountPath",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "mountPath",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Pod volumes to mount into the container's filesystem. Cannot be updated.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.VolumeMount"),
+									},
+								},
+							},
+						},
+					},
+					"volumeDevices": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"devicePath",
+								},
+								"x-kubernetes-list-type":       "map",
+								"x-kubernetes-patch-merge-key": "devicePath",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "volumeDevices is the list of block devices to be used by the container.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.VolumeDevice"),
+									},
+								},
+							},
+						},
+					},
+					"livenessProbe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Periodic probe of container liveness. Container will be restarted if the probe fails. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+							Ref:         ref("k8s.io/api/core/v1.Probe"),
+						},
+					},
+					"readinessProbe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Periodic probe of container service readiness. Container will be removed from service endpoints if the probe fails. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+							Ref:         ref("k8s.io/api/core/v1.Probe"),
+						},
+					},
+					"startupProbe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartupProbe indicates that the Pod has successfully initialized. If specified, no other probes are executed until this completes successfully. If this probe fails, the Pod will be restarted, just as if the livenessProbe failed. This can be used to provide different probe parameters at the beginning of a Pod's lifecycle, when it might take a long time to load data or warm a cache, than during steady-state operation. This cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes",
+							Ref:         ref("k8s.io/api/core/v1.Probe"),
+						},
+					},
+					"lifecycle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Actions that the management system should take in response to container lifecycle events. Cannot be updated.",
+							Ref:         ref("k8s.io/api/core/v1.Lifecycle"),
+						},
+					},
+					"terminationMessagePath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Optional: Path at which the file to which the container's termination message will be written is mounted into the container's filesystem. Message written is intended to be brief final status, such as an assertion failure message. Will be truncated by the node if greater than 4096 bytes. The total message length across all containers will be limited to 12kb. Defaults to /dev/termination-log. Cannot be updated.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"terminationMessagePolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Indicate how the termination message should be populated. File will use the contents of terminationMessagePath to populate the container status message on both success and failure. FallbackToLogsOnError will use the last chunk of container log output if the termination message file is empty and the container exited with an error. The log output is limited to 2048 bytes or 80 lines, whichever is smaller. Defaults to File. Cannot be updated.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"imagePullPolicy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. Cannot be updated. More info: https://kubernetes.io/docs/concepts/containers/images#updating-images",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"securityContext": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecurityContext defines the security options the container should be run with. If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/",
+							Ref:         ref("k8s.io/api/core/v1.SecurityContext"),
+						},
+					},
+					"stdin": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Whether this container should allocate a buffer for stdin in the container runtime. If this is not set, reads from stdin in the container will always result in EOF. Default is false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"stdinOnce": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Whether the container runtime should close the stdin channel after it has been opened by a single attach. When stdin is true the stdin stream will remain open across multiple attach sessions. If stdinOnce is set to true, stdin is opened on container start, is empty until the first client attaches to stdin, and then remains open and accepts data until the client disconnects, at which time stdin is closed and remains closed until the container is restarted. If this flag is false, a container processes that reads from stdin will never receive an EOF. Default is false",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"tty": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Whether this container should allocate a TTY for itself, also requires 'stdin' to be true. Default is false.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.ContainerPort", "k8s.io/api/core/v1.ContainerResizePolicy", "k8s.io/api/core/v1.EnvFromSource", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.Lifecycle", "k8s.io/api/core/v1.Probe", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.SecurityContext", "k8s.io/api/core/v1.VolumeDevice", "k8s.io/api/core/v1.VolumeMount"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RuntimeRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -7535,6 +9497,40 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the runtime being referenced",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind of the runtime being referenced Defaults to ClusterServingRuntime",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiGroup": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIGroup of the resource being referenced Defaults to `ome.io`",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -7572,6 +9568,18 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 							Description: "Set to true to disable use of this runtime",
 							Type:        []string{"boolean"},
 							Format:      "",
+						},
+					},
+					"engineConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Engine configuration for this runtime",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec"),
+						},
+					},
+					"decoderConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Decoder configuration for this runtime",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec"),
 						},
 					},
 					"protocolVersions": {
@@ -7790,7 +9798,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BuiltInAdapter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.BuiltInAdapter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 
@@ -8958,7 +10966,7 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "WorkerSpec for the predictor, this is used for multi-node serving without Ray Cluster",
+				Description: "WorkerSpec defines the configuration for worker nodes in a multi-node component",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"volumes": {
@@ -9402,10 +11410,16 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 							Format:      "int32",
 						},
 					},
+					"runner": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }

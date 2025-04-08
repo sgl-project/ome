@@ -6,7 +6,7 @@ RuntimeRef represents the reference to the existing training runtime.
 
 | Name          | Type    | Description                                                                                                                                              | Notes                      |
 |---------------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
-| **api_group** | **str** | APIGroup of the runtime being referenced. Defaults to &#x60;kubeflow.org&#x60;.                                                                          | [optional]                 |
+| **api_group** | **str** | APIGroup of the runtime being referenced. Defaults to &#x60;ome.io&#x60;.                                                                                | [optional]                 |
 | **kind**      | **str** | Kind of the runtime being referenced. Defaults to ClusterTrainingRuntime.                                                                                | [optional]                 |
 | **name**      | **str** | Name of the runtime being referenced. When namespaced-scoped TrainingRuntime is used, the TrainJob must have the same namespace as the deployed runtime. | [optional] [default to ''] |
 

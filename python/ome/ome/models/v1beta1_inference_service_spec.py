@@ -19,8 +19,12 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from ome.models.v1beta1_decoder_spec import V1beta1DecoderSpec
+from ome.models.v1beta1_engine_spec import V1beta1EngineSpec
 from ome.models.v1beta1_keda_config import V1beta1KedaConfig
+from ome.models.v1beta1_model_ref import V1beta1ModelRef
 from ome.models.v1beta1_predictor_spec import V1beta1PredictorSpec
+from ome.models.v1beta1_runtime_ref import V1beta1RuntimeRef
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -29,9 +33,13 @@ class V1beta1InferenceServiceSpec(BaseModel):
     InferenceServiceSpec is the top level type for this resource
     """ # noqa: E501
     compartment_id: Optional[StrictStr] = Field(default=None, description="The compartment ID to use for the inference service", alias="compartmentID")
+    decoder: Optional[V1beta1DecoderSpec] = None
+    engine: Optional[V1beta1EngineSpec] = None
     keda_config: Optional[V1beta1KedaConfig] = Field(default=None, alias="kedaConfig")
+    model: Optional[V1beta1ModelRef] = None
     predictor: V1beta1PredictorSpec
-    __properties: ClassVar[List[str]] = ["compartmentID", "kedaConfig", "predictor"]
+    runtime: Optional[V1beta1RuntimeRef] = None
+    __properties: ClassVar[List[str]] = ["compartmentID", "decoder", "engine", "kedaConfig", "model", "predictor", "runtime"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,12 +80,24 @@ class V1beta1InferenceServiceSpec(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of decoder
+        if self.decoder:
+            _dict['decoder'] = self.decoder.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of engine
+        if self.engine:
+            _dict['engine'] = self.engine.to_dict()
         # override the default output from pydantic by calling `to_dict()` of keda_config
         if self.keda_config:
             _dict['kedaConfig'] = self.keda_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of model
+        if self.model:
+            _dict['model'] = self.model.to_dict()
         # override the default output from pydantic by calling `to_dict()` of predictor
         if self.predictor:
             _dict['predictor'] = self.predictor.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of runtime
+        if self.runtime:
+            _dict['runtime'] = self.runtime.to_dict()
         return _dict
 
     @classmethod
@@ -91,8 +111,12 @@ class V1beta1InferenceServiceSpec(BaseModel):
 
         _obj = cls.model_validate({
             "compartmentID": obj.get("compartmentID"),
+            "decoder": V1beta1DecoderSpec.from_dict(obj["decoder"]) if obj.get("decoder") is not None else None,
+            "engine": V1beta1EngineSpec.from_dict(obj["engine"]) if obj.get("engine") is not None else None,
             "kedaConfig": V1beta1KedaConfig.from_dict(obj["kedaConfig"]) if obj.get("kedaConfig") is not None else None,
-            "predictor": V1beta1PredictorSpec.from_dict(obj["predictor"]) if obj.get("predictor") is not None else None
+            "model": V1beta1ModelRef.from_dict(obj["model"]) if obj.get("model") is not None else None,
+            "predictor": V1beta1PredictorSpec.from_dict(obj["predictor"]) if obj.get("predictor") is not None else None,
+            "runtime": V1beta1RuntimeRef.from_dict(obj["runtime"]) if obj.get("runtime") is not None else None
         })
         return _obj
 

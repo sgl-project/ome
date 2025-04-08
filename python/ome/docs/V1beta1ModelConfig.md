@@ -2,10 +2,10 @@
 
 ## Properties
 
-| Name             | Type                                            | Description                                                                          | Notes      |
-|------------------|-------------------------------------------------|--------------------------------------------------------------------------------------|------------|
-| **input_model**  | **str**                                         | InputModel defines where the input model stores. Todo: support generic model storage | [optional] |
-| **output_model** | [**V1beta1StorageSpec**](V1beta1StorageSpec.md) |                                                                                      | [optional] |
+| Name             | Type                                            | Description                             | Notes      |
+|------------------|-------------------------------------------------|-----------------------------------------|------------|
+| **input_model**  | **str**                                         | InputModel defines the base model name. | [optional] |
+| **output_model** | [**V1beta1StorageSpec**](V1beta1StorageSpec.md) |                                         | [optional] |
 
 ## Example
 

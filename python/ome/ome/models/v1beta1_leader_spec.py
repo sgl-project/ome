@@ -23,9 +23,9 @@ from ome.models.v1beta1_runner_spec import V1beta1RunnerSpec
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1WorkerSpec(BaseModel):
+class V1beta1LeaderSpec(BaseModel):
     """
-    WorkerSpec defines the configuration for worker nodes in a multi-node component
+    LeaderSpec defines the configuration for a leader node in a multi-node component
     """ # noqa: E501
     active_deadline_seconds: Optional[StrictInt] = Field(default=None, description="Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.", alias="activeDeadlineSeconds")
     affinity: Optional[V1Affinity] = None
@@ -62,13 +62,12 @@ class V1beta1WorkerSpec(BaseModel):
     service_account_name: Optional[StrictStr] = Field(default=None, description="ServiceAccountName is the name of the ServiceAccount to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/", alias="serviceAccountName")
     set_hostname_as_fqdn: Optional[StrictBool] = Field(default=None, description="If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default). In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname). In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\Tcpip\\\\Parameters to FQDN. If a pod does not have FQDN, this has no effect. Default to false.", alias="setHostnameAsFQDN")
     share_process_namespace: Optional[StrictBool] = Field(default=None, description="Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.", alias="shareProcessNamespace")
-    size: Optional[StrictInt] = Field(default=None, description="Size of the worker, this is the number of pods in the worker.")
     subdomain: Optional[StrictStr] = Field(default=None, description="If specified, the fully qualified Pod hostname will be \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\". If not specified, the pod will not have a domainname at all.")
     termination_grace_period_seconds: Optional[StrictInt] = Field(default=None, description="Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds.", alias="terminationGracePeriodSeconds")
     tolerations: Optional[List[V1Toleration]] = Field(default=None, description="If specified, the pod's tolerations.")
     topology_spread_constraints: Optional[List[V1TopologySpreadConstraint]] = Field(default=None, description="TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.", alias="topologySpreadConstraints")
     volumes: Optional[List[V1Volume]] = Field(default=None, description="List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes")
-    __properties: ClassVar[List[str]] = ["activeDeadlineSeconds", "affinity", "automountServiceAccountToken", "containers", "dnsConfig", "dnsPolicy", "enableServiceLinks", "ephemeralContainers", "hostAliases", "hostIPC", "hostNetwork", "hostPID", "hostUsers", "hostname", "imagePullSecrets", "initContainers", "nodeName", "nodeSelector", "os", "overhead", "preemptionPolicy", "priority", "priorityClassName", "readinessGates", "resourceClaims", "restartPolicy", "runner", "runtimeClassName", "schedulerName", "schedulingGates", "securityContext", "serviceAccount", "serviceAccountName", "setHostnameAsFQDN", "shareProcessNamespace", "size", "subdomain", "terminationGracePeriodSeconds", "tolerations", "topologySpreadConstraints", "volumes"]
+    __properties: ClassVar[List[str]] = ["activeDeadlineSeconds", "affinity", "automountServiceAccountToken", "containers", "dnsConfig", "dnsPolicy", "enableServiceLinks", "ephemeralContainers", "hostAliases", "hostIPC", "hostNetwork", "hostPID", "hostUsers", "hostname", "imagePullSecrets", "initContainers", "nodeName", "nodeSelector", "os", "overhead", "preemptionPolicy", "priority", "priorityClassName", "readinessGates", "resourceClaims", "restartPolicy", "runner", "runtimeClassName", "schedulerName", "schedulingGates", "securityContext", "serviceAccount", "serviceAccountName", "setHostnameAsFQDN", "shareProcessNamespace", "subdomain", "terminationGracePeriodSeconds", "tolerations", "topologySpreadConstraints", "volumes"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -88,7 +87,7 @@ class V1beta1WorkerSpec(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1WorkerSpec from a JSON string"""
+        """Create an instance of V1beta1LeaderSpec from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -212,7 +211,7 @@ class V1beta1WorkerSpec(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1WorkerSpec from a dict"""
+        """Create an instance of V1beta1LeaderSpec from a dict"""
         if obj is None:
             return None
 
@@ -260,7 +259,6 @@ class V1beta1WorkerSpec(BaseModel):
             "serviceAccountName": obj.get("serviceAccountName"),
             "setHostnameAsFQDN": obj.get("setHostnameAsFQDN"),
             "shareProcessNamespace": obj.get("shareProcessNamespace"),
-            "size": obj.get("size"),
             "subdomain": obj.get("subdomain"),
             "terminationGracePeriodSeconds": obj.get("terminationGracePeriodSeconds"),
             "tolerations": [V1Toleration.from_dict(_item) for _item in obj["tolerations"]] if obj.get("tolerations") is not None else None,

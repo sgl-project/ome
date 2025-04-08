@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -10,12 +11,146 @@ type InferenceServiceSpec struct {
 	// +required
 	Predictor PredictorSpec `json:"predictor"`
 
+	// Engine defines the serving engine spec
+	// This will be used to replace the predictor
+	// +optional
+	Engine *EngineSpec `json:"engine,omitempty"`
+
+	// Decoder defines the decoder spec
+	// This will be used as decode server for prefill-decode disaggregated deployment
+	// +optional
+	Decoder *DecoderSpec `json:"decoder,omitempty"`
+
+	// Model specification moved out of predictor for flexibility
+	// +optional
+	Model *ModelRef `json:"model,omitempty"`
+
+	// Runtime specification moved out of predictor for flexibility
+	// +optional
+	Runtime *RuntimeRef `json:"runtime,omitempty"`
+
 	// The compartment ID to use for the inference service
 	// +optional
-	CompartmentID string `json:"compartmentID,omitempty"`
+	CompartmentID *string `json:"compartmentID,omitempty"`
 
 	// KedaConfig defines the autoscaling configuration for KEDA
 	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
+}
+
+// EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
+type EngineSpec struct {
+	// This spec provides a full PodSpec for the engine component
+	// +optional
+	PodSpec `json:",inline"`
+
+	// ComponentExtensionSpec defines deployment configuration like min/max replicas, scaling metrics, etc.
+	ComponentExtensionSpec `json:",inline"`
+
+	// Runner container override for customizing the engine container
+	// This is essentially a container spec that can override the default container
+	// +optional
+	Runner *RunnerSpec `json:"runner,omitempty"`
+
+	// Leader node configuration (only used for MultiNode deployment)
+	// +optional
+	Leader *LeaderSpec `json:"leader,omitempty"`
+
+	// Worker nodes configuration (only used for MultiNode deployment)
+	// +optional
+	Worker *WorkerSpec `json:"worker,omitempty"`
+}
+
+// DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
+type DecoderSpec struct {
+	// This spec provides a full PodSpec for the decoder component
+	// +optional
+	PodSpec `json:",inline"`
+
+	// ComponentExtensionSpec defines deployment configuration like min/max replicas, scaling metrics, etc.
+	ComponentExtensionSpec `json:",inline"`
+
+	// Runner container override for customizing the main container
+	// This is essentially a container spec that can override the default container
+	// +optional
+	Runner *RunnerSpec `json:"runner,omitempty"`
+
+	// Leader node configuration (only used for MultiNode deployment)
+	// +optional
+	Leader *LeaderSpec `json:"leader,omitempty"`
+
+	// Worker nodes configuration (only used for MultiNode deployment)
+	// +optional
+	Worker *WorkerSpec `json:"worker,omitempty"`
+}
+
+// LeaderSpec defines the configuration for a leader node in a multi-node component
+type LeaderSpec struct {
+	// Pod specification for the leader node
+	// This overrides the main PodSpec when specified
+	// +optional
+	PodSpec `json:",inline"`
+
+	// Runner container override for customizing the main container
+	// This is essentially a container spec that can override the default container
+	// +optional
+	Runner *RunnerSpec `json:"runner,omitempty"`
+}
+
+// WorkerSpec defines the configuration for worker nodes in a multi-node component
+type WorkerSpec struct {
+	// PodSpec for the worker
+	// +optional
+	PodSpec `json:",inline"`
+
+	// Size of the worker, this is the number of pods in the worker.
+	// +optional
+	Size *int `json:"size,omitempty"`
+
+	// Runner container override for customizing the main container
+	// This is essentially a container spec that can override the default container
+	// +optional
+	Runner *RunnerSpec `json:"runner,omitempty"`
+}
+
+// RunnerSpec defines container configuration plus additional config settings
+type RunnerSpec struct {
+	// Container spec for the runner
+	// +optional
+	v1.Container `json:",inline"`
+}
+
+type ModelRef struct {
+	// Name of the model being referenced
+	Name string `json:"name"`
+
+	// Kind of the model being referenced
+	// Defaults to ClusterBaseModel
+	// +kubebuilder:default="ClusterBaseModel"
+	Kind *string `json:"kind,omitempty"`
+
+	// APIGroup of the resource being referenced
+	// Defaults to `ome.io`
+	// +kubebuilder:default="ome.io"
+	APIGroup *string `json:"apiGroup,omitempty"`
+
+	// Optional FineTunedWeights references
+	// +optional
+	FineTunedWeights []string `json:"fineTunedWeights,omitempty"`
+}
+
+type ServingRuntimeRef struct {
+	// Name of the runtime being referenced
+	Name string `json:"name"`
+
+	// Kind of the runtime being referenced
+	// Defaults to ClusterServingRuntime
+	// +kubebuilder:default="ClusterServingRuntime"
+	Kind *string `json:"kind,omitempty"`
+
+	// APIGroup of the resource being referenced
+	// Defaults to `ome.io`
+	// +kubebuilder:default="ome.io"
+	APIGroup *string `json:"apiGroup,omitempty"`
 }
 
 // LoggerType controls the scope of log publishing

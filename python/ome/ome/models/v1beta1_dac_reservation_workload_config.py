@@ -17,18 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1DacReconcilePolicyConfig(BaseModel):
+class V1beta1DacReservationWorkloadConfig(BaseModel):
     """
-    V1beta1DacReconcilePolicyConfig
+    V1beta1DacReservationWorkloadConfig
     """ # noqa: E501
-    reconcile_failed_lifecycle_state: Optional[StrictBool] = Field(default=None, alias="reconcileFailedLifecycleState")
-    reconcile_with_kueue: Optional[StrictBool] = Field(default=None, alias="reconcileWithKueue")
-    __properties: ClassVar[List[str]] = ["reconcileFailedLifecycleState", "reconcileWithKueue"]
+    creation_failed_time_threshold_second: StrictInt = Field(alias="creationFailedTimeThresholdSecond")
+    image: StrictStr
+    __properties: ClassVar[List[str]] = ["creationFailedTimeThresholdSecond", "image"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -48,7 +48,7 @@ class V1beta1DacReconcilePolicyConfig(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1DacReconcilePolicyConfig from a JSON string"""
+        """Create an instance of V1beta1DacReservationWorkloadConfig from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -73,7 +73,7 @@ class V1beta1DacReconcilePolicyConfig(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1DacReconcilePolicyConfig from a dict"""
+        """Create an instance of V1beta1DacReservationWorkloadConfig from a dict"""
         if obj is None:
             return None
 
@@ -81,8 +81,8 @@ class V1beta1DacReconcilePolicyConfig(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "reconcileFailedLifecycleState": obj.get("reconcileFailedLifecycleState"),
-            "reconcileWithKueue": obj.get("reconcileWithKueue")
+            "creationFailedTimeThresholdSecond": obj.get("creationFailedTimeThresholdSecond") if obj.get("creationFailedTimeThresholdSecond") is not None else 0,
+            "image": obj.get("image") if obj.get("image") is not None else ''
         })
         return _obj
 
