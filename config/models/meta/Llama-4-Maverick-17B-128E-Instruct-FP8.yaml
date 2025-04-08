@@ -16,6 +16,7 @@ spec:
   modelArchitecture: Llama4ForConditionalGeneration
   modelParameterSize: 402B
   maxTokens: 1048576
+  quantization: fp8
   modelCapabilities:
     - "TEXT_GENERATION"
   storage:
