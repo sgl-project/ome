@@ -15,7 +15,7 @@ spec:
   disabled: false
   displayName: intfloat.e5-mistral-7b-instruct
   storage:
-    storageUri: oci://n/idqj093njucb/b/model-store/o/intfloat/e5-mistral-7b-instruct-20240827
+    storageUri: oci://n/idqj093njucb/b/model-store/o/intfloat/e5-mistral-7b-instruct
     path: /raid/models/intfloat/e5-mistral-7b-instruct
   vendor: intfloat
   version: "0.0"

@@ -56,7 +56,7 @@ llama-3-2-3b-instruct:
 
 llama-3-70b-instruct:
   enabled: false
-  lifecyclePhase: "ACTIVE"
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
 
 mixtral-8x7b-instruct-v0-1-chat:
   enabled: false
@@ -125,6 +125,10 @@ cohere-command-r-082024-v1-6-tp4-128k:
   lifecyclePhase: "ACTIVE"
 
 cohere-command-r-v1-2-16k-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-v1-3-16k-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
 

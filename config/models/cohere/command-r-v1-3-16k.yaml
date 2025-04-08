@@ -1,0 +1,42 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-r-v1-3-16k-chat
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "cohere-command-r-small-v3"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "true"
+    models.ome.io/internal: "false"
+    models.ome.io/lifecycle-phase: "ACTIVE"
+    ome.io/base-model-decryption-key-name: "command_r"
+    ome.io/base-model-decryption-secret-name: "command_r-dek"
+spec:
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  disabled: false
+  displayName: cohere.command-r-16k
+  storage:
+    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/command-r-v1.3-16k"
+    path: /mnt/data/models/cohere/command-r-v1.3-16k
+  vendor: cohere
+  version: "1.3"
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.9.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.9.0'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 34.55B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 131072
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: SMALL_COHERE_4
+          quotaUnit: 1
+          default: true
+    internalName: "command-r-v1.3-16k"
+    type: "Serving"

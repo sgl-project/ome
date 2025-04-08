@@ -1,15 +1,18 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: llama-3-1-70b-instruct
+  name: llama-3-70b-instruct
 spec:
   vendor: meta
   disabled: false
   version: "1.0.0"
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  storage:
+    storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-70b-instruct
+    path: /mnt/data/models/meta/llama-3-70b-instruct
   modelFramework:
     name: transformers
-    version: "4.42.3"
+    version: "4.40.0.dev0"
   modelFormat:
     name: safetensors
     version: "1"
@@ -17,9 +20,15 @@ spec:
   modelParameterSize: 70B
   modelCapabilities:
     - "CHAT"
-  storage:
-    storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-1-70b-instruct
-    path: /raid/models/meta/Llama-3.1-70B-Instruct
+  maxTokens: 8192
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC
+          quotaUnit: 1
+          default: true
+    internalName: "llama-3-70b-instruct"
+    type: "Serving"
   modelConfiguration:
     {
       "architectures": [
@@ -28,34 +37,23 @@ spec:
       "attention_bias": false,
       "attention_dropout": 0.0,
       "bos_token_id": 128000,
-      "eos_token_id": [
-        128001,
-        128008,
-        128009
-      ],
+      "eos_token_id": 128001,
       "hidden_act": "silu",
       "hidden_size": 8192,
       "initializer_range": 0.02,
       "intermediate_size": 28672,
-      "max_position_embeddings": 131072,
-      "mlp_bias": false,
+      "max_position_embeddings": 8192,
       "model_type": "llama",
       "num_attention_heads": 64,
       "num_hidden_layers": 80,
       "num_key_value_heads": 8,
       "pretraining_tp": 1,
       "rms_norm_eps": 1e-05,
-      "rope_scaling": {
-        "factor": 8.0,
-        "low_freq_factor": 1.0,
-        "high_freq_factor": 4.0,
-        "original_max_position_embeddings": 8192,
-        "rope_type": "llama3"
-      },
+      "rope_scaling": null,
       "rope_theta": 500000.0,
       "tie_word_embeddings": false,
       "torch_dtype": "bfloat16",
-      "transformers_version": "4.42.3",
+      "transformers_version": "4.40.0.dev0",
       "use_cache": true,
       "vocab_size": 128256
     }
