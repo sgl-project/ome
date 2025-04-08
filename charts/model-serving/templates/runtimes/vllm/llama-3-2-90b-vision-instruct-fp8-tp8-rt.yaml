@@ -71,6 +71,11 @@ spec:
         - /bin/bash
         - '-lc'
         - --
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '120'
       args:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
