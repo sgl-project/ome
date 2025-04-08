@@ -33,6 +33,7 @@ spec:
   maxTokens: 131072
   additionalMetadata:
     type: "Finetuning"
+    internalName: "llama-3-3-70b-instruct"
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: LARGE_GENERIC

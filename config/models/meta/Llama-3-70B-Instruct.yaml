@@ -2,14 +2,23 @@ apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
   name: llama-3-70b-instruct
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "vllm-llama-3-70b-instruct"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "False"
+    models.ome.io/internal: "False"
+    models.ome.io/lifecycle-phase: "ACTIVE"
 spec:
-  vendor: meta
-  disabled: false
-  version: "1.0.0"
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  disabled: false
+  displayName: meta.llama-3-70b-instruct
   storage:
     storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-3-70b-instruct
-    path: /mnt/data/models/meta/llama-3-70b-instruct
+    path: /raid/models/meta/llama-3-70b-instruct
+  vendor: meta
+  version: "1.0.0"
   modelFramework:
     name: transformers
     version: "4.40.0.dev0"
@@ -20,15 +29,15 @@ spec:
   modelParameterSize: 70B
   modelCapabilities:
     - "CHAT"
-  maxTokens: 8192
+  maxTokens: 131072
   additionalMetadata:
+    type: "Serving"
+    internalName: "llama-3-70b-instruct"
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: LARGE_GENERIC
           quotaUnit: 1
           default: true
-    internalName: "llama-3-70b-instruct"
-    type: "Serving"
   modelConfiguration:
     {
       "architectures": [
@@ -57,7 +66,3 @@ spec:
       "use_cache": true,
       "vocab_size": 128256
     }
-
-
-
-
