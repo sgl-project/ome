@@ -1283,7 +1283,7 @@
       }
     },
     "v1beta1.DecoderSpec": {
-      "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)",
+      "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
       "type": "object",
       "properties": {
         "activeDeadlineSeconds": {
@@ -1415,7 +1415,7 @@
           }
         },
         "leader": {
-          "description": "Leader node configuration (only used for MultiNode deployment)",
+          "description": "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed token generation in multi-node deployments.",
           "$ref": "#/definitions/v1beta1.LeaderSpec"
         },
         "logger": {
@@ -1496,7 +1496,7 @@
           "type": "string"
         },
         "runner": {
-          "description": "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+          "description": "Runner container override for customizing the main container This is essentially a container spec that can override the default container Defines the main decoder container configuration, including image, resource requests/limits, environment variables, and command.",
           "$ref": "#/definitions/v1beta1.RunnerSpec"
         },
         "runtimeClassName": {
@@ -1598,7 +1598,7 @@
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
         "worker": {
-          "description": "Worker nodes configuration (only used for MultiNode deployment)",
+          "description": "Worker nodes configuration (only used for MultiNode deployment) Defines the pod and container spec for worker nodes that perform distributed token generation tasks as directed by the leader.",
           "$ref": "#/definitions/v1beta1.WorkerSpec"
         }
       }
@@ -1898,7 +1898,7 @@
       }
     },
     "v1beta1.EngineSpec": {
-      "description": "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)",
+      "description": "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments) Provides a comprehensive specification for deploying model serving containers and pods. It allows for complete Kubernetes pod configuration including main containers, init containers, sidecars, volumes, and other pod-level settings. For distributed deployments, it supports leader-worker architecture configuration.",
       "type": "object",
       "properties": {
         "activeDeadlineSeconds": {
@@ -2030,7 +2030,7 @@
           }
         },
         "leader": {
-          "description": "Leader node configuration (only used for MultiNode deployment)",
+          "description": "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed inference in multi-node deployments.",
           "$ref": "#/definitions/v1beta1.LeaderSpec"
         },
         "logger": {
@@ -2111,7 +2111,7 @@
           "type": "string"
         },
         "runner": {
-          "description": "Runner container override for customizing the engine container This is essentially a container spec that can override the default container",
+          "description": "Runner container override for customizing the engine container This is essentially a container spec that can override the default container Defines the main model runner container configuration, including image, resource requests/limits, environment variables, and command.",
           "$ref": "#/definitions/v1beta1.RunnerSpec"
         },
         "runtimeClassName": {
@@ -2213,7 +2213,7 @@
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
         "worker": {
-          "description": "Worker nodes configuration (only used for MultiNode deployment)",
+          "description": "Worker nodes configuration (only used for MultiNode deployment) Defines the pod and container spec for worker nodes that perform distributed processing tasks as directed by the leader.",
           "$ref": "#/definitions/v1beta1.WorkerSpec"
         }
       }
@@ -2482,33 +2482,33 @@
       ],
       "properties": {
         "compartmentID": {
-          "description": "The compartment ID to use for the inference service",
+          "description": "The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.",
           "type": "string"
         },
         "decoder": {
-          "description": "Decoder defines the decoder spec This will be used as decode server for prefill-decode disaggregated deployment",
+          "description": "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
           "$ref": "#/definitions/v1beta1.DecoderSpec"
         },
         "engine": {
-          "description": "Engine defines the serving engine spec This will be used to replace the predictor",
+          "description": "Engine defines the serving engine spec This provides detailed container and pod specifications for model serving. It allows defining the model runner (container spec), as well as complete pod specifications including init containers, sidecar containers, and other pod-level configurations. Engine can also be configured for multi-node deployments using leader and worker specifications.",
           "$ref": "#/definitions/v1beta1.EngineSpec"
         },
         "kedaConfig": {
-          "description": "KedaConfig defines the autoscaling configuration for KEDA",
+          "description": "KedaConfig defines the autoscaling configuration for KEDA Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling), allowing the service to scale based on custom metrics or event sources.",
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "model": {
-          "description": "Model specification moved out of predictor for flexibility",
+          "description": "Model defines the model to be used for inference, referencing either a BaseModel or a custom model. This allows models to be managed independently of the serving configuration.",
           "$ref": "#/definitions/v1beta1.ModelRef"
         },
         "predictor": {
-          "description": "Predictor defines the model serving spec",
+          "description": "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests.",
           "default": {},
           "$ref": "#/definitions/v1beta1.PredictorSpec"
         },
         "runtime": {
-          "description": "Runtime specification moved out of predictor for flexibility",
-          "$ref": "#/definitions/v1beta1.RuntimeRef"
+          "description": "Runtime defines the serving runtime environment that will be used to execute the model. It is an inference service spec template that determines how the service should be deployed. Runtime is optional - if not defined, the operator will automatically select the best runtime based on the model's size, architecture, format, quantization, and framework.",
+          "$ref": "#/definitions/v1beta1.ServingRuntimeRef"
         }
       }
     },
@@ -2717,7 +2717,7 @@
       }
     },
     "v1beta1.LeaderSpec": {
-      "description": "LeaderSpec defines the configuration for a leader node in a multi-node component",
+      "description": "LeaderSpec defines the configuration for a leader node in a multi-node component The leader node coordinates the activities of worker nodes in distributed inference or token generation setups, handling task distribution and result aggregation.",
       "type": "object",
       "properties": {
         "activeDeadlineSeconds": {
@@ -2879,7 +2879,7 @@
           "type": "string"
         },
         "runner": {
-          "description": "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+          "description": "Runner container override for customizing the main container This is essentially a container spec that can override the default container Provides fine-grained control over the container that executes the leader node's coordination logic.",
           "$ref": "#/definitions/v1beta1.RunnerSpec"
         },
         "runtimeClassName": {
@@ -2969,7 +2969,7 @@
       }
     },
     "v1beta1.LoggerSpec": {
-      "description": "LoggerSpec specifies optional payload logging available for all components",
+      "description": "LoggerSpec specifies optional payload logging available for all components Configures how request and response payloads are logged for auditing and debugging.",
       "type": "object",
       "properties": {
         "mode": {
@@ -2977,7 +2977,7 @@
           "type": "string"
         },
         "url": {
-          "description": "URL to send logging events",
+          "description": "URL to send logging events The endpoint where log data will be sent for external processing or storage.",
           "type": "string"
         }
       }
@@ -3146,11 +3146,11 @@
       "type": "object",
       "properties": {
         "apiGroup": {
-          "description": "APIGroup of the resource being referenced Defaults to `ome.io`",
+          "description": "APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced model.",
           "type": "string"
         },
         "fineTunedWeights": {
-          "description": "Optional FineTunedWeights references",
+          "description": "Optional FineTunedWeights references References to fine-tuned weights that should be applied to the base model.",
           "type": "array",
           "items": {
             "type": "string",
@@ -3158,11 +3158,11 @@
           }
         },
         "kind": {
-          "description": "Kind of the model being referenced Defaults to ClusterBaseModel",
+          "description": "Kind of the model being referenced Defaults to ClusterBaseModel Specifies the Kubernetes resource kind of the referenced model.",
           "type": "string"
         },
         "name": {
-          "description": "Name of the model being referenced",
+          "description": "Name of the model being referenced Identifies the specific model to be used for inference.",
           "type": "string",
           "default": ""
         }
@@ -4806,7 +4806,7 @@
       }
     },
     "v1beta1.RunnerSpec": {
-      "description": "RunnerSpec defines container configuration plus additional config settings",
+      "description": "RunnerSpec defines container configuration plus additional config settings The Runner is the primary container that executes the model serving or token generation logic.",
       "type": "object",
       "properties": {
         "args": {
@@ -5333,15 +5333,15 @@
       "type": "object",
       "properties": {
         "apiGroup": {
-          "description": "APIGroup of the resource being referenced Defaults to `ome.io`",
+          "description": "APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced runtime.",
           "type": "string"
         },
         "kind": {
-          "description": "Kind of the runtime being referenced Defaults to ClusterServingRuntime",
+          "description": "Kind of the runtime being referenced Defaults to ClusterServingRuntime Specifies the Kubernetes resource kind of the referenced runtime. ClusterServingRuntime is a cluster-wide runtime, while ServingRuntime is namespace-scoped.",
           "type": "string"
         },
         "name": {
-          "description": "Name of the runtime being referenced",
+          "description": "Name of the runtime being referenced Identifies the specific runtime environment to be used for model execution.",
           "type": "string",
           "default": ""
         }
@@ -6148,7 +6148,7 @@
       }
     },
     "v1beta1.WorkerSpec": {
-      "description": "WorkerSpec defines the configuration for worker nodes in a multi-node component",
+      "description": "WorkerSpec defines the configuration for worker nodes in a multi-node component Worker nodes perform the distributed processing tasks assigned by the leader node, enabling horizontal scaling for compute-intensive workloads.",
       "type": "object",
       "properties": {
         "activeDeadlineSeconds": {
@@ -6310,7 +6310,7 @@
           "type": "string"
         },
         "runner": {
-          "description": "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+          "description": "Runner container override for customizing the main container This is essentially a container spec that can override the default container Provides fine-grained control over the container that executes the worker node's processing logic.",
           "$ref": "#/definitions/v1beta1.RunnerSpec"
         },
         "runtimeClassName": {
@@ -6356,7 +6356,7 @@
           "type": "boolean"
         },
         "size": {
-          "description": "Size of the worker, this is the number of pods in the worker.",
+          "description": "Size of the worker, this is the number of pods in the worker. Controls how many worker pod instances will be deployed for horizontal scaling.",
           "type": "integer",
           "format": "int32"
         },

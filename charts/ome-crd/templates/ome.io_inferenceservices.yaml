@@ -32188,7 +32188,7 @@ spec:
                       default: ome.io
                       type: string
                     kind:
-                      default: ClusterTrainingRuntime
+                      default: ClusterServingRuntime
                       type: string
                     name:
                       type: string

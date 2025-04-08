@@ -1538,7 +1538,7 @@ func (in *InferenceServiceSpec) DeepCopyInto(out *InferenceServiceSpec) {
 	}
 	if in.Runtime != nil {
 		in, out := &in.Runtime, &out.Runtime
-		*out = new(RuntimeRef)
+		*out = new(ServingRuntimeRef)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.CompartmentID != nil {

@@ -2392,7 +2392,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)",
+				Description: "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"volumes": {
@@ -2929,19 +2929,19 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container Defines the main decoder container configuration, including image, resource requests/limits, environment variables, and command.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
 						},
 					},
 					"leader": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Leader node configuration (only used for MultiNode deployment)",
+							Description: "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed token generation in multi-node deployments.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec"),
 						},
 					},
 					"worker": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Worker nodes configuration (only used for MultiNode deployment)",
+							Description: "Worker nodes configuration (only used for MultiNode deployment) Defines the pod and container spec for worker nodes that perform distributed token generation tasks as directed by the leader.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec"),
 						},
 					},
@@ -3488,7 +3488,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)",
+				Description: "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments) Provides a comprehensive specification for deploying model serving containers and pods. It allows for complete Kubernetes pod configuration including main containers, init containers, sidecars, volumes, and other pod-level settings. For distributed deployments, it supports leader-worker architecture configuration.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"volumes": {
@@ -4025,19 +4025,19 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Runner container override for customizing the engine container This is essentially a container spec that can override the default container",
+							Description: "Runner container override for customizing the engine container This is essentially a container spec that can override the default container Defines the main model runner container configuration, including image, resource requests/limits, environment variables, and command.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
 						},
 					},
 					"leader": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Leader node configuration (only used for MultiNode deployment)",
+							Description: "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed inference in multi-node deployments.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec"),
 						},
 					},
 					"worker": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Worker nodes configuration (only used for MultiNode deployment)",
+							Description: "Worker nodes configuration (only used for MultiNode deployment) Defines the pod and container spec for worker nodes that perform distributed processing tasks as directed by the leader.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec"),
 						},
 					},
@@ -4493,45 +4493,45 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 				Properties: map[string]spec.Schema{
 					"predictor": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Predictor defines the model serving spec",
+							Description: "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec"),
 						},
 					},
 					"engine": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Engine defines the serving engine spec This will be used to replace the predictor",
+							Description: "Engine defines the serving engine spec This provides detailed container and pod specifications for model serving. It allows defining the model runner (container spec), as well as complete pod specifications including init containers, sidecar containers, and other pod-level configurations. Engine can also be configured for multi-node deployments using leader and worker specifications.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec"),
 						},
 					},
 					"decoder": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Decoder defines the decoder spec This will be used as decode server for prefill-decode disaggregated deployment",
+							Description: "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec"),
 						},
 					},
 					"model": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Model specification moved out of predictor for flexibility",
+							Description: "Model defines the model to be used for inference, referencing either a BaseModel or a custom model. This allows models to be managed independently of the serving configuration.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRef"),
 						},
 					},
 					"runtime": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Runtime specification moved out of predictor for flexibility",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef"),
+							Description: "Runtime defines the serving runtime environment that will be used to execute the model. It is an inference service spec template that determines how the service should be deployed. Runtime is optional - if not defined, the operator will automatically select the best runtime based on the model's size, architecture, format, quantization, and framework.",
+							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef"),
 						},
 					},
 					"compartmentID": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the inference service",
+							Description: "The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"kedaConfig": {
 						SchemaProps: spec.SchemaProps{
-							Description: "KedaConfig defines the autoscaling configuration for KEDA",
+							Description: "KedaConfig defines the autoscaling configuration for KEDA Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling), allowing the service to scale based on custom metrics or event sources.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig"),
 						},
 					},
@@ -4540,7 +4540,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRef", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RuntimeRef"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelRef", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.PredictorSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef"},
 	}
 }
 
@@ -4899,7 +4899,7 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LeaderSpec defines the configuration for a leader node in a multi-node component",
+				Description: "LeaderSpec defines the configuration for a leader node in a multi-node component The leader node coordinates the activities of worker nodes in distributed inference or token generation setups, handling task distribution and result aggregation.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"volumes": {
@@ -5338,7 +5338,7 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container Provides fine-grained control over the container that executes the leader node's coordination logic.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
 						},
 					},
@@ -5354,12 +5354,12 @@ func schema_pkg_apis_ome_v1beta1_LoggerSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LoggerSpec specifies optional payload logging available for all components",
+				Description: "LoggerSpec specifies optional payload logging available for all components Configures how request and response payloads are logged for auditing and debugging.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"url": {
 						SchemaProps: spec.SchemaProps{
-							Description: "URL to send logging events",
+							Description: "URL to send logging events The endpoint where log data will be sent for external processing or storage.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -5672,7 +5672,7 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 				Properties: map[string]spec.Schema{
 					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name of the model being referenced",
+							Description: "Name of the model being referenced Identifies the specific model to be used for inference.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -5680,21 +5680,21 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 					},
 					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind of the model being referenced Defaults to ClusterBaseModel",
+							Description: "Kind of the model being referenced Defaults to ClusterBaseModel Specifies the Kubernetes resource kind of the referenced model.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"apiGroup": {
 						SchemaProps: spec.SchemaProps{
-							Description: "APIGroup of the resource being referenced Defaults to `ome.io`",
+							Description: "APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced model.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"fineTunedWeights": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Optional FineTunedWeights references",
+							Description: "Optional FineTunedWeights references References to fine-tuned weights that should be applied to the base model.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -8575,7 +8575,7 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "RunnerSpec defines container configuration plus additional config settings",
+				Description: "RunnerSpec defines container configuration plus additional config settings The Runner is the primary container that executes the model serving or token generation logic.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"name": {
@@ -9505,7 +9505,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 				Properties: map[string]spec.Schema{
 					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name of the runtime being referenced",
+							Description: "Name of the runtime being referenced Identifies the specific runtime environment to be used for model execution.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -9513,14 +9513,14 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 					},
 					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind of the runtime being referenced Defaults to ClusterServingRuntime",
+							Description: "Kind of the runtime being referenced Defaults to ClusterServingRuntime Specifies the Kubernetes resource kind of the referenced runtime. ClusterServingRuntime is a cluster-wide runtime, while ServingRuntime is namespace-scoped.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"apiGroup": {
 						SchemaProps: spec.SchemaProps{
-							Description: "APIGroup of the resource being referenced Defaults to `ome.io`",
+							Description: "APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced runtime.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -10966,7 +10966,7 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "WorkerSpec defines the configuration for worker nodes in a multi-node component",
+				Description: "WorkerSpec defines the configuration for worker nodes in a multi-node component Worker nodes perform the distributed processing tasks assigned by the leader node, enabling horizontal scaling for compute-intensive workloads.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"volumes": {
@@ -11405,14 +11405,14 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 					},
 					"size": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Size of the worker, this is the number of pods in the worker.",
+							Description: "Size of the worker, this is the number of pods in the worker. Controls how many worker pod instances will be deployed for horizontal scaling.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
 					"runner": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container",
+							Description: "Runner container override for customizing the main container This is essentially a container spec that can override the default container Provides fine-grained control over the container that executes the worker node's processing logic.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec"),
 						},
 					},
