@@ -79,6 +79,8 @@ ome:
     affinity: {}
     image: ord.ocir.io/idqj093njucb/model-controller
     tag: *defaultVersion
+  dac:
+    reconcileWithKueue: false
   omeAgent:
     image: ap-osaka-1.ocir.io/idqj093njucb/genai-ome-agent
     tag: *defaultVersion

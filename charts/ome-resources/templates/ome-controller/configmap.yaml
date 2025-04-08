@@ -133,7 +133,7 @@ data:
   dacReconcilePolicy: |-
     {
       "reconcileFailedLifecycleState": true,
-      "reconcileWithKueue": true
+      "reconcileWithKueue": {{.Values.ome.dac.reconcileWithKueue}}
     }
 
 ---
