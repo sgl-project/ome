@@ -1,0 +1,44 @@
+{{- if index .Values "cohere-command-r-082024-v1-7-tp1-16k" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-r-082024-v1-7-tp1-16k
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "cohere-command-r-small-v3"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "cohere-command-r-082024-v1-7-tp1-16k" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "cohere-command-r-082024-v1-7-tp1-16k" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-r-082024-v1-7-tp1-16k" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "command_r"
+    ome.io/base-model-decryption-secret-name: "command_r-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command-r-08-2024
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-082024-v1-7-tp1-16k" "osBucket" }}/o/{{ index .Values "cohere-command-r-082024-v1-7-tp1-16k" "vendor" }}/{{ index .Values "cohere-command-r-082024-v1-7-tp1-128k" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/command-r-082024-v1-7-tp1-16k
+  vendor: {{ index .Values "cohere-command-r-082024-v1-7-tp1-16k" "vendor" }}
+  version: "1.8"
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.11.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.11.0'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 35B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 4096
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: SMALL_COHERE_V2
+          quotaUnit: 1
+          default: true
+    internalName: "command-r-082024-v1.7-tp1-16k"
+    type: "Serving"
+{{- end }}
