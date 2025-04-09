@@ -407,7 +407,7 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 	
 	@echo "\n🚀 Step 2: Deploying OME components..."
 	@echo "  • Applying kustomize configuration..."
-	kubectl apply -k config/default
+	kubectl apply --server-side --force-conflicts -k config/default
 	
 	@if [ ${OME_ENABLE_SELF_SIGNED_CA} != false ]; then \
 		echo "  • Setting up self-signed CA..."; \
@@ -420,7 +420,7 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 	fi
 	
 	@echo "\n🔄 Step 4: Applying cluster resources..."
-	kubectl apply -k config/clusterresources
+	kubectl apply --server-side --force-conflicts -k config/clusterresources
 	
 	@echo "\n🧹 Step 5: Cleanup..."
 	@git checkout HEAD -- config/certmanager/certificate.yaml
