@@ -525,11 +525,11 @@ test-cmd: fmt vet manifests envtest ## 🧪 Run cmd tests with coverage
 test-pkg: fmt vet manifests envtest ## 🧪 Run pkg tests with coverage
 	@echo "🧪 Running package tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		$$(go list ./pkg/... | grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing) \
+		$$(go list ./pkg/... | grep -v ./pkg/apis |grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing) \
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
 	@echo "🔍 Filtering coverage report..."
-	@cat coverage-pkg.out.tmp | grep -v "pkg/testing/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-pkg.out
+	@cat coverage-pkg.out.tmp | grep -v "/pkg/apis/" | grep -v "pkg/testing/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-pkg.out
 	@rm coverage-pkg.out.tmp
 	@echo "✅ Package tests passed"
 

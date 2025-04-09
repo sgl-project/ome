@@ -28,10 +28,6 @@ API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ServingRuntimeSpec,ProtocolVersions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobStatus,Conditions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,UserStatus,Conditions
-API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServicesConfig,MultiNodeProber
-API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServicesConfig,OCIConfig
-API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,IngressConfig,IngressServiceName
-API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,IngressConfig,LocalGatewayServiceName
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ModelStatusSpec,LifeCycle
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,OrganizationSpec,OrganizationID
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,PodGroupPolicy,CoschedulingPodGroupPolicyConfig

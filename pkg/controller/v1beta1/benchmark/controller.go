@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -114,7 +116,7 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Build config and pod spec
-	config, err := v1beta1.NewBenchmarkJobConfig(r.Clientset)
+	config, err := controllerconfig.NewBenchmarkJobConfig(r.Clientset)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -210,7 +212,7 @@ func (r *BenchmarkJobReconciler) reconcileJob(benchmarkJob *v1beta1.BenchmarkJob
 }
 
 // reconcilePodSpec creates the final PodSpec by merging defaults and overrides.
-func (r *BenchmarkJobReconciler) reconcilePodSpec(benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *v1beta1.BenchmarkJobConfig) (ctrl.Result, *v1.PodSpec, error) {
+func (r *BenchmarkJobReconciler) reconcilePodSpec(benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *controllerconfig.BenchmarkJobConfig) (ctrl.Result, *v1.PodSpec, error) {
 	podSpec, err := r.createPodSpec(benchmarkJob, benchmarkConfig)
 	if err != nil {
 		return ctrl.Result{}, nil, err
@@ -233,7 +235,7 @@ func (r *BenchmarkJobReconciler) buildMetadata(benchmarkJob *v1beta1.BenchmarkJo
 }
 
 // createPodSpec creates a PodSpec for the BenchmarkJob by combining defaults with any user overrides
-func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *v1beta1.BenchmarkJobConfig) (*v1.PodSpec, error) {
+func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *controllerconfig.BenchmarkJobConfig) (*v1.PodSpec, error) {
 	// Build default container spec
 	resources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{

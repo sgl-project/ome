@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -62,7 +64,7 @@ func (sa *XAIServiceAccount) Create(ctx context.Context) error {
 	}
 
 	// Add service account key to common secret
-	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
+	aiPlatformConfig, err := controllerconfig.NewAIPlatformConfig(sa.Clientset)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
 	}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -131,7 +133,7 @@ func (r *ResourceBase) getServiceAccountStatusMessage(status v1beta1.ServiceAcco
 }
 
 // getCommonSecret retrieves or creates the common secret
-func (r *ResourceBase) getCommonSecret(ctx context.Context, config *v1beta1.AIPlatformConfig) (*v1.Secret, error) {
+func (r *ResourceBase) getCommonSecret(ctx context.Context, config *controllerconfig.AIPlatformConfig) (*v1.Secret, error) {
 	secret := &v1.Secret{}
 	err := r.Get(ctx, client.ObjectKey{Name: config.SecretConfig.SecretName, Namespace: config.SecretConfig.Namespace}, secret)
 	if err != nil {
@@ -183,7 +185,7 @@ func (r *ResourceBase) GetOrganization(ctx context.Context, sa *v1beta1.ServiceA
 }
 
 // deleteServiceAccountKeyFromSecret removes a key from the common secret
-func (r *ResourceBase) deleteServiceAccountKeyFromSecret(ctx context.Context, sa *v1beta1.ServiceAccount, aiPlatformConfig *v1beta1.AIPlatformConfig) error {
+func (r *ResourceBase) deleteServiceAccountKeyFromSecret(ctx context.Context, sa *v1beta1.ServiceAccount, aiPlatformConfig *controllerconfig.AIPlatformConfig) error {
 	// Safety check - ensure we have a service account ID
 	if sa.Status.ServiceAccountID == nil {
 		r.Log.Info("No service account ID found, skipping key deletion from common secret",

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"github.com/google/go-cmp/cmp"
@@ -46,10 +48,10 @@ type IngressReconciler struct {
 	// clientset is the client that allows us to talk to the k8s for core APIs
 	clientset     kubernetes.Interface
 	scheme        *runtime.Scheme
-	ingressConfig *v1beta1.IngressConfig
+	ingressConfig *controllerconfig.IngressConfig
 }
 
-func NewIngressReconciler(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme, ingressConfig *v1beta1.IngressConfig) *IngressReconciler {
+func NewIngressReconciler(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme, ingressConfig *controllerconfig.IngressConfig) *IngressReconciler {
 	return &IngressReconciler{
 		client:        client,
 		clientset:     clientset,
@@ -79,7 +81,7 @@ func getServiceHost(isvc *v1beta1.InferenceService) string {
 	}
 }
 
-func getAdditionalHosts(domainList *[]string, serviceHost string, config *v1beta1.IngressConfig, additionalHosts *[]string) {
+func getAdditionalHosts(domainList *[]string, serviceHost string, config *controllerconfig.IngressConfig, additionalHosts *[]string) {
 	// Include additional ingressDomain to the domains (both internal and external)
 	subdomain := ""
 	if domainList != nil && len(*domainList) != 0 {
@@ -107,7 +109,7 @@ func getAdditionalHosts(domainList *[]string, serviceHost string, config *v1beta
 	}
 }
 
-func getServiceUrl(isvc *v1beta1.InferenceService, config *v1beta1.IngressConfig) string {
+func getServiceUrl(isvc *v1beta1.InferenceService, config *controllerconfig.IngressConfig) string {
 	url := getHostBasedServiceUrl(isvc, config)
 	if url == "" {
 		return ""
@@ -119,7 +121,7 @@ func getServiceUrl(isvc *v1beta1.InferenceService, config *v1beta1.IngressConfig
 	}
 }
 
-func getPathBasedServiceUrl(isvc *v1beta1.InferenceService, config *v1beta1.IngressConfig) string {
+func getPathBasedServiceUrl(isvc *v1beta1.InferenceService, config *controllerconfig.IngressConfig) string {
 	path, err := GenerateUrlPath(isvc.Name, isvc.Namespace, config)
 	if err != nil {
 		log.Error(err, "Failed to generate URL path from pathTemplate")
@@ -133,7 +135,7 @@ func getPathBasedServiceUrl(isvc *v1beta1.InferenceService, config *v1beta1.Ingr
 	return url.String()
 }
 
-func getHostBasedServiceUrl(isvc *v1beta1.InferenceService, config *v1beta1.IngressConfig) string {
+func getHostBasedServiceUrl(isvc *v1beta1.InferenceService, config *controllerconfig.IngressConfig) string {
 	urlScheme := config.UrlScheme
 	disableIstioVirtualHost := config.DisableIstioVirtualHost
 	if isvc.Status.Components == nil {
@@ -159,7 +161,7 @@ func getHostBasedServiceUrl(isvc *v1beta1.InferenceService, config *v1beta1.Ingr
 	}
 }
 
-func (r *IngressReconciler) reconcileExternalService(isvc *v1beta1.InferenceService, config *v1beta1.IngressConfig) error {
+func (r *IngressReconciler) reconcileExternalService(isvc *v1beta1.InferenceService, config *controllerconfig.IngressConfig) error {
 	desired := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      isvc.Name,
@@ -222,7 +224,7 @@ func createHTTPRouteDestination(gatewayService string) *istiov1beta1.HTTPRouteDe
 	return httpRouteDestination
 }
 
-func createHTTPMatchRequest(prefix, targetHost, internalHost string, additionalHosts *[]string, isInternal bool, config *v1beta1.IngressConfig) []*istiov1beta1.HTTPMatchRequest {
+func createHTTPMatchRequest(prefix, targetHost, internalHost string, additionalHosts *[]string, isInternal bool, config *controllerconfig.IngressConfig) []*istiov1beta1.HTTPMatchRequest {
 	var uri *istiov1beta1.StringMatch
 	if prefix != "" {
 		uri = &istiov1beta1.StringMatch{
@@ -273,7 +275,7 @@ func createHTTPMatchRequest(prefix, targetHost, internalHost string, additionalH
 	return matchRequests
 }
 
-func createIngress(isvc *v1beta1.InferenceService, useDefault bool, config *v1beta1.IngressConfig, domainList *[]string) *istioclientv1beta1.VirtualService {
+func createIngress(isvc *v1beta1.InferenceService, useDefault bool, config *controllerconfig.IngressConfig, domainList *[]string) *istioclientv1beta1.VirtualService {
 	if !isvc.Status.IsConditionReady(v1beta1.PredictorReady) {
 		status := corev1.ConditionFalse
 		if isvc.Status.IsConditionUnknown(v1beta1.PredictorReady) {

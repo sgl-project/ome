@@ -1,27 +1,26 @@
-package v1beta1
+package isvc
 
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strconv"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"regexp"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
-	"knative.dev/serving/pkg/apis/autoscaling"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // regular expressions for validation of isvc name
 const (
-	IsvcNameFmt                         string = "[a-z]([-a-z0-9]*[a-z0-9])?"
-	StorageUriPresentInTransformerError string = "storage uri should not be specified in transformer container"
+	IsvcNameFmt                string = "[a-z]([-a-z0-9]*[a-z0-9])?"
+	InvalidISVCNameFormatError string = "invalid InferenceService name %q, must match %q"
 )
 
 var (
@@ -83,9 +82,8 @@ func GetIntReference(number int) *int {
 	return &num
 }
 
-func validateInferenceService(isvc *InferenceService) (admission.Warnings, error) {
+func validateInferenceService(isvc *v1beta1.InferenceService) (admission.Warnings, error) {
 	var allWarnings admission.Warnings
-	annotations := isvc.Annotations
 
 	if err := validateInferenceServiceName(isvc); err != nil {
 		return allWarnings, err
@@ -98,39 +96,11 @@ func validateInferenceService(isvc *InferenceService) (admission.Warnings, error
 	if err := validateAutoscalerTargetUtilizationPercentage(isvc); err != nil {
 		return allWarnings, err
 	}
-
-	for _, component := range []Component{
-		&isvc.Spec.Predictor,
-	} {
-		if !reflect.ValueOf(component).IsNil() {
-			if err := validateExactlyOneImplementation(component); err != nil {
-				return allWarnings, err
-			}
-			if err := utils.FirstNonNilError([]error{
-				component.GetImplementation().Validate(),
-				component.GetExtensions().Validate(),
-				validateAutoScalingCompExtension(annotations, component.GetExtensions()),
-			}); err != nil {
-				return allWarnings, err
-			}
-		}
-	}
 	return allWarnings, nil
 }
 
-// Validate scaling options component extensions
-func validateAutoScalingCompExtension(annotations map[string]string, compExtSpec *ComponentExtensionSpec) error {
-	deploymentMode := annotations["ome.io/deploymentMode"]
-	annotationClass := annotations[autoscaling.ClassAnnotationKey]
-	if deploymentMode == string(constants.RawDeployment) || annotationClass == string(autoscaling.HPA) {
-		return validateScalingHPACompExtension(compExtSpec)
-	}
-
-	return validateScalingKPACompExtension(compExtSpec)
-}
-
 // Validation of isvc name
-func validateInferenceServiceName(isvc *InferenceService) error {
+func validateInferenceServiceName(isvc *v1beta1.InferenceService) error {
 	if !IsvcRegexp.MatchString(isvc.Name) {
 		return fmt.Errorf(InvalidISVCNameFormatError, isvc.Name, IsvcNameFmt)
 	}
@@ -138,7 +108,7 @@ func validateInferenceServiceName(isvc *InferenceService) error {
 }
 
 // Validation of isvc autoscaler class
-func validateInferenceServiceAutoscaler(isvc *InferenceService) error {
+func validateInferenceServiceAutoscaler(isvc *v1beta1.InferenceService) error {
 	annotations := isvc.ObjectMeta.Annotations
 	value, ok := annotations[constants.AutoscalerClass]
 	class := constants.AutoscalerClassType(value)
@@ -148,7 +118,7 @@ func validateInferenceServiceAutoscaler(isvc *InferenceService) error {
 				switch class {
 				case constants.AutoscalerClassHPA:
 					if metric, ok := annotations[constants.AutoscalerMetrics]; ok {
-						return validateHPAMetrics(ScaleMetric(metric))
+						return validateHPAMetrics(v1beta1.ScaleMetric(metric))
 					} else {
 						return nil
 					}
@@ -166,7 +136,7 @@ func validateInferenceServiceAutoscaler(isvc *InferenceService) error {
 }
 
 // Validate of autoscaler HPA metrics
-func validateHPAMetrics(metric ScaleMetric) error {
+func validateHPAMetrics(metric v1beta1.ScaleMetric) error {
 	for _, item := range constants.AutoscalerAllowedMetricsList {
 		if item == constants.AutoscalerMetricsType(metric) {
 			return nil
@@ -176,7 +146,7 @@ func validateHPAMetrics(metric ScaleMetric) error {
 }
 
 // Validate of autoscaler targetUtilizationPercentage
-func validateAutoscalerTargetUtilizationPercentage(isvc *InferenceService) error {
+func validateAutoscalerTargetUtilizationPercentage(isvc *v1beta1.InferenceService) error {
 	annotations := isvc.ObjectMeta.Annotations
 	if value, ok := annotations[constants.TargetUtilizationPercentage]; ok {
 		t, err := strconv.Atoi(value)
@@ -190,70 +160,9 @@ func validateAutoscalerTargetUtilizationPercentage(isvc *InferenceService) error
 	return nil
 }
 
-func validateScalingHPACompExtension(compExtSpec *ComponentExtensionSpec) error {
-	metric := MetricCPU
-	if compExtSpec.ScaleMetric != nil {
-		metric = *compExtSpec.ScaleMetric
-	}
-
-	err := validateHPAMetrics(metric)
-
-	if err != nil {
-		return err
-	}
-
-	if compExtSpec.ScaleTarget != nil {
-		target := *compExtSpec.ScaleTarget
-		if metric == MetricCPU && target < 1 || target > 100 {
-			return fmt.Errorf("the target utilization percentage should be a [1-100] integer")
-		}
-
-		if metric == MetricMemory && target < 1 {
-			return fmt.Errorf("the target memory should be greater than 1 MiB")
-		}
-	}
-
-	return nil
-}
-
-func validateKPAMetrics(metric ScaleMetric) error {
-	for _, item := range constants.AutoScalerKPAMetricsAllowedList {
-		if item == constants.AutoScalerKPAMetricsType(metric) {
-			return nil
-		}
-	}
-	return fmt.Errorf("[%s] is not a supported metric", metric)
-}
-
-func validateScalingKPACompExtension(compExtSpec *ComponentExtensionSpec) error {
-	if compExtSpec.DeploymentStrategy != nil {
-		return fmt.Errorf("customizing deploymentStrategy is only supported for raw deployment mode")
-	}
-	metric := MetricConcurrency
-	if compExtSpec.ScaleMetric != nil {
-		metric = *compExtSpec.ScaleMetric
-	}
-
-	err := validateKPAMetrics(metric)
-
-	if err != nil {
-		return err
-	}
-
-	if compExtSpec.ScaleTarget != nil {
-		target := *compExtSpec.ScaleTarget
-
-		if metric == MetricRPS && target < 1 {
-			return fmt.Errorf("the target for rps should be greater than 1")
-		}
-	}
-
-	return nil
-}
-
 // Convert runtime.Object into InferenceService
-func convertToInferenceService(obj runtime.Object) (*InferenceService, error) {
-	isvc, ok := obj.(*InferenceService)
+func convertToInferenceService(obj runtime.Object) (*v1beta1.InferenceService, error) {
+	isvc, ok := obj.(*v1beta1.InferenceService)
 	if !ok {
 		return nil, fmt.Errorf("expected an InferenceService object but got %T", obj)
 	}

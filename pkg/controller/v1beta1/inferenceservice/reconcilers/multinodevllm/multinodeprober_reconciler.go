@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +39,7 @@ func NewMultiNodeProberReconciler(
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
-	multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+	multiNodeProberConfig *controllerconfig.MultiNodeProberConfig,
 ) *MultiNodeProberReconciler {
 	deployments := make([]*appsv1.Deployment, 0, *componentExt.MinReplicas)
 	for i := 0; i < *componentExt.MinReplicas; i++ {
@@ -57,7 +59,7 @@ func NewMultiNodeProberReconciler(
 
 func createRawDeployment(
 	componentMeta metav1.ObjectMeta,
-	multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+	multiNodeProberConfig *controllerconfig.MultiNodeProberConfig,
 	url *knapis.URL,
 	index int,
 ) *appsv1.Deployment {
@@ -92,7 +94,7 @@ func createRawDeployment(
 }
 
 func getDefaultPodSpec(
-	multiNodeProberConfig *v1beta1.MultiNodeProberConfig,
+	multiNodeProberConfig *controllerconfig.MultiNodeProberConfig,
 	url *knapis.URL,
 ) *corev1.PodSpec {
 	return &corev1.PodSpec{
@@ -148,7 +150,7 @@ func createProbe(path string) *corev1.Probe {
 	}
 }
 
-func createStartupProbe(config *v1beta1.MultiNodeProberConfig) *corev1.Probe {
+func createStartupProbe(config *controllerconfig.MultiNodeProberConfig) *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{

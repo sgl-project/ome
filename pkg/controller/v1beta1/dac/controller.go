@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	v1beta2 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
 	appsv1 "k8s.io/api/apps/v1"
@@ -69,7 +71,7 @@ import (
 // DedicatedAIClusterReconciler reconciles a DedicatedAICluster object
 type DedicatedAIClusterReconciler struct {
 	client.Client
-	DacReconcilePolicy *v1beta2.DacReconcilePolicyConfig
+	DacReconcilePolicy *controllerconfig.DacReconcilePolicyConfig
 	ClientConfig       *rest.Config
 	Clientset          kubernetes.Interface
 	Log                logr.Logger
@@ -677,7 +679,7 @@ func (r *DedicatedAIClusterReconciler) getPodsFailureReason(deployment *appsv1.D
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacReconcilePolicyConfig *v1beta2.DacReconcilePolicyConfig) error {
+func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacReconcilePolicyConfig *controllerconfig.DacReconcilePolicyConfig) error {
 	r.ClientConfig = mgr.GetConfig()
 	r.DacReconcilePolicy = dacReconcilePolicyConfig
 

@@ -3,7 +3,7 @@ package ingress
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -12,7 +12,7 @@ func TestGenerateUrlPath(t *testing.T) {
 	type args struct {
 		name          string
 		namespace     string
-		ingressConfig *v1beta1.IngressConfig
+		ingressConfig *controllerconfig.IngressConfig
 	}
 
 	tests := []struct {
@@ -26,7 +26,7 @@ func TestGenerateUrlPath(t *testing.T) {
 			args: args{
 				name:      "model",
 				namespace: "user",
-				ingressConfig: &v1beta1.IngressConfig{
+				ingressConfig: &controllerconfig.IngressConfig{
 					IngressDomain: "my.domain",
 				},
 			},
@@ -37,7 +37,7 @@ func TestGenerateUrlPath(t *testing.T) {
 			args: args{
 				name:      "model",
 				namespace: "user",
-				ingressConfig: &v1beta1.IngressConfig{
+				ingressConfig: &controllerconfig.IngressConfig{
 					PathTemplate: "/path/to/{{ .Namespace }}/{{ .Name }}",
 				},
 			},
@@ -48,7 +48,7 @@ func TestGenerateUrlPath(t *testing.T) {
 			args: args{
 				name:      "model",
 				namespace: "user",
-				ingressConfig: &v1beta1.IngressConfig{
+				ingressConfig: &controllerconfig.IngressConfig{
 					UrlScheme:     "https",
 					IngressDomain: "my.domain",
 					PathTemplate:  "/{{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}",
@@ -61,7 +61,7 @@ func TestGenerateUrlPath(t *testing.T) {
 			args: args{
 				name:      "model",
 				namespace: "user",
-				ingressConfig: &v1beta1.IngressConfig{
+				ingressConfig: &controllerconfig.IngressConfig{
 					UrlScheme:     "https",
 					IngressDomain: "my.domain",
 					PathTemplate:  "/{{ .Unknownfield }}/serving/{{ .Namespace }}/{{ .Name }}",
@@ -74,7 +74,7 @@ func TestGenerateUrlPath(t *testing.T) {
 			args: args{
 				name:      "model",
 				namespace: "user",
-				ingressConfig: &v1beta1.IngressConfig{
+				ingressConfig: &controllerconfig.IngressConfig{
 					UrlScheme:     "https",
 					IngressDomain: "my.domain",
 					PathTemplate:  "myhost/serving/{{ .Namespace }}/{{ .Name }}",
@@ -87,7 +87,7 @@ func TestGenerateUrlPath(t *testing.T) {
 			args: args{
 				name:      "model",
 				namespace: "user",
-				ingressConfig: &v1beta1.IngressConfig{
+				ingressConfig: &controllerconfig.IngressConfig{
 					UrlScheme:     "https",
 					IngressDomain: "my.domain",
 					PathTemplate:  "http://myhost/serving/{{ .Namespace }}/{{ .Name }}",

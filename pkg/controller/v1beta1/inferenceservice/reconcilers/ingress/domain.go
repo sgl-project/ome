@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -21,7 +21,7 @@ type DomainTemplateValues struct {
 }
 
 // GenerateDomainName generate domain name using template configured in IngressConfig
-func GenerateDomainName(name string, obj metav1.ObjectMeta, ingressConfig *v1beta1.IngressConfig) (string, error) {
+func GenerateDomainName(name string, obj metav1.ObjectMeta, ingressConfig *controllerconfig.IngressConfig) (string, error) {
 
 	values := DomainTemplateValues{
 		Name:          name,

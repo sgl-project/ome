@@ -3,6 +3,8 @@ package capacityreservation
 import (
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation/utils"
@@ -152,7 +154,7 @@ func TestCapacityReservationReconciler_Reconcile(t *testing.T) {
 
 			reconciler := &CapacityReservationReconciler{
 				Client:                             fakeClient,
-				CapacityReservationReconcilePolicy: &omev1beta1.CapacityReservationReconcilePolicyConfig{ReconcileFailedLifecycleState: false},
+				CapacityReservationReconcilePolicy: &controllerconfig.CapacityReservationReconcilePolicyConfig{ReconcileFailedLifecycleState: false},
 				ClientConfig:                       &rest.Config{},
 				Clientset:                          kubernetes.Interface(nil),
 				Log:                                zap.New(),

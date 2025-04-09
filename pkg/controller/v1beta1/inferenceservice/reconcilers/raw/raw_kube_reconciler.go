@@ -3,6 +3,8 @@ package raw
 import (
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -59,7 +61,7 @@ func NewRawKubeReconciler(client client.Client,
 }
 
 func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*knapis.URL, error) {
-	ingressConfig, err := v1beta1.NewIngressConfig(clientset)
+	ingressConfig, err := controllerconfig.NewIngressConfig(clientset)
 	if err != nil {
 		return nil, err
 	}

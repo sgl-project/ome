@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	batchv1 "k8s.io/api/batch/v1"
@@ -427,7 +429,7 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 	tests := []struct {
 		name            string
 		benchmarkJob    *v1beta1.BenchmarkJob
-		benchmarkConfig *v1beta1.BenchmarkJobConfig
+		benchmarkConfig *controllerconfig.BenchmarkJobConfig
 		expectedError   bool
 	}{
 		{
@@ -457,8 +459,8 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 					},
 				},
 			},
-			benchmarkConfig: &v1beta1.BenchmarkJobConfig{
-				PodConfig: v1beta1.PodConfig{
+			benchmarkConfig: &controllerconfig.BenchmarkJobConfig{
+				PodConfig: controllerconfig.PodConfig{
 					Image:         "test-image",
 					CPURequest:    "100m",
 					CPULimit:      "200m",

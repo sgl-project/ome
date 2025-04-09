@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,7 +26,7 @@ var log = logf.Log.WithName("ReservationDeploymentReconciler")
 type DeploymentReconciler struct {
 	client                    client.Client
 	scheme                    *runtime.Scheme
-	ReservationWorkloadConfig *v1beta1.DacReservationWorkloadConfig
+	ReservationWorkloadConfig *controllerconfig.DacReservationWorkloadConfig
 	Deployment                *appsv1.Deployment
 }
 
@@ -38,7 +39,7 @@ func NewDeploymentReconciler(
 	affinity *corev1.Affinity,
 	count int) (*DeploymentReconciler, error) {
 
-	reservationWorkloadConfig, err := v1beta1.NewDacReservationWorkloadConfig(clientset)
+	reservationWorkloadConfig, err := controllerconfig.NewDacReservationWorkloadConfig(clientset)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func createDeployment(
 	namespace string,
 	resources *corev1.ResourceRequirements,
 	affinity *corev1.Affinity,
-	reservationWorkloadConfig *v1beta1.DacReservationWorkloadConfig,
+	reservationWorkloadConfig *controllerconfig.DacReservationWorkloadConfig,
 	count int) *appsv1.Deployment {
 
 	podMetadata := metav1.ObjectMeta{

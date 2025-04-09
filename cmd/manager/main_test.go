@@ -7,7 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/stretchr/testify/assert"
@@ -315,7 +316,7 @@ func TestDeployConfigSetup(t *testing.T) {
 				return
 			}
 
-			deployConfig, err := v1beta1.NewDeployConfig(clientset)
+			deployConfig, err := controllerconfig.NewDeployConfig(clientset)
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {
@@ -363,7 +364,7 @@ func TestIngressConfigSetup(t *testing.T) {
 				return
 			}
 
-			ingressConfig, err := v1beta1.NewIngressConfig(clientset)
+			ingressConfig, err := controllerconfig.NewIngressConfig(clientset)
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {

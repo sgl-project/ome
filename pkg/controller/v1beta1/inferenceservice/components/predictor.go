@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
 
@@ -36,14 +38,14 @@ type Predictor struct {
 	client                 client.Client
 	clientset              kubernetes.Interface
 	scheme                 *runtime.Scheme
-	inferenceServiceConfig *v1beta1.InferenceServicesConfig
+	inferenceServiceConfig *controllerconfig.InferenceServicesConfig
 	deploymentMode         constants.DeploymentModeType
 	Log                    logr.Logger
 }
 
 // NewPredictor creates a new Predictor instance.
 func NewPredictor(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme,
-	inferenceServiceConfig *v1beta1.InferenceServicesConfig, deploymentMode constants.DeploymentModeType) Component {
+	inferenceServiceConfig *controllerconfig.InferenceServicesConfig, deploymentMode constants.DeploymentModeType) Component {
 	return &Predictor{
 		client:                 client,
 		clientset:              clientset,
@@ -725,6 +727,25 @@ func (p *Predictor) getRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1
 	return p.getSupportingRuntime(isvc, baseModel)
 }
 
+// getSupportingRuntime retrieves the supporting runtime for the predictor.
+func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
+	runtimes, err := isvcutils.GetSupportingRuntimes(isvc.Spec.Predictor.Model, p.client, isvc.Namespace)
+	if err != nil {
+		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, err
+	}
+
+	if len(runtimes) == 0 {
+		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "No runtime found to support specified framework/version")
+		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, fmt.Errorf("no runtime found to support specified predictor with model type: %v", baseModel.ModelFormat.Name)
+	}
+
+	// Use the first supporting runtime.
+	isvc.Spec.Predictor.Model.Runtime = &runtimes[0].Name
+	p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime, "inference service", isvc.Name, "namespace", isvc.Namespace)
+
+	return runtimes[0].Spec, runtimes[0].Name, ctrl.Result{}, nil
+}
+
 // getSpecifiedRuntime retrieves the specified runtime for the predictor.
 func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, ctrl.Result, error) {
 
@@ -744,7 +765,7 @@ func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseMode
 		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s does not support specified protocol version", *isvc.Spec.Predictor.Model.Runtime)
 	}
 
-	if !isvc.Spec.Predictor.Model.RuntimeSupportsModel(rt, &baseModel) {
+	if !isvcutils.RuntimeSupportsModel(isvc.Spec.Predictor.Model, rt, &baseModel) {
 		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified runtime does not support specified framework/version")
 		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s does not support specified predictor with model type: %v", *isvc.Spec.Predictor.Model.Runtime, baseModel.ModelFormat.Name)
 	}
@@ -752,31 +773,15 @@ func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseMode
 	return *rt, ctrl.Result{}, nil
 }
 
-// getSupportingRuntime retrieves the supporting runtime for the predictor.
-func (p *Predictor) getSupportingRuntime(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (v1beta1.ServingRuntimeSpec, string, ctrl.Result, error) {
-	runtimes, err := isvc.Spec.Predictor.Model.GetSupportingRuntimes(p.client, isvc.Namespace)
-	if err != nil {
-		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, err
-	}
-
-	if len(runtimes) == 0 {
-		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "No runtime found to support specified framework/version")
-		return v1beta1.ServingRuntimeSpec{}, "", ctrl.Result{}, fmt.Errorf("no runtime found to support specified predictor with model type: %v", baseModel.ModelFormat.Name)
-	}
-
-	// Use the first supporting runtime.
-	isvc.Spec.Predictor.Model.Runtime = &runtimes[0].Name
-	p.Log.Info("Using first supporting runtime", "runtime", *isvc.Spec.Predictor.Model.Runtime, "inference service", isvc.Name, "namespace", isvc.Namespace)
-
-	return runtimes[0].Spec, runtimes[0].Name, ctrl.Result{}, nil
-}
-
 // isProtocolVersionSupported checks if the protocol version is supported by the runtime.
 func (p *Predictor) isProtocolVersionSupported(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec) bool {
 	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
 		return true
 	}
-	return runtime.IsProtocolVersionSupported(*isvc.Spec.Predictor.Model.ProtocolVersion)
+
+	protocolVersion := isvcutils.GetProtocol(isvc.Spec.Predictor.Model)
+
+	return runtime.IsProtocolVersionSupported(protocolVersion)
 }
 
 // reconcilePVPVC reconciles the PersistentVolume and PersistentVolumeClaim for the predictor.

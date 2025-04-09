@@ -3,7 +3,7 @@ package ingress
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,7 +13,7 @@ func TestGenerateDomainName(t *testing.T) {
 	type args struct {
 		name          string
 		obj           v1.ObjectMeta
-		ingressConfig *v1beta1.IngressConfig
+		ingressConfig *controllerconfig.IngressConfig
 	}
 
 	obj := v1.ObjectMeta{
@@ -38,9 +38,9 @@ func TestGenerateDomainName(t *testing.T) {
 			args: args{
 				name: "model",
 				obj:  obj,
-				ingressConfig: &v1beta1.IngressConfig{
-					IngressDomain:  v1beta1.DefaultIngressDomain,
-					DomainTemplate: v1beta1.DefaultDomainTemplate,
+				ingressConfig: &controllerconfig.IngressConfig{
+					IngressDomain:  controllerconfig.DefaultIngressDomain,
+					DomainTemplate: controllerconfig.DefaultDomainTemplate,
 				},
 			},
 			want: "model.test.example.com",
@@ -50,8 +50,8 @@ func TestGenerateDomainName(t *testing.T) {
 			args: args{
 				name: "model",
 				obj:  obj,
-				ingressConfig: &v1beta1.IngressConfig{
-					IngressDomain:  v1beta1.DefaultIngressDomain,
+				ingressConfig: &controllerconfig.IngressConfig{
+					IngressDomain:  controllerconfig.DefaultIngressDomain,
 					DomainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				},
 			},
@@ -62,8 +62,8 @@ func TestGenerateDomainName(t *testing.T) {
 			args: args{
 				name: "model",
 				obj:  obj,
-				ingressConfig: &v1beta1.IngressConfig{
-					IngressDomain:  v1beta1.DefaultIngressDomain,
+				ingressConfig: &controllerconfig.IngressConfig{
+					IngressDomain:  controllerconfig.DefaultIngressDomain,
 					DomainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .Annotations.annotation }}.{{ .IngressDomain }}",
 				},
 			},
@@ -74,8 +74,8 @@ func TestGenerateDomainName(t *testing.T) {
 			args: args{
 				name: "model",
 				obj:  obj,
-				ingressConfig: &v1beta1.IngressConfig{
-					IngressDomain:  v1beta1.DefaultIngressDomain,
+				ingressConfig: &controllerconfig.IngressConfig{
+					IngressDomain:  controllerconfig.DefaultIngressDomain,
 					DomainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .Labels.label }}.{{ .IngressDomain }}",
 				},
 			},
@@ -86,8 +86,8 @@ func TestGenerateDomainName(t *testing.T) {
 			args: args{
 				name: "model",
 				obj:  obj,
-				ingressConfig: &v1beta1.IngressConfig{
-					IngressDomain:  v1beta1.DefaultIngressDomain,
+				ingressConfig: &controllerconfig.IngressConfig{
+					IngressDomain:  controllerconfig.DefaultIngressDomain,
 					DomainTemplate: "{{ .ModelName }}.{{ .Namespace }}.{{ .IngressDomain }}",
 				},
 			},
@@ -98,8 +98,8 @@ func TestGenerateDomainName(t *testing.T) {
 			args: args{
 				name: "model",
 				obj:  obj,
-				ingressConfig: &v1beta1.IngressConfig{
-					IngressDomain:  v1beta1.DefaultIngressDomain,
+				ingressConfig: &controllerconfig.IngressConfig{
+					IngressDomain:  controllerconfig.DefaultIngressDomain,
 					DomainTemplate: "{{ .Name }}_{{ .Namespace }}_{{ .IngressDomain }}",
 				},
 			},

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	goerrors "github.com/pkg/errors"
@@ -28,7 +30,7 @@ GetDeploymentMode returns the current deployment mode based on annotations and c
 If a valid deployment mode is specified in annotations, it is used.
 Otherwise, returns the default deployment mode from config.
 */
-func GetDeploymentMode(annotations map[string]string, deployConfig *v1beta1.DeployConfig) constants.DeploymentModeType {
+func GetDeploymentMode(annotations map[string]string, deployConfig *controllerconfig.DeployConfig) constants.DeploymentModeType {
 	if mode, exists := annotations[constants.DeploymentMode]; exists {
 		deploymentMode := constants.DeploymentModeType(mode)
 		if deploymentMode.IsValid() {
@@ -183,25 +185,6 @@ func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta
 		return nil, err
 	}
 	return nil, goerrors.New("No ServingRuntimes or ClusterServingRuntimes with the name: " + name)
-}
-
-// GetBaseModel Get the base model from the given model name.
-func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
-	baseModel := &v1beta1.BaseModel{}
-	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
-	if err == nil {
-		return &baseModel.Spec, &baseModel.ObjectMeta, nil
-	} else if !errors.IsNotFound(err) {
-		return nil, nil, err
-	}
-	clusterBaseModel := &v1beta1.ClusterBaseModel{}
-	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterBaseModel)
-	if err == nil {
-		return &clusterBaseModel.Spec, &clusterBaseModel.ObjectMeta, nil
-	} else if !errors.IsNotFound(err) {
-		return nil, nil, err
-	}
-	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
 }
 
 // GetFineTunedWeight Get the fine-tuned weight from the given fine-tuned weight name.

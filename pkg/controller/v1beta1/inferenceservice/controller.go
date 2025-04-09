@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
 
@@ -119,7 +121,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
-	deployConfig, err := v1beta2.NewDeployConfig(r.Clientset)
+	deployConfig, err := controllerconfig.NewDeployConfig(r.Clientset)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create DeployConfig")
 	}
@@ -185,7 +187,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Setup reconcilers
 	r.Log.Info("Reconciling inference service", "apiVersion", isvc.APIVersion, "namespace", isvc.Namespace, "isvc", isvc.Name)
-	isvcConfig, err := v1beta2.NewInferenceServicesConfig(r.Clientset)
+	isvcConfig, err := controllerconfig.NewInferenceServicesConfig(r.Clientset)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create InferenceServicesConfig")
 	}
@@ -221,7 +223,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		isvc.Status.PropagateCrossComponentStatus(componentList, v1beta2.LatestDeploymentReady)
 	}
 	// Reconcile ingress
-	ingressConfig, err := v1beta2.NewIngressConfig(r.Clientset)
+	ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
 	}
@@ -368,7 +370,7 @@ func inferenceServiceStatusEqual(s1, s2 v1beta2.InferenceServiceStatus) bool {
 	return equality.Semantic.DeepEqual(s1, s2)
 }
 
-func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployConfig *v1beta2.DeployConfig, ingressConfig *v1beta2.IngressConfig) error {
+func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployConfig *controllerconfig.DeployConfig, ingressConfig *controllerconfig.IngressConfig) error {
 	r.ClientConfig = mgr.GetConfig()
 
 	ksvcFound, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)

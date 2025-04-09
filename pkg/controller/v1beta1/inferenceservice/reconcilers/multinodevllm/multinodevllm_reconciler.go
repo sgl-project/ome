@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
@@ -43,7 +45,7 @@ func NewMultiNodeVllmReconciler(client client.Client,
 		return nil, err
 	}
 
-	multinodeProberConfig, err := v1beta1.NewMultiNodeProberConfig(clientset)
+	multinodeProberConfig, err := controllerconfig.NewMultiNodeProberConfig(clientset)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +68,7 @@ func NewMultiNodeVllmReconciler(client client.Client,
 }
 
 func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*knapis.URL, error) {
-	ingressConfig, err := v1beta1.NewIngressConfig(clientset)
+	ingressConfig, err := controllerconfig.NewIngressConfig(clientset)
 	if err != nil {
 		return nil, err
 	}

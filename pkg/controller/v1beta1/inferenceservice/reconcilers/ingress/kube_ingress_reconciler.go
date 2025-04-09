@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -27,12 +29,12 @@ import (
 type RawIngressReconciler struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	ingressConfig *v1beta1.IngressConfig
+	ingressConfig *controllerconfig.IngressConfig
 }
 
 func NewRawIngressReconciler(client client.Client,
 	scheme *runtime.Scheme,
-	ingressConfig *v1beta1.IngressConfig) (*RawIngressReconciler, error) {
+	ingressConfig *controllerconfig.IngressConfig) (*RawIngressReconciler, error) {
 	return &RawIngressReconciler{
 		client:        client,
 		scheme:        scheme,
@@ -41,7 +43,7 @@ func NewRawIngressReconciler(client client.Client,
 }
 
 func createRawURL(isvc *v1beta1.InferenceService,
-	ingressConfig *v1beta1.IngressConfig) (*knapis.URL, error) {
+	ingressConfig *controllerconfig.IngressConfig) (*knapis.URL, error) {
 	var err error
 	url := &knapis.URL{}
 	url.Scheme = ingressConfig.UrlScheme
@@ -110,7 +112,7 @@ func generateMetadata(isvc *v1beta1.InferenceService,
 }
 
 // generateIngressHost return the config domain in configmap.IngressDomain
-func generateIngressHost(ingressConfig *v1beta1.IngressConfig,
+func generateIngressHost(ingressConfig *controllerconfig.IngressConfig,
 	isvc *v1beta1.InferenceService,
 	componentType string,
 	topLevelFlag bool,
@@ -124,7 +126,7 @@ func generateIngressHost(ingressConfig *v1beta1.IngressConfig,
 }
 
 func createRawIngress(scheme *runtime.Scheme, isvc *v1beta1.InferenceService,
-	ingressConfig *v1beta1.IngressConfig, client client.Client) (*netv1.Ingress, error) {
+	ingressConfig *controllerconfig.IngressConfig, client client.Client) (*netv1.Ingress, error) {
 	if !isvc.Status.IsConditionReady(v1beta1.PredictorReady) {
 		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
 			Type:   v1beta1.IngressReady,

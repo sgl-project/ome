@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"os"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/isvc"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
 
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
@@ -206,24 +210,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	deployConfig, err := v1beta1.NewDeployConfig(clientSet)
+	deployConfig, err := controllerconfig.NewDeployConfig(clientSet)
 	if err != nil {
 		setupLog.Error(err, "Failed to initialize deployment configuration")
 		os.Exit(1)
 	}
-	ingressConfig, err := v1beta1.NewIngressConfig(clientSet)
+	ingressConfig, err := controllerconfig.NewIngressConfig(clientSet)
 	if err != nil {
 		setupLog.Error(err, "Failed to initialize ingress configuration")
 		os.Exit(1)
 	}
 
-	dacReconcilePolicyConfig, err := v1beta1.NewDacReconcilePolicyConfig(clientSet)
+	dacReconcilePolicyConfig, err := controllerconfig.NewDacReconcilePolicyConfig(clientSet)
 	if err != nil {
 		setupLog.Error(err, "Failed to initialize DAC reconciliation policy configuration")
 		os.Exit(1)
 	}
 
-	capacityReservationReconcilePolicyConfig, err := v1beta1.NewCapacityReservationReconcilePolicyConfig(clientSet)
+	capacityReservationReconcilePolicyConfig, err := controllerconfig.NewCapacityReservationReconcilePolicyConfig(clientSet)
 	if err != nil {
 		setupLog.Error(err, "Failed to initialize CapacityReservation reconciliation policy configuration")
 		os.Exit(1)
@@ -397,8 +401,8 @@ func main() {
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&v1beta1.InferenceService{}).
-			WithDefaulter(&v1beta1.InferenceServiceDefaulter{}).
-			WithValidator(&v1beta1.InferenceServiceValidator{}).
+			WithDefaulter(&isvc.InferenceServiceDefaulter{}).
+			WithValidator(&isvc.InferenceServiceValidator{}).
 			Complete(); err != nil {
 			setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
 			os.Exit(1)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -108,7 +110,7 @@ func (sa *OpenAIServiceAccount) Create(ctx context.Context) error {
 	}
 
 	// Add service account key to common secret
-	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
+	aiPlatformConfig, err := controllerconfig.NewAIPlatformConfig(sa.Clientset)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
 	}
@@ -174,7 +176,7 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 				"projectRef", sa.Resource.Spec.ProjectRef.Name)
 
 			// Even if the project is gone, we should still clean up the service account key from the common secret
-			aiPlatformConfig, configErr := v1beta1.NewAIPlatformConfig(sa.Clientset)
+			aiPlatformConfig, configErr := controllerconfig.NewAIPlatformConfig(sa.Clientset)
 			if configErr != nil {
 				sa.Log.Error(configErr, "Failed to get AIPlatform config")
 				// Update status but don't return error to avoid requeuing
@@ -216,7 +218,7 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 	}
 
 	// Delete service account key from common secret
-	aiPlatformConfig, err := v1beta1.NewAIPlatformConfig(sa.Clientset)
+	aiPlatformConfig, err := controllerconfig.NewAIPlatformConfig(sa.Clientset)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
 	}

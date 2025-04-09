@@ -3,6 +3,8 @@ package hpa
 import (
 	"testing"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/isvc"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/google/go-cmp/cmp"
@@ -51,9 +53,9 @@ func TestCreateHPA(t *testing.T) {
 				},
 			},
 			componentExt: &v1beta1.ComponentExtensionSpec{
-				MinReplicas: v1beta1.GetIntReference(2),
+				MinReplicas: isvc.GetIntReference(2),
 				MaxReplicas: 5,
-				ScaleTarget: v1beta1.GetIntReference(30),
+				ScaleTarget: isvc.GetIntReference(30),
 				ScaleMetric: &cpuResource,
 			},
 		},
@@ -69,16 +71,16 @@ func TestCreateHPA(t *testing.T) {
 		"predictorspecifiedhpa": {
 			objectMeta: metav1.ObjectMeta{},
 			componentExt: &v1beta1.ComponentExtensionSpec{
-				MinReplicas: v1beta1.GetIntReference(5),
+				MinReplicas: isvc.GetIntReference(5),
 				MaxReplicas: 10,
-				ScaleTarget: v1beta1.GetIntReference(50),
+				ScaleTarget: isvc.GetIntReference(50),
 				ScaleMetric: &cpuResource,
 			},
 		},
 		"invalidinputhpa": {
 			objectMeta: metav1.ObjectMeta{},
 			componentExt: &v1beta1.ComponentExtensionSpec{
-				MinReplicas: v1beta1.GetIntReference(0),
+				MinReplicas: isvc.GetIntReference(0),
 				MaxReplicas: -10,
 				ScaleTarget: nil,
 				ScaleMetric: &memoryResource,

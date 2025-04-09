@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"testing"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -54,7 +56,7 @@ func TestCreateVirtualService(t *testing.T) {
 	cases := []struct {
 		name            string
 		isvc            *v1beta1.InferenceService
-		ingressConfig   *v1beta1.IngressConfig
+		ingressConfig   *controllerconfig.IngressConfig
 		domainList      *[]string
 		useDefault      bool
 		componentStatus *v1beta1.InferenceServiceStatus
@@ -65,7 +67,7 @@ func TestCreateVirtualService(t *testing.T) {
 		expectedService: nil,
 	}, {
 		name: "predictor missing url",
-		ingressConfig: &v1beta1.IngressConfig{
+		ingressConfig: &controllerconfig.IngressConfig{
 			IngressGateway:          constants.KnativeIngressGateway,
 			IngressServiceName:      "someIngressServiceName",
 			LocalGateway:            constants.KnativeLocalGateway,
@@ -80,7 +82,7 @@ func TestCreateVirtualService(t *testing.T) {
 		expectedService: nil,
 	}, {
 		name: "found predictor status",
-		ingressConfig: &v1beta1.IngressConfig{
+		ingressConfig: &controllerconfig.IngressConfig{
 			IngressGateway:          constants.KnativeIngressGateway,
 			IngressServiceName:      "someIngressServiceName",
 			LocalGateway:            constants.KnativeLocalGateway,
@@ -135,7 +137,7 @@ func TestCreateVirtualService(t *testing.T) {
 		},
 	}, {
 		name: "local cluster predictor",
-		ingressConfig: &v1beta1.IngressConfig{
+		ingressConfig: &controllerconfig.IngressConfig{
 			IngressGateway:          constants.KnativeIngressGateway,
 			IngressServiceName:      "someIngressServiceName",
 			LocalGateway:            constants.KnativeLocalGateway,
@@ -200,7 +202,7 @@ func TestCreateVirtualService(t *testing.T) {
 	},
 		{
 			name: "nil transformer status fails with status unknown",
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				IngressGateway:          constants.KnativeIngressGateway,
 				IngressServiceName:      "someIngressServiceName",
 				LocalGateway:            constants.KnativeLocalGateway,
@@ -226,7 +228,7 @@ func TestCreateVirtualService(t *testing.T) {
 			expectedService: nil,
 		}, {
 			name: "found predictor status with path template",
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				IngressGateway:          constants.KnativeIngressGateway,
 				IngressServiceName:      "someIngressServiceName",
 				LocalGateway:            constants.KnativeLocalGateway,
@@ -345,7 +347,7 @@ func TestCreateVirtualService(t *testing.T) {
 			},
 		}, {
 			name: "found predictor status with the additional ingress domains",
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				IngressGateway:           constants.KnativeIngressGateway,
 				IngressServiceName:       "someIngressServiceName",
 				LocalGateway:             constants.KnativeLocalGateway,
@@ -483,7 +485,7 @@ func TestCreateVirtualService(t *testing.T) {
 			},
 		}, {
 			name: "found predictor status with default suffix",
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				IngressGateway:          constants.KnativeIngressGateway,
 				IngressServiceName:      "someIngressServiceName",
 				LocalGateway:            constants.KnativeLocalGateway,
@@ -551,7 +553,7 @@ func TestCreateVirtualService(t *testing.T) {
 					Predictor: v1beta1.PredictorSpec{},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				IngressGateway:          constants.KnativeIngressGateway,
 				IngressServiceName:      "someIngressServiceName",
 				LocalGateway:            constants.KnativeLocalGateway,
@@ -721,7 +723,7 @@ func TestGetServiceUrl(t *testing.T) {
 
 	cases := map[string]struct {
 		isvc          *v1beta1.InferenceService
-		ingressConfig *v1beta1.IngressConfig
+		ingressConfig *controllerconfig.IngressConfig
 		matcher       gomegaTypes.GomegaMatcher
 	}{
 		"component is empty": {
@@ -736,7 +738,7 @@ func TestGetServiceUrl(t *testing.T) {
 					Predictor: v1beta1.PredictorSpec{},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				UrlScheme:               "http",
 				DisableIstioVirtualHost: false,
 			},
@@ -765,7 +767,7 @@ func TestGetServiceUrl(t *testing.T) {
 					ModelStatus: v1beta1.ModelStatus{},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				UrlScheme:               "http",
 				DisableIstioVirtualHost: false,
 			},
@@ -795,7 +797,7 @@ func TestGetServiceUrl(t *testing.T) {
 					},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				UrlScheme:               "http",
 				DisableIstioVirtualHost: false,
 			},
@@ -817,7 +819,7 @@ func TestGetServiceUrl(t *testing.T) {
 					Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				UrlScheme:               "http",
 				DisableIstioVirtualHost: false,
 			},
@@ -848,7 +850,7 @@ func TestGetServiceUrl(t *testing.T) {
 					},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				UrlScheme:               "http",
 				DisableIstioVirtualHost: false,
 			},
@@ -878,7 +880,7 @@ func TestGetServiceUrl(t *testing.T) {
 					},
 				},
 			},
-			ingressConfig: &v1beta1.IngressConfig{
+			ingressConfig: &controllerconfig.IngressConfig{
 				UrlScheme:               "http",
 				DisableIstioVirtualHost: true,
 			},
@@ -901,7 +903,7 @@ func TestGetServiceUrlPathBased(t *testing.T) {
 	isvcAnnotations := map[string]string{"test": "test", "kubectl.kubernetes.io/last-applied-configuration": "test"}
 	labels := map[string]string{"test": "test"}
 	predictorUrl, _ := url.Parse("http://my-model-predictor-default.example.com")
-	ingressConfig := &v1beta1.IngressConfig{
+	ingressConfig := &controllerconfig.IngressConfig{
 		UrlScheme:               "http",
 		IngressDomain:           "my-domain.com",
 		PathTemplate:            "/serving/{{ .Namespace }}/{{ .Name }}",

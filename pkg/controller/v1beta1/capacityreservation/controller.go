@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
 	"strings"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -51,7 +53,7 @@ import (
 // CapacityReservationReconciler reconciles a CapacityReservation object
 type CapacityReservationReconciler struct {
 	client.Client
-	CapacityReservationReconcilePolicy *omev1beta1.CapacityReservationReconcilePolicyConfig
+	CapacityReservationReconcilePolicy *controllerconfig.CapacityReservationReconcilePolicyConfig
 	ClientConfig                       *rest.Config
 	Clientset                          kubernetes.Interface
 	Log                                logr.Logger
@@ -398,7 +400,7 @@ func (r *CapacityReservationReconciler) listCapacityReservations(ctx context.Con
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *CapacityReservationReconciler) SetupWithManager(mgr ctrl.Manager, capacityReservationReconcilePolicyConfig *omev1beta1.CapacityReservationReconcilePolicyConfig) error {
+func (r *CapacityReservationReconciler) SetupWithManager(mgr ctrl.Manager, capacityReservationReconcilePolicyConfig *controllerconfig.CapacityReservationReconcilePolicyConfig) error {
 	r.ClientConfig = mgr.GetConfig()
 	r.CapacityReservationReconcilePolicy = capacityReservationReconcilePolicyConfig
 

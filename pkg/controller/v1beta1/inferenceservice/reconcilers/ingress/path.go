@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"net/url"
 )
@@ -16,7 +16,7 @@ type PathTemplateValues struct {
 }
 
 // GenerateUrlPath generates the path using the pathTemplate configured in IngressConfig
-func GenerateUrlPath(name string, namespace string, ingressConfig *v1beta1.IngressConfig) (string, error) {
+func GenerateUrlPath(name string, namespace string, ingressConfig *controllerconfig.IngressConfig) (string, error) {
 	if ingressConfig.PathTemplate == "" {
 		return "", nil
 	}
