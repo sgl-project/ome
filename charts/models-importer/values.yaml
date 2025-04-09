@@ -284,10 +284,10 @@ gemini-2-0-flash:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-grok-2-1212:
+grok-3-0404:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-grok-2-vision-1212:
+grok-3-mini-0404:
   enabled: false
   lifecyclePhase: "ACTIVE"
