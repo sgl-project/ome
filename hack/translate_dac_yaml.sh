@@ -83,62 +83,87 @@ convertCount() {
 	fi
 }
 
+removeNamespaceOwnerrefernce() {
+	# Define the resource and namespace
+	RESOURCE_TYPE="namespace"
+	local namespace=$1
+	local old_namespace_json=$2
+	local new_namespace_json=$3
+
+	# Retrieve current resource metadata
+	kubectl get $RESOURCE_TYPE "$namespace" -o json > "$old_namespace_json"
+
+	# Delete ownerReferences
+	jq 'del(.metadata.ownerReferences[])' "$old_namespace_json" > "$new_namespace_json"
+
+	# Apply resource back to cluster
+	kubectl apply -f "$new_namespace_json"
+}
+
 main() {
 	if [[ $# -ne 1 ]]; then
         error "Usage: $0 <dac-name>"
-    fi
+  fi
 
-    local dac_name=$1
-    # Allow user to configure KUBECONFIG or fallback to default
-    : "${KUBECONFIG:=$HOME/.kube/gais-clusters/dp-us-chicago-1-preprod-config}"
-    export KUBECONFIG
-    log "Using KUBECONFIG: $KUBECONFIG"
+  local dac_name=$1
+  # Allow user to configure KUBECONFIG or fallback to default
+  : "${KUBECONFIG:=$HOME/.kube/gais-clusters/dp-us-chicago-1-dev-config}"
+  export KUBECONFIG
+  log "Using KUBECONFIG: $KUBECONFIG"
 
-    local region="us-chicago-1"
-    local env="ppe"
-    local target="dac"
-    local file_dir="./$env-$target-$region/$dac_name"
+  local region="us-chicago-1"
+  local env="dev"
+  local target="dac"
+  local file_dir="./$env-$target-$region/$dac_name"
 
-    validate_dependencies
+  validate_dependencies
 
-    mkdir -p "$file_dir"
-    # File paths
-    local old_yaml_file="$file_dir/old_dac_yaml.yaml"
-    local new_yaml_file="$file_dir/new_dac_yaml.yaml"
+  mkdir -p "$file_dir"
+  # File paths
+  local old_yaml_file="$file_dir/old_dac_yaml.yaml"
+  local new_yaml_file="$file_dir/new_dac_yaml.yaml"
+  local old_namespace_json="$file_dir/old_namespace_json.json"
+  local new_namespace_json="$file_dir/new_namespce_json.json"
+  local old_pv_json="$file_dir/old_pv_json.json"
+  local new_pv_json="$file_dir/new_pv_json.json"
+  local old_pvc_json="$file_dir/old_pvc_json.json"
+  local new_pvc_json="$file_dir/new_pvc_json.json"
+  local old_deployment_json="$file_dir/old_deployment_json.json"
+  local new_deployment_json="$file_dir/new_deployment_json.json"
 
-    fetch_resource_yaml "DedicatedAiCluster.ome.oracle.com" "$dac_name" "$old_yaml_file"
+  fetch_resource_yaml "DedicatedAiCluster.ome.oracle.com" "$dac_name" "$old_yaml_file"
+  removeNamespaceOwnerrefernce "$dac_name" "$old_namespace_json" "$new_namespace_json"
 
-    dac_json=$(yq eval -o=json -I=0 "$file_dir/old_dac_yaml.yaml")
+  dac_json=$(yq eval -o=json -I=0 "$file_dir/old_dac_yaml.yaml")
 
-	echo "$dac_json" > "$file_dir/old_json.json"
+  echo "$dac_json" > "$file_dir/old_json.json"
 
-	# Extract fields
-	size=$(jq -r '.spec.size' <<< "$dac_json")
-	type=$(jq -r '.spec.type' <<< "$dac_json")
-	unitshape=$(jq -r '.spec.unitShape' <<< "$dac_json")
-	tenancyId=$(jq -r '.metadata.labels."tenancy-id"' <<< "$dac_json" || echo "")
+  # Extract fields
+  size=$(jq -r '.spec.size' <<< "$dac_json")
+  type=$(jq -r '.spec.type' <<< "$dac_json")
+  unitshape=$(jq -r '.spec.unitShape' <<< "$dac_json")
 
-	# Delete fields
-	dac_json=$(jq '
-		.apiVersion ="ome.io/v1beta1" |
-		.kind = "DedicatedAICluster" |
-		del(.status, .metadata.creationTimestamp, .metadata.finalizers, .metadata.generation, .metadata.resourceVersion,
-	        .metadata.uid, .metadata.labels.isCapacityReserved) |
-	    del(.spec.size, .spec.type, .spec.unitShape)' <<< "$dac_json")
+  # Delete fields
+  dac_json=$(jq '
+    .apiVersion ="ome.io/v1beta1" |
+    .kind = "DedicatedAICluster" |
+    del(.status, .metadata.creationTimestamp, .metadata.finalizers, .metadata.generation, .metadata.resourceVersion,
+          .metadata.uid, .metadata.labels.isCapacityReserved) |
+      del(.spec.size, .spec.type, .spec.unitShape)' <<< "$dac_json")
 
-	# convert unitshape and count
-	dacprofile=$(convertDacShape "$type" "$unitshape")
-	count=$(convertCount "$type" "$size")
+  # convert unitshape and count
+  dacprofile=$(convertDacShape "$type" "$unitshape")
+  count=$(convertCount "$type" "$size")
 
-	#update count and dacprofile
-	dac_json=$(jq --argjson count "$count" '.spec.count=$count' <<< "$dac_json")
-	dac_json=$(jq --arg dacprofile "$dacprofile" '.spec.profile=$dacprofile' <<< "$dac_json")
+  #update count and dacprofile
+  dac_json=$(jq --argjson count "$count" '.spec.count=$count' <<< "$dac_json")
+  dac_json=$(jq --arg dacprofile "$dacprofile" '.spec.profile=$dacprofile' <<< "$dac_json")
 
-	result=$(yq -o=yaml <<< "$dac_json")
-	echo $result > "$file_dir/new_dac_yaml.yaml"
+  result=$(yq -o=yaml <<< "$dac_json")
+  echo $result > "$file_dir/new_dac_yaml.yaml"
 
-	kubectl apply -f "$file_dir/new_dac_yaml.yaml"
-	log "Successfully applied updated resource: $dac_name"
+  kubectl apply -f "$file_dir/new_dac_yaml.yaml"
+  log "Successfully applied updated resource: $dac_name"
 }
 
 main "$@"
