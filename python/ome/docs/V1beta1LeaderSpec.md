@@ -1,6 +1,6 @@
 # V1beta1LeaderSpec
 
-LeaderSpec defines the configuration for a leader node in a multi-node component
+LeaderSpec defines the configuration for a leader node in a multi-node component The leader node coordinates the activities of worker nodes in distributed inference or token generation setups, handling task distribution and result aggregation.
 
 ## Properties
 

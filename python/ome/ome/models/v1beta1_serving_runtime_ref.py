@@ -26,9 +26,9 @@ class V1beta1ServingRuntimeRef(BaseModel):
     """
     V1beta1ServingRuntimeRef
     """ # noqa: E501
-    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the resource being referenced Defaults to `ome.io`", alias="apiGroup")
-    kind: Optional[StrictStr] = Field(default=None, description="Kind of the runtime being referenced Defaults to ClusterServingRuntime")
-    name: Optional[StrictStr] = Field(default='', description="Name of the runtime being referenced")
+    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced runtime.", alias="apiGroup")
+    kind: Optional[StrictStr] = Field(default=None, description="Kind of the runtime being referenced Defaults to ClusterServingRuntime Specifies the Kubernetes resource kind of the referenced runtime. ClusterServingRuntime is a cluster-wide runtime, while ServingRuntime is namespace-scoped.")
+    name: Optional[StrictStr] = Field(default='', description="Name of the runtime being referenced Identifies the specific runtime environment to be used for model execution.")
     __properties: ClassVar[List[str]] = ["apiGroup", "kind", "name"]
 
     model_config = ConfigDict(

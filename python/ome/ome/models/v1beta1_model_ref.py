@@ -26,10 +26,10 @@ class V1beta1ModelRef(BaseModel):
     """
     V1beta1ModelRef
     """ # noqa: E501
-    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the resource being referenced Defaults to `ome.io`", alias="apiGroup")
-    fine_tuned_weights: Optional[List[StrictStr]] = Field(default=None, description="Optional FineTunedWeights references", alias="fineTunedWeights")
-    kind: Optional[StrictStr] = Field(default=None, description="Kind of the model being referenced Defaults to ClusterBaseModel")
-    name: Optional[StrictStr] = Field(default='', description="Name of the model being referenced")
+    api_group: Optional[StrictStr] = Field(default=None, description="APIGroup of the resource being referenced Defaults to `ome.io` Specifies the Kubernetes API group of the referenced model.", alias="apiGroup")
+    fine_tuned_weights: Optional[List[StrictStr]] = Field(default=None, description="Optional FineTunedWeights references References to fine-tuned weights that should be applied to the base model.", alias="fineTunedWeights")
+    kind: Optional[StrictStr] = Field(default=None, description="Kind of the model being referenced Defaults to ClusterBaseModel Specifies the Kubernetes resource kind of the referenced model.")
+    name: Optional[StrictStr] = Field(default='', description="Name of the model being referenced Identifies the specific model to be used for inference.")
     __properties: ClassVar[List[str]] = ["apiGroup", "fineTunedWeights", "kind", "name"]
 
     model_config = ConfigDict(

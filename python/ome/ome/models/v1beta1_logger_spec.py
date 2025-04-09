@@ -24,10 +24,10 @@ from typing_extensions import Self
 
 class V1beta1LoggerSpec(BaseModel):
     """
-    LoggerSpec specifies optional payload logging available for all components
+    LoggerSpec specifies optional payload logging available for all components Configures how request and response payloads are logged for auditing and debugging.
     """ # noqa: E501
     mode: Optional[StrictStr] = Field(default=None, description="Specifies the scope of the loggers. <br /> Valid values are: <br /> - \"all\" (default): log both request and response; <br /> - \"request\": log only request; <br /> - \"response\": log only response <br />")
-    url: Optional[StrictStr] = Field(default=None, description="URL to send logging events")
+    url: Optional[StrictStr] = Field(default=None, description="URL to send logging events The endpoint where log data will be sent for external processing or storage.")
     __properties: ClassVar[List[str]] = ["mode", "url"]
 
     model_config = ConfigDict(

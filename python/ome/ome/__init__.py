@@ -30,14 +30,12 @@ from ome.exceptions import ApiAttributeError
 from ome.exceptions import ApiException
 
 # import models into sdk package
-from ome.models.v1beta1_ai_platform_config import V1beta1AIPlatformConfig
 from ome.models.v1beta1_api_key_spec import V1beta1APIKeySpec
 from ome.models.v1beta1_association_usage import V1beta1AssociationUsage
 from ome.models.v1beta1_base_model import V1beta1BaseModel
 from ome.models.v1beta1_base_model_list import V1beta1BaseModelList
 from ome.models.v1beta1_base_model_spec import V1beta1BaseModelSpec
 from ome.models.v1beta1_benchmark_job import V1beta1BenchmarkJob
-from ome.models.v1beta1_benchmark_job_config import V1beta1BenchmarkJobConfig
 from ome.models.v1beta1_benchmark_job_list import V1beta1BenchmarkJobList
 from ome.models.v1beta1_benchmark_job_spec import V1beta1BenchmarkJobSpec
 from ome.models.v1beta1_benchmark_job_status import V1beta1BenchmarkJobStatus
@@ -45,7 +43,6 @@ from ome.models.v1beta1_built_in_adapter import V1beta1BuiltInAdapter
 from ome.models.v1beta1_capacity_reservation import V1beta1CapacityReservation
 from ome.models.v1beta1_capacity_reservation_condition import V1beta1CapacityReservationCondition
 from ome.models.v1beta1_capacity_reservation_list import V1beta1CapacityReservationList
-from ome.models.v1beta1_capacity_reservation_reconcile_policy_config import V1beta1CapacityReservationReconcilePolicyConfig
 from ome.models.v1beta1_capacity_reservation_spec import V1beta1CapacityReservationSpec
 from ome.models.v1beta1_capacity_reservation_status import V1beta1CapacityReservationStatus
 from ome.models.v1beta1_cluster_base_model import V1beta1ClusterBaseModel
@@ -60,9 +57,6 @@ from ome.models.v1beta1_component_extension_spec import V1beta1ComponentExtensio
 from ome.models.v1beta1_component_status_spec import V1beta1ComponentStatusSpec
 from ome.models.v1beta1_coscheduling_pod_group_policy_config import V1beta1CoschedulingPodGroupPolicyConfig
 from ome.models.v1beta1_cross_reference import V1beta1CrossReference
-from ome.models.v1beta1_custom_predictor import V1beta1CustomPredictor
-from ome.models.v1beta1_dac_reconcile_policy_config import V1beta1DacReconcilePolicyConfig
-from ome.models.v1beta1_dac_reservation_workload_config import V1beta1DacReservationWorkloadConfig
 from ome.models.v1beta1_decoder_spec import V1beta1DecoderSpec
 from ome.models.v1beta1_dedicated_ai_cluster import V1beta1DedicatedAICluster
 from ome.models.v1beta1_dedicated_ai_cluster_list import V1beta1DedicatedAIClusterList
@@ -71,7 +65,6 @@ from ome.models.v1beta1_dedicated_ai_cluster_profile_list import V1beta1Dedicate
 from ome.models.v1beta1_dedicated_ai_cluster_profile_spec import V1beta1DedicatedAIClusterProfileSpec
 from ome.models.v1beta1_dedicated_ai_cluster_spec import V1beta1DedicatedAIClusterSpec
 from ome.models.v1beta1_dedicated_ai_cluster_status import V1beta1DedicatedAIClusterStatus
-from ome.models.v1beta1_deploy_config import V1beta1DeployConfig
 from ome.models.v1beta1_endpoint import V1beta1Endpoint
 from ome.models.v1beta1_endpoint_spec import V1beta1EndpointSpec
 from ome.models.v1beta1_engine_spec import V1beta1EngineSpec
@@ -86,8 +79,6 @@ from ome.models.v1beta1_inference_service_list import V1beta1InferenceServiceLis
 from ome.models.v1beta1_inference_service_reference import V1beta1InferenceServiceReference
 from ome.models.v1beta1_inference_service_spec import V1beta1InferenceServiceSpec
 from ome.models.v1beta1_inference_service_status import V1beta1InferenceServiceStatus
-from ome.models.v1beta1_inference_services_config import V1beta1InferenceServicesConfig
-from ome.models.v1beta1_ingress_config import V1beta1IngressConfig
 from ome.models.v1beta1_job_set_template_spec import V1beta1JobSetTemplateSpec
 from ome.models.v1beta1_job_status import V1beta1JobStatus
 from ome.models.v1beta1_keda_config import V1beta1KedaConfig
@@ -108,14 +99,11 @@ from ome.models.v1beta1_model_size_range_spec import V1beta1ModelSizeRangeSpec
 from ome.models.v1beta1_model_spec import V1beta1ModelSpec
 from ome.models.v1beta1_model_status import V1beta1ModelStatus
 from ome.models.v1beta1_model_status_spec import V1beta1ModelStatusSpec
-from ome.models.v1beta1_multi_node_prober_config import V1beta1MultiNodeProberConfig
-from ome.models.v1beta1_oci_config import V1beta1OCIConfig
 from ome.models.v1beta1_object_reference import V1beta1ObjectReference
 from ome.models.v1beta1_organization import V1beta1Organization
 from ome.models.v1beta1_organization_list import V1beta1OrganizationList
 from ome.models.v1beta1_organization_spec import V1beta1OrganizationSpec
 from ome.models.v1beta1_organization_status import V1beta1OrganizationStatus
-from ome.models.v1beta1_pod_config import V1beta1PodConfig
 from ome.models.v1beta1_pod_group_policy import V1beta1PodGroupPolicy
 from ome.models.v1beta1_pod_override import V1beta1PodOverride
 from ome.models.v1beta1_pod_spec import V1beta1PodSpec
@@ -130,9 +118,9 @@ from ome.models.v1beta1_rate_limit_config import V1beta1RateLimitConfig
 from ome.models.v1beta1_rate_limit_list import V1beta1RateLimitList
 from ome.models.v1beta1_rate_limit_spec import V1beta1RateLimitSpec
 from ome.models.v1beta1_rate_limit_status import V1beta1RateLimitStatus
+from ome.models.v1beta1_router_spec import V1beta1RouterSpec
 from ome.models.v1beta1_runner_spec import V1beta1RunnerSpec
 from ome.models.v1beta1_runtime_ref import V1beta1RuntimeRef
-from ome.models.v1beta1_secret_config import V1beta1SecretConfig
 from ome.models.v1beta1_secret_reference import V1beta1SecretReference
 from ome.models.v1beta1_service_account import V1beta1ServiceAccount
 from ome.models.v1beta1_service_account_list import V1beta1ServiceAccountList

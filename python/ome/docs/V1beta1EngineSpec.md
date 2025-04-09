@@ -1,6 +1,6 @@
 # V1beta1EngineSpec
 
-EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
+EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments) Provides a comprehensive specification for deploying model serving containers and pods. It allows for complete Kubernetes pod configuration including main containers, init containers, sidecars, volumes, and other pod-level settings. For distributed deployments, it supports leader-worker architecture configuration.
 
 ## Properties
 

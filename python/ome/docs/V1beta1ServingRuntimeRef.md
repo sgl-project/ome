@@ -2,11 +2,11 @@
 
 ## Properties
 
-| Name          | Type    | Description                                                              | Notes                      |
-|---------------|---------|--------------------------------------------------------------------------|----------------------------|
-| **api_group** | **str** | APIGroup of the resource being referenced Defaults to &#x60;ome.io&#x60; | [optional]                 |
-| **kind**      | **str** | Kind of the runtime being referenced Defaults to ClusterServingRuntime   | [optional]                 |
-| **name**      | **str** | Name of the runtime being referenced                                     | [optional] [default to ''] |
+| Name          | Type    | Description                                                                                                                                                                                                                         | Notes                      |
+|---------------|---------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| **api_group** | **str** | APIGroup of the resource being referenced Defaults to &#x60;ome.io&#x60; Specifies the Kubernetes API group of the referenced runtime.                                                                                              | [optional]                 |
+| **kind**      | **str** | Kind of the runtime being referenced Defaults to ClusterServingRuntime Specifies the Kubernetes resource kind of the referenced runtime. ClusterServingRuntime is a cluster-wide runtime, while ServingRuntime is namespace-scoped. | [optional]                 |
+| **name**      | **str** | Name of the runtime being referenced Identifies the specific runtime environment to be used for model execution.                                                                                                                    | [optional] [default to ''] |
 
 ## Example
 

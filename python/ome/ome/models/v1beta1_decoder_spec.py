@@ -29,7 +29,7 @@ from typing_extensions import Self
 
 class V1beta1DecoderSpec(BaseModel):
     """
-    DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
+    DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.
     """ # noqa: E501
     active_deadline_seconds: Optional[StrictInt] = Field(default=None, description="Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.", alias="activeDeadlineSeconds")
     affinity: Optional[V1Affinity] = None

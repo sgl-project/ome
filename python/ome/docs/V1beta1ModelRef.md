@@ -2,12 +2,12 @@
 
 ## Properties
 
-| Name                   | Type          | Description                                                              | Notes                      |
-|------------------------|---------------|--------------------------------------------------------------------------|----------------------------|
-| **api_group**          | **str**       | APIGroup of the resource being referenced Defaults to &#x60;ome.io&#x60; | [optional]                 |
-| **fine_tuned_weights** | **List[str]** | Optional FineTunedWeights references                                     | [optional]                 |
-| **kind**               | **str**       | Kind of the model being referenced Defaults to ClusterBaseModel          | [optional]                 |
-| **name**               | **str**       | Name of the model being referenced                                       | [optional] [default to ''] |
+| Name                   | Type          | Description                                                                                                                          | Notes                      |
+|------------------------|---------------|--------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| **api_group**          | **str**       | APIGroup of the resource being referenced Defaults to &#x60;ome.io&#x60; Specifies the Kubernetes API group of the referenced model. | [optional]                 |
+| **fine_tuned_weights** | **List[str]** | Optional FineTunedWeights references References to fine-tuned weights that should be applied to the base model.                      | [optional]                 |
+| **kind**               | **str**       | Kind of the model being referenced Defaults to ClusterBaseModel Specifies the Kubernetes resource kind of the referenced model.      | [optional]                 |
+| **name**               | **str**       | Name of the model being referenced Identifies the specific model to be used for inference.                                           | [optional] [default to ''] |
 
 ## Example
 

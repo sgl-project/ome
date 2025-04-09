@@ -147,6 +147,10 @@ type ServingRuntimeSpec struct {
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
 
+	// Router configuration for this runtime
+	// +optional
+	RouterConfig *RouterSpec `json:"routerConfig,omitempty"`
+
 	// Engine configuration for this runtime
 	// +optional
 	EngineConfig *EngineSpec `json:"engineConfig,omitempty"`

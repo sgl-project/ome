@@ -1,6 +1,6 @@
 # V1beta1RunnerSpec
 
-RunnerSpec defines container configuration plus additional config settings
+RunnerSpec defines container configuration plus additional config settings The Runner is the primary container that executes the model serving or token generation logic.
 
 ## Properties
 

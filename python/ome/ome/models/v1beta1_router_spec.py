@@ -19,18 +19,25 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from ome.models.v1beta1_keda_config import V1beta1KedaConfig
+from ome.models.v1beta1_logger_spec import V1beta1LoggerSpec
 from ome.models.v1beta1_runner_spec import V1beta1RunnerSpec
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1LeaderSpec(BaseModel):
+class V1beta1RouterSpec(BaseModel):
     """
-    LeaderSpec defines the configuration for a leader node in a multi-node component The leader node coordinates the activities of worker nodes in distributed inference or token generation setups, handling task distribution and result aggregation.
+    RouterSpec defines the configuration for the Router component, which handles request routing
     """ # noqa: E501
     active_deadline_seconds: Optional[StrictInt] = Field(default=None, description="Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.", alias="activeDeadlineSeconds")
     affinity: Optional[V1Affinity] = None
+    annotations: Optional[Dict[str, StrictStr]] = Field(default=None, description="Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations")
     automount_service_account_token: Optional[StrictBool] = Field(default=None, description="AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.", alias="automountServiceAccountToken")
+    canary_traffic_percent: Optional[StrictInt] = Field(default=None, description="CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision", alias="canaryTrafficPercent")
+    config: Optional[Dict[str, StrictStr]] = Field(default=None, description="Additional configuration parameters for the runner This can include framework-specific settings")
+    container_concurrency: Optional[StrictInt] = Field(default=None, description="ContainerConcurrency specifies how many requests can be processed concurrently, this sets the hard limit of the container concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).", alias="containerConcurrency")
     containers: Optional[List[V1Container]] = Field(default=None, description="List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.")
+    deployment_strategy: Optional[K8sIoApiAppsV1DeploymentStrategy] = Field(default=None, alias="deploymentStrategy")
     dns_config: Optional[V1PodDNSConfig] = Field(default=None, alias="dnsConfig")
     dns_policy: Optional[StrictStr] = Field(default=None, description="Set DNS policy for the pod. Defaults to \"ClusterFirst\". Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'. DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy. To have DNS options set along with hostNetwork, you have to specify DNS policy explicitly to 'ClusterFirstWithHostNet'.", alias="dnsPolicy")
     enable_service_links: Optional[StrictBool] = Field(default=None, description="EnableServiceLinks indicates whether information about services should be injected into pod's environment variables, matching the syntax of Docker links. Optional: Defaults to true.", alias="enableServiceLinks")
@@ -43,6 +50,11 @@ class V1beta1LeaderSpec(BaseModel):
     hostname: Optional[StrictStr] = Field(default=None, description="Specifies the hostname of the Pod If not specified, the pod's hostname will be set to a system-defined value.")
     image_pull_secrets: Optional[List[V1LocalObjectReference]] = Field(default=None, description="ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod", alias="imagePullSecrets")
     init_containers: Optional[List[V1Container]] = Field(default=None, description="List of initialization containers belonging to the pod. Init containers are executed in order prior to containers being started. If any init container fails, the pod is considered to have failed and is handled according to its restartPolicy. The name for an init container or normal container must be unique among all containers. Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes. The resourceRequirements of an init container are taken into account during scheduling by finding the highest request/limit for each resource type, and then using the max of of that value or the sum of the normal containers. Limits are applied to init containers in a similar fashion. Init containers cannot currently be added or removed. Cannot be updated. More info: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/", alias="initContainers")
+    keda_config: Optional[V1beta1KedaConfig] = Field(default=None, alias="kedaConfig")
+    labels: Optional[Dict[str, StrictStr]] = Field(default=None, description="Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels")
+    logger: Optional[V1beta1LoggerSpec] = None
+    max_replicas: Optional[StrictInt] = Field(default=None, description="Maximum number of replicas for autoscaling.", alias="maxReplicas")
+    min_replicas: Optional[StrictInt] = Field(default=None, description="Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.", alias="minReplicas")
     node_name: Optional[StrictStr] = Field(default=None, description="NodeName is a request to schedule this pod onto a specific node. If it is non-empty, the scheduler simply schedules this pod onto that node, assuming that it fits resource requirements.", alias="nodeName")
     node_selector: Optional[Dict[str, StrictStr]] = Field(default=None, description="NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/", alias="nodeSelector")
     os: Optional[V1PodOS] = None
@@ -55,6 +67,8 @@ class V1beta1LeaderSpec(BaseModel):
     restart_policy: Optional[StrictStr] = Field(default=None, description="Restart policy for all containers within the pod. One of Always, OnFailure, Never. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy", alias="restartPolicy")
     runner: Optional[V1beta1RunnerSpec] = None
     runtime_class_name: Optional[StrictStr] = Field(default=None, description="RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run. If unset or empty, the \"legacy\" RuntimeClass will be used, which is an implicit class with an empty definition that uses the default runtime handler. More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class This is a beta feature as of Kubernetes v1.14.", alias="runtimeClassName")
+    scale_metric: Optional[StrictStr] = Field(default=None, description="ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).", alias="scaleMetric")
+    scale_target: Optional[StrictInt] = Field(default=None, description="ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).", alias="scaleTarget")
     scheduler_name: Optional[StrictStr] = Field(default=None, description="If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.", alias="schedulerName")
     scheduling_gates: Optional[List[V1PodSchedulingGate]] = Field(default=None, description="SchedulingGates is an opaque list of values that if specified will block scheduling the pod. If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the scheduler will not attempt to schedule the pod.  SchedulingGates can only be set at pod creation time, and be removed only afterwards.  This is a beta feature enabled by the PodSchedulingReadiness feature gate.", alias="schedulingGates")
     security_context: Optional[V1PodSecurityContext] = Field(default=None, alias="securityContext")
@@ -64,10 +78,11 @@ class V1beta1LeaderSpec(BaseModel):
     share_process_namespace: Optional[StrictBool] = Field(default=None, description="Share a single process namespace between all of the containers in a pod. When this is set containers will be able to view and signal processes from other containers in the same pod, and the first process in each container will not be assigned PID 1. HostPID and ShareProcessNamespace cannot both be set. Optional: Default to false.", alias="shareProcessNamespace")
     subdomain: Optional[StrictStr] = Field(default=None, description="If specified, the fully qualified Pod hostname will be \"<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>\". If not specified, the pod will not have a domainname at all.")
     termination_grace_period_seconds: Optional[StrictInt] = Field(default=None, description="Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request. Value must be non-negative integer. The value zero indicates stop immediately via the kill signal (no opportunity to shut down). If this value is nil, the default grace period will be used instead. The grace period is the duration in seconds after the processes running in the pod are sent a termination signal and the time when the processes are forcibly halted with a kill signal. Set this value longer than the expected cleanup time for your process. Defaults to 30 seconds.", alias="terminationGracePeriodSeconds")
+    timeout_seconds: Optional[StrictInt] = Field(default=None, description="TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.", alias="timeoutSeconds")
     tolerations: Optional[List[V1Toleration]] = Field(default=None, description="If specified, the pod's tolerations.")
     topology_spread_constraints: Optional[List[V1TopologySpreadConstraint]] = Field(default=None, description="TopologySpreadConstraints describes how a group of pods ought to spread across topology domains. Scheduler will schedule pods in a way which abides by the constraints. All topologySpreadConstraints are ANDed.", alias="topologySpreadConstraints")
     volumes: Optional[List[V1Volume]] = Field(default=None, description="List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes")
-    __properties: ClassVar[List[str]] = ["activeDeadlineSeconds", "affinity", "automountServiceAccountToken", "containers", "dnsConfig", "dnsPolicy", "enableServiceLinks", "ephemeralContainers", "hostAliases", "hostIPC", "hostNetwork", "hostPID", "hostUsers", "hostname", "imagePullSecrets", "initContainers", "nodeName", "nodeSelector", "os", "overhead", "preemptionPolicy", "priority", "priorityClassName", "readinessGates", "resourceClaims", "restartPolicy", "runner", "runtimeClassName", "schedulerName", "schedulingGates", "securityContext", "serviceAccount", "serviceAccountName", "setHostnameAsFQDN", "shareProcessNamespace", "subdomain", "terminationGracePeriodSeconds", "tolerations", "topologySpreadConstraints", "volumes"]
+    __properties: ClassVar[List[str]] = ["activeDeadlineSeconds", "affinity", "annotations", "automountServiceAccountToken", "canaryTrafficPercent", "config", "containerConcurrency", "containers", "deploymentStrategy", "dnsConfig", "dnsPolicy", "enableServiceLinks", "ephemeralContainers", "hostAliases", "hostIPC", "hostNetwork", "hostPID", "hostUsers", "hostname", "imagePullSecrets", "initContainers", "kedaConfig", "labels", "logger", "maxReplicas", "minReplicas", "nodeName", "nodeSelector", "os", "overhead", "preemptionPolicy", "priority", "priorityClassName", "readinessGates", "resourceClaims", "restartPolicy", "runner", "runtimeClassName", "scaleMetric", "scaleTarget", "schedulerName", "schedulingGates", "securityContext", "serviceAccount", "serviceAccountName", "setHostnameAsFQDN", "shareProcessNamespace", "subdomain", "terminationGracePeriodSeconds", "timeoutSeconds", "tolerations", "topologySpreadConstraints", "volumes"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,7 +102,7 @@ class V1beta1LeaderSpec(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1LeaderSpec from a JSON string"""
+        """Create an instance of V1beta1RouterSpec from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -118,6 +133,9 @@ class V1beta1LeaderSpec(BaseModel):
                 if _item_containers:
                     _items.append(_item_containers.to_dict())
             _dict['containers'] = _items
+        # override the default output from pydantic by calling `to_dict()` of deployment_strategy
+        if self.deployment_strategy:
+            _dict['deploymentStrategy'] = self.deployment_strategy.to_dict()
         # override the default output from pydantic by calling `to_dict()` of dns_config
         if self.dns_config:
             _dict['dnsConfig'] = self.dns_config.to_dict()
@@ -149,6 +167,12 @@ class V1beta1LeaderSpec(BaseModel):
                 if _item_init_containers:
                     _items.append(_item_init_containers.to_dict())
             _dict['initContainers'] = _items
+        # override the default output from pydantic by calling `to_dict()` of keda_config
+        if self.keda_config:
+            _dict['kedaConfig'] = self.keda_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of logger
+        if self.logger:
+            _dict['logger'] = self.logger.to_dict()
         # override the default output from pydantic by calling `to_dict()` of os
         if self.os:
             _dict['os'] = self.os.to_dict()
@@ -211,7 +235,7 @@ class V1beta1LeaderSpec(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1LeaderSpec from a dict"""
+        """Create an instance of V1beta1RouterSpec from a dict"""
         if obj is None:
             return None
 
@@ -221,8 +245,13 @@ class V1beta1LeaderSpec(BaseModel):
         _obj = cls.model_validate({
             "activeDeadlineSeconds": obj.get("activeDeadlineSeconds"),
             "affinity": V1Affinity.from_dict(obj["affinity"]) if obj.get("affinity") is not None else None,
+            "annotations": obj.get("annotations"),
             "automountServiceAccountToken": obj.get("automountServiceAccountToken"),
+            "canaryTrafficPercent": obj.get("canaryTrafficPercent"),
+            "config": obj.get("config"),
+            "containerConcurrency": obj.get("containerConcurrency"),
             "containers": [V1Container.from_dict(_item) for _item in obj["containers"]] if obj.get("containers") is not None else None,
+            "deploymentStrategy": K8sIoApiAppsV1DeploymentStrategy.from_dict(obj["deploymentStrategy"]) if obj.get("deploymentStrategy") is not None else None,
             "dnsConfig": V1PodDNSConfig.from_dict(obj["dnsConfig"]) if obj.get("dnsConfig") is not None else None,
             "dnsPolicy": obj.get("dnsPolicy"),
             "enableServiceLinks": obj.get("enableServiceLinks"),
@@ -235,6 +264,11 @@ class V1beta1LeaderSpec(BaseModel):
             "hostname": obj.get("hostname"),
             "imagePullSecrets": [V1LocalObjectReference.from_dict(_item) for _item in obj["imagePullSecrets"]] if obj.get("imagePullSecrets") is not None else None,
             "initContainers": [V1Container.from_dict(_item) for _item in obj["initContainers"]] if obj.get("initContainers") is not None else None,
+            "kedaConfig": V1beta1KedaConfig.from_dict(obj["kedaConfig"]) if obj.get("kedaConfig") is not None else None,
+            "labels": obj.get("labels"),
+            "logger": V1beta1LoggerSpec.from_dict(obj["logger"]) if obj.get("logger") is not None else None,
+            "maxReplicas": obj.get("maxReplicas"),
+            "minReplicas": obj.get("minReplicas"),
             "nodeName": obj.get("nodeName"),
             "nodeSelector": obj.get("nodeSelector"),
             "os": V1PodOS.from_dict(obj["os"]) if obj.get("os") is not None else None,
@@ -252,6 +286,8 @@ class V1beta1LeaderSpec(BaseModel):
             "restartPolicy": obj.get("restartPolicy"),
             "runner": V1beta1RunnerSpec.from_dict(obj["runner"]) if obj.get("runner") is not None else None,
             "runtimeClassName": obj.get("runtimeClassName"),
+            "scaleMetric": obj.get("scaleMetric"),
+            "scaleTarget": obj.get("scaleTarget"),
             "schedulerName": obj.get("schedulerName"),
             "schedulingGates": [V1PodSchedulingGate.from_dict(_item) for _item in obj["schedulingGates"]] if obj.get("schedulingGates") is not None else None,
             "securityContext": V1PodSecurityContext.from_dict(obj["securityContext"]) if obj.get("securityContext") is not None else None,
@@ -261,6 +297,7 @@ class V1beta1LeaderSpec(BaseModel):
             "shareProcessNamespace": obj.get("shareProcessNamespace"),
             "subdomain": obj.get("subdomain"),
             "terminationGracePeriodSeconds": obj.get("terminationGracePeriodSeconds"),
+            "timeoutSeconds": obj.get("timeoutSeconds"),
             "tolerations": [V1Toleration.from_dict(_item) for _item in obj["tolerations"]] if obj.get("tolerations") is not None else None,
             "topologySpreadConstraints": [V1TopologySpreadConstraint.from_dict(_item) for _item in obj["topologySpreadConstraints"]] if obj.get("topologySpreadConstraints") is not None else None,
             "volumes": [V1Volume.from_dict(_item) for _item in obj["volumes"]] if obj.get("volumes") is not None else None

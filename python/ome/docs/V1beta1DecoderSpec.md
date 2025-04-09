@@ -1,6 +1,6 @@
 # V1beta1DecoderSpec
 
-DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
+DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.
 
 ## Properties
 

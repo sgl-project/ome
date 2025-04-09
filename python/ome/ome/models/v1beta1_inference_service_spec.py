@@ -24,7 +24,8 @@ from ome.models.v1beta1_engine_spec import V1beta1EngineSpec
 from ome.models.v1beta1_keda_config import V1beta1KedaConfig
 from ome.models.v1beta1_model_ref import V1beta1ModelRef
 from ome.models.v1beta1_predictor_spec import V1beta1PredictorSpec
-from ome.models.v1beta1_runtime_ref import V1beta1RuntimeRef
+from ome.models.v1beta1_router_spec import V1beta1RouterSpec
+from ome.models.v1beta1_serving_runtime_ref import V1beta1ServingRuntimeRef
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -32,14 +33,15 @@ class V1beta1InferenceServiceSpec(BaseModel):
     """
     InferenceServiceSpec is the top level type for this resource
     """ # noqa: E501
-    compartment_id: Optional[StrictStr] = Field(default=None, description="The compartment ID to use for the inference service", alias="compartmentID")
+    compartment_id: Optional[StrictStr] = Field(default=None, description="The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.", alias="compartmentID")
     decoder: Optional[V1beta1DecoderSpec] = None
     engine: Optional[V1beta1EngineSpec] = None
     keda_config: Optional[V1beta1KedaConfig] = Field(default=None, alias="kedaConfig")
     model: Optional[V1beta1ModelRef] = None
     predictor: V1beta1PredictorSpec
-    runtime: Optional[V1beta1RuntimeRef] = None
-    __properties: ClassVar[List[str]] = ["compartmentID", "decoder", "engine", "kedaConfig", "model", "predictor", "runtime"]
+    router: Optional[V1beta1RouterSpec] = None
+    runtime: Optional[V1beta1ServingRuntimeRef] = None
+    __properties: ClassVar[List[str]] = ["compartmentID", "decoder", "engine", "kedaConfig", "model", "predictor", "router", "runtime"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -95,6 +97,9 @@ class V1beta1InferenceServiceSpec(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of predictor
         if self.predictor:
             _dict['predictor'] = self.predictor.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of router
+        if self.router:
+            _dict['router'] = self.router.to_dict()
         # override the default output from pydantic by calling `to_dict()` of runtime
         if self.runtime:
             _dict['runtime'] = self.runtime.to_dict()
@@ -116,7 +121,8 @@ class V1beta1InferenceServiceSpec(BaseModel):
             "kedaConfig": V1beta1KedaConfig.from_dict(obj["kedaConfig"]) if obj.get("kedaConfig") is not None else None,
             "model": V1beta1ModelRef.from_dict(obj["model"]) if obj.get("model") is not None else None,
             "predictor": V1beta1PredictorSpec.from_dict(obj["predictor"]) if obj.get("predictor") is not None else None,
-            "runtime": V1beta1RuntimeRef.from_dict(obj["runtime"]) if obj.get("runtime") is not None else None
+            "router": V1beta1RouterSpec.from_dict(obj["router"]) if obj.get("router") is not None else None,
+            "runtime": V1beta1ServingRuntimeRef.from_dict(obj["runtime"]) if obj.get("runtime") is not None else None
         })
         return _obj
 

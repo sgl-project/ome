@@ -29,7 +29,7 @@ from typing_extensions import Self
 
 class V1beta1EngineSpec(BaseModel):
     """
-    EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
+    EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments) Provides a comprehensive specification for deploying model serving containers and pods. It allows for complete Kubernetes pod configuration including main containers, init containers, sidecars, volumes, and other pod-level settings. For distributed deployments, it supports leader-worker architecture configuration.
     """ # noqa: E501
     active_deadline_seconds: Optional[StrictInt] = Field(default=None, description="Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.", alias="activeDeadlineSeconds")
     affinity: Optional[V1Affinity] = None

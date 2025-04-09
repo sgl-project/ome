@@ -75,7 +75,7 @@ if ! npm list -g prettier &> /dev/null; then
 fi
 if ! npm list -g markdown-table-formatter &> /dev/null; then
     echo >&2 "Installing markdown-table-formatter..."
-    npm install -g prettier 2>&1 || handle_error "Failed to install markdown-table-formatter"
+    npm install -g markdown-table-formatter 2>&1 || handle_error "Failed to install markdown-table-formatter"
 fi
 
 # Format all Markdown files in the docs directory
@@ -85,8 +85,8 @@ if [ -d "${SDK_OUTPUT_PATH}/docs" ]; then
     find "${SDK_OUTPUT_PATH}/docs" -name "*.md" -type f | while read -r file; do
         echo >&2 "Formatting $file..."
         prettier --write "$file" 2>&1 || handle_error "Failed to format $file"
+        markdown-table-formatter "$file" 2>&1 || handle_error "Failed to format $file"
     done
-    markdown-table-formatter "${SDK_OUTPUT_PATH}/docs/*.md" 2>&1 || handle_error "Failed to format $file"
 else
     echo >&2 "No docs directory found at ${SDK_OUTPUT_PATH}/docs"
 fi

@@ -40,6 +40,10 @@ type InferenceServiceSpec struct {
 	// +optional
 	Runtime *ServingRuntimeRef `json:"runtime,omitempty"`
 
+	// Router defines the router spec
+	// +optional
+	Router *RouterSpec `json:"router,omitempty"`
+
 	// The compartment ID to use for the inference service
 	// Specifies the OCI compartment where the inference service resources will be created.
 	// +optional
@@ -158,6 +162,24 @@ type WorkerSpec struct {
 	// Provides fine-grained control over the container that executes the worker node's processing logic.
 	// +optional
 	Runner *RunnerSpec `json:"runner,omitempty"`
+}
+
+// RouterSpec defines the configuration for the Router component, which handles request routing
+type RouterSpec struct {
+	// PodSpec defines the container configuration for the router
+	PodSpec `json:",inline"`
+
+	// ComponentExtensionSpec defines deployment configuration like min/max replicas, scaling metrics, etc.
+	ComponentExtensionSpec `json:",inline"`
+
+	// This is essentially a container spec that can override the default container
+	// +optional
+	Runner *RunnerSpec `json:"runner,omitempty"`
+
+	// Additional configuration parameters for the runner
+	// This can include framework-specific settings
+	// +optional
+	Config map[string]string `json:"config,omitempty"`
 }
 
 // RunnerSpec defines container configuration plus additional config settings
