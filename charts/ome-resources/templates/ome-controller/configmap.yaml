@@ -78,10 +78,10 @@ data:
   modelInit: |-
     {
         "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
-        "memoryRequest": "320Gi",
-        "memoryLimit": "320Gi",
-        "cpuRequest": "15",
-        "cpuLimit": "15",
+        "memoryRequest": "{{ .Values.ome.omeAgent.modelInit.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.modelInit.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.modelInit.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.modelInit.cpuLimit }}",
         "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
@@ -101,10 +101,10 @@ data:
   fineTunedAdapter: |-
     {
         "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
-        "memoryRequest": "320Gi",
-        "memoryLimit": "320Gi",
-        "cpuRequest": "15",
-        "cpuLimit": "15",
+        "memoryRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuLimit }}",
         "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "region": "{{ .Values.ome.omeAgent.region }}"

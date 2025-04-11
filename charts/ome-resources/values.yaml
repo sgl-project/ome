@@ -80,7 +80,7 @@ ome:
     image: ord.ocir.io/idqj093njucb/model-controller
     tag: *defaultVersion
   dac:
-    reconcileWithKueue: false
+    reconcileWithKueue: true
   omeAgent:
     image: ap-osaka-1.ocir.io/idqj093njucb/genai-ome-agent
     tag: *defaultVersion
@@ -89,6 +89,16 @@ ome:
     compartmentId: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
     vaultId: ocid1.vault.oc1.ap-osaka-1.fzsn2sguaahse.abvwsljrmzc5vt7ya6qpzlormzkwzxsw45fa2fgtp7dqfgjbxib32z62f5pq
     region: ap-osaka-1
+    modelInit:
+      memoryRequest: 150Gi
+      memoryLimit: 180Gi
+      cpuRequest: 15
+      cpuLimit: 15
+    fineTunedAdapter:
+      memoryRequest: 150Gi
+      memoryLimit: 180Gi
+      cpuRequest: 15
+      cpuLimit: 15
 
 modelAgent:
   # each host has different nvme mount configured, so we need to mount the hostPath to the correct path
