@@ -121,7 +121,7 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// Merge the specs with DAC taking precedence
-		mergedSpec = mergeSpecs(&profile.Spec, mergedSpec)
+		mergedSpec = MergeSpecs(&profile.Spec, mergedSpec)
 	}
 
 	// Determine if reconciling with Kueue by checking both if the Volcano queue is present and if the enableKueue flag is set as true
@@ -332,8 +332,8 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-// mergeSpecs merges the profile spec with the DAC spec, giving priority to DAC fields.
-func mergeSpecs(profileSpec *v1beta2.DedicatedAIClusterProfileSpec, dacSpec *v1beta2.DedicatedAIClusterSpec) *v1beta2.DedicatedAIClusterSpec {
+// MergeSpecs merges the profile spec with the DAC spec, giving priority to DAC fields.
+func MergeSpecs(profileSpec *v1beta2.DedicatedAIClusterProfileSpec, dacSpec *v1beta2.DedicatedAIClusterSpec) *v1beta2.DedicatedAIClusterSpec {
 
 	// Merge Resources
 	if dacSpec.Resources == nil {
