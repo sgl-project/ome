@@ -291,3 +291,11 @@ grok-3-0404:
 grok-3-mini-0404:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+grok-3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
