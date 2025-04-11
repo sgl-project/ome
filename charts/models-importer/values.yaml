@@ -18,19 +18,7 @@ llama-3-3-70b-instruct-fp8-dynamic:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-llama-3-2-90b-vision:
-  enabled: false
-  lifecyclePhase: "ACTIVE"
-
-llama-3-2-90b-vision-instruct:
-  enabled: false
-  lifecyclePhase: "ACTIVE"
-
 llama-3-2-90b-vision-instruct-fp8-dynamic:
-  enabled: false
-  lifecyclePhase: "ACTIVE"
-
-llama-3-2-11b-vision:
   enabled: false
   lifecyclePhase: "ACTIVE"
 

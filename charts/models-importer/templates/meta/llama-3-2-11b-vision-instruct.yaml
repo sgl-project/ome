@@ -38,6 +38,9 @@ spec:
         - name: SMALL_GENERIC_V2
           quotaUnit: 1
           default: true
+    internalName: "llama-3-2-11b-vision-instruct"
+    type: "Serving"
+    image-text-to-text: "true"
   modelConfiguration:
     {
       "architectures": [

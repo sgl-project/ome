@@ -15,7 +15,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: meta.llama-3.2-90b-vision-instruct-fp8-dynamic
+  displayName: meta.llama-3.2-90b-vision-instruct
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osBucket" }}/o/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-2-90b-vision-instruct-fp8-dynamic" "osPrefixOverride" }}"
     path: /mnt/data/models/meta/llama-3-2-90b-vision-instruct-fp8-dynamic
@@ -38,6 +38,9 @@ spec:
         - name: LARGE_GENERIC_V2
           quotaUnit: 1
           default: true
+    internalName: "llama-3-2-90b-vision-instruct-fp8-dynamic"
+    type: "Serving"
+    image-text-to-text: "true"
   modelConfiguration:
     {
       "architectures": [
