@@ -19,7 +19,7 @@ spec:
   displayName: cohere.command-r-16k
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-v1-3-16k-chat" "osBucket" }}/o/{{ index .Values "cohere-command-r-v1-3-16k-chat" "vendor" }}/{{ index .Values "cohere-command-r-v1-3-16k-chat" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command-r-v1.2-16k
+    path: /mnt/data/models/cohere/command-r-v1.3-16k
   vendor: {{ index .Values "cohere-command-r-v1-3-16k-chat" "vendor" }}
   version: "1.2"
   modelFormat:
