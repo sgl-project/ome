@@ -1,6 +1,6 @@
-{{- if .Values.cohere.command_a_032025.enabled }}
+{{- if .Values.command_a_032025.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: command-a-032025
   namespace: command-a-032025
@@ -9,8 +9,8 @@ spec:
     model:
       runtime: cohere-command-a-vllm
       baseModel: command-a-032025
-    minReplicas: {{ .Values.cohere.command_a_032025.minReplicas}}
-    maxReplicas: {{ .Values.cohere.command_a_032025.maxReplicas}}
+    minReplicas: {{ .Values.command_a_032025.minReplicas}}
+    maxReplicas: {{ .Values.command_a_032025.maxReplicas}}
 ---
 apiVersion: v1
 kind: Namespace

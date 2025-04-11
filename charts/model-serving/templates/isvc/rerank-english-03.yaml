@@ -1,6 +1,6 @@
-{{- if .Values.cohere.rerank_english_03.enabled }}
+{{- if .Values.rerank_english_03.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: rerank-english-03
   namespace: rerank-english-03
@@ -9,8 +9,8 @@ spec:
     model:
       runtime: cohere-rerank-v3
       baseModel: rerank-english-03
-    minReplicas: {{ .Values.cohere.rerank_english_03.minReplicas}}
-    maxReplicas: {{ .Values.cohere.rerank_english_03.maxReplicas}}
+    minReplicas: {{ .Values.rerank_english_03.minReplicas}}
+    maxReplicas: {{ .Values.rerank_english_03.maxReplicas}}
 ---
 apiVersion: v1
 kind: Namespace

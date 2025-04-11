@@ -1,6 +1,6 @@
-{{- if .Values.cohere.embed_multilingual_light_03.enabled }}
+{{- if .Values.embed_multilingual_light_03.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: embed-multilingual-light-03
   namespace: embed-multilingual-light-03
@@ -9,8 +9,8 @@ spec:
     model:
       runtime: cohere-embed-v3
       baseModel: embed-multilingual-light-03
-    minReplicas: {{ .Values.cohere.embed_multilingual_light_03.minReplicas}}
-    maxReplicas: {{ .Values.cohere.embed_multilingual_light_03.maxReplicas}}
+    minReplicas: {{ .Values.embed_multilingual_light_03.minReplicas}}
+    maxReplicas: {{ .Values.embed_multilingual_light_03.maxReplicas}}
 ---
 apiVersion: v1
 kind: Namespace

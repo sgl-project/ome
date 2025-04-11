@@ -1,6 +1,6 @@
-{{- if .Values.cohere.cohere_rerank.enabled }}
+{{- if .Values.cohere_rerank.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: cohere-rerank
   namespace: cohere-rerank
@@ -9,8 +9,8 @@ spec:
     model:
       runtime: cohere-rerank-v1
       baseModel: cohere-rerank
-    minReplicas: {{ .Values.cohere.cohere_rerank.minReplicas}}
-    maxReplicas: {{ .Values.cohere.cohere_rerank.maxReplicas}}
+    minReplicas: {{ .Values.cohere_rerank.minReplicas}}
+    maxReplicas: {{ .Values.cohere_rerank.maxReplicas}}
 ---
 apiVersion: v1
 kind: Namespace

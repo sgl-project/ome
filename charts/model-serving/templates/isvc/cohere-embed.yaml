@@ -1,6 +1,6 @@
-{{- if .Values.cohere.cohere_embed.enabled }}
+{{- if .Values.cohere_embed.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: cohere-embed
   namespace: cohere-embed
@@ -9,8 +9,8 @@ spec:
     model:
       runtime: cohere-embed-v2
       baseModel: cohere-embed
-    minReplicas: {{ .Values.cohere.cohere_embed.minReplicas}}
-    maxReplicas: {{ .Values.cohere.cohere_embed.maxReplicas}}
+    minReplicas: {{ .Values.cohere_embed.minReplicas}}
+    maxReplicas: {{ .Values.cohere_embed.maxReplicas}}
 ---
 apiVersion: v1
 kind: Namespace

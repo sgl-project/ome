@@ -17,6 +17,60 @@ sglang:
     tag: v0.4.2.post1.35b88e65-cu121
   # If you need to add another image tag, please think twice about the impact, and the business justification
 
+command_a_032025:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+cohere_rerank:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+rerank_english_03:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+rerank_multilingual_03:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+cohere_embed:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+embed_english_03:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+embed_english_light_03:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+embed_multilingual_03:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+embed_multilingual_light_03:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+command_r_082024_v1_7_tp1_128k:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+command_r_plus_082024_v1_6_128k:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
 
 cohere:
   commonAnnotations:
@@ -89,56 +143,6 @@ cohere:
   commandAImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.8.1-03192025"
-
-  command_a_032025:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  cohere_rerank:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  rerank_english_03:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  cohere_embed:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  embed_english_03:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  embed_english_light_03:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  embed_multilingual_03:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  embed_multilingual_light_03:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  command_r_082024_v1_7_tp1_128k:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-
-  command_r_plus_082024_v1_6_128k:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 1
   
   readinessProbe:
     httpGet:
