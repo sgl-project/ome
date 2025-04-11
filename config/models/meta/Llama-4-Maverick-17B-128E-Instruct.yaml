@@ -17,7 +17,7 @@ spec:
   modelParameterSize: 402B
   maxTokens: 32000
   modelCapabilities:
-    - "TEXT_GENERATION"
+    - "CHAT"
   storage:
     storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-4-maverick-17b-128e-instruct
     path: /raid/models/meta/llama-4-maverick-17b-128e-instruct

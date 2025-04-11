@@ -1,0 +1,21 @@
+{{- if .Values.llama_4_maverick_17b_128e_instruct_fp8.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-4-maverick-17b-128e-instruct-fp8
+  namespace: llama-4-maverick-17b-128e-instruct-fp8
+spec:
+  predictor:
+    model:
+      baseModel:  llama-4-maverick-17b-128e-instruct-fp8
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_4_maverick_17b_128e_instruct_fp8.minReplicas}}
+    maxReplicas: {{ .Values.llama_4_maverick_17b_128e_instruct_fp8.maxReplicas}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-4-maverick-17b-128e-instruct-fp8
+
+{{- end }}

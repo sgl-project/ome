@@ -1,13 +1,23 @@
+{{- if index .Values "llama-4-scout-17b-16e-instruct" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
   name: llama-4-scout-17b-16e-instruct
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    # TODO clean up annotations after migration, which is used in MP
+    models.ome.io/runtime: "vllm-llama-4-scout-17b-16e-instruct"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "llama-4-scout-17b-16e-instruct" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "llama-4-scout-17b-16e-instruct" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "llama-4-scout-17b-16e-instruct" "lifecyclePhase" }}"
 spec:
   vendor: meta
   disabled: false
   displayName: meta.llama4-scout
   version: "1.0.0"
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  compartmentID: {{ .Values.compartmentID }}
   modelFramework:
     name: transformers
     version: "4.51.0.dev0"
@@ -20,8 +30,14 @@ spec:
   modelCapabilities:
     - "CHAT"
   storage:
-    storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-4-scout-17b-16e-instruct
-    path: /raid/models/meta/llama-4-scout-17b-16e-instruct
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-4-scout-17b-16e-instruct" "osBucket" }}/o/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
+    path: /mnt/data/models/meta/llama-4-scout-17b-16e-instruct
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC_V2
+          quotaUnit: 1
+          default: true
   modelConfiguration:
     {
       "architectures": [
@@ -103,3 +119,4 @@ spec:
         "vision_output_dim": 4096
       }
     }
+{{- end }}

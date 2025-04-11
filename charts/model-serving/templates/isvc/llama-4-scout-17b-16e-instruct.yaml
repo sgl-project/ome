@@ -1,0 +1,21 @@
+{{- if .Values.llama_4_scout_17b_16e_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-4-scout-17b-16e-instruct
+  namespace: llama-4-scout-17b-16e-instruct
+spec:
+  predictor:
+    model:
+      baseModel: llama-4-scout-17b-16e-instruct
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_4_scout_17b_16e_instruct.minReplicas}}
+    maxReplicas: {{ .Values.llama_4_scout_17b_16e_instruct.maxReplicas}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-4-scout-17b-16e-instruct
+
+{{- end }}
