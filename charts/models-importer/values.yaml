@@ -96,6 +96,10 @@ nl2sql-m1-premium-70b:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+llama-3-2-11b-vision-ft-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 command-a-032025:
   enabled: false
   lifecyclePhase: "ACTIVE"

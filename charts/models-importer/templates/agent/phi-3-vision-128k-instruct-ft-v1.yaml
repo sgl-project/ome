@@ -39,6 +39,7 @@ spec:
           default: true
     internalName: "phi-3-vision-128k-instruct-ft-v1"
     type: "Serving"
+    image-text-to-text: "true"
   modelConfiguration:
     {
       "_name_or_path": "Phi-3-vision-128k-instruct",
