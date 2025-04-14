@@ -251,6 +251,7 @@ type BuiltInAdapter struct {
 	// Timeout for model loading operations in milliseconds
 	ModelLoadingTimeoutMillis int `json:"modelLoadingTimeoutMillis,omitempty"`
 	// Environment variables used to control other aspects of the built-in adapter's behaviour (uncommon)
+	// +listType=atomic
 	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 

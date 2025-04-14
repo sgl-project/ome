@@ -157,10 +157,12 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               nodesReady:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               state:
                 enum:
                 - Creating

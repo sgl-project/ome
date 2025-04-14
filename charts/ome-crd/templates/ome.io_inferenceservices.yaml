@@ -6237,6 +6237,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                       type: object
                     logger:
                       properties:
@@ -7950,6 +7953,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     worker:
                       properties:
                         activeDeadlineSeconds:
@@ -12212,6 +12218,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                       type: object
                   type: object
                 engine:
@@ -18393,6 +18402,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                       type: object
                     logger:
                       properties:
@@ -20106,6 +20118,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     worker:
                       properties:
                         activeDeadlineSeconds:
@@ -24368,6 +24383,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                       type: object
                   type: object
                 kedaConfig:
@@ -24392,6 +24410,7 @@ spec:
                       items:
                         type: string
                       type: array
+                      x-kubernetes-list-type: atomic
                     kind:
                       default: ClusterBaseModel
                       type: string
@@ -26447,6 +26466,9 @@ spec:
                           items:
                             type: string
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         image:
                           type: string
                         imagePullPolicy:
@@ -28045,6 +28067,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     workerSpec:
                       properties:
                         activeDeadlineSeconds:
@@ -32307,6 +32332,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                       type: object
                   type: object
                 router:
@@ -35944,6 +35972,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                   type: object
                 runtime:
                   properties:
@@ -36020,6 +36051,9 @@ spec:
                               type: string
                           type: object
                         type: array
+                        x-kubernetes-list-map-keys:
+                          - name
+                        x-kubernetes-list-type: map
                       url:
                         type: string
                     type: object

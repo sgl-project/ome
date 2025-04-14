@@ -119,6 +119,7 @@ type PodOverride struct {
 
 	// If specified, the pod's tolerations.
 	// +optional
+	// +listType=atomic
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty" protobuf:"bytes,22,opt,name=tolerations"`
 
 	// NodeSelector is a selector which must be true for the pod to fit on a node.
@@ -137,6 +138,7 @@ type PodOverride struct {
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge,retainKeys
+	// +listType=atomic
 	Volumes []corev1.Volume `json:"volumes,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name" protobuf:"bytes,1,rep,name=volumes"`
 }
 

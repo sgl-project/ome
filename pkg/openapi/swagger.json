@@ -395,7 +395,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.EnvVar"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "modelLoadingTimeoutMillis": {
           "description": "Timeout for model loading operations in milliseconds",
@@ -910,7 +911,11 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/knative.dev.serving.pkg.apis.serving.v1.TrafficTarget"
-          }
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "url": {
           "description": "URL holds the primary url that will distribute traffic over the provided traffic targets. This will be one the REST or gRPC endpoints that are available. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
@@ -1277,6 +1282,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
@@ -1906,6 +1915,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
@@ -2622,6 +2635,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
@@ -2814,7 +2831,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "kind": {
           "description": "Kind of the model being referenced Defaults to ClusterBaseModel Specifies the Kubernetes resource kind of the referenced model.",
@@ -2909,7 +2927,11 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
         },
         "image": {
           "description": "Container image name. More info: https://kubernetes.io/docs/concepts/containers/images This field is optional to allow higher level config management to default or override container images in workload controllers like Deployments and StatefulSets.",
@@ -3088,14 +3110,16 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "nodesReady": {
           "type": "array",
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "state": {
           "description": "Status of the model weight",
@@ -3283,7 +3307,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Toleration"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "volumeMounts": {
           "description": "Pod volumes to mount into the container's filesystem.",
@@ -3304,6 +3329,7 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-type": "atomic",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
@@ -3574,6 +3600,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
@@ -4086,6 +4116,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
@@ -4679,6 +4713,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
@@ -6282,6 +6320,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }

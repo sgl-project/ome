@@ -251,8 +251,10 @@ type ModelStatusSpec struct {
 	// Status of the model weight
 	State LifeCycleState `json:"state"`
 
+	// +listType=atomic
 	NodesReady []string `json:"nodesReady,omitempty"`
 
+	// +listType=atomic
 	NodesFailed []string `json:"nodesFailed,omitempty"`
 }
 

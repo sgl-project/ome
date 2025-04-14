@@ -211,6 +211,7 @@ type ModelRef struct {
 	// Optional FineTunedWeights references
 	// References to fine-tuned weights that should be applied to the base model.
 	// +optional
+	// +listType=atomic
 	FineTunedWeights []string `json:"fineTunedWeights,omitempty"`
 }
 
