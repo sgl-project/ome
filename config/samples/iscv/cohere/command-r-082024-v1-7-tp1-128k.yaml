@@ -13,6 +13,6 @@ spec:
     model:
       runtime: cohere-command-r-small-vnext
       baseModel: command-r-082024-v1-7-tp1-128k
-      protocolVersion: openAI
+      protocolVersion: cohere
     minReplicas: 1
     maxReplicas: 1

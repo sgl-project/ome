@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-command-r-v3
       baseModel: command-r-plus-082024-v1-6-128k
+      protocolVersion: cohere
     minReplicas: {{ .Values.command_r_plus_082024_v1_6_128k.minReplicas}}
     maxReplicas: {{ .Values.command_r_plus_082024_v1_6_128k.maxReplicas}}
 ---

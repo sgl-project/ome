@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-embed-v2
       baseModel: cohere-embed
+      protocolVersion: cohere
     minReplicas: {{ .Values.cohere_embed.minReplicas}}
     maxReplicas: {{ .Values.cohere_embed.maxReplicas}}
 ---

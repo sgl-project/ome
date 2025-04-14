@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-rerank-v1
       baseModel: cohere-rerank
+      protocolVersion: cohere
     minReplicas: {{ .Values.cohere_rerank.minReplicas}}
     maxReplicas: {{ .Values.cohere_rerank.maxReplicas}}
 ---

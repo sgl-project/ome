@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-embed-v3
       baseModel: embed-multilingual-light-03
+      protocolVersion: cohere
     minReplicas: {{ .Values.embed_multilingual_light_03.minReplicas}}
     maxReplicas: {{ .Values.embed_multilingual_light_03.maxReplicas}}
 ---

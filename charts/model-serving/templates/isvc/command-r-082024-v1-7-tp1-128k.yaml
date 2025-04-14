@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-command-r-small-vnext
       baseModel: command-r-082024-v1-7-tp1-128k
+      protocolVersion: cohere
     minReplicas: {{ .Values.command_r_082024_v1_7_tp1_128k.minReplicas}}
     maxReplicas: {{ .Values.command_r_082024_v1_7_tp1_128k.maxReplicas}}
 ---

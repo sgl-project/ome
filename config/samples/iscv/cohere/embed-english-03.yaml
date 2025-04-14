@@ -13,6 +13,6 @@ spec:
     model:
       runtime: cohere-embed-v3
       baseModel: embed-english-03
-      protocolVersion: openAI
+      protocolVersion: cohere
     minReplicas: 1
     maxReplicas: 1

@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-command-a-vllm
       baseModel: command-a-032025
+      protocolVersion: cohere
     minReplicas: {{ .Values.command_a_032025.minReplicas}}
     maxReplicas: {{ .Values.command_a_032025.maxReplicas}}
 ---

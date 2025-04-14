@@ -9,6 +9,7 @@ spec:
     model:
       runtime: cohere-rerank-v3
       baseModel: rerank-multilingual-03
+      protocolVersion: cohere
     minReplicas: {{ .Values.rerank_multilingual_03.minReplicas}}
     maxReplicas: {{ .Values.rerank_multilingual_03.maxReplicas}}
 ---

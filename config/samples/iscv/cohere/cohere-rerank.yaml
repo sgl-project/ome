@@ -13,6 +13,6 @@ spec:
     model:
       runtime: cohere-rerank-v1
       baseModel: cohere-rerank
-      protocolVersion: openAI
+      protocolVersion: cohere
     minReplicas: 1
     maxReplicas: 1
