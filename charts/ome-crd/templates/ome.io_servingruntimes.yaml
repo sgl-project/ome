@@ -2388,6 +2388,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     deploymentStrategy:
                       properties:
                         rollingUpdate:
@@ -3115,6 +3118,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     hostAliases:
                       items:
                         properties:
@@ -3129,6 +3135,9 @@ spec:
                           - ip
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - ip
+                      x-kubernetes-list-type: map
                     hostIPC:
                       type: boolean
                     hostNetwork:
@@ -3148,6 +3157,9 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     initContainers:
                       items:
                         properties:
@@ -3828,6 +3840,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     kedaConfig:
                       properties:
                         customPromQuery:
@@ -4971,6 +4986,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         dnsConfig:
                           properties:
                             nameservers:
@@ -5680,6 +5698,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         hostAliases:
                           items:
                             properties:
@@ -5694,6 +5715,9 @@ spec:
                               - ip
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - ip
+                          x-kubernetes-list-type: map
                         hostIPC:
                           type: boolean
                         hostNetwork:
@@ -5713,6 +5737,9 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         initContainers:
                           items:
                             properties:
@@ -6393,6 +6420,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         nodeName:
                           type: string
                         nodeSelector:
@@ -6431,6 +6461,7 @@ spec:
                               - conditionType
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         resourceClaims:
                           items:
                             properties:
@@ -7249,6 +7280,7 @@ spec:
                                 type: string
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         topologySpreadConstraints:
                           items:
                             properties:
@@ -8142,6 +8174,7 @@ spec:
                           - conditionType
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     resourceClaims:
                       items:
                         properties:
@@ -8972,6 +9005,7 @@ spec:
                             type: string
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     topologySpreadConstraints:
                       items:
                         properties:
@@ -10937,6 +10971,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         dnsConfig:
                           properties:
                             nameservers:
@@ -11646,6 +11683,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         hostAliases:
                           items:
                             properties:
@@ -11660,6 +11700,9 @@ spec:
                               - ip
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - ip
+                          x-kubernetes-list-type: map
                         hostIPC:
                           type: boolean
                         hostNetwork:
@@ -11679,6 +11722,9 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         initContainers:
                           items:
                             properties:
@@ -12359,6 +12405,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         nodeName:
                           type: string
                         nodeSelector:
@@ -12397,6 +12446,7 @@ spec:
                               - conditionType
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         resourceClaims:
                           items:
                             properties:
@@ -13217,6 +13267,7 @@ spec:
                                 type: string
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         topologySpreadConstraints:
                           items:
                             properties:
@@ -15198,6 +15249,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     deploymentStrategy:
                       properties:
                         rollingUpdate:
@@ -15925,6 +15979,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     hostAliases:
                       items:
                         properties:
@@ -15939,6 +15996,9 @@ spec:
                           - ip
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - ip
+                      x-kubernetes-list-type: map
                     hostIPC:
                       type: boolean
                     hostNetwork:
@@ -15958,6 +16018,9 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     initContainers:
                       items:
                         properties:
@@ -16638,6 +16701,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     kedaConfig:
                       properties:
                         customPromQuery:
@@ -17781,6 +17847,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         dnsConfig:
                           properties:
                             nameservers:
@@ -18490,6 +18559,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         hostAliases:
                           items:
                             properties:
@@ -18504,6 +18576,9 @@ spec:
                               - ip
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - ip
+                          x-kubernetes-list-type: map
                         hostIPC:
                           type: boolean
                         hostNetwork:
@@ -18523,6 +18598,9 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         initContainers:
                           items:
                             properties:
@@ -19203,6 +19281,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         nodeName:
                           type: string
                         nodeSelector:
@@ -19241,6 +19322,7 @@ spec:
                               - conditionType
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         resourceClaims:
                           items:
                             properties:
@@ -20059,6 +20141,7 @@ spec:
                                 type: string
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         topologySpreadConstraints:
                           items:
                             properties:
@@ -20952,6 +21035,7 @@ spec:
                           - conditionType
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     resourceClaims:
                       items:
                         properties:
@@ -21782,6 +21866,7 @@ spec:
                             type: string
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     topologySpreadConstraints:
                       items:
                         properties:
@@ -23747,6 +23832,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         dnsConfig:
                           properties:
                             nameservers:
@@ -24456,6 +24544,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         hostAliases:
                           items:
                             properties:
@@ -24470,6 +24561,9 @@ spec:
                               - ip
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - ip
+                          x-kubernetes-list-type: map
                         hostIPC:
                           type: boolean
                         hostNetwork:
@@ -24489,6 +24583,9 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         initContainers:
                           items:
                             properties:
@@ -25169,6 +25266,9 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-map-keys:
+                            - name
+                          x-kubernetes-list-type: map
                         nodeName:
                           type: string
                         nodeSelector:
@@ -25207,6 +25307,7 @@ spec:
                               - conditionType
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         resourceClaims:
                           items:
                             properties:
@@ -26027,6 +26128,7 @@ spec:
                                 type: string
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         topologySpreadConstraints:
                           items:
                             properties:
@@ -28046,6 +28148,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     deploymentStrategy:
                       properties:
                         rollingUpdate:
@@ -28773,6 +28878,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     hostAliases:
                       items:
                         properties:
@@ -28787,6 +28895,9 @@ spec:
                           - ip
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - ip
+                      x-kubernetes-list-type: map
                     hostIPC:
                       type: boolean
                     hostNetwork:
@@ -28806,6 +28917,9 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     initContainers:
                       items:
                         properties:
@@ -29486,6 +29600,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     kedaConfig:
                       properties:
                         customPromQuery:
@@ -29556,6 +29673,7 @@ spec:
                           - conditionType
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     resourceClaims:
                       items:
                         properties:
@@ -30386,6 +30504,7 @@ spec:
                             type: string
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     topologySpreadConstraints:
                       items:
                         properties:
