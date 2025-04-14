@@ -64,7 +64,6 @@ spec:
           --model-path="$MODEL_PATH" \
           --tp 4 \
           --mem-frac=0.9 \
-          --max-total-tokens=131072 \
           --chat-template llama_3_vision
       volumeMounts:
         - mountPath: /dev/shm

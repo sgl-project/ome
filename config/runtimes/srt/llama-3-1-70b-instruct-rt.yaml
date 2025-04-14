@@ -66,8 +66,7 @@ spec:
           --enable-metrics \
           --model-path="$MODEL_PATH" \
           --tp-size=4 \
-          --mem-frac=0.9 \
-          --max-total-tokens=131072
+          --mem-frac=0.9
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

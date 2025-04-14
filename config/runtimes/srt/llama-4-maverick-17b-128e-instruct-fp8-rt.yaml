@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-1-405b-instruct-fp8
+  name: srt-llama-4-maverick-17b-128e-instruct-fp8
 spec:
   disabled: false
   annotations:
@@ -31,22 +31,22 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.0.dev0"
+        version: "4.51.0.dev0"
       modelFormat:
         name: safetensors
         version: "1"
-      modelArchitecture: LlamaForCausalLM
-      autoSelect: false
-      priority: 1
+      modelArchitecture: Llama4ForConditionalGeneration
+      autoSelect: true
+      priority: 2
+      quantization: fp8
   modelSizeRange:
     min: 400B
-    max: 410B
+    max: 402B
   protocolVersions:
     - openAI
-  schedulerName: "genai-kube-scheduler"
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.6b67f9b-srt-cu121
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.fbebcb7
       ports:
         - containerPort: 8080
           name: http1
@@ -63,19 +63,22 @@ spec:
           --enable-metrics \
           --model-path="$MODEL_PATH" \
           --tp 8 \
-          --mem-frac=0.9
+          --mem-frac=0.9 \
+          --context-length=430000 \
+          --chat-template llama_4 \
+          --attention-backend fa3
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
