@@ -54,3 +54,10 @@ that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes c
 - 🌐 **Multi-Node Model Serving and Training**: Supports multi-node model serving and multi-node model training leveraging Volcano for gang scheduling.
 
 - 🛠️ **Resource Management**: Supports dedicated resource reservation and resource sharing.
+
+## Documentation
+
+- [Contributing Guidelines](CONTRIBUTING.md) - Learn how to contribute to OME
+- [Roadmap](Roadmap.md) - Check out our future plans and upcoming features
+
+[Back to top](#readme-top)
