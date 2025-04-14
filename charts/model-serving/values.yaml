@@ -774,3 +774,13 @@ gliner_large_v2_1:
   image:
     repository: fra.ocir.io/idqj093njucb/genai-pii-protection
     tag: v0.1-24-release
+
+content_moderator_dedicated:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
+deberta_v3_base_prompt_injection_v2_dedicated:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
