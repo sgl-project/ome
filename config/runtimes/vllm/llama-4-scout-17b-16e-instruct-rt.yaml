@@ -63,20 +63,20 @@ spec:
           --model="$MODEL_PATH" \
           --max-log-len=0 \
           --served-model-name=vllm-model \
-          --tensor-parallel-size=8 \
-          --max-model-len=1280000
+          --tensor-parallel-size=4 \
+          --max-model-len=128000
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 64
+          memory: 256Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 64
+          memory: 256Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
