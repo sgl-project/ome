@@ -65,7 +65,7 @@ func setupTestGeminiServiceAccount(t *testing.T) (*GeminiServiceAccount, kuberne
 			},
 		},
 		Status: v1beta1.ProjectStatus{
-			ProjectID: "proj-123",
+			ProjectId: "proj-123",
 		},
 	}
 
@@ -289,8 +289,8 @@ func TestGeminiServiceAccount_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountID)
-	assert.Equal(t, "user-testing-gemini", *updatedServiceAccount.Status.ServiceAccountID)
+	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountId)
+	assert.Equal(t, "user-testing-gemini", *updatedServiceAccount.Status.ServiceAccountId)
 	assert.NotNil(t, updatedServiceAccount.Status.CreationTime)
 	assert.Nil(t, updatedServiceAccount.Status.APIKey)
 
@@ -309,7 +309,7 @@ func TestGeminiServiceAccount_Delete(t *testing.T) {
 	serviceAccount, _ := setupTestGeminiServiceAccount(t)
 
 	// Set up service account with an ID for deletion
-	serviceAccount.Resource.Status.ServiceAccountID = testing_pkg.StringPtr("sa-123")
+	serviceAccount.Resource.Status.ServiceAccountId = testing_pkg.StringPtr("sa-123")
 
 	// Test
 	err := serviceAccount.Delete(context.Background())

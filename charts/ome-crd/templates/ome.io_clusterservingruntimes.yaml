@@ -1253,6 +1253,9 @@ spec:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
                 decoderConfig:
                   properties:
                     activeDeadlineSeconds:
@@ -27004,6 +27007,9 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
                 labels:
                   additionalProperties:
                     type: string
@@ -27025,6 +27031,7 @@ spec:
                   items:
                     type: string
                   type: array
+                  x-kubernetes-list-type: atomic
                 replicas:
                   type: integer
                 routerConfig:
@@ -31428,6 +31435,7 @@ spec:
                         type: string
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
                 volumes:
                   items:
                     properties:
@@ -32209,6 +32217,9 @@ spec:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
                 workers:
                   properties:
                     affinity:
@@ -33334,6 +33345,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     dnsPolicy:
                       type: string
                     hostIPC:
@@ -33349,6 +33363,9 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     labels:
                       additionalProperties:
                         type: string
@@ -33377,6 +33394,7 @@ spec:
                             type: string
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     volumes:
                       items:
                         properties:
@@ -34158,6 +34176,9 @@ spec:
                           - name
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                   required:
                     - containers
                   type: object

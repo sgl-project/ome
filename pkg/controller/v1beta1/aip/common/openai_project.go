@@ -75,7 +75,7 @@ func (p *OpenAIProject) Create(ctx context.Context) error {
 
 	// Update project status
 	creationTime := v1.NewTime(time.Unix(resp.CreatedAt, 0))
-	p.Resource.Status.ProjectID = resp.ID
+	p.Resource.Status.ProjectId = resp.ID
 	p.Resource.Status.CreationTime = &creationTime
 	p.Resource.Status.LastUpdatedTime = &creationTime
 
@@ -106,7 +106,7 @@ func (p *OpenAIProject) updateInternal(ctx context.Context) error {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
 	}
 
-	resp, err := openaiClient.Projects.Update(ctx, p.Resource.Status.ProjectID, openaisdk.ProjectUpdateRequest{Name: p.Resource.Spec.Name})
+	resp, err := openaiClient.Projects.Update(ctx, p.Resource.Status.ProjectId, openaisdk.ProjectUpdateRequest{Name: p.Resource.Spec.Name})
 	if err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
@@ -125,9 +125,9 @@ func (p *OpenAIProject) GetProject(ctx context.Context) (*openaisdk.Project, err
 		return nil, fmt.Errorf("failed to initialize client for project %s: %w", p.Resource.Name, err)
 	}
 
-	project, err := openaiClient.Projects.Get(ctx, p.Resource.Status.ProjectID)
+	project, err := openaiClient.Projects.Get(ctx, p.Resource.Status.ProjectId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project %s (ID: %s): %w", p.Resource.Name, p.Resource.Status.ProjectID, err)
+		return nil, fmt.Errorf("failed to get project %s (ID: %s): %w", p.Resource.Name, p.Resource.Status.ProjectId, err)
 	}
 	return project, nil
 }
@@ -139,7 +139,7 @@ func (p *OpenAIProject) Delete(ctx context.Context) error {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
 	}
 
-	if _, err := openaiClient.Projects.Archive(ctx, p.Resource.Status.ProjectID); err != nil {
+	if _, err := openaiClient.Projects.Archive(ctx, p.Resource.Status.ProjectId); err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
 

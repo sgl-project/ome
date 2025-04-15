@@ -34,7 +34,7 @@ type PredictorSpec struct {
 type PredictorExtensionSpec struct {
 	// This field points to the location of the model which is mounted onto the pod.
 	// +optional
-	StorageURI *string `json:"storageUri,omitempty"`
+	StorageUri *string `json:"storageUri,omitempty"`
 	// Runtime version of the predictor docker image
 	// +optional
 	RuntimeVersion *string `json:"runtimeVersion,omitempty"`

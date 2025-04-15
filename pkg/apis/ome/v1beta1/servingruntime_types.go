@@ -59,12 +59,16 @@ type ServingRuntimePodSpec struct {
 	// Cannot be updated.
 	// +patchMergeKey=name
 	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=name
 	Containers []corev1.Container `json:"containers" patchStrategy:"merge" patchMergeKey:"name" validate:"required"`
 
 	// List of volumes that can be mounted by containers belonging to the pod.
 	// More info: https://kubernetes.io/docs/concepts/storage/volumes
 	// +optional
 	// +patchMergeKey=name
+	// +listType=map
+	// +listMapKey=name
 	// +patchStrategy=merge,retainKeys
 	Volumes []corev1.Volume `json:"volumes,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name" protobuf:"bytes,1,rep,name=volumes"`
 
@@ -79,6 +83,7 @@ type ServingRuntimePodSpec struct {
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
 	// If specified, the pod's tolerations.
+	// +listType=atomic
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
@@ -92,12 +97,13 @@ type ServingRuntimePodSpec struct {
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 	// ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec.
-	// If specified, these secrets will be passed to individual puller implementations for them to use. For example,
-	// in the case of docker, only DockerConfig type secrets are honored.
+	// If specified, these secrets will be passed to individual puller implementations for them to use.
 	// More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=name
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty" patchStrategy:"merge" patchMergeKey:"name" protobuf:"bytes,15,rep,name=imagePullSecrets"`
 
 	// If specified, the pod will be dispatched by specified scheduler.
@@ -160,6 +166,7 @@ type ServingRuntimeSpec struct {
 
 	// Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)
 	// +optional
+	// +listType=atomic
 	ProtocolVersions []constants.InferenceServiceProtocol `json:"protocolVersions,omitempty"`
 
 	// PodSpec for the serving runtime

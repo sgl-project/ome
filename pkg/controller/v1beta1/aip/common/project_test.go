@@ -70,7 +70,7 @@ func setupTestWithMockServer(t *testing.T) (*OpenAIProject, *httptest.Server) {
 			},
 		},
 		Status: v1beta1.ProjectStatus{
-			ProjectID: "proj-123",
+			ProjectId: "proj-123",
 		},
 	}
 
@@ -242,7 +242,7 @@ func TestProject_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.Equal(t, "proj-123", updatedProject.Status.ProjectID)
+	assert.Equal(t, "proj-123", updatedProject.Status.ProjectId)
 	assert.NotNil(t, updatedProject.Status.CreationTime)
 	assert.NotNil(t, updatedProject.Status.LastUpdatedTime)
 

@@ -65,7 +65,7 @@ func setupTestXAIProject(t *testing.T) *XAIProject {
 			},
 		},
 		Status: v1beta1.ProjectStatus{
-			ProjectID: "test-project",
+			ProjectId: "test-project",
 		},
 	}
 
@@ -124,7 +124,7 @@ func TestXAIProject_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.Equal(t, "proj_74syguzYwy34fGSeK7uaS9", updatedProject.Status.ProjectID)
+	assert.Equal(t, "proj_74syguzYwy34fGSeK7uaS9", updatedProject.Status.ProjectId)
 	assert.NotNil(t, updatedProject.Status.CreationTime)
 	assert.NotNil(t, updatedProject.Status.LastUpdatedTime)
 

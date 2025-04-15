@@ -38,9 +38,9 @@ type OrganizationSpec struct {
 	// Disabled indicates whether the organization is disabled
 	// +optional
 	Disabled *bool `json:"disabled,omitempty"`
-	// OrganizationID is the platform-specific organization ID
+	// OrganizationId is the platform-specific organization ID
 	// +required
-	OrganizationID string `json:"organizationId"`
+	OrganizationId string `json:"organizationId"`
 	// SecretRef references the secret containing the API key
 	// optional
 	SecretRef *SecretReference `json:"secretRef,omitempty"`
@@ -62,7 +62,7 @@ type OrganizationStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope="Cluster"
 // +kubebuilder:printcolumn:name="ProjectName",type="string",JSONPath=".spec.name"
-// +kubebuilder:printcolumn:name="ProjectID",type="string",JSONPath=".status.projectId"
+// +kubebuilder:printcolumn:name="ProjectId",type="string",JSONPath=".status.projectId"
 // +kubebuilder:printcolumn:name="Organization",type="string",JSONPath=".spec.organizationRef.name"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 type Project struct {
@@ -88,9 +88,9 @@ type ProjectSpec struct {
 }
 
 type ProjectStatus struct {
-	// ProjectID is the platform-specific project ID
+	// ProjectId is the platform-specific project ID
 	// +optional
-	ProjectID string `json:"projectId"`
+	ProjectId string `json:"projectId"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the project was created
@@ -136,9 +136,9 @@ type ServiceAccountSpec struct {
 }
 
 type ServiceAccountStatus struct {
-	// ServiceAccountID is the platform-specific service account ID
+	// ServiceAccountId is the platform-specific service account ID
 	// +optional
-	ServiceAccountID *string `json:"serviceAccountId"`
+	ServiceAccountId *string `json:"serviceAccountId"`
 	// +optional
 	APIKey *APIKeySpec `json:"apiKey"`
 	// Conditions represent the latest available observations of an object's state
@@ -187,9 +187,9 @@ type UserSpec struct {
 }
 
 type UserStatus struct {
-	// UserID is the platform-specific user ID
+	// UserId is the platform-specific user ID
 	// +required
-	UserID string `json:"userId"`
+	UserId string `json:"userId"`
 	// Conditions represent the latest available observations of an object's state
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// CreationTime is the time when the user was created

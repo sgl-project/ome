@@ -3463,7 +3463,7 @@
           "type": "boolean"
         },
         "organizationId": {
-          "description": "OrganizationID is the platform-specific organization ID",
+          "description": "OrganizationId is the platform-specific organization ID",
           "type": "string",
           "default": ""
         },
@@ -4481,7 +4481,7 @@
           "$ref": "#/definitions/v1.Time"
         },
         "projectId": {
-          "description": "ProjectID is the platform-specific project ID",
+          "description": "ProjectId is the platform-specific project ID",
           "type": "string",
           "default": ""
         }
@@ -5286,7 +5286,7 @@
           "$ref": "#/definitions/v1.Time"
         },
         "serviceAccountId": {
-          "description": "ServiceAccountID is the platform-specific service account ID",
+          "description": "ServiceAccountId is the platform-specific service account ID",
           "type": "string"
         }
       }
@@ -5403,6 +5403,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Container"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -5419,12 +5423,16 @@
           "type": "boolean"
         },
         "imagePullSecrets": {
-          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
           "type": "array",
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.LocalObjectReference"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -5454,7 +5462,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Toleration"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "volumes": {
           "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
@@ -5463,6 +5472,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }
@@ -5520,6 +5533,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Container"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -5552,12 +5569,16 @@
           "type": "string"
         },
         "imagePullSecrets": {
-          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
           "type": "array",
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.LocalObjectReference"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -5591,7 +5612,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "replicas": {
           "description": "Configure the number of replicas in the Deployments generated by this ServingRuntime If specified, this overrides the podsPerRuntime configuration value",
@@ -5621,7 +5643,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Toleration"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "volumes": {
           "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
@@ -5630,6 +5653,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         },
@@ -5652,6 +5679,19 @@
         "key": {
           "description": "The Storage Key in the secret for this model.",
           "type": "string"
+        },
+        "nodeAffinity": {
+          "description": "Describes node affinity rules for the model download.",
+          "$ref": "#/definitions/v1.NodeAffinity"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector is a selector which must be true for the model to fit on a node. Selector which must match a node's labels for the model to be downloaded on that node.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-map-type": "atomic"
         },
         "parameters": {
           "description": "Parameters to override the default storage credentials and config.",
@@ -5916,7 +5956,7 @@
           "description": "Datasets defines the datasets for the training job.",
           "$ref": "#/definitions/v1beta1.StorageSpec"
         },
-        "hyperparameterConfig": {
+        "hyperParameterTuningConfig": {
           "description": "HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy",
           "$ref": "#/definitions/v1beta1.HyperparameterTuningConfig"
         },
@@ -6189,7 +6229,7 @@
           "$ref": "#/definitions/v1.Time"
         },
         "userId": {
-          "description": "UserID is the platform-specific user ID",
+          "description": "UserId is the platform-specific user ID",
           "type": "string",
           "default": ""
         }
@@ -6220,6 +6260,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Container"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -6236,12 +6280,16 @@
           "type": "boolean"
         },
         "imagePullSecrets": {
-          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+          "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
           "type": "array",
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.LocalObjectReference"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -6276,7 +6324,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1.Toleration"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "volumes": {
           "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
@@ -6285,6 +6334,10 @@
             "default": {},
             "$ref": "#/definitions/v1.Volume"
           },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
         }

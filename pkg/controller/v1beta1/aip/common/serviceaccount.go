@@ -187,7 +187,7 @@ func (r *ResourceBase) GetOrganization(ctx context.Context, sa *v1beta1.ServiceA
 // deleteServiceAccountKeyFromSecret removes a key from the common secret
 func (r *ResourceBase) deleteServiceAccountKeyFromSecret(ctx context.Context, sa *v1beta1.ServiceAccount, aiPlatformConfig *controllerconfig.AIPlatformConfig) error {
 	// Safety check - ensure we have a service account ID
-	if sa.Status.ServiceAccountID == nil {
+	if sa.Status.ServiceAccountId == nil {
 		r.Log.Info("No service account ID found, skipping key deletion from common secret",
 			"name", sa.Name, "namespace", sa.Namespace)
 		return nil
@@ -205,14 +205,14 @@ func (r *ResourceBase) deleteServiceAccountKeyFromSecret(ctx context.Context, sa
 	}
 
 	// Check if the key exists in the secret data
-	if commonSecret.Data == nil || len(commonSecret.Data[*sa.Status.ServiceAccountID]) == 0 {
+	if commonSecret.Data == nil || len(commonSecret.Data[*sa.Status.ServiceAccountId]) == 0 {
 		r.Log.Info("Service account key not found in common secret, nothing to delete",
 			"name", sa.Name, "namespace", sa.Namespace,
-			"serviceAccountID", *sa.Status.ServiceAccountID)
+			"serviceAccountID", *sa.Status.ServiceAccountId)
 		return nil
 	}
 
 	// Delete the key from the secret
-	delete(commonSecret.Data, *sa.Status.ServiceAccountID)
+	delete(commonSecret.Data, *sa.Status.ServiceAccountId)
 	return r.Client.Update(ctx, commonSecret)
 }

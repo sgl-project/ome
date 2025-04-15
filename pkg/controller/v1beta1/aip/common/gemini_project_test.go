@@ -63,7 +63,7 @@ func setupTestGeminiProject(t *testing.T) *GeminiProject {
 			},
 		},
 		Status: v1beta1.ProjectStatus{
-			ProjectID: "test-project",
+			ProjectId: "test-project",
 		},
 	}
 
@@ -122,7 +122,7 @@ func TestGeminiProject_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.Equal(t, "test-project-name", updatedProject.Status.ProjectID)
+	assert.Equal(t, "test-project-name", updatedProject.Status.ProjectId)
 	assert.NotNil(t, updatedProject.Status.CreationTime)
 	assert.NotNil(t, updatedProject.Status.LastUpdatedTime)
 

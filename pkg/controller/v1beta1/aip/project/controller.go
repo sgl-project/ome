@@ -73,7 +73,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	// Handle deletion
 	if !proj.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(proj, constants.ProjectFinalizerName) {
-			if proj.Status.ProjectID != "" {
+			if proj.Status.ProjectId != "" {
 				// Delete project in OpenAI
 				err := project.Delete(ctx)
 				if err != nil {
@@ -103,7 +103,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	}
 
 	// Create or update project
-	if proj.Status.ProjectID == "" {
+	if proj.Status.ProjectId == "" {
 		// Create project
 		err := project.Create(ctx)
 		if err != nil {
@@ -113,7 +113,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	}
 
 	// Only attempt to get the project if we have a project ID
-	if proj.Status.ProjectID != "" {
+	if proj.Status.ProjectId != "" {
 		// Update project
 		err := project.Update(ctx)
 		if err != nil {

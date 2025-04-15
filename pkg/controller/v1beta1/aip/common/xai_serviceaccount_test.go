@@ -65,7 +65,7 @@ func setupTestXAIServiceAccount(t *testing.T) (*XAIServiceAccount, kubernetes.In
 			},
 		},
 		Status: v1beta1.ProjectStatus{
-			ProjectID: "proj-123",
+			ProjectId: "proj-123",
 		},
 	}
 
@@ -290,8 +290,8 @@ func TestXAIServiceAccount_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountID)
-	assert.Equal(t, "user_74syguzYwy34fGSeK7uaS9", *updatedServiceAccount.Status.ServiceAccountID)
+	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountId)
+	assert.Equal(t, "user_74syguzYwy34fGSeK7uaS9", *updatedServiceAccount.Status.ServiceAccountId)
 	assert.NotNil(t, updatedServiceAccount.Status.CreationTime)
 	assert.Nil(t, updatedServiceAccount.Status.APIKey)
 
@@ -310,7 +310,7 @@ func TestXAIServiceAccount_Delete(t *testing.T) {
 	serviceAccount, _ := setupTestXAIServiceAccount(t)
 
 	// Set up service account with an ID for deletion
-	serviceAccount.Resource.Status.ServiceAccountID = testing_pkg.StringPtr("sa-123")
+	serviceAccount.Resource.Status.ServiceAccountId = testing_pkg.StringPtr("sa-123")
 
 	// Test
 	err := serviceAccount.Delete(context.Background())

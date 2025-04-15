@@ -290,7 +290,7 @@ func TestBenchmarkJobReconciler_reconcileModelPVPVC(t *testing.T) {
 						Model: &v1beta1.ModelSpec{
 							BaseModel: StringPtr("test-model"),
 							PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-								StorageURI: StringPtr("oci://bucket/path"),
+								StorageUri: StringPtr("oci://bucket/path"),
 							},
 						},
 					},
@@ -576,7 +576,7 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 						Model: &v1beta1.ModelSpec{
 							BaseModel: StringPtr("test-model"),
 							PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-								StorageURI: StringPtr("oci://bucket/path"),
+								StorageUri: StringPtr("oci://bucket/path"),
 							},
 						},
 					},

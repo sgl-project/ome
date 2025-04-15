@@ -35,7 +35,7 @@ func NewXAIProject(c client.Client, cs kubernetes.Interface, log logr.Logger, sc
 // Create creates a new project
 func (p *XAIProject) Create(ctx context.Context) error {
 	creationTime := v1.NewTime(time.Now())
-	p.Resource.Status.ProjectID = GenerateId("proj_", p.Resource.UID)
+	p.Resource.Status.ProjectId = GenerateId("proj_", p.Resource.UID)
 	p.Resource.Status.CreationTime = &creationTime
 	p.Resource.Status.LastUpdatedTime = &creationTime
 

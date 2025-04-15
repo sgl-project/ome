@@ -18,7 +18,7 @@ spec:
       name: ProjectName
       type: string
     - jsonPath: .status.projectId
-      name: ProjectID
+      name: ProjectId
       type: string
     - jsonPath: .spec.organizationRef.name
       name: Organization

@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -48,6 +49,14 @@ type StorageSpec struct {
 	// - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})
 	// +required
 	StorageUri *string `json:"storageUri,omitempty"`
+	// NodeSelector is a selector which must be true for the model to fit on a node.
+	// Selector which must match a node's labels for the model to be downloaded on that node.
+	// +optional
+	// +mapType=atomic
+	NodeSelector map[string]string `json:"nodeSelector,omitempty" protobuf:"bytes,7,rep,name=nodeSelector"`
+	// Describes node affinity rules for the model download.
+	// +optional
+	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty" protobuf:"bytes,1,opt,name=nodeAffinity"`
 }
 
 // BaseModelSpec defines the desired state of BaseModel

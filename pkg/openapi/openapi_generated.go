@@ -6200,7 +6200,7 @@ func schema_pkg_apis_ome_v1beta1_OrganizationSpec(ref common.ReferenceCallback) 
 					},
 					"organizationId": {
 						SchemaProps: spec.SchemaProps{
-							Description: "OrganizationID is the platform-specific organization ID",
+							Description: "OrganizationId is the platform-specific organization ID",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -7996,7 +7996,7 @@ func schema_pkg_apis_ome_v1beta1_ProjectStatus(ref common.ReferenceCallback) com
 				Properties: map[string]spec.Schema{
 					"projectId": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ProjectID is the platform-specific project ID",
+							Description: "ProjectId is the platform-specific project ID",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -9401,7 +9401,7 @@ func schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref common.ReferenceCallba
 				Properties: map[string]spec.Schema{
 					"serviceAccountId": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ServiceAccountID is the platform-specific service account ID",
+							Description: "ServiceAccountId is the platform-specific service account ID",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -9590,6 +9590,10 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 					"containers": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge",
 							},
@@ -9610,6 +9614,10 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 					"volumes": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge,retainKeys",
 							},
@@ -9650,6 +9658,11 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 						},
 					},
 					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "If specified, the pod's tolerations.",
 							Type:        []string{"array"},
@@ -9698,12 +9711,16 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 					"imagePullSecrets": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -9844,6 +9861,11 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 						},
 					},
 					"protocolVersions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)",
 							Type:        []string{"array"},
@@ -9861,6 +9883,10 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 					"containers": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge",
 							},
@@ -9881,6 +9907,10 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 					"volumes": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge,retainKeys",
 							},
@@ -9921,6 +9951,11 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 						},
 					},
 					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "If specified, the pod's tolerations.",
 							Type:        []string{"array"},
@@ -9969,12 +10004,16 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 					"imagePullSecrets": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -10124,10 +10163,39 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 							Format:      "",
 						},
 					},
+					"nodeSelector": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector is a selector which must be true for the model to fit on a node. Selector which must match a node's labels for the model to be downloaded on that node.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"nodeAffinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Describes node affinity rules for the model download.",
+							Ref:         ref("k8s.io/api/core/v1.NodeAffinity"),
+						},
+					},
 				},
 				Required: []string{"storageUri"},
 			},
 		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.NodeAffinity"},
 	}
 }
 
@@ -10551,7 +10619,7 @@ func schema_pkg_apis_ome_v1beta1_TrainingJobSpec(ref common.ReferenceCallback) c
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"),
 						},
 					},
-					"hyperparameterConfig": {
+					"hyperParameterTuningConfig": {
 						SchemaProps: spec.SchemaProps{
 							Description: "HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig"),
@@ -11010,7 +11078,7 @@ func schema_pkg_apis_ome_v1beta1_UserStatus(ref common.ReferenceCallback) common
 				Properties: map[string]spec.Schema{
 					"userId": {
 						SchemaProps: spec.SchemaProps{
-							Description: "UserID is the platform-specific user ID",
+							Description: "UserId is the platform-specific user ID",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -11061,6 +11129,10 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 					"containers": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge",
 							},
@@ -11081,6 +11153,10 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 					"volumes": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge,retainKeys",
 							},
@@ -11121,6 +11197,11 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 						},
 					},
 					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "If specified, the pod's tolerations.",
 							Type:        []string{"array"},
@@ -11169,12 +11250,16 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 					"imagePullSecrets": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type":       "map",
 								"x-kubernetes-patch-merge-key": "name",
 								"x-kubernetes-patch-strategy":  "merge",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. For example, in the case of docker, only DockerConfig type secrets are honored. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
+							Description: "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{

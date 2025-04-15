@@ -45,7 +45,7 @@ type TrainingJobSpec struct {
 	Datasets *StorageSpec `json:"datasets,omitempty"`
 
 	// HyperParameterTuningConfig defines the hyperparameter configuration and tuning strategy
-	HyperParameterTuningConfig *HyperparameterTuningConfig `json:"hyperparameterConfig,omitempty"`
+	HyperParameterTuningConfig *HyperparameterTuningConfig `json:"hyperParameterTuningConfig,omitempty"`
 
 	// Whether the controller should suspend the running TrainJob.
 	// Defaults to false.

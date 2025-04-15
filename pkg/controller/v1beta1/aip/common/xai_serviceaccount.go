@@ -56,9 +56,9 @@ func (sa *XAIServiceAccount) Create(ctx context.Context) error {
 			fmt.Errorf("failed to update service account with owner reference: %w", err))
 	}
 
-	// Check if ProjectID is available
-	if project.Status.ProjectID == "" {
-		sa.Log.Info("ProjectID is not available yet for service account", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
+	// Check if ProjectId is available
+	if project.Status.ProjectId == "" {
+		sa.Log.Info("ProjectId is not available yet for service account", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusProjectError,
 			fmt.Errorf("project ID not available for project %s", project.Name))
 	}
@@ -83,7 +83,7 @@ func (sa *XAIServiceAccount) Create(ctx context.Context) error {
 	// Update status
 	creationTime := metav1.NewTime(time.Now())
 	sa.Resource.Status = v1beta1.ServiceAccountStatus{
-		ServiceAccountID: &serviceAccountID,
+		ServiceAccountId: &serviceAccountID,
 		CreationTime:     &creationTime,
 	}
 	return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusCreated)

@@ -72,7 +72,7 @@ func setupTestWithMockServerForServiceAccount(t *testing.T) (*OpenAIServiceAccou
 			},
 		},
 		Status: v1beta1.ProjectStatus{
-			ProjectID: "proj-123",
+			ProjectId: "proj-123",
 		},
 	}
 
@@ -345,8 +345,8 @@ func TestServiceAccount_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check status fields
-	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountID)
-	assert.Equal(t, "sa-123", *updatedServiceAccount.Status.ServiceAccountID)
+	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountId)
+	assert.Equal(t, "sa-123", *updatedServiceAccount.Status.ServiceAccountId)
 	assert.NotNil(t, updatedServiceAccount.Status.CreationTime)
 	assert.NotNil(t, updatedServiceAccount.Status.APIKey)
 	assert.Equal(t, "key-123", *updatedServiceAccount.Status.APIKey.APIKeyId)
@@ -391,7 +391,7 @@ func TestServiceAccount_Delete(t *testing.T) {
 	defer server.Close()
 
 	// Set up service account with an ID for deletion
-	serviceAccount.Resource.Status.ServiceAccountID = testing_pkg.StringPtr("sa-123")
+	serviceAccount.Resource.Status.ServiceAccountId = testing_pkg.StringPtr("sa-123")
 
 	// Test
 	err := serviceAccount.Delete(context.Background())
@@ -418,7 +418,7 @@ func TestServiceAccount_Delete_Error(t *testing.T) {
 	server.Close() // Close the server to force an error
 
 	// Set up service account with an ID for deletion
-	serviceAccount.Resource.Status.ServiceAccountID = testing_pkg.StringPtr("sa-123")
+	serviceAccount.Resource.Status.ServiceAccountId = testing_pkg.StringPtr("sa-123")
 
 	// Test
 	err := serviceAccount.Delete(context.Background())

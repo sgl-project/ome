@@ -38,7 +38,7 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 	projectName := p.Resource.Spec.Name
 
 	creationTime := v1.NewTime(time.Now())
-	p.Resource.Status.ProjectID = projectName
+	p.Resource.Status.ProjectId = projectName
 	p.Resource.Status.CreationTime = &creationTime
 	p.Resource.Status.LastUpdatedTime = &creationTime
 

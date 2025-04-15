@@ -90,21 +90,21 @@ func (sa *OpenAIServiceAccount) Create(ctx context.Context) error {
 			fmt.Errorf("failed to update service account with owner reference: %w", err))
 	}
 
-	// Check if ProjectID is available
-	if project.Status.ProjectID == "" {
-		sa.Log.Info("ProjectID is not available yet for service account", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
+	// Check if ProjectId is available
+	if project.Status.ProjectId == "" {
+		sa.Log.Info("ProjectId is not available yet for service account", "name", sa.Resource.Name, "namespace", sa.Resource.Namespace)
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusProjectError,
 			fmt.Errorf("project ID not available for project %s", project.Name))
 	}
 
 	// Create service account in OpenAI
-	resp, err := openaiClient.ServiceAccounts.Create(ctx, project.Status.ProjectID, openaisdk.ProjectServiceAccountCreateRequest{Name: *sa.Resource.Spec.Name})
+	resp, err := openaiClient.ServiceAccounts.Create(ctx, project.Status.ProjectId, openaisdk.ProjectServiceAccountCreateRequest{Name: *sa.Resource.Spec.Name})
 	if err != nil {
 		// Log the error without stack trace for API errors as they might be transient
 		sa.Log.Info("Failed to create service account in API, will retry",
 			"name", sa.Resource.Name,
 			"namespace", sa.Resource.Namespace,
-			"projectID", project.Status.ProjectID,
+			"projectID", project.Status.ProjectId,
 			"error", err.Error())
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError, err)
 	}
@@ -147,7 +147,7 @@ func (sa *OpenAIServiceAccount) Create(ctx context.Context) error {
 	// Update status
 	creationTime := metav1.NewTime(time.Unix(resp.CreatedAt, 0))
 	sa.Resource.Status = v1beta1.ServiceAccountStatus{
-		ServiceAccountID: &resp.ID,
+		ServiceAccountId: &resp.ID,
 		APIKey: &v1beta1.APIKeySpec{
 			Name:     &resp.APIKey.Name,
 			APIKeyId: &resp.APIKey.ID,
@@ -181,7 +181,7 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 				sa.Log.Error(configErr, "Failed to get AIPlatform config")
 				// Update status but don't return error to avoid requeuing
 				_ = sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError)
-			} else if sa.Resource.Status.ServiceAccountID != nil {
+			} else if sa.Resource.Status.ServiceAccountId != nil {
 				// Try to delete the key from the common secret
 				if secretErr := sa.deleteServiceAccountKeyFromSecret(ctx, sa.Resource, aiPlatformConfig); secretErr != nil {
 					sa.Log.Error(secretErr, "Failed to delete service account key from common secret")
@@ -204,14 +204,14 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 	}
 
 	// Only try to delete the service account in the API if we have both project ID and service account ID
-	if project.Status.ProjectID != "" && sa.Resource.Status.ServiceAccountID != nil {
-		if _, err := openaiClient.ServiceAccounts.Delete(ctx, project.Status.ProjectID, *sa.Resource.Status.ServiceAccountID); err != nil {
+	if project.Status.ProjectId != "" && sa.Resource.Status.ServiceAccountId != nil {
+		if _, err := openaiClient.ServiceAccounts.Delete(ctx, project.Status.ProjectId, *sa.Resource.Status.ServiceAccountId); err != nil {
 			// Log the error without stack trace for API errors as they might be transient
 			sa.Log.Info("Failed to delete service account in API, will retry",
 				"name", sa.Resource.Name,
 				"namespace", sa.Resource.Namespace,
-				"projectID", project.Status.ProjectID,
-				"serviceAccountID", *sa.Resource.Status.ServiceAccountID,
+				"projectID", project.Status.ProjectId,
+				"serviceAccountID", *sa.Resource.Status.ServiceAccountId,
 				"error", err.Error())
 			return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError, err)
 		}
@@ -223,7 +223,7 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
 	}
 
-	if sa.Resource.Status.ServiceAccountID != nil {
+	if sa.Resource.Status.ServiceAccountId != nil {
 		if err := sa.deleteServiceAccountKeyFromSecret(ctx, sa.Resource, aiPlatformConfig); err != nil {
 			return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusSecretError, err)
 		}

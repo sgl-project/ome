@@ -83,7 +83,7 @@ func (r *ServiceAccountReconciler) Reconcile(ctx context.Context, request reconc
 	}
 
 	// Handle creation/update
-	if sa.Status.ServiceAccountID == nil {
+	if sa.Status.ServiceAccountId == nil {
 		if err := resource.Create(ctx); err != nil {
 			// Log without stack trace for better readability
 			log.Info("Failed to create service account, will retry",
