@@ -58,7 +58,6 @@ type ModelSpec struct {
 	BaseModel *string `json:"baseModel,omitempty"`
 
 	// +optional Specific FineTunedWeight name to use for hosting the additional weights.
-	// +listType=map
-	// +listMapKey=name
+	// +listType=atomic
 	FineTunedWeights []string `json:"fineTunedWeights,omitempty"`
 }

@@ -524,6 +524,9 @@ spec:
                             type: integer
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
                   required:
                   - routerType
                   type: object
@@ -592,6 +595,7 @@ spec:
                       type: string
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
             required:
             - nodes
             type: object

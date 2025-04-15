@@ -26466,9 +26466,7 @@ spec:
                           items:
                             type: string
                           type: array
-                          x-kubernetes-list-map-keys:
-                            - name
-                          x-kubernetes-list-type: map
+                          x-kubernetes-list-type: atomic
                         image:
                           type: string
                         imagePullPolicy:
@@ -36051,9 +36049,7 @@ spec:
                               type: string
                           type: object
                         type: array
-                        x-kubernetes-list-map-keys:
-                          - name
-                        x-kubernetes-list-type: map
+                        x-kubernetes-list-type: atomic
                       url:
                         type: string
                     type: object

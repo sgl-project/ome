@@ -50,8 +50,7 @@ type ComponentStatusSpec struct {
 	LatestRolledoutRevision string `json:"latestRolledoutRevision,omitempty"`
 	// Traffic holds the configured traffic distribution for latest ready revision and previous rolled out revision.
 	// +optional
-	// +listType=map
-	// +listMapKey=name
+	// +listType=atomic
 	Traffic []knservingv1.TrafficTarget `json:"traffic,omitempty"`
 	// URL holds the primary url that will distribute traffic over the provided traffic targets.
 	// This will be one the REST or gRPC endpoints that are available.
