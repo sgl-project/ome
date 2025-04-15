@@ -54,7 +54,7 @@ spec:
     max: 110B
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:866b94a
+      image: {{ .Values.llama_4_scout_17b_16e_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_4_scout_17b_16e_instruct.image.tag | default .Values.vllm.latestImage.tag }}
       ports:
         - containerPort: 8080
           name: http1
