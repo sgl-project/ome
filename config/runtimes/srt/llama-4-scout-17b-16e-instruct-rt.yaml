@@ -45,7 +45,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.fbebcb7
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.78157e3-cu124
       ports:
         - containerPort: 8080
           name: http1
@@ -61,22 +61,23 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp 8 \
+          --tp 4 \
           --mem-frac=0.8 \
-          --max-total-tokens=1000000 \
+          --context-length=128000 \
           --chat-template llama-4 \
-          --attention-backend fa3
+          --attention-backend fa3 \
+          --log-requests
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 30
-          memory: 100Gi
+          cpu: 64
+          memory: 256Gi
           nvidia.com/gpu: 4
         limits:
-          cpu: 30
-          memory: 100Gi
+          cpu: 64
+          memory: 256Gi
           nvidia.com/gpu: 4
 
       readinessProbe:

@@ -46,7 +46,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.fbebcb7
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.78157e3-cu124
       ports:
         - containerPort: 8080
           name: http1
@@ -66,7 +66,8 @@ spec:
           --mem-frac=0.9 \
           --context-length=430000 \
           --chat-template llama_4 \
-          --attention-backend fa3
+          --attention-backend fa3 \
+          --log-requests
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

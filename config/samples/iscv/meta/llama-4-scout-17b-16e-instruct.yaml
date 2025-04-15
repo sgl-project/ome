@@ -22,4 +22,5 @@ spec:
       name: ''
       protocolVersion: openAI
       resources: {}
+      runtime: vllm-llama-4-scout-17b-16e-instruct
     workerSpec: {}
