@@ -57,11 +57,18 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":              schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference":       schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.HyperparameterTuningConfig":       schema_pkg_apis_ome_v1beta1_HyperparameterTuningConfig(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraph":                   schema_pkg_apis_ome_v1beta1_InferenceGraph(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphList":               schema_pkg_apis_ome_v1beta1_InferenceGraphList(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphSpec":               schema_pkg_apis_ome_v1beta1_InferenceGraphSpec(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphStatus":             schema_pkg_apis_ome_v1beta1_InferenceGraphStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceRouter":                  schema_pkg_apis_ome_v1beta1_InferenceRouter(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceService":                 schema_pkg_apis_ome_v1beta1_InferenceService(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceList":             schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":        schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":             schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":           schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceStep":                    schema_pkg_apis_ome_v1beta1_InferenceStep(ref),
+		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceTarget":                  schema_pkg_apis_ome_v1beta1_InferenceTarget(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobSetTemplateSpec":               schema_pkg_apis_ome_v1beta1_JobSetTemplateSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus":                        schema_pkg_apis_ome_v1beta1_JobStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                       schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
@@ -3808,6 +3815,343 @@ func schema_pkg_apis_ome_v1beta1_HyperparameterTuningConfig(ref common.Reference
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_InferenceGraph(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceGraph is the Schema for the InferenceGraph API for multiple models",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraphStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceGraphList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceGraphList contains a list of InferenceGraph",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraph"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceGraph", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceGraphSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceGraphSpec defines the InferenceGraph spec",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"nodes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Map of InferenceGraph router nodes Each node defines the router which can be different routing types",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceRouter"),
+									},
+								},
+							},
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"timeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"minReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Maximum number of replicas for autoscaling.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scaleTarget": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"scaleMetric": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Toleration specifies the toleration for the InferenceGraph. https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"nodeSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector specifies the node selector for the InferenceGraph. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeName specifies the node name for the InferenceGraph. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceAccountName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceAccountName specifies the service account name for the InferenceGraph. https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"nodes"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceRouter", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceGraphStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceGraphStatus defines the InferenceGraph conditions and status",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the 'Generation' of the Service that was last processed by the controller.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-patch-merge-key": "type",
+								"x-kubernetes-patch-strategy":  "merge",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions the latest available observations of a resource's current state.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("knative.dev/pkg/apis.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations is additional Status fields for the Resource to save some additional State as well as convey more information to the user. This is roughly akin to Annotations on any k8s resource, just the reconciler conveying richer information outwards.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Url for the InferenceGraph",
+							Ref:         ref("knative.dev/pkg/apis.URL"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceRouter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceRouter defines the router for each InferenceGraph node with one or multiple steps\n\n```yaml kind: InferenceGraph metadata:\n\n\tname: canary-route\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Splitter\n\t    routes:\n\t    - service: mymodel1\n\t      weight: 20\n\t    - service: mymodel2\n\t      weight: 80\n\n```\n\n```yaml kind: InferenceGraph metadata:\n\n\tname: abtest\n\nspec:\n\n\tnodes:\n\t  mymodel:\n\t    routerType: Switch\n\t    routes:\n\t    - service: mymodel1\n\t      condition: \"{ .input.userId == 1 }\"\n\t    - service: mymodel2\n\t      condition: \"{ .input.userId == 2 }\"\n\n```\n\nScoring a case using a model ensemble consists of scoring it using each model separately, then combining the results into a single scoring result using one of the pre-defined combination methods.\n\nTree Ensemble constitutes a case where simple algorithms for combining results of either classification or regression trees are well known. Multiple classification trees, for example, are commonly combined using a \"majority-vote\" method. Multiple regression trees are often combined using various averaging techniques. e.g tagging models with segment identifiers and weights to be used for their combination in these ways. ```yaml kind: InferenceGraph metadata:\n\n\tname: ensemble\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Sequence\n\t    routes:\n\t    - service: feast\n\t    - nodeName: ensembleModel\n\t      data: $response\n\t  ensembleModel:\n\t    routerType: Ensemble\n\t    routes:\n\t    - service: sklearn-model\n\t    - service: xgboost-model\n\n```\n\nScoring a case using a sequence, or chain of models allows the output of one model to be passed in as input to the subsequent models. ```yaml kind: InferenceGraph metadata:\n\n\tname: model-chainer\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Sequence\n\t    routes:\n\t    - service: mymodel-s1\n\t    - service: mymodel-s2\n\t      data: $response\n\t    - service: mymodel-s3\n\t      data: $response\n\n```\n\nIn the flow described below, the pre_processing node base64 encodes the image and passes it to two model nodes in the flow. The encoded data is available to both these nodes for classification. The second node i.e. dog-breed-classification takes the original input from the pre_processing node along-with the response from the cat-dog-classification node to do further classification of the dog breed if required. ```yaml kind: InferenceGraph metadata:\n\n\tname: dog-breed-classification\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Sequence\n\t    routes:\n\t    - service: cat-dog-classifier\n\t    - nodeName: breed-classifier\n\t      data: $request\n\t  breed-classifier:\n\t    routerType: Switch\n\t    routes:\n\t    - service: dog-breed-classifier\n\t      condition: { .predictions.class == \"dog\" }\n\t    - service: cat-breed-classifier\n\t      condition: { .predictions.class == \"cat\" }\n\n```",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"routerType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RouterType\n\n- `Sequence:` chain multiple inference steps with input/output from previous step\n\n- `Splitter:` randomly routes to the target service according to the weight\n\n- `Ensemble:` routes the request to multiple models and then merge the responses\n\n- `Switch:` routes the request to one of the steps based on condition",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"steps": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Steps defines destinations for the current router node",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceStep"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"routerType"},
+			},
+		},
+		Dependencies: []string{
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.InferenceStep"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_InferenceService(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -4094,6 +4438,109 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelStatus", "knative.dev/pkg/apis.Condition", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceStep(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InferenceStep defines the inference target of the current step with condition, weights and data.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Unique name for the step within this node",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The node name for routing as next step",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "named reference for InferenceService",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceUrl": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InferenceService URL, mutually exclusive with ServiceName",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"data": {
+						SchemaProps: spec.SchemaProps{
+							Description: "request data sent to the next route with input/output from the previous step $request $response.predictions",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"weight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "the weight for split of the traffic, only used for Split Router when weight is specified all the routing targets should be sum to 100",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"condition": {
+						SchemaProps: spec.SchemaProps{
+							Description: "routing based on the condition",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"dependency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "to decide whether a step is a hard or a soft dependency in the Inference Graph",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InferenceTarget(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Exactly one InferenceTarget field must be specified",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The node name for routing as next step",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "named reference for InferenceService",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceUrl": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InferenceService URL, mutually exclusive with ServiceName",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

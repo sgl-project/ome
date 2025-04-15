@@ -41,6 +41,13 @@ var (
 	AIPlatformConfigMapName = "aiplatform-config"
 )
 
+// InferenceGraph Constants
+const (
+	RouterHeadersPropagateEnvVar = "PROPAGATE_HEADERS"
+	RouterReadinessEndpoint      = "/readyz"
+	RouterPort                   = 8080
+)
+
 // InferenceService Constants
 var (
 	InferenceServiceName                = "inferenceservice"

@@ -1,0 +1,89 @@
+{
+  "nodes": {
+    "root": {
+      "routerType": "sequence",
+      "steps": [
+        {
+          "stepName": "input-validation",
+          "serviceUrl": "http://validator:8080/validate",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "feature-extraction",
+          "serviceUrl": "http://feature-extractor:8080/extract",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "router-decision",
+          "nodeName": "router-selector",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "post-processing",
+          "serviceUrl": "http://post-processor:8080/process",
+          "dependency": "soft",
+          "data": "$response"
+        }
+      ]
+    },
+    "router-selector": {
+      "routerType": "switch",
+      "steps": [
+        {
+          "stepName": "text-processing",
+          "nodeName": "text-models",
+          "condition": "input.type == \"text\"",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "image-processing",
+          "nodeName": "image-models",
+          "condition": "input.type == \"image\"",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "default-processing",
+          "serviceUrl": "http://default-model:8080/predict",
+          "dependency": "hard"
+        }
+      ]
+    },
+    "text-models": {
+      "routerType": "ensemble",
+      "steps": [
+        {
+          "stepName": "text-model-1",
+          "serviceUrl": "http://text-model-1:8080/predict",
+          "dependency": "soft"
+        },
+        {
+          "stepName": "text-model-2",
+          "serviceUrl": "http://text-model-2:8080/predict",
+          "dependency": "soft"
+        },
+        {
+          "stepName": "text-model-3",
+          "serviceUrl": "http://text-model-3:8080/predict",
+          "dependency": "hard"
+        }
+      ]
+    },
+    "image-models": {
+      "routerType": "splitter",
+      "steps": [
+        {
+          "stepName": "high-res-model",
+          "serviceUrl": "http://high-res-model:8080/predict",
+          "weight": 60,
+          "dependency": "hard"
+        },
+        {
+          "stepName": "low-res-model",
+          "serviceUrl": "http://low-res-model:8080/predict",
+          "weight": 40,
+          "dependency": "hard"
+        }
+      ]
+    }
+  }
+} 

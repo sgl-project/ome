@@ -1,0 +1,23 @@
+# Mac file system
+**/.DS_Store
+
+# editor and IDE paraphernalia
+.idea
+.editorconfig
+.vscode
+.project
+*.swp
+*.swo
+*~
+
+# Rust specific ignores
+/target/
+**/target/
+**/*.rs.bk
+Cargo.lock
+*.pdb
+.cargo-ok
+.rustc_info.json
+router.log
+test_graph.json
+mock_servers.log

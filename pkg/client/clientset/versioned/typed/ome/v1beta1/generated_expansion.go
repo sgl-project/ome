@@ -22,6 +22,8 @@ type DedicatedAIClusterProfileExpansion interface{}
 
 type FineTunedWeightExpansion interface{}
 
+type InferenceGraphExpansion interface{}
+
 type InferenceServiceExpansion interface{}
 
 type OrganizationExpansion interface{}

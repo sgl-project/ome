@@ -1,0 +1,42 @@
+[package]
+name = "inference_router"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.28", features = ["full"] }
+tokio-stream = "0.1"
+
+# Web framework
+actix-web = "4.3"
+actix-rt = "2.8"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "stream"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utilities
+async-trait = "0.1"
+futures = "0.3"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.10"
+clap = { version = "4.4", features = ["derive"] }
+tracing-subscriber = { version = "0.3.18", features = ["json", "env-filter"] }
+scopeguard = "1.2"
+chrono = "0.4"
+uuid = { version = "1.4", features = ["v4"] }
+rand = "0.8"
+
+[dev-dependencies]
+tokio = { version = "1.28", features = ["full", "test-util"] }
+tempfile = "3.6"
+ctor = "0.2.0"
+
+[[test]]
+name = "integration"
+path = "tests/integration/mod.rs"

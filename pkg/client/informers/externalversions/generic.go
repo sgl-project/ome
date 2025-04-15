@@ -57,6 +57,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().DedicatedAIClusterProfiles().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("finetunedweights"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().FineTunedWeights().Informer()}, nil
+	case v1beta1.SchemeGroupVersion.WithResource("inferencegraphs"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().InferenceGraphs().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("inferenceservices"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ome().V1beta1().InferenceServices().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("organizations"):

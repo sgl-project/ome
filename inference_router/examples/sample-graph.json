@@ -1,0 +1,68 @@
+{
+  "nodes": {
+    "root": {
+      "routerType": "sequence",
+      "steps": [
+        {
+          "stepName": "preprocessor",
+          "serviceUrl": "http://localhost:1234/process",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "model-selection",
+          "nodeName": "model-router",
+          "dependency": "hard"
+        }
+      ]
+    },
+    "model-router": {
+      "routerType": "switch",
+      "steps": [
+        {
+          "stepName": "large-model",
+          "serviceUrl": "http://large-model:8080/predict",
+          "condition": "input.size == \"large\"",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "small-model",
+          "serviceUrl": "http://small-model:8080/predict",
+          "condition": "input.size == \"small\"",
+          "dependency": "hard"
+        }
+      ]
+    },
+    "ensemble": {
+      "routerType": "ensemble",
+      "steps": [
+        {
+          "stepName": "model1",
+          "serviceUrl": "http://model1:8080/predict",
+          "dependency": "soft"
+        },
+        {
+          "stepName": "model2",
+          "serviceUrl": "http://model2:8080/predict",
+          "dependency": "soft"
+        }
+      ]
+    },
+    "load-balancer": {
+      "routerType": "splitter",
+      "steps": [
+        {
+          "stepName": "instance1",
+          "serviceUrl": "http://instance1:8080/predict",
+          "weight": 50,
+          "dependency": "hard"
+        },
+        {
+          "stepName": "instance2",
+          "serviceUrl": "http://instance2:8080/predict",
+          "weight": 50,
+          "dependency": "hard"
+        }
+      ]
+    }
+  }
+} 

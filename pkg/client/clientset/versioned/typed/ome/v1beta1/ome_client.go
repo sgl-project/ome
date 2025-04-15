@@ -22,6 +22,7 @@ type OmeV1beta1Interface interface {
 	DedicatedAIClustersGetter
 	DedicatedAIClusterProfilesGetter
 	FineTunedWeightsGetter
+	InferenceGraphsGetter
 	InferenceServicesGetter
 	OrganizationsGetter
 	ProjectsGetter
@@ -76,6 +77,10 @@ func (c *OmeV1beta1Client) DedicatedAIClusterProfiles() DedicatedAIClusterProfil
 
 func (c *OmeV1beta1Client) FineTunedWeights() FineTunedWeightInterface {
 	return newFineTunedWeights(c)
+}
+
+func (c *OmeV1beta1Client) InferenceGraphs(namespace string) InferenceGraphInterface {
+	return newInferenceGraphs(c, namespace)
 }
 
 func (c *OmeV1beta1Client) InferenceServices(namespace string) InferenceServiceInterface {

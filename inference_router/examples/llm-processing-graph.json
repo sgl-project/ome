@@ -1,0 +1,93 @@
+{
+  "nodes": {
+    "root": {
+      "routerType": "sequence",
+      "steps": [
+        {
+          "stepName": "input-preprocessing",
+          "serviceUrl": "http://preprocessor:8080/process",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "model-selection",
+          "nodeName": "model-router",
+          "dependency": "hard",
+          "data": "$response"
+        },
+        {
+          "stepName": "post-processing",
+          "nodeName": "output-formatter",
+          "dependency": "hard",
+          "data": "$response"
+        }
+      ]
+    },
+    "model-router": {
+      "routerType": "switch",
+      "steps": [
+        {
+          "stepName": "complex-task",
+          "nodeName": "heavy-models",
+          "condition": "input.complexity_score > 0.7",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "medium-task",
+          "serviceUrl": "http://medium-model:8080/generate",
+          "condition": "input.complexity_score > 0.3 && input.complexity_score <= 0.7",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "simple-task",
+          "serviceUrl": "http://simple-model:8080/generate",
+          "condition": "input.complexity_score <= 0.3",
+          "dependency": "hard"
+        }
+      ]
+    },
+    "heavy-models": {
+      "routerType": "sequence",
+      "steps": [
+        {
+          "stepName": "initial-processing",
+          "serviceUrl": "http://large-model:8080/generate",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "reasoning",
+          "serviceUrl": "http://reasoning-model:8080/analyze",
+          "dependency": "hard",
+          "data": "$response"
+        },
+        {
+          "stepName": "fact-checking",
+          "serviceUrl": "http://fact-checker:8080/verify",
+          "dependency": "soft",
+          "data": "$response"
+        }
+      ]
+    },
+    "output-formatter": {
+      "routerType": "switch",
+      "steps": [
+        {
+          "stepName": "json-formatter",
+          "serviceUrl": "http://json-formatter:8080/format",
+          "condition": "input.output_format == \"json\"",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "markdown-formatter",
+          "serviceUrl": "http://markdown-formatter:8080/format",
+          "condition": "input.output_format == \"markdown\"",
+          "dependency": "hard"
+        },
+        {
+          "stepName": "plain-text-formatter",
+          "serviceUrl": "http://text-formatter:8080/format",
+          "dependency": "hard"
+        }
+      ]
+    }
+  }
+} 

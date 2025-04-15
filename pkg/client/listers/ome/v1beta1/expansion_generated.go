@@ -54,6 +54,14 @@ type DedicatedAIClusterProfileListerExpansion interface{}
 // FineTunedWeightLister.
 type FineTunedWeightListerExpansion interface{}
 
+// InferenceGraphListerExpansion allows custom methods to be added to
+// InferenceGraphLister.
+type InferenceGraphListerExpansion interface{}
+
+// InferenceGraphNamespaceListerExpansion allows custom methods to be added to
+// InferenceGraphNamespaceLister.
+type InferenceGraphNamespaceListerExpansion interface{}
+
 // InferenceServiceListerExpansion allows custom methods to be added to
 // InferenceServiceLister.
 type InferenceServiceListerExpansion interface{}

@@ -2109,6 +2109,193 @@
         }
       }
     },
+    "v1beta1.InferenceGraph": {
+      "description": "InferenceGraph is the Schema for the InferenceGraph API for multiple models",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.InferenceGraphSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.InferenceGraphStatus"
+        }
+      }
+    },
+    "v1beta1.InferenceGraphList": {
+      "description": "InferenceGraphList contains a list of InferenceGraph",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.InferenceGraph"
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.InferenceGraphSpec": {
+      "description": "InferenceGraphSpec defines the InferenceGraph spec",
+      "type": "object",
+      "required": [
+        "nodes"
+      ],
+      "properties": {
+        "affinity": {
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "maxReplicas": {
+          "description": "Maximum number of replicas for autoscaling.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "minReplicas": {
+          "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "nodeName": {
+          "description": "NodeName specifies the node name for the InferenceGraph. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/",
+          "type": "string"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector specifies the node selector for the InferenceGraph. https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "nodes": {
+          "description": "Map of InferenceGraph router nodes Each node defines the router which can be different routing types",
+          "type": "object",
+          "additionalProperties": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.InferenceRouter"
+          }
+        },
+        "resources": {
+          "default": {},
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "scaleMetric": {
+          "description": "ScaleMetric defines the scaling metric type watched by autoscaler possible values are concurrency, rps, cpu, memory. concurrency, rps are supported via Knative Pod Autoscaler(https://knative.dev/docs/serving/autoscaling/autoscaling-metrics).",
+          "type": "string"
+        },
+        "scaleTarget": {
+          "description": "ScaleTarget specifies the integer target value of the metric type the Autoscaler watches for. concurrency and rps targets are supported by Knative Pod Autoscaler (https://knative.dev/docs/serving/autoscaling/autoscaling-targets/).",
+          "type": "integer",
+          "format": "int32"
+        },
+        "serviceAccountName": {
+          "description": "ServiceAccountName specifies the service account name for the InferenceGraph. https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "TimeoutSeconds specifies the number of seconds to wait before timing out a request to the component.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "tolerations": {
+          "description": "Toleration specifies the toleration for the InferenceGraph. https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Toleration"
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
+    "v1beta1.InferenceGraphStatus": {
+      "description": "InferenceGraphStatus defines the InferenceGraph conditions and status",
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "description": "Annotations is additional Status fields for the Resource to save some additional State as well as convey more information to the user. This is roughly akin to Annotations on any k8s resource, just the reconciler conveying richer information outwards.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "conditions": {
+          "description": "Conditions the latest available observations of a resource's current state.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/knative.Condition"
+          },
+          "x-kubernetes-patch-merge-key": "type",
+          "x-kubernetes-patch-strategy": "merge"
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration is the 'Generation' of the Service that was last processed by the controller.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "url": {
+          "description": "Url for the InferenceGraph",
+          "$ref": "#/definitions/knative.URL"
+        }
+      }
+    },
+    "v1beta1.InferenceRouter": {
+      "description": "InferenceRouter defines the router for each InferenceGraph node with one or multiple steps\n\n```yaml kind: InferenceGraph metadata:\n\n\tname: canary-route\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Splitter\n\t    routes:\n\t    - service: mymodel1\n\t      weight: 20\n\t    - service: mymodel2\n\t      weight: 80\n\n```\n\n```yaml kind: InferenceGraph metadata:\n\n\tname: abtest\n\nspec:\n\n\tnodes:\n\t  mymodel:\n\t    routerType: Switch\n\t    routes:\n\t    - service: mymodel1\n\t      condition: \"{ .input.userId == 1 }\"\n\t    - service: mymodel2\n\t      condition: \"{ .input.userId == 2 }\"\n\n```\n\nScoring a case using a model ensemble consists of scoring it using each model separately, then combining the results into a single scoring result using one of the pre-defined combination methods.\n\nTree Ensemble constitutes a case where simple algorithms for combining results of either classification or regression trees are well known. Multiple classification trees, for example, are commonly combined using a \"majority-vote\" method. Multiple regression trees are often combined using various averaging techniques. e.g tagging models with segment identifiers and weights to be used for their combination in these ways. ```yaml kind: InferenceGraph metadata:\n\n\tname: ensemble\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Sequence\n\t    routes:\n\t    - service: feast\n\t    - nodeName: ensembleModel\n\t      data: $response\n\t  ensembleModel:\n\t    routerType: Ensemble\n\t    routes:\n\t    - service: sklearn-model\n\t    - service: xgboost-model\n\n```\n\nScoring a case using a sequence, or chain of models allows the output of one model to be passed in as input to the subsequent models. ```yaml kind: InferenceGraph metadata:\n\n\tname: model-chainer\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Sequence\n\t    routes:\n\t    - service: mymodel-s1\n\t    - service: mymodel-s2\n\t      data: $response\n\t    - service: mymodel-s3\n\t      data: $response\n\n```\n\nIn the flow described below, the pre_processing node base64 encodes the image and passes it to two model nodes in the flow. The encoded data is available to both these nodes for classification. The second node i.e. dog-breed-classification takes the original input from the pre_processing node along-with the response from the cat-dog-classification node to do further classification of the dog breed if required. ```yaml kind: InferenceGraph metadata:\n\n\tname: dog-breed-classification\n\nspec:\n\n\tnodes:\n\t  root:\n\t    routerType: Sequence\n\t    routes:\n\t    - service: cat-dog-classifier\n\t    - nodeName: breed-classifier\n\t      data: $request\n\t  breed-classifier:\n\t    routerType: Switch\n\t    routes:\n\t    - service: dog-breed-classifier\n\t      condition: { .predictions.class == \"dog\" }\n\t    - service: cat-breed-classifier\n\t      condition: { .predictions.class == \"cat\" }\n\n```",
+      "type": "object",
+      "required": [
+        "routerType"
+      ],
+      "properties": {
+        "routerType": {
+          "description": "RouterType\n\n- `Sequence:` chain multiple inference steps with input/output from previous step\n\n- `Splitter:` randomly routes to the target service according to the weight\n\n- `Ensemble:` routes the request to multiple models and then merge the responses\n\n- `Switch:` routes the request to one of the steps based on condition",
+          "type": "string",
+          "default": ""
+        },
+        "steps": {
+          "description": "Steps defines destinations for the current router node",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.InferenceStep"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        }
+      }
+    },
     "v1beta1.InferenceService": {
       "description": "InferenceService is the Schema for the InferenceServices API",
       "type": "object",
@@ -2273,6 +2460,63 @@
         "url": {
           "description": "URL holds the url that will distribute traffic over the provided traffic targets. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
           "$ref": "#/definitions/knative.URL"
+        }
+      }
+    },
+    "v1beta1.InferenceStep": {
+      "description": "InferenceStep defines the inference target of the current step with condition, weights and data.",
+      "type": "object",
+      "properties": {
+        "condition": {
+          "description": "routing based on the condition",
+          "type": "string"
+        },
+        "data": {
+          "description": "request data sent to the next route with input/output from the previous step $request $response.predictions",
+          "type": "string"
+        },
+        "dependency": {
+          "description": "to decide whether a step is a hard or a soft dependency in the Inference Graph",
+          "type": "string"
+        },
+        "name": {
+          "description": "Unique name for the step within this node",
+          "type": "string"
+        },
+        "nodeName": {
+          "description": "The node name for routing as next step",
+          "type": "string"
+        },
+        "serviceName": {
+          "description": "named reference for InferenceService",
+          "type": "string"
+        },
+        "serviceUrl": {
+          "description": "InferenceService URL, mutually exclusive with ServiceName",
+          "type": "string"
+        },
+        "weight": {
+          "description": "the weight for split of the traffic, only used for Split Router when weight is specified all the routing targets should be sum to 100",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "v1beta1.InferenceTarget": {
+      "description": "Exactly one InferenceTarget field must be specified",
+      "type": "object",
+      "properties": {
+        "nodeName": {
+          "description": "The node name for routing as next step",
+          "type": "string"
+        },
+        "serviceName": {
+          "description": "named reference for InferenceService",
+          "type": "string"
+        },
+        "serviceUrl": {
+          "description": "InferenceService URL, mutually exclusive with ServiceName",
+          "type": "string"
         }
       }
     },

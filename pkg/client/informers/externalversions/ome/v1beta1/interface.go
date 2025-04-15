@@ -28,6 +28,8 @@ type Interface interface {
 	DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer
 	// FineTunedWeights returns a FineTunedWeightInformer.
 	FineTunedWeights() FineTunedWeightInformer
+	// InferenceGraphs returns a InferenceGraphInformer.
+	InferenceGraphs() InferenceGraphInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
 	// Organizations returns a OrganizationInformer.
@@ -107,6 +109,11 @@ func (v *version) DedicatedAIClusterProfiles() DedicatedAIClusterProfileInformer
 // FineTunedWeights returns a FineTunedWeightInformer.
 func (v *version) FineTunedWeights() FineTunedWeightInformer {
 	return &fineTunedWeightInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// InferenceGraphs returns a InferenceGraphInformer.
+func (v *version) InferenceGraphs() InferenceGraphInformer {
+	return &inferenceGraphInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // InferenceServices returns a InferenceServiceInformer.

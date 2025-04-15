@@ -1,3 +1,4 @@
+API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceGraphList,Items
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceServiceList,Items
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,OrganizationStatus,Conditions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ProjectStatus,Conditions
@@ -12,6 +13,9 @@ API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ServingRuntimeSpec,ProtocolVersions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,TrainingJobStatus,Conditions
 API rule violation: list_type_missing,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,UserStatus,Conditions
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceGraphSpec,TimeoutSeconds
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceStep,StepName
+API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,InferenceTarget,ServiceURL
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,ModelStatusSpec,LifeCycle
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,OrganizationSpec,OrganizationID
 API rule violation: names_match,bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1,PodGroupPolicy,CoschedulingPodGroupPolicyConfig
