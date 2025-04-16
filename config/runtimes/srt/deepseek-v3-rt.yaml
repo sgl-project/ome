@@ -44,7 +44,6 @@ spec:
       version: "1.0.0"
   protocolVersions:
     - openAI
-  schedulerName: "genai-kube-scheduler"
   containers:
     - name: ome-container
       image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.2.post1.35b88e65-cu121

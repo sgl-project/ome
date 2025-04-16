@@ -65,7 +65,6 @@ spec:
                   - BM.GPU.H100.8
   protocolVersions:
     - cohere
-  schedulerName: "genai-kube-scheduler"
   volumes:
     - name: shared-memory
       emptyDir:

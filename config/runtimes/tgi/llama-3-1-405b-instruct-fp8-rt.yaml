@@ -43,7 +43,6 @@ spec:
     max: 410B
   protocolVersions:
     - openAI
-  schedulerName: "genai-kube-scheduler"
   containers:
     - name: ome-container
       image: ghcr.io/huggingface/text-generation-inference:3.0.0

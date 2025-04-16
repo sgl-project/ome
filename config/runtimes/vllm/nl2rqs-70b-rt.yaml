@@ -43,7 +43,6 @@ spec:
     max: 75B
   protocolVersions:
     - openAI
-  schedulerName: "genai-kube-scheduler"
   containers:
     - name: ome-container
       image: eu-frankfurt-1.ocir.io/axoxdievda5j/ocasgs-vllm-serving:0.4.0.post1.d7823e5e491

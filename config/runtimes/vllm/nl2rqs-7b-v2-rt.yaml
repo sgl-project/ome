@@ -46,7 +46,6 @@ spec:
     max: 9B
   protocolVersions:
     - openAI
-  schedulerName: "genai-kube-scheduler"
   containers:
     - name: ome-container
       image: us-chicago-1.ocir.io/axoxdievda5j/official-vllm-openai:0.5.3.post1.7f8d612d-log

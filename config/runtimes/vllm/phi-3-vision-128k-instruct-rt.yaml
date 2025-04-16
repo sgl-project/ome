@@ -43,7 +43,6 @@ spec:
       priority: 1
   protocolVersions:
     - openAI
-  schedulerName: "genai-kube-scheduler"
   modelSizeRange:
     min: 3B
     max: 6B

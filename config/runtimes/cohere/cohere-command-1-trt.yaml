@@ -51,7 +51,6 @@ spec:
                   - BM.GPU.A100-v2.8
   protocolVersions:
     - cohere
-  schedulerName: "genai-kube-scheduler"
   volumes:
     - name: shared-memory
       emptyDir:
