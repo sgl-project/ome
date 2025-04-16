@@ -8,13 +8,13 @@ TrainingJobSpec defines the base job spec which various training job specs imple
 |--------------------|--------------------|---------------------------------------------------------------------------------------------------------------|------------|
 | **annotations**    | **Dict[str, str]** | Annotations to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values. | [optional] |
 | **compartment_id** | **str**            | The compartment ID to use for the training job                                                                | [optional] |
-| **datasets**              | [**V1beta1StorageSpec**](V1beta1StorageSpec.md)                               |                                                                                                               |
-| **hyperparameter_config** | [**V1beta1HyperparameterTuningConfig**](V1beta1HyperparameterTuningConfig.md) |                                                                                                               | [optional] |
-| **labels**                | **Dict[str, str]**                                                            | Labels to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.      | [optional] |
-| **model_config**          | [**V1beta1ModelConfig**](V1beta1ModelConfig.md)                               |                                                                                                               |
-| **runtime_ref**           | [**V1beta1RuntimeRef**](V1beta1RuntimeRef.md)                                 |                                                                                                               |
-| **suspend**               | **bool**                                                                      | Whether the controller should suspend the running TrainJob. Defaults to false.                                | [optional] |
-| **trainer**               | [**V1beta1TrainerSpec**](V1beta1TrainerSpec.md)                               |                                                                                                               |
+| **datasets**                      | [**V1beta1StorageSpec**](V1beta1StorageSpec.md)                               |                                                                                                               |
+| **hyper_parameter_tuning_config** | [**V1beta1HyperparameterTuningConfig**](V1beta1HyperparameterTuningConfig.md) |                                                                                                               | [optional] |
+| **labels**                        | **Dict[str, str]**                                                            | Labels to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.      | [optional] |
+| **model_config**                  | [**V1beta1ModelConfig**](V1beta1ModelConfig.md)                               |                                                                                                               |
+| **runtime_ref**                   | [**V1beta1RuntimeRef**](V1beta1RuntimeRef.md)                                 |                                                                                                               |
+| **suspend**                       | **bool**                                                                      | Whether the controller should suspend the running TrainJob. Defaults to false.                                | [optional] |
+| **trainer**                       | [**V1beta1TrainerSpec**](V1beta1TrainerSpec.md)                               |                                                                                                               |
 
 ## Example
 

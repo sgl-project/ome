@@ -29,7 +29,7 @@ class V1beta1ProjectStatus(BaseModel):
     conditions: Optional[List[V1Condition]] = Field(default=None, description="Conditions represent the latest available observations of an object's state")
     creation_time: Optional[V1Time] = Field(default=None, alias="creationTime")
     last_updated_time: Optional[V1Time] = Field(default=None, alias="lastUpdatedTime")
-    project_id: Optional[StrictStr] = Field(default='', description="ProjectID is the platform-specific project ID", alias="projectId")
+    project_id: Optional[StrictStr] = Field(default='', description="ProjectId is the platform-specific project ID", alias="projectId")
     __properties: ClassVar[List[str]] = ["conditions", "creationTime", "lastUpdatedTime", "projectId"]
 
     model_config = ConfigDict(

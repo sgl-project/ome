@@ -6,7 +6,7 @@
 |---------------------|---------------------------------------------------------|---------------------------------------------------------|-----------------|
 | **config**          | **Dict[str, str]**                                      | Config contains vendor-specific configuration           | [optional]      |
 | **disabled**        | **bool**                                                | Disabled indicates whether the organization is disabled | [optional]      |
-| **organization_id** | **str**                                                 | OrganizationID is the platform-specific organization ID | [default to ''] |
+| **organization_id** | **str**                                                 | OrganizationId is the platform-specific organization ID | [default to ''] |
 | **secret_ref**      | [**V1beta1SecretReference**](V1beta1SecretReference.md) |                                                         | [optional]      |
 | **vendor**          | **str**                                                 | Vendor specifies the AI platform vendor (e.g., \&quot;openai\&quot;, \&quot;anthropic\&quot;) |
 

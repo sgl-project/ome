@@ -7,7 +7,7 @@
 | **conditions**        | [**List[V1Condition]**](V1Condition.md) | Conditions represent the latest available observations of an object&#39;s state | [optional]                 |
 | **creation_time**     | [**V1Time**](V1Time.md)                 |                                                                                 | [optional]                 |
 | **last_updated_time** | [**V1Time**](V1Time.md)                 |                                                                                 | [optional]                 |
-| **project_id**        | **str**                                 | ProjectID is the platform-specific project ID                                   | [optional] [default to ''] |
+| **project_id**        | **str**                                 | ProjectId is the platform-specific project ID                                   | [optional] [default to ''] |
 
 ## Example
 

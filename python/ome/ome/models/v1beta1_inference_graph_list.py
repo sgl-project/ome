@@ -19,17 +19,19 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from ome.models.v1beta1_inference_graph import V1beta1InferenceGraph
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1UserStatus(BaseModel):
+class V1beta1InferenceGraphList(BaseModel):
     """
-    V1beta1UserStatus
+    InferenceGraphList contains a list of InferenceGraph
     """ # noqa: E501
-    conditions: Optional[List[V1Condition]] = Field(default=None, description="Conditions represent the latest available observations of an object's state")
-    creation_time: Optional[V1Time] = Field(default=None, alias="creationTime")
-    user_id: StrictStr = Field(description="UserId is the platform-specific user ID", alias="userId")
-    __properties: ClassVar[List[str]] = ["conditions", "creationTime", "userId"]
+    api_version: Optional[StrictStr] = Field(default=None, description="APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources", alias="apiVersion")
+    items: List[V1beta1InferenceGraph]
+    kind: Optional[StrictStr] = Field(default=None, description="Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds")
+    metadata: Optional[V1ListMeta] = None
+    __properties: ClassVar[List[str]] = ["apiVersion", "items", "kind", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -49,7 +51,7 @@ class V1beta1UserStatus(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1UserStatus from a JSON string"""
+        """Create an instance of V1beta1InferenceGraphList from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -70,21 +72,21 @@ class V1beta1UserStatus(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in conditions (list)
+        # override the default output from pydantic by calling `to_dict()` of each item in items (list)
         _items = []
-        if self.conditions:
-            for _item_conditions in self.conditions:
-                if _item_conditions:
-                    _items.append(_item_conditions.to_dict())
-            _dict['conditions'] = _items
-        # override the default output from pydantic by calling `to_dict()` of creation_time
-        if self.creation_time:
-            _dict['creationTime'] = self.creation_time.to_dict()
+        if self.items:
+            for _item_items in self.items:
+                if _item_items:
+                    _items.append(_item_items.to_dict())
+            _dict['items'] = _items
+        # override the default output from pydantic by calling `to_dict()` of metadata
+        if self.metadata:
+            _dict['metadata'] = self.metadata.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1UserStatus from a dict"""
+        """Create an instance of V1beta1InferenceGraphList from a dict"""
         if obj is None:
             return None
 
@@ -92,9 +94,10 @@ class V1beta1UserStatus(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "conditions": [V1Condition.from_dict(_item) for _item in obj["conditions"]] if obj.get("conditions") is not None else None,
-            "creationTime": V1Time.from_dict(obj["creationTime"]) if obj.get("creationTime") is not None else None,
-            "userId": obj.get("userId") if obj.get("userId") is not None else ''
+            "apiVersion": obj.get("apiVersion"),
+            "items": [V1beta1InferenceGraph.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
+            "kind": obj.get("kind"),
+            "metadata": V1ListMeta.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None
         })
         return _obj
 

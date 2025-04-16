@@ -30,7 +30,7 @@ class V1beta1ServiceAccountStatus(BaseModel):
     api_key: Optional[V1beta1APIKeySpec] = Field(default=None, alias="apiKey")
     conditions: Optional[List[V1Condition]] = Field(default=None, description="Conditions represent the latest available observations of an object's state")
     creation_time: Optional[V1Time] = Field(default=None, alias="creationTime")
-    service_account_id: Optional[StrictStr] = Field(default=None, description="ServiceAccountID is the platform-specific service account ID", alias="serviceAccountId")
+    service_account_id: Optional[StrictStr] = Field(default=None, description="ServiceAccountId is the platform-specific service account ID", alias="serviceAccountId")
     __properties: ClassVar[List[str]] = ["apiKey", "conditions", "creationTime", "serviceAccountId"]
 
     model_config = ConfigDict(

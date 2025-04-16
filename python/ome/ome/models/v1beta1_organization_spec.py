@@ -29,7 +29,7 @@ class V1beta1OrganizationSpec(BaseModel):
     """ # noqa: E501
     config: Optional[Dict[str, StrictStr]] = Field(default=None, description="Config contains vendor-specific configuration")
     disabled: Optional[StrictBool] = Field(default=None, description="Disabled indicates whether the organization is disabled")
-    organization_id: StrictStr = Field(description="OrganizationID is the platform-specific organization ID", alias="organizationId")
+    organization_id: StrictStr = Field(description="OrganizationId is the platform-specific organization ID", alias="organizationId")
     secret_ref: Optional[V1beta1SecretReference] = Field(default=None, alias="secretRef")
     vendor: StrictStr = Field(description="Vendor specifies the AI platform vendor (e.g., \"openai\", \"anthropic\")")
     __properties: ClassVar[List[str]] = ["config", "disabled", "organizationId", "secretRef", "vendor"]

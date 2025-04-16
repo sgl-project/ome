@@ -6,7 +6,7 @@
 |-------------------|-----------------------------------------|---------------------------------------------------------------------------------|-----------------|
 | **conditions**    | [**List[V1Condition]**](V1Condition.md) | Conditions represent the latest available observations of an object&#39;s state | [optional]      |
 | **creation_time** | [**V1Time**](V1Time.md)                 |                                                                                 | [optional]      |
-| **user_id**       | **str**                                 | UserID is the platform-specific user ID                                         | [default to ''] |
+| **user_id**       | **str**                                 | UserId is the platform-specific user ID                                         | [default to ''] |
 
 ## Example
 

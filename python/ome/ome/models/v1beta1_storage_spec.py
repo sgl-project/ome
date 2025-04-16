@@ -27,11 +27,13 @@ class V1beta1StorageSpec(BaseModel):
     V1beta1StorageSpec
     """ # noqa: E501
     key: Optional[StrictStr] = Field(default=None, description="The Storage Key in the secret for this model.")
+    node_affinity: Optional[V1NodeAffinity] = Field(default=None, alias="nodeAffinity")
+    node_selector: Optional[Dict[str, StrictStr]] = Field(default=None, description="NodeSelector is a selector which must be true for the model to fit on a node. Selector which must match a node's labels for the model to be downloaded on that node.", alias="nodeSelector")
     parameters: Optional[Dict[str, StrictStr]] = Field(default=None, description="Parameters to override the default storage credentials and config.")
     path: Optional[StrictStr] = Field(default=None, description="The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name")
     schema_path: Optional[StrictStr] = Field(default=None, description="The path to the model schema file in the storage.", alias="schemaPath")
     storage_uri: StrictStr = Field(description="The path to the model object in storage. Supported storage types: - OCI object storage (e.g., oci://n/{namespace}/b/{bucket}/o/{object_path}) - PVC storage (e.g., pvc://{pvc-name}/{sub-path}) - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})", alias="storageUri")
-    __properties: ClassVar[List[str]] = ["key", "parameters", "path", "schemaPath", "storageUri"]
+    __properties: ClassVar[List[str]] = ["key", "nodeAffinity", "nodeSelector", "parameters", "path", "schemaPath", "storageUri"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,6 +74,9 @@ class V1beta1StorageSpec(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of node_affinity
+        if self.node_affinity:
+            _dict['nodeAffinity'] = self.node_affinity.to_dict()
         return _dict
 
     @classmethod
@@ -85,6 +90,8 @@ class V1beta1StorageSpec(BaseModel):
 
         _obj = cls.model_validate({
             "key": obj.get("key"),
+            "nodeAffinity": V1NodeAffinity.from_dict(obj["nodeAffinity"]) if obj.get("nodeAffinity") is not None else None,
+            "nodeSelector": obj.get("nodeSelector"),
             "parameters": obj.get("parameters"),
             "path": obj.get("path"),
             "schemaPath": obj.get("schemaPath"),

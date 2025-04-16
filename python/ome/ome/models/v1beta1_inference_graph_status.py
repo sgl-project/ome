@@ -17,19 +17,20 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1UserStatus(BaseModel):
+class V1beta1InferenceGraphStatus(BaseModel):
     """
-    V1beta1UserStatus
+    InferenceGraphStatus defines the InferenceGraph conditions and status
     """ # noqa: E501
-    conditions: Optional[List[V1Condition]] = Field(default=None, description="Conditions represent the latest available observations of an object's state")
-    creation_time: Optional[V1Time] = Field(default=None, alias="creationTime")
-    user_id: StrictStr = Field(description="UserId is the platform-specific user ID", alias="userId")
-    __properties: ClassVar[List[str]] = ["conditions", "creationTime", "userId"]
+    annotations: Optional[Dict[str, StrictStr]] = Field(default=None, description="Annotations is additional Status fields for the Resource to save some additional State as well as convey more information to the user. This is roughly akin to Annotations on any k8s resource, just the reconciler conveying richer information outwards.")
+    conditions: Optional[List[KnativeCondition]] = Field(default=None, description="Conditions the latest available observations of a resource's current state.")
+    observed_generation: Optional[StrictInt] = Field(default=None, description="ObservedGeneration is the 'Generation' of the Service that was last processed by the controller.", alias="observedGeneration")
+    url: Optional[KnativeURL] = None
+    __properties: ClassVar[List[str]] = ["annotations", "conditions", "observedGeneration", "url"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -49,7 +50,7 @@ class V1beta1UserStatus(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1UserStatus from a JSON string"""
+        """Create an instance of V1beta1InferenceGraphStatus from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -77,14 +78,14 @@ class V1beta1UserStatus(BaseModel):
                 if _item_conditions:
                     _items.append(_item_conditions.to_dict())
             _dict['conditions'] = _items
-        # override the default output from pydantic by calling `to_dict()` of creation_time
-        if self.creation_time:
-            _dict['creationTime'] = self.creation_time.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of url
+        if self.url:
+            _dict['url'] = self.url.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1UserStatus from a dict"""
+        """Create an instance of V1beta1InferenceGraphStatus from a dict"""
         if obj is None:
             return None
 
@@ -92,9 +93,10 @@ class V1beta1UserStatus(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "conditions": [V1Condition.from_dict(_item) for _item in obj["conditions"]] if obj.get("conditions") is not None else None,
-            "creationTime": V1Time.from_dict(obj["creationTime"]) if obj.get("creationTime") is not None else None,
-            "userId": obj.get("userId") if obj.get("userId") is not None else ''
+            "annotations": obj.get("annotations"),
+            "conditions": [KnativeCondition.from_dict(_item) for _item in obj["conditions"]] if obj.get("conditions") is not None else None,
+            "observedGeneration": obj.get("observedGeneration"),
+            "url": KnativeURL.from_dict(obj["url"]) if obj.get("url") is not None else None
         })
         return _obj
 

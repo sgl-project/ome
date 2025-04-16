@@ -7,7 +7,7 @@
 | **api_key**            | [**V1beta1APIKeySpec**](V1beta1APIKeySpec.md) |                                                                                 | [optional] |
 | **conditions**         | [**List[V1Condition]**](V1Condition.md)       | Conditions represent the latest available observations of an object&#39;s state | [optional] |
 | **creation_time**      | [**V1Time**](V1Time.md)                       |                                                                                 | [optional] |
-| **service_account_id** | **str**                                       | ServiceAccountID is the platform-specific service account ID                    | [optional] |
+| **service_account_id** | **str**                                       | ServiceAccountId is the platform-specific service account ID                    | [optional] |
 
 ## Example
 

@@ -17,19 +17,24 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
 
-class V1beta1UserStatus(BaseModel):
+class V1beta1InferenceStep(BaseModel):
     """
-    V1beta1UserStatus
+    InferenceStep defines the inference target of the current step with condition, weights and data.
     """ # noqa: E501
-    conditions: Optional[List[V1Condition]] = Field(default=None, description="Conditions represent the latest available observations of an object's state")
-    creation_time: Optional[V1Time] = Field(default=None, alias="creationTime")
-    user_id: StrictStr = Field(description="UserId is the platform-specific user ID", alias="userId")
-    __properties: ClassVar[List[str]] = ["conditions", "creationTime", "userId"]
+    condition: Optional[StrictStr] = Field(default=None, description="routing based on the condition")
+    data: Optional[StrictStr] = Field(default=None, description="request data sent to the next route with input/output from the previous step $request $response.predictions")
+    dependency: Optional[StrictStr] = Field(default=None, description="to decide whether a step is a hard or a soft dependency in the Inference Graph")
+    name: Optional[StrictStr] = Field(default=None, description="Unique name for the step within this node")
+    node_name: Optional[StrictStr] = Field(default=None, description="The node name for routing as next step", alias="nodeName")
+    service_name: Optional[StrictStr] = Field(default=None, description="named reference for InferenceService", alias="serviceName")
+    service_url: Optional[StrictStr] = Field(default=None, description="InferenceService URL, mutually exclusive with ServiceName", alias="serviceUrl")
+    weight: Optional[StrictInt] = Field(default=None, description="the weight for split of the traffic, only used for Split Router when weight is specified all the routing targets should be sum to 100")
+    __properties: ClassVar[List[str]] = ["condition", "data", "dependency", "name", "nodeName", "serviceName", "serviceUrl", "weight"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -49,7 +54,7 @@ class V1beta1UserStatus(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of V1beta1UserStatus from a JSON string"""
+        """Create an instance of V1beta1InferenceStep from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -70,21 +75,11 @@ class V1beta1UserStatus(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in conditions (list)
-        _items = []
-        if self.conditions:
-            for _item_conditions in self.conditions:
-                if _item_conditions:
-                    _items.append(_item_conditions.to_dict())
-            _dict['conditions'] = _items
-        # override the default output from pydantic by calling `to_dict()` of creation_time
-        if self.creation_time:
-            _dict['creationTime'] = self.creation_time.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of V1beta1UserStatus from a dict"""
+        """Create an instance of V1beta1InferenceStep from a dict"""
         if obj is None:
             return None
 
@@ -92,9 +87,14 @@ class V1beta1UserStatus(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "conditions": [V1Condition.from_dict(_item) for _item in obj["conditions"]] if obj.get("conditions") is not None else None,
-            "creationTime": V1Time.from_dict(obj["creationTime"]) if obj.get("creationTime") is not None else None,
-            "userId": obj.get("userId") if obj.get("userId") is not None else ''
+            "condition": obj.get("condition"),
+            "data": obj.get("data"),
+            "dependency": obj.get("dependency"),
+            "name": obj.get("name"),
+            "nodeName": obj.get("nodeName"),
+            "serviceName": obj.get("serviceName"),
+            "serviceUrl": obj.get("serviceUrl"),
+            "weight": obj.get("weight")
         })
         return _obj
 

@@ -34,13 +34,13 @@ class V1beta1TrainingJobSpec(BaseModel):
     annotations: Optional[Dict[str, StrictStr]] = Field(default=None, description="Annotations to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.")
     compartment_id: Optional[StrictStr] = Field(default=None, description="The compartment ID to use for the training job", alias="compartmentID")
     datasets: V1beta1StorageSpec
-    hyperparameter_config: Optional[V1beta1HyperparameterTuningConfig] = Field(default=None, alias="hyperparameterConfig")
+    hyper_parameter_tuning_config: Optional[V1beta1HyperparameterTuningConfig] = Field(default=None, alias="hyperParameterTuningConfig")
     labels: Optional[Dict[str, StrictStr]] = Field(default=None, description="Labels to apply for the derivative JobSet and Jobs. They will be merged with the TrainingRuntime values.")
     model_config: V1beta1ModelConfig = Field(alias="modelConfig")
     runtime_ref: V1beta1RuntimeRef = Field(alias="runtimeRef")
     suspend: Optional[StrictBool] = Field(default=None, description="Whether the controller should suspend the running TrainJob. Defaults to false.")
     trainer: V1beta1TrainerSpec
-    __properties: ClassVar[List[str]] = ["annotations", "compartmentID", "datasets", "hyperparameterConfig", "labels", "modelConfig", "runtimeRef", "suspend", "trainer"]
+    __properties: ClassVar[List[str]] = ["annotations", "compartmentID", "datasets", "hyperParameterTuningConfig", "labels", "modelConfig", "runtimeRef", "suspend", "trainer"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -84,9 +84,9 @@ class V1beta1TrainingJobSpec(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of datasets
         if self.datasets:
             _dict['datasets'] = self.datasets.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of hyperparameter_config
-        if self.hyperparameter_config:
-            _dict['hyperparameterConfig'] = self.hyperparameter_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of hyper_parameter_tuning_config
+        if self.hyper_parameter_tuning_config:
+            _dict['hyperParameterTuningConfig'] = self.hyper_parameter_tuning_config.to_dict()
         # override the default output from pydantic by calling `to_dict()` of model_config
         if self.model_config:
             _dict['modelConfig'] = self.model_config.to_dict()
@@ -111,7 +111,7 @@ class V1beta1TrainingJobSpec(BaseModel):
             "annotations": obj.get("annotations"),
             "compartmentID": obj.get("compartmentID"),
             "datasets": V1beta1StorageSpec.from_dict(obj["datasets"]) if obj.get("datasets") is not None else None,
-            "hyperparameterConfig": V1beta1HyperparameterTuningConfig.from_dict(obj["hyperparameterConfig"]) if obj.get("hyperparameterConfig") is not None else None,
+            "hyperParameterTuningConfig": V1beta1HyperparameterTuningConfig.from_dict(obj["hyperParameterTuningConfig"]) if obj.get("hyperParameterTuningConfig") is not None else None,
             "labels": obj.get("labels"),
             "modelConfig": V1beta1ModelConfig.from_dict(obj["modelConfig"]) if obj.get("modelConfig") is not None else None,
             "runtimeRef": V1beta1RuntimeRef.from_dict(obj["runtimeRef"]) if obj.get("runtimeRef") is not None else None,
