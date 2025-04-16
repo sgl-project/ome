@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
@@ -72,6 +73,9 @@ func createRawDeployment(componentMeta metav1.ObjectMeta,
 	}
 
 	setDefaultDeploymentSpec(&deployment.Spec)
+
+	// Only update deployment name after we use it to populate pod selector label value
+	updateDeploymentName(deployment)
 	return deployment
 }
 
@@ -211,4 +215,23 @@ func (r *DeploymentReconciler) Reconcile() (*appsv1.Deployment, error) {
 	}
 
 	return r.Deployment, nil
+}
+
+/* Need a different name for ome.io based DAC inference service raw deployment under OME migration context since:
+ *  1. Kueue required labels: kueue.x-k8s.io/queue-name & kueue.x-k8s.io/priority-class are 2 immutable fields;
+ *  2. Kueue is only introduced in new OME, not old OME. So for OME migration from old OME to new OME, need to recreate a
+ *     new deployment resource with a different name so new OME inference service can be up successfully with Kueue,
+ *     it cannot directly update the existing old OME deployment resource due to above point #1;
+ *  Note: Only need to adopt a new deployment name when it comes to migrate old OME DAC inference service, no need to do
+ *        this for below:
+ *     1). on-demand model serving;
+ *     2). DAC inference service deployment from new OME with Volcano reconciled; (Out of scope, will handle its migration
+ *         separately)
+ */
+func updateDeploymentName(deployment *appsv1.Deployment) {
+	if _, ok := deployment.Annotations[constants.DedicatedAICluster]; ok {
+		if _, ok = deployment.Annotations[constants.VolcanoScheduler]; !ok {
+			deployment.Name = fmt.Sprintf("%s-%s", deployment.Name, "new")
+		}
+	}
 }
