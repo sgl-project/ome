@@ -127,6 +127,8 @@ func runCommand(cmd *cobra.Command, args []string) {
 
 	inClusterKubeConfig := getKubeConfig()
 	kubeClient := createKubeClient(inClusterKubeConfig)
+
+	// Get node shape for backward compatibility
 	nodeShape := getNodeShape(kubeClient, cfg.nodeName)
 
 	omev1beta1ClientSet := createOmeClient(inClusterKubeConfig)

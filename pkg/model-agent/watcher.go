@@ -3,6 +3,7 @@ package model_agent
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -13,6 +14,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"go.uber.org/zap"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +31,7 @@ type Watcher struct {
 	informerFactory        omev1beta1informers.SharedInformerFactory
 	syncerChan             chan<- *SyncerTask
 	nodeName               string
+	nodeInfo               *v1.Node
 	nodeShape              string
 	nodeShapeAlias         string
 	kubeClient             *kubernetes.Clientset
@@ -56,9 +59,16 @@ func NewWatcher(nodeShape string,
 		return nil, err
 	}
 
+	// Fetch the complete node info
+	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node info for node %s: %w", nodeName, err)
+	}
+
 	watcher := &Watcher{
 		nodeShape:              nodeShape,
 		nodeShapeAlias:         nodeShapeAlias,
+		nodeInfo:               nodeInfo,
 		baseModelLister:        baseModelInformer.Lister(),
 		baseModelSynced:        baseModelInformer.Informer().HasSynced,
 		clusterBaseModelLister: clusterBaseModelInformer.Lister(),
@@ -150,15 +160,18 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 		return
 	}
 
-	if w.matchTargetShape(baseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
-		nodeInfo, err := w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
+	if w.shouldDownloadModel(baseModel.Spec.Storage) {
+		// Refresh the node info
+		var err error
+		w.nodeInfo, err = w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
 		if err != nil {
-			w.logger.Fatalf("Error getting the node info: %s", err.Error())
-		} else {
-			if state, ok := nodeInfo.Labels[constants.GetModelsLabelWithUid(baseModel.UID)]; ok {
-				if state == string(Ready) {
-					return
-				}
+			w.logger.Errorf("Error getting the node info: %s, skipping download", err.Error())
+			return
+		}
+
+		if state, ok := w.nodeInfo.Labels[constants.GetModelsLabelWithUid(baseModel.UID)]; ok {
+			if state == string(Ready) {
+				return
 			}
 		}
 
@@ -194,15 +207,18 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 		return
 	}
 
-	if w.matchTargetShape(clusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
-		nodeInfo, err := w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
+	if w.shouldDownloadModel(clusterBaseModel.Spec.Storage) {
+		// Refresh the node info
+		var err error
+		w.nodeInfo, err = w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
 		if err != nil {
-			w.logger.Fatalf("Error getting the node info: %s", err.Error())
-		} else {
-			if state, ok := nodeInfo.Labels[constants.GetModelsLabelWithUid(clusterBaseModel.UID)]; ok {
-				if state == string(Ready) {
-					return
-				}
+			w.logger.Errorf("Error getting the node info: %s, skipping download", err.Error())
+			return
+		}
+
+		if state, ok := w.nodeInfo.Labels[constants.GetModelsLabelWithUid(clusterBaseModel.UID)]; ok {
+			if state == string(Ready) {
+				return
 			}
 		}
 
@@ -238,8 +254,8 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	if w.matchTargetShape(oldBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) &&
-		!w.matchTargetShape(newBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
+	if w.shouldDownloadModel(oldBaseModel.Spec.Storage) &&
+		!w.shouldDownloadModel(newBaseModel.Spec.Storage) {
 		// shape config changed, delete from current node
 		w.logger.Infof("Target shapes excluded BaseModel update: %s in namespace %s, deleting", newBaseModel.GetName(), newBaseModel.GetNamespace())
 		w.deleteBaseModel(new)
@@ -260,7 +276,7 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		needRefresh = false
 	}
 
-	if needRefresh && w.matchTargetShape(newBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
+	if needRefresh && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
 		w.logger.Infof("BaseModel %s need refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
 
 		nodeLabelOp := &NodeLabelOp{
@@ -308,8 +324,8 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	if w.matchTargetShape(oldClusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) &&
-		!w.matchTargetShape(newClusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
+	if w.shouldDownloadModel(oldClusterBaseModel.Spec.Storage) &&
+		!w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
 		// shape config changed, delete from current node
 		w.logger.Infof("Target shapes excluded ClusterBaseModel %s, deleting", newClusterBaseModel.GetName())
 		w.deleteClusterBaseModel(new)
@@ -330,7 +346,7 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		needRefresh = false
 	}
 
-	if needRefresh && w.matchTargetShape(newClusterBaseModel.ObjectMeta.Annotations[constants.TargetInstanceShapes]) {
+	if needRefresh && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
 		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
 
 		nodeLabelOp := &NodeLabelOp{
@@ -414,7 +430,157 @@ func (w *Watcher) deleteClusterBaseModel(obj interface{}) {
 	w.syncerChan <- syncerTask
 }
 
+// shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity
+func (w *Watcher) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
+	if storage == nil {
+		// If storage is nil, default to true (backward compatibility)
+		return true
+	}
+
+	// Check NodeSelector if specified
+	if len(storage.NodeSelector) > 0 {
+		for key, value := range storage.NodeSelector {
+			nodeValue, exists := w.nodeInfo.Labels[key]
+			if !exists || nodeValue != value {
+				return false
+			}
+		}
+	}
+
+	// Check NodeAffinity if specified
+	if storage.NodeAffinity != nil && storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+		nodeSelectorTerms := storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+		if len(nodeSelectorTerms) > 0 {
+			matches := false
+			for _, term := range nodeSelectorTerms {
+				if w.nodeMatchesSelectorTerm(term) {
+					matches = true
+					break
+				}
+			}
+			if !matches {
+				return false
+			}
+		}
+	}
+
+	// If neither NodeSelector nor NodeAffinity are specified, fallback to annotation-based matching for backward compatibility
+	// TODO remove this fallback in the future once we deprecate the annotation
+	if len(storage.NodeSelector) == 0 &&
+		(storage.NodeAffinity == nil || storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil ||
+			len(storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) == 0) {
+
+		// Check if target shape annotation exists on the node
+		if targetShapes, ok := w.nodeInfo.Annotations[constants.TargetInstanceShapes]; ok && targetShapes != "" {
+			return w.matchTargetShape(targetShapes)
+		}
+	}
+
+	// Default to true if no other conditions are specified
+	return true
+}
+
+func (w *Watcher) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
+	// Check match expressions
+	for _, expr := range term.MatchExpressions {
+		if !w.nodeMatchesExpression(expr) {
+			return false
+		}
+	}
+
+	// Check match fields
+	for _, field := range term.MatchFields {
+		if !w.nodeMatchesExpression(field) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (w *Watcher) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
+	// Get the field value based on whether it's a label or field selector
+	var values []string
+	var exists bool
+
+	// For label selectors, get the label values
+	labelValue, labelExists := w.nodeInfo.Labels[expr.Key]
+	if labelExists {
+		values = []string{labelValue}
+		exists = true
+	}
+
+	// If not found in labels, try fields (only for special fields)
+	if !exists {
+		switch expr.Key {
+		case "metadata.name":
+			values = []string{w.nodeInfo.Name}
+			exists = true
+			// Add other field cases as needed
+		}
+	}
+
+	if !exists {
+		return expr.Operator == v1.NodeSelectorOpDoesNotExist
+	}
+
+	switch expr.Operator {
+	case v1.NodeSelectorOpIn:
+		for _, v := range values {
+			for _, requiredValue := range expr.Values {
+				if v == requiredValue {
+					return true
+				}
+			}
+		}
+		return false
+	case v1.NodeSelectorOpNotIn:
+		for _, v := range values {
+			for _, requiredValue := range expr.Values {
+				if v == requiredValue {
+					return false
+				}
+			}
+		}
+		return true
+	case v1.NodeSelectorOpExists:
+		return true
+	case v1.NodeSelectorOpDoesNotExist:
+		return false
+	case v1.NodeSelectorOpGt:
+		if len(values) == 0 || len(expr.Values) == 0 {
+			return false
+		}
+		// Try to convert to integers for numeric comparison
+		nodeVal, nodeErr := strconv.Atoi(values[0])
+		requiredVal, reqErr := strconv.Atoi(expr.Values[0])
+		if nodeErr == nil && reqErr == nil {
+			// If both values can be parsed as integers, do numeric comparison
+			return nodeVal > requiredVal
+		}
+		// Fall back to string comparison if not numeric
+		return values[0] > expr.Values[0]
+	case v1.NodeSelectorOpLt:
+		if len(values) == 0 || len(expr.Values) == 0 {
+			return false
+		}
+		// Try to convert to integers for numeric comparison
+		nodeVal, nodeErr := strconv.Atoi(values[0])
+		requiredVal, reqErr := strconv.Atoi(expr.Values[0])
+		if nodeErr == nil && reqErr == nil {
+			// If both values can be parsed as integers, do numeric comparison
+			return nodeVal < requiredVal
+		}
+		// Fall back to string comparison if not numeric
+		return values[0] < expr.Values[0]
+	}
+
+	return false
+}
+
+// Keep the legacy implementation but modify it to check annotations in the model object
 func (w *Watcher) matchTargetShape(targetShapes string) bool {
+	// For backward compatibility - this functionality is now integrated into shouldDownloadModel
 	// matched if target shape not specified
 	if len(targetShapes) == 0 {
 		return true
