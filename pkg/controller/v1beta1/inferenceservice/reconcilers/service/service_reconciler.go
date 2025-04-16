@@ -43,6 +43,48 @@ func NewServiceReconciler(client client.Client,
 	}
 }
 
+// determineServiceType determines the service type based on annotations
+func determineServiceType(meta metav1.ObjectMeta) corev1.ServiceType {
+	serviceType := corev1.ServiceTypeClusterIP
+	if serviceTypeAnnotation, ok := meta.Annotations[constants.ServiceType]; ok {
+		switch serviceTypeAnnotation {
+		case "LoadBalancer":
+			serviceType = corev1.ServiceTypeLoadBalancer
+		case "NodePort":
+			serviceType = corev1.ServiceTypeNodePort
+		}
+	}
+	return serviceType
+}
+
+// buildServiceWithLoadBalancer constructs a Service object with LoadBalancer IP support
+func buildServiceWithLoadBalancer(
+	componentMeta metav1.ObjectMeta,
+	serviceType corev1.ServiceType,
+	servicePorts []corev1.ServicePort,
+	selector map[string]string) *corev1.Service {
+
+	var loadBalancerIP string
+	if loadBalancerIPAnnotation, ok := componentMeta.Annotations[constants.LoadBalancerIP]; ok {
+		loadBalancerIP = loadBalancerIPAnnotation
+	}
+
+	spec := corev1.ServiceSpec{
+		Type:     serviceType,
+		Selector: selector,
+		Ports:    servicePorts,
+	}
+
+	if serviceType == corev1.ServiceTypeLoadBalancer && loadBalancerIP != "" {
+		spec.LoadBalancerIP = loadBalancerIP
+	}
+
+	return &corev1.Service{
+		ObjectMeta: componentMeta,
+		Spec:       spec,
+	}
+}
+
 // buildService constructs a Service object from the given specifications
 func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
@@ -54,14 +96,7 @@ func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.Compone
 		selector = map[string]string{"app": constants.GetRawServiceLabel(componentMeta.Name)}
 	}
 
-	return &corev1.Service{
-		ObjectMeta: componentMeta,
-		Spec: corev1.ServiceSpec{
-			Type:     serviceType,
-			Selector: selector,
-			Ports:    servicePorts,
-		},
-	}
+	return buildServiceWithLoadBalancer(componentMeta, serviceType, servicePorts, selector)
 }
 
 // buildServicePorts creates service ports configuration from pod spec
@@ -112,20 +147,6 @@ func buildDefaultServicePort(name string) corev1.ServicePort {
 		},
 		Protocol: corev1.ProtocolTCP,
 	}
-}
-
-// determineServiceType determines the service type based on annotations
-func determineServiceType(meta metav1.ObjectMeta) corev1.ServiceType {
-	serviceType := corev1.ServiceTypeClusterIP
-	if serviceTypeAnnotation, ok := meta.Annotations[constants.ServiceType]; ok {
-		switch serviceTypeAnnotation {
-		case "LoadBalancer":
-			serviceType = corev1.ServiceTypeLoadBalancer
-		case "NodePort":
-			serviceType = corev1.ServiceTypeNodePort
-		}
-	}
-	return serviceType
 }
 
 // Reconcile ensures the Service matches the desired state

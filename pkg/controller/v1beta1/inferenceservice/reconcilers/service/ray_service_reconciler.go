@@ -36,15 +36,9 @@ func NewRayServiceReconciler(client client.Client,
 func buildRayHeadService(componentMeta metav1.ObjectMeta, podSpec *corev1.PodSpec) *corev1.Service {
 	servicePorts := buildRayServicePorts(podSpec, componentMeta.Name)
 	serviceType := determineServiceType(componentMeta)
+	selector := buildRayHeadSelectorLabels(componentMeta)
 
-	return &corev1.Service{
-		ObjectMeta: componentMeta,
-		Spec: corev1.ServiceSpec{
-			Selector: buildRayHeadSelectorLabels(componentMeta),
-			Ports:    servicePorts,
-			Type:     serviceType,
-		},
-	}
+	return buildServiceWithLoadBalancer(componentMeta, serviceType, servicePorts, selector)
 }
 
 // buildRayServicePorts creates service ports configuration for Ray head service
