@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: openai.gpt-4-1
+  displayName: openai.gpt-4.1
   storage:
     storageUri: "vendor://openai/models/{{ index .Values "gpt-4-1" "osPrefixOverride" }}"
   vendor: {{ index .Values "gpt-4-1" "vendor" }}

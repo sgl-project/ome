@@ -13,7 +13,7 @@ metadata:
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
-  displayName: openai.gpt-4-1-nano-2025-04-14
+  displayName: openai.gpt-4.1-nano-2025-04-14
   storage:
     storageUri: "vendor://openai/models/gpt-4-1-nano-2025-04-14"
   vendor: openai

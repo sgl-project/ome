@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: openai.gpt-4-1-nano
+  displayName: openai.gpt-4.1-nano
   storage:
     storageUri: "vendor://openai/models/{{ index .Values "gpt-4-1-nano" "osPrefixOverride" }}"
   vendor: {{ index .Values "gpt-4-1-nano" "vendor" }}
