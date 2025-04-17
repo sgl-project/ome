@@ -11,7 +11,6 @@ spec:
     ome.io/inject-model-init: 'true'
   labels:
     logging-forward: enabled
-    sidecar.istio.io/inject: 'true'
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Exists"
