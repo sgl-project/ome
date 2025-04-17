@@ -63,6 +63,20 @@ func createScaledObject(
 	minReplicas := calculateMinReplicas(componentExt)
 	maxReplicas := calculateMaxReplicas(componentExt, minReplicas)
 	triggers := getScaledObjectTriggers(componentMeta, inferenceServiceSpec)
+	/* Need a different name for ome.io based DAC inference service raw deployment under OME migration context since:
+	 *  1. Kueue required labels: kueue.x-k8s.io/queue-name & kueue.x-k8s.io/priority-class are 2 immutable fields;
+	 *  2. Kueue is only introduced in new OME, not old OME. So for OME migration from old OME to new OME, need to recreate a
+	 *     new deployment resource with a different name so new OME inference service can be up successfully with Kueue,
+	 *     it cannot directly update the existing old OME deployment resource due to above point #1;
+	 *  Note: Only need to adopt a new deployment name when it comes to migrate old OME DAC inference service, no need to do
+	 *        this for below:
+	 *     1). on-demand model serving;
+	 *     2). DAC inference service deployment from new OME with Volcano reconciled; (Out of scope, will handle its migration
+	 *         separately)
+	 *  when we create an inference service with Kueue enabled, we need to use inferencerservice name + "-new" as the deployment name
+	 *  for keda scale target ref.
+	 */
+	deploymentName := getDeploymentName(componentMeta)
 
 	return &kedav1.ScaledObject{
 		ObjectMeta: metav1.ObjectMeta{
@@ -75,7 +89,7 @@ func createScaledObject(
 			ScaleTargetRef: &kedav1.ScaleTarget{
 				APIVersion: "apps/v1",
 				Kind:       "Deployment",
-				Name:       componentMeta.Name,
+				Name:       deploymentName,
 			},
 			MinReplicaCount: &minReplicas,
 			MaxReplicaCount: &maxReplicas,
@@ -98,6 +112,14 @@ func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec, minRepli
 		return int32(componentExt.MaxReplicas)
 	}
 	return minReplicas
+}
+
+// getDeploymentName constructs the deployment name based on the componentMeta
+func getDeploymentName(metadata metav1.ObjectMeta) string {
+	if enabledKueue, ok := metadata.Annotations["kueue-enabled"]; ok && enabledKueue == "true" {
+		return fmt.Sprintf("%s-%s", metadata.Name, "new")
+	}
+	return metadata.Name
 }
 
 // getScaledObjectTriggers constructs the triggers for the ScaledObject
