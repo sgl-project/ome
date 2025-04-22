@@ -1,0 +1,10 @@
+# DO NOT EDIT, UPDATE, OR APPLY this file to upstream cluster unless you have consulted with Simo Lin
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aor-evaluator-ns
+
+# IP pool:
+# 147.154.178.181: llama-4-maverick-17b-128e-instruct-fp8
+# 147.154.132.151: llama-4-scout-17b-16e-instruct
+# 147.154.182.82: None
