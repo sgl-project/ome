@@ -14,7 +14,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: xai.grok-3
+  displayName: xai.grok-3-mini
   storage:
     storageUri: "vendor://xai/models/{{ index .Values "grok-3-mini" "osPrefixOverride" }}"
   vendor: {{ index .Values "grok-3-mini" "vendor" }}
