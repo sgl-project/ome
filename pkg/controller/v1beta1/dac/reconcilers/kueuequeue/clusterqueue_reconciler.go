@@ -34,12 +34,13 @@ func NewClusterQueueReconciler(client client.Client, scheme *runtime.Scheme, que
 }
 
 func createClusterQueue(queueName string, resources *corev1.ResourceRequirements, count int) *kueuev1beta1.ClusterQueue {
+	// Require extra resources for rolling update
 	cpuRequest := resources.Requests[corev1.ResourceCPU]
-	utils.ResourceQuantityAfterMultiply(&cpuRequest, count)
+	utils.ResourceQuantityAfterMultiply(&cpuRequest, count+1)
 	memoryRequest := resources.Requests[corev1.ResourceMemory]
-	utils.ResourceQuantityAfterMultiply(&memoryRequest, count)
+	utils.ResourceQuantityAfterMultiply(&memoryRequest, count+1)
 	gpuRequest := resources.Requests[corev1.ResourceName(constants.NvidiaGPUResourceType)]
-	utils.ResourceQuantityAfterMultiply(&gpuRequest, count)
+	utils.ResourceQuantityAfterMultiply(&gpuRequest, count+1)
 
 	return &kueuev1beta1.ClusterQueue{
 		ObjectMeta: metav1.ObjectMeta{

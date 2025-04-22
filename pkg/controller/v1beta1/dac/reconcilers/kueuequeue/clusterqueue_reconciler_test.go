@@ -42,7 +42,7 @@ func TestClusterQueueReconciler(t *testing.T) {
 			},
 			count:          1,
 			wantErr:        false,
-			expectedQueue:  createTestClusterQueue("test-queue", "30", "120Gi", "8"),
+			expectedQueue:  createTestClusterQueue("test-queue", "60", "240Gi", "16"),
 			expectedUpdate: false,
 		},
 		{
@@ -77,7 +77,7 @@ func TestClusterQueueReconciler(t *testing.T) {
 					},
 				},
 			},
-			expectedQueue:  createTestClusterQueue("existing-queue", "60", "360Gi", "6"),
+			expectedQueue:  createTestClusterQueue("existing-queue", "80", "480Gi", "8"),
 			expectedUpdate: true,
 		},
 		{
@@ -91,9 +91,9 @@ func TestClusterQueueReconciler(t *testing.T) {
 				},
 			},
 			count:          2,
-			existingQueue:  createTestClusterQueue("existing-same-queue", "20", "300Gi", "8"),
+			existingQueue:  createTestClusterQueue("existing-same-queue", "30", "450Gi", "12"),
 			wantErr:        false,
-			expectedQueue:  createTestClusterQueue("existing-same-queue", "20", "300Gi", "8"),
+			expectedQueue:  createTestClusterQueue("existing-same-queue", "30", "450Gi", "12"),
 			expectedUpdate: false, // Should not update since specs match
 		},
 	}
