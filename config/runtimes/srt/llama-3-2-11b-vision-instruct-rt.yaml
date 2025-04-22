@@ -62,7 +62,8 @@ spec:
           --model-path="$MODEL_PATH" \
           --tp 1 \
           --mem-frac=0.9 \
-          --chat-template llama_3_vision
+          --chat-template llama_3_vision \
+          --tool-call-parser=llama3
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
