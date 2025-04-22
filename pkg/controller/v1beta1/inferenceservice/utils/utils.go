@@ -40,13 +40,6 @@ func GetDeploymentMode(annotations map[string]string, deployConfig *controllerco
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
 }
 
-// IsChainsawInjectEnabled checks if the Chainsaw sidecar injection is enabled
-// based on the InferenceService annotations.
-func IsChainsawInjectEnabled(annotations map[string]string) bool {
-	chainsawInject, ok := annotations[constants.ChainsawInject]
-	return ok && chainsawInject == "enabled"
-}
-
 func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 	inject, ok := annotations[constants.BlockListDisableInjection]
 	return ok && inject == "true"

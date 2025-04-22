@@ -146,22 +146,6 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	} else {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(isvc, finalizerName) {
-
-			if deploymentMode != constants.VirtualDeployment {
-				pvName := constants.PVName(isvc.Name, isvc.Namespace, *isvc.Spec.Predictor.Model.BaseModel)
-				r.Log.Info("Force deleting PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
-				if err := r.ForceDeletePV(pvName); err != nil {
-					return ctrl.Result{}, err
-				}
-				for _, item := range constants.OCIETCHostPaths {
-					pvName := constants.PVName(isvc.Name, isvc.Namespace, item.Name)
-					r.Log.Info("Force deleting chainsaw PersistentVolume before removing finalizer", "pv", pvName, "inference service", isvc.Name, "namespace", isvc.Namespace)
-					if err := r.ForceDeletePV(pvName); err != nil {
-						return ctrl.Result{}, err
-					}
-				}
-			}
-
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(isvc, finalizerName)
 			if err := r.Update(context.Background(), isvc); err != nil {
@@ -333,29 +317,6 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta2.Infere
 			r.Recorder.Eventf(desiredService, v1.EventTypeNormal, string(InferenceServiceReadyState),
 				fmt.Sprintf("InferenceService [%v] is Ready", desiredService.GetName()))
 		}
-	}
-	return nil
-}
-
-// ForceDeletePV deletes the PersistentVolume with the given name
-func (r *InferenceServiceReconciler) ForceDeletePV(pvName string) error {
-	r.Log.Info("Force deleting PersistentVolume", "pv", pvName)
-	pv := &v1.PersistentVolume{}
-	if err := r.Get(context.TODO(), client.ObjectKey{Name: pvName}, pv); err != nil {
-		// If the PV is not found, return nil without an error
-		if apierr.IsNotFound(err) {
-			r.Log.Info("PersistentVolume not found, skipping deletion", "pv", pvName)
-			return nil
-		}
-		// Return any other error
-		return err
-	}
-
-	deletePolicy := metav1.DeletePropagationForeground
-	if err := r.Delete(context.TODO(), pv, &client.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		return err
 	}
 	return nil
 }

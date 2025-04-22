@@ -47,24 +47,23 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 }
 
 // UpdateVolumeMounts updates the volume mounts for the benchmark container if a base model is defined.
-func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container) {
-	if isvc.Spec.Predictor.Model == nil || isvc.Spec.Predictor.Model.BaseModel == nil {
+func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, baseModel *v1beta1.BaseModelSpec) {
+	if isvc.Spec.Predictor.Model == nil || isvc.Spec.Predictor.Model.BaseModel == nil || baseModel == nil {
 		return
 	}
 
 	baseModelName := *isvc.Spec.Predictor.Model.BaseModel
-	modelMountPath := fmt.Sprintf("/model/%s", baseModelName)
 
 	// Define the volume mount
 	volumeMount := v1.VolumeMount{
 		Name:      baseModelName,
-		MountPath: modelMountPath,
+		MountPath: *baseModel.Storage.Path,
 		ReadOnly:  true,
 	}
 
 	isvcutils.UpdateVolumeMounts(container, &volumeMount)
 	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-		{Name: "MODEL_PATH", Value: modelMountPath},
+		{Name: "MODEL_PATH", Value: *baseModel.Storage.Path},
 	})
 }
 

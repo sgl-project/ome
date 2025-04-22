@@ -383,6 +383,7 @@ func TestUpdateVolumeMounts(t *testing.T) {
 	tests := []struct {
 		name      string
 		isvc      *v1beta1.InferenceService
+		model     *v1beta1.ClusterBaseModel
 		container *v1.Container
 		want      *v1.Container
 	}{
@@ -394,6 +395,13 @@ func TestUpdateVolumeMounts(t *testing.T) {
 						Model: &v1beta1.ModelSpec{
 							BaseModel: strPtr("test-model"),
 						},
+					},
+				},
+			},
+			model: &v1beta1.ClusterBaseModel{
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						Path: strPtr("/model/test-model"),
 					},
 				},
 			},
@@ -428,7 +436,11 @@ func TestUpdateVolumeMounts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			UpdateVolumeMounts(tt.isvc, tt.container)
+			if tt.model != nil {
+				UpdateVolumeMounts(tt.isvc, tt.container, &tt.model.Spec)
+			} else {
+				UpdateVolumeMounts(tt.isvc, tt.container, nil)
+			}
 			if !reflect.DeepEqual(tt.container, tt.want) {
 				t.Errorf("UpdateVolumeMounts() = %v, want %v", tt.container, tt.want)
 			}

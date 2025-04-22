@@ -2,7 +2,6 @@ package servingruntime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -150,9 +149,6 @@ func areModelSizeRangesEqual(range1 *v1beta1.ModelSizeRangeSpec, range2 *v1beta1
 func validateServingRuntimeAnnotations(servingRuntime *v1beta1.ServingRuntimeSpec) error {
 	if servingRuntime.ServingRuntimePodSpec.Annotations == nil {
 		return nil
-	}
-	if _, ok := servingRuntime.ServingRuntimePodSpec.Annotations[constants.ChainsawInject]; ok {
-		return errors.New(ChainsawInjectAnnotationNotAllowError)
 	}
 	return nil
 }

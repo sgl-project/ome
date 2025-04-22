@@ -66,12 +66,7 @@ func createRawDeployment(
 	podMetadata := componentMeta.DeepCopy()
 	podMetadata.Name = rayutils.CheckName(fmt.Sprintf("%s-%d-mnp", componentMeta.Name, index))
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
-	// Remove abandoned annotations, abandoned, your first vocab word for SAT test ( ͡° ͜ʖ ͡°)
-	abandonedAnnotations := []string{
-		constants.ChainsawInject,
-	}
 	utils.SetPodLabelsFromAnnotations(podMetadata)
-	utils.RemovePodAnnotations(podMetadata, abandonedAnnotations)
 
 	podSpec := getDefaultPodSpec(multiNodeProberConfig, url)
 	deployment := &appsv1.Deployment{

@@ -168,10 +168,6 @@ var (
 	DefaultPrometheusPath                    = "/metrics"
 	QueueProxyAggregatePrometheusMetricsPort = 9088
 	DefaultPodPrometheusPort                 = "9091"
-	ChainsawInject                           = ChainsawAPIGroupName + "/inject"
-	ChainsawLogPath                          = ChainsawAPIGroupName + "/logPath"
-	ChainsawNamespace                        = ChainsawAPIGroupName + "/namespace"
-	ChainsawCompartmentID                    = ChainsawAPIGroupName + "/compartmentId"
 	ModelCategoryAnnotation                  = "models.ome.io/category"
 )
 
@@ -587,25 +583,6 @@ const (
 	Unknown
 )
 
-type HostPath struct {
-	Name     string
-	HostPath string
-}
-
-var OCIETCHostPaths = []HostPath{
-	{"region", "/etc/region"},
-	{"host-class", "/etc/hostclass"},
-	// This typo (avalability) is intentional, it is used in the code in chainsaw sidecar injection,
-	// so DO NOT FIX IT UNLESS YOU FIX THE CODE in chainsaw sidecar injection
-	// the exact code is here https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/core-k8s-apps/browse/logging-flow/charts/chainsaw-sidecar-injector/values.yaml#85
-	{"etc-avalability-domain", "/etc/availability-domain"},
-	{"etc-fault-domain", "/etc/fault-domain"},
-	{"etc-pki", "/etc/pki"},
-	{"etc-ocipki", "/etc/oci-pki"},
-	{"etc-identity-realm", "/etc/identity-realm"},
-	{"etc-hosts", "/etc/hosts"},
-}
-
 // revision label
 const (
 	RevisionLabel         = "serving.knative.dev/revision"
@@ -983,32 +960,6 @@ func ModelConfigName(isvcName string) string {
 		isvcName = isvcName[len(isvcName)-maxLen:]
 	}
 	return fmt.Sprintf("modelconfig-%s", isvcName)
-}
-
-func PVName(isvcName string, isvcNamespace string, componentName string) string {
-	var maxSubLen = 16
-	if len(isvcNamespace) > maxSubLen {
-		isvcNamespace = isvcNamespace[len(isvcNamespace)-maxSubLen:]
-	}
-	if len(isvcName) > maxSubLen {
-		isvcName = isvcName[len(isvcName)-maxSubLen:]
-	}
-
-	if len(componentName) > maxSubLen {
-		componentName = componentName[len(componentName)-maxSubLen:]
-	}
-	return fmt.Sprintf("pv-%s-%s-%s", isvcNamespace, isvcName, componentName)
-}
-
-func PVCName(isvcName string, component string) string {
-	var maxLen = 25
-	if len(isvcName) > maxLen {
-		isvcName = isvcName[len(isvcName)-maxLen:]
-	}
-	if len(component) > maxLen {
-		component = component[len(component)-maxLen:]
-	}
-	return fmt.Sprintf("pvc-%s-%s", isvcName, component)
 }
 
 func LWSName(isvcName string) string {

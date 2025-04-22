@@ -7,17 +7,15 @@ import (
 	"strconv"
 	"time"
 
+	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"k8s.io/apimachinery/pkg/types"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/reconcilers/job"
-	benchmarkjobpv "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/reconcilers/pv"
-	benchmarkjobpvc "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/reconcilers/pvc"
 	benchmarkutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/utils"
-	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -110,11 +108,6 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// Reconcile model PV/PVC if needed
-	if _, err := r.reconcileModelPVPVC(benchmarkJob, isvcRef); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Build config and pod spec
 	config, err := controllerconfig.NewBenchmarkJobConfig(r.Clientset)
 	if err != nil {
@@ -152,49 +145,12 @@ func (r *BenchmarkJobReconciler) fetchBenchmarkJob(ctx context.Context, req ctrl
 func (r *BenchmarkJobReconciler) handleDeletion(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob) (ctrl.Result, error) {
 	if controllerutil.ContainsFinalizer(benchmarkJob, finalizerName) {
 		// Perform cleanup logic here
-		if err := r.cleanupResources(benchmarkJob); err != nil {
-			return ctrl.Result{}, err
-		}
-
 		controllerutil.RemoveFinalizer(benchmarkJob, finalizerName)
 		if err := r.Update(ctx, benchmarkJob); err != nil {
 			r.Log.Error(err, "Failed to remove finalizer from BenchmarkJob")
 			return ctrl.Result{}, err
 		}
 	}
-	return ctrl.Result{}, nil
-}
-
-// reconcileModelPVPVC handles the creation or update of PV and PVC for the benchmark job if needed.
-func (r *BenchmarkJobReconciler) reconcileModelPVPVC(benchmarkJob *v1beta1.BenchmarkJob, isvcRef *v1beta1.InferenceService) (ctrl.Result, error) {
-	if benchmarkJob.Spec.Endpoint.InferenceService == nil {
-		return ctrl.Result{}, nil
-	}
-
-	baseModelName := ""
-	if isvcRef != nil && isvcRef.Spec.Predictor.Model.BaseModel != nil {
-		baseModelName = *isvcRef.Spec.Predictor.Model.BaseModel
-	}
-	if baseModelName == "" {
-		return ctrl.Result{}, fmt.Errorf("base model name is null, cannot create benchmark job")
-	}
-
-	baseModel, _, err := isvcutils.GetBaseModel(r.Client, baseModelName, isvcRef.Namespace)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pvReconciler := benchmarkjobpv.NewBenchmarkJobPVReconciler(r.Client, r.Clientset, r.Scheme)
-	pvcReconciler := benchmarkjobpvc.NewBenchmarkJobPVCReconciler(r.Client, r.Clientset, r.Scheme)
-
-	if result, err := pvReconciler.Reconcile(benchmarkJob, baseModelName, baseModel); err != nil {
-		return result, err
-	}
-
-	if result, err := pvcReconciler.Reconcile(benchmarkJob, baseModelName); err != nil {
-		return result, err
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -290,15 +246,17 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		if err != nil {
 			return nil, err
 		}
-
-		benchmarkutils.UpdateVolumeMounts(inferenceService, &defaultContainer)
+		baseModel, _, err := isvcutils.GetBaseModel(r.Client, *inferenceService.Spec.Predictor.Model.BaseModel, inferenceService.Namespace)
+		if err != nil {
+			return nil, err
+		}
+		benchmarkutils.UpdateVolumeMounts(inferenceService, &defaultContainer, baseModel)
 
 		volumes = append(volumes, v1.Volume{
 			Name: *inferenceService.Spec.Predictor.Model.BaseModel,
 			VolumeSource: v1.VolumeSource{
-				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: constants.PVCName(benchmarkJob.Name, *inferenceService.Spec.Predictor.Model.BaseModel),
-					ReadOnly:  true,
+				HostPath: &v1.HostPathVolumeSource{
+					Path: *baseModel.Storage.Path,
 				},
 			},
 		})
@@ -580,47 +538,6 @@ func (r *BenchmarkJobReconciler) updateStatus(ctx context.Context, benchmarkJob 
 	// Update the BenchmarkJob status on the cluster if changed.
 	// This ensures the status is stored and reflected in the resource.
 	return r.Update(ctx, benchmarkJob)
-}
-
-// cleanupResources handles resource cleanup during deletion.
-func (r *BenchmarkJobReconciler) cleanupResources(benchmarkJob *v1beta1.BenchmarkJob) error {
-	// Implement cleanup logic if needed
-	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
-		isvcRef, err := benchmarkutils.GetInferenceService(r.Client, benchmarkJob.Spec.Endpoint.InferenceService)
-		if err != nil {
-			return err
-		}
-		pvName := constants.PVName(benchmarkJob.Name, benchmarkJob.Namespace, *isvcRef.Spec.Predictor.Model.BaseModel)
-		if err := r.ForceDeletePV(pvName); err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-}
-
-// ForceDeletePV deletes the PersistentVolume with the given name
-func (r *BenchmarkJobReconciler) ForceDeletePV(pvName string) error {
-	r.Log.Info("Force deleting PersistentVolume", "pv", pvName)
-	pv := &v1.PersistentVolume{}
-	if err := r.Get(context.TODO(), client.ObjectKey{Name: pvName}, pv); err != nil {
-		// If the PV is not found, return nil without an error
-		if apierr.IsNotFound(err) {
-			r.Log.Info("PersistentVolume not found, skipping deletion", "pv", pvName)
-			return nil
-		}
-		// Return any other error
-		return err
-	}
-
-	deletePolicy := metav1.DeletePropagationForeground
-	if err := r.Delete(context.TODO(), pv, &client.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		return err
-	}
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

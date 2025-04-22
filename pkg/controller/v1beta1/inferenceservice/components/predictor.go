@@ -12,8 +12,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
-	predictorpv "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pv"
-	predictorpvc "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pvc"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -70,11 +68,6 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	// Reconcile PVC and PV
-	if result, err := p.reconcilePVPVC(isvc, baseModel); err != nil {
-		return result, err
-	}
-
 	// Reconcile and validate runtime
 	sRuntime, runtimeName, result, err := p.getRuntime(isvc, baseModel)
 	if err != nil {
@@ -91,12 +84,12 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 		return result, err
 	}
 
-	podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime, &objectMeta)
+	podSpec, result, err := p.reconcilePodSpec(isvc, sRuntime, &objectMeta, &baseModel)
 	if err != nil {
 		return result, err
 	}
 
-	workerPodSpec, result, err := p.reconcileWorkerPodSpec(isvc, sRuntime, &objectMeta)
+	workerPodSpec, result, err := p.reconcileWorkerPodSpec(isvc, sRuntime, &objectMeta, &baseModel)
 	if err != nil {
 		return result, err
 	}
@@ -424,7 +417,7 @@ func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1b
 }
 
 // reconcileWorkerPodSpec reconciles the worker pod spec for the predictor.
-func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
+func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta, baseModel *v1beta1.BaseModelSpec) (v1.PodSpec, ctrl.Result, error) {
 	// Early return if no worker specs are defined
 	if sRuntime.WorkerPodSpec == nil && isvc.Spec.Predictor.Worker == nil {
 		return v1.PodSpec{}, ctrl.Result{}, nil
@@ -448,7 +441,7 @@ func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRunt
 	}
 
 	// Update volume mounts and pod spec
-	p.updateVolumeMounts(isvc, workerContainer, objectMeta)
+	p.updateVolumeMounts(isvc, workerContainer, objectMeta, baseModel)
 	p.updateWorkerPodSpec(
 		isvc,
 		sRuntime,
@@ -456,7 +449,7 @@ func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRunt
 		containerIndices.runtimeIndex,
 		workerContainer,
 		&workerPodSpec,
-		objectMeta,
+		baseModel,
 	)
 
 	return workerPodSpec, ctrl.Result{}, nil
@@ -576,19 +569,18 @@ func (p *Predictor) createMergedWorkerPodSpec(isvc *v1beta1.InferenceService, sR
 }
 
 // updateVolumeMounts updates the volume mounts for the predictor.
-func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta) {
+func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta, baseModel *v1beta1.BaseModelSpec) {
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
 
 	if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-		modelMountPath := fmt.Sprintf("/model/%s", *isvc.Spec.Predictor.Model.BaseModel)
 		vm := v1.VolumeMount{
 			Name:      *isvc.Spec.Predictor.Model.BaseModel,
-			MountPath: modelMountPath,
+			MountPath: *baseModel.Storage.Path,
 			ReadOnly:  true,
 		}
 		isvcutils.UpdateVolumeMounts(container, &vm)
 		isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-			{Name: "MODEL_PATH", Value: modelMountPath},
+			{Name: "MODEL_PATH", Value: *baseModel.Storage.Path},
 		})
 	}
 
@@ -611,18 +603,25 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 }
 
 // updatePodSpec updates the pod spec for the predictor.
-func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, omeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, objectMeta *metav1.ObjectMeta) {
+func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	omeContainerIdx int,
+	container *v1.Container,
+	podSpec *v1.PodSpec,
+	objectMeta *metav1.ObjectMeta,
+	baseModel *v1beta1.BaseModelSpec,
+) {
 	// Update containers by inserting the custom container and keeping the other runtime containers
 	podSpec.Containers = append([]v1.Container{*container}, sRuntime.Containers[:omeContainerIdx]...)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.Containers[omeContainerIdx+1:]...)
 
-	// Initialize volumes and add the main PVC volume
+	// Initialize volumes and add the main model volume
 	volumes := []v1.Volume{
 		{
 			Name: *isvc.Spec.Predictor.Model.BaseModel,
 			VolumeSource: v1.VolumeSource{
-				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: constants.PVCName(isvc.Name, *isvc.Spec.Predictor.Model.BaseModel),
+				HostPath: &v1.HostPathVolumeSource{
+					Path: *baseModel.Storage.Path,
 				},
 			},
 		},
@@ -642,20 +641,6 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 		volumes = append(volumes, blockListConfigMapVolume)
 	}
 
-	// Add additional volumes if Chainsaw injection is enabled
-	if isvcutils.IsChainsawInjectEnabled(objectMeta.Annotations) {
-		for _, item := range constants.OCIETCHostPaths {
-			volumes = append(volumes, v1.Volume{
-				Name: item.Name,
-				VolumeSource: v1.VolumeSource{
-					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-						ClaimName: constants.PVCName(isvc.Name, item.Name),
-					},
-				},
-			})
-		}
-	}
-
 	// Append volumes to the podSpec
 	podSpec.Volumes = append(podSpec.Volumes, volumes...)
 
@@ -663,7 +648,7 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService, sRuntime v1bet
 }
 
 // updateWorkerPodSpec updates the worker pod spec for the predictor.
-func (p *Predictor) updateWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, isvcOmeContainerIdx int, sRuntimeOmeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, objectMeta *metav1.ObjectMeta) {
+func (p *Predictor) updateWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, isvcOmeContainerIdx int, sRuntimeOmeContainerIdx int, container *v1.Container, podSpec *v1.PodSpec, baseModel *v1beta1.BaseModelSpec) {
 	// Update containers by inserting the custom container and keeping the other runtime containers
 	podSpec.Containers = append([]v1.Container{*container}, sRuntime.WorkerPodSpec.Containers[:sRuntimeOmeContainerIdx]...)
 	podSpec.Containers = append(podSpec.Containers, sRuntime.WorkerPodSpec.Containers[sRuntimeOmeContainerIdx+1:]...)
@@ -677,25 +662,11 @@ func (p *Predictor) updateWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime
 		{
 			Name: *isvc.Spec.Predictor.Model.BaseModel,
 			VolumeSource: v1.VolumeSource{
-				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: constants.PVCName(isvc.Name, *isvc.Spec.Predictor.Model.BaseModel),
+				HostPath: &v1.HostPathVolumeSource{
+					Path: *baseModel.Storage.Path,
 				},
 			},
 		},
-	}
-
-	// Add additional volumes if Chainsaw injection is enabled
-	if isvcutils.IsChainsawInjectEnabled(objectMeta.Annotations) {
-		for _, item := range constants.OCIETCHostPaths {
-			volumes = append(volumes, v1.Volume{
-				Name: item.Name,
-				VolumeSource: v1.VolumeSource{
-					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-						ClaimName: constants.PVCName(isvc.Name, item.Name),
-					},
-				},
-			})
-		}
 	}
 
 	// Append volumes to the podSpec
@@ -784,21 +755,6 @@ func (p *Predictor) isProtocolVersionSupported(isvc *v1beta1.InferenceService, r
 	return runtime.IsProtocolVersionSupported(protocolVersion)
 }
 
-// reconcilePVPVC reconciles the PersistentVolume and PersistentVolumeClaim for the predictor.
-func (p *Predictor) reconcilePVPVC(isvc *v1beta1.InferenceService, baseModel v1beta1.BaseModelSpec) (ctrl.Result, error) {
-	pvReconciler := predictorpv.NewPredictorPVReconciler(p.client, p.clientset, p.scheme)
-	pvcReconciler := predictorpvc.NewPredictorPVCReconciler(p.client, p.clientset, p.scheme)
-
-	if result, err := pvReconciler.Reconcile(isvc, &baseModel); err != nil {
-		return result, err
-	}
-
-	if result, err := pvcReconciler.Reconcile(isvc); err != nil {
-		return result, err
-	}
-	return ctrl.Result{}, nil
-}
-
 // reconcileBaseModel reconciles the base model for the predictor.
 func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, metav1.ObjectMeta, ctrl.Result, error) {
 	if isvc.Spec.Predictor.Model.BaseModel == nil {
@@ -861,7 +817,11 @@ func (p *Predictor) updateModelTransitionStatus(isvc *v1beta1.InferenceService, 
 }
 
 // reconcilePodSpec reconciles the pod spec.
-func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (v1.PodSpec, ctrl.Result, error) {
+func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	objectMeta *metav1.ObjectMeta,
+	baseModel *v1beta1.BaseModelSpec,
+) (v1.PodSpec, ctrl.Result, error) {
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
@@ -877,8 +837,8 @@ func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService, sRuntime v1
 		return v1.PodSpec{}, ctrl.Result{}, err
 	}
 
-	p.updateVolumeMounts(isvc, container, objectMeta)
-	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec, objectMeta)
+	p.updateVolumeMounts(isvc, container, objectMeta, baseModel)
+	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec, objectMeta, baseModel)
 
 	return podSpec, ctrl.Result{}, nil
 }
