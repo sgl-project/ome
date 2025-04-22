@@ -280,11 +280,27 @@ o1-2024-12-17:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+o3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o3-2025-04-16: 
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 o3-mini:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
 o3-mini-2025-01-31:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o4-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o4-mini-2025-04-16:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
