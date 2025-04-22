@@ -10,10 +10,10 @@
     <img src="site/assets/ome-logo-hd.png" alt="Logo" width="" height="300">
   </a>
 
-<h3 align="center">Oracle Managed ML Engine</h3>
+<h3 align="center">Open Model Engine</h3>
 
   <p align="center">
-This Project Provides AI/ML Workload Management on Oracle Kubernetes Engine (OKE)
+This Project Provides AI/ML Workload Management on Kubernetes
     <br />
     <a href="https://PENDING"><strong>Explore the docs »</strong></a>
     <br />
