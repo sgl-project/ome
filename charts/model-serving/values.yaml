@@ -460,7 +460,7 @@ llama_4_maverick_17b_128e_instruct_fp8:
   maxReplicas: 1
   image:
     repository:
-    tag: 866b94a
+    tag: v0.8.4.6b2f6bdb
 
 llama_4_scout_17b_16e_instruct:
   enabled: false
@@ -484,7 +484,7 @@ llama_4_scout_17b_16e_instruct:
   maxReplicas: 1
   image:
     repository:
-    tag: 866b94a
+    tag: v0.8.4.6b2f6bdb
 
 phi_3_vision_128k_instruct:
   enabled: false

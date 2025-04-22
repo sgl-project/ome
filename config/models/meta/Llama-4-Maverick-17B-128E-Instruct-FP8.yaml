@@ -5,7 +5,7 @@ metadata:
 spec:
   vendor: meta
   disabled: false
-  displayName: meta.llama4-maverick
+  displayName: meta.llama-4-maverick-17b-128e-instruct-fp8
   version: "1.0.0"
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   modelFramework:

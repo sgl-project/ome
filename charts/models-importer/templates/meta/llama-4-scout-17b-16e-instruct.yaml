@@ -15,7 +15,7 @@ metadata:
 spec:
   vendor: meta
   disabled: false
-  displayName: meta.llama4-scout
+  displayName: meta.llama-4-scout-17b-16e-instruct
   version: "1.0.0"
   compartmentID: {{ .Values.compartmentID }}
   modelFramework:
