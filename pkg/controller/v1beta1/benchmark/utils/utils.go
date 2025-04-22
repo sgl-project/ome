@@ -40,10 +40,74 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 	}
 
 	if endpointSpec.InferenceService != nil {
-		return buildArgsFromInferenceService(c, endpointSpec.InferenceService)
+		ref := endpointSpec.InferenceService
+		inferenceService, err := GetInferenceService(c, ref)
+		if err != nil {
+			return nil, err
+		}
+
+		args := make(map[string]string)
+		// TODO: Use actual service account key later
+		args["--api-key"] = "sample-key"
+
+		if inferenceService.Spec.Predictor.Model != nil {
+			model := inferenceService.Spec.Predictor.Model
+
+			// Use protocol version if available
+			if model.ProtocolVersion != nil {
+				args["--api-backend"] = string(*model.ProtocolVersion)
+			} else {
+				// Default or error if protocol is mandatory?
+				// For now, let's assume a default or leave it empty if not critical
+				args["--api-backend"] = "vllm" // Assuming default if nil
+			}
+
+			// Use a generic model name and set the model-tokenizer if BaseModel is defined
+			if model.BaseModel != nil {
+				baseModel, _, err := isvcutils.GetBaseModel(c, *model.BaseModel, inferenceService.Namespace)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get BaseModel %s: %w", *model.BaseModel, err)
+				}
+				if baseModel.Storage == nil || baseModel.Storage.Path == nil {
+					return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", *model.BaseModel)
+				}
+				args["--api-model-name"] = "vllm-model" // Or derive from somewhere?
+				args["--model-tokenizer"] = *baseModel.Storage.Path
+			} else {
+				// Handle case where BaseModel is not specified but needed?
+				// Or maybe model name comes from somewhere else?
+				args["--api-model-name"] = "some-default-model" // Placeholder
+			}
+		} else {
+			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined in Predictor spec", ref.Namespace, ref.Name)
+		}
+
+		// Extract the URL from the InferenceService's status if available
+		if inferenceService.Status.URL == nil || inferenceService.Status.URL.Host == "" {
+			return nil, fmt.Errorf("InferenceService %s/%s has no URL.Host in status", ref.Namespace, ref.Name)
+		}
+		// Assuming http and standard port for now if scheme/port missing
+		scheme := "http"
+		if inferenceService.Status.URL.Scheme != "" {
+			scheme = inferenceService.Status.URL.Scheme
+		}
+		args["--api-base"] = fmt.Sprintf("%s://%s", scheme, inferenceService.Status.URL.Host)
+
+		return args, nil
 	}
 
 	return nil, fmt.Errorf("invalid EndpointSpec: both Endpoint and InferenceService are nil")
+}
+
+// buildArgsFromEndpoint constructs the arguments map when an Endpoint is directly provided.
+func buildArgsFromEndpoint(endpoint *v1beta1.Endpoint) map[string]string {
+	args := make(map[string]string)
+	args["--api-backend"] = endpoint.APIFormat
+	args["--api-model-name"] = endpoint.ModelName
+	args["--api-base"] = endpoint.URL
+
+	// TODO: add --model-tokenizer once available
+	return args
 }
 
 // UpdateVolumeMounts updates the volume mounts for the benchmark container if a base model is defined.
@@ -65,51 +129,6 @@ func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container,
 	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
 		{Name: "MODEL_PATH", Value: *baseModel.Storage.Path},
 	})
-}
-
-// buildArgsFromEndpoint constructs the arguments map when an Endpoint is directly provided.
-func buildArgsFromEndpoint(endpoint *v1beta1.Endpoint) map[string]string {
-	args := make(map[string]string)
-	args["--api-backend"] = endpoint.APIFormat
-	args["--api-model-name"] = endpoint.ModelName
-	args["--api-base"] = endpoint.URL
-
-	// TODO: add --model-tokenizer once available
-	return args
-}
-
-// buildArgsFromInferenceService constructs the arguments map by querying the InferenceService.
-func buildArgsFromInferenceService(c client.Client, ref *v1beta1.InferenceServiceReference) (map[string]string, error) {
-	inferenceService, err := GetInferenceService(c, ref)
-	if err != nil {
-		return nil, err
-	}
-
-	args := make(map[string]string)
-	args["--api-key"] = "sample-key"
-
-	if inferenceService.Spec.Predictor.Model != nil {
-		model := inferenceService.Spec.Predictor.Model
-		// Use protocol version if available
-		if model.ProtocolVersion != nil {
-			args["--api-backend"] = string(*model.ProtocolVersion)
-		}
-
-		// Use a generic model name and set the model-tokenizer if BaseModel is defined
-		if model.BaseModel != nil {
-			args["--api-model-name"] = "vllm-model"
-			args["--model-tokenizer"] = fmt.Sprintf("/model/%s", *model.BaseModel)
-		}
-	}
-
-	// Extract the URL from the InferenceService's status if available
-	if inferenceService.Status.URL == nil {
-		return nil, fmt.Errorf("InferenceService %s/%s has no URL in status",
-			ref.Namespace, ref.Name)
-	}
-	args["--api-base"] = fmt.Sprintf("%s:%d", inferenceService.Status.URL, 8080)
-
-	return args, nil
 }
 
 // BuildStorageArgs builds command line arguments for storage configuration

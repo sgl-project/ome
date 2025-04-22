@@ -474,10 +474,23 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 			_ = batchv1.AddToScheme(scheme)
 			_ = corev1.AddToScheme(scheme)
 
+			baseModel := &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{ // Add storage path needed by the refactored code
+					Storage: &v1beta1.StorageSpec{
+						Path: StringPtr("oci://some-bucket/model/path"),
+					},
+				},
+			}
+
 			client := cfake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.benchmarkJob).
 				WithObjects(tt.isvc).
+				WithObjects(baseModel).
 				Build()
 
 			r := &BenchmarkJobReconciler{
