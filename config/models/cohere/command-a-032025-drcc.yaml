@@ -1,0 +1,43 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-a-032025-drcc
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "cohere-command-1-trt"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "false"
+    models.ome.io/internal: "false"
+    models.ome.io/lifecycle-phase: "ACTIVE"
+    ome.io/base-model-decryption-key-name: "command_3"
+    ome.io/base-model-decryption-secret-name: "command_3-dek"
+spec:
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  disabled: false
+  displayName: cohere.command-a-03-2025
+  storage:
+    storageUri: oci://n/idqj093njucb/b/partner-models/o/cohere/command-a-032025
+    path: /raid/models/cohere/command-a-032025
+  vendor: cohere
+  version: "1.1"
+  # keep trt structure for now
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 111B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 256000
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_COHERE
+          quotaUnit: 1
+          default: true
+    internalName: "command-a-032025"
+    type: "Serving"
