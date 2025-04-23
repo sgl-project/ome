@@ -64,8 +64,7 @@ spec:
           --enable-metrics \
           --model-path="$MODEL_PATH" \
           --tp 1 \
-          --mem-frac=0.9 \
-          --tool-call-parser=llama3
+          --mem-frac=0.9
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
