@@ -11,22 +11,4 @@ TrainingRuntime is the Schema for the TrainingRuntimes API
 | **metadata**    | [**V1ObjectMeta**](https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1ObjectMeta.md) |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **spec**        | [**V1beta1TrainingRuntimeSpec**](V1beta1TrainingRuntimeSpec.md)                                             |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_training_runtime import V1beta1TrainingRuntime
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1TrainingRuntime from a JSON string
-v1beta1_training_runtime_instance = V1beta1TrainingRuntime.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1TrainingRuntime.to_json())
-
-# convert the object into a dict
-v1beta1_training_runtime_dict = v1beta1_training_runtime_instance.to_dict()
-# create an instance of V1beta1TrainingRuntime from a dict
-v1beta1_training_runtime_from_dict = V1beta1TrainingRuntime.from_dict(v1beta1_training_runtime_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

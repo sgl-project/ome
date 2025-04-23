@@ -12,22 +12,4 @@ BaseModel is the Schema for the basemodels API
 | **spec**        | [**V1beta1BaseModelSpec**](V1beta1BaseModelSpec.md)                                                         |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **status**      | [**V1beta1ModelStatusSpec**](V1beta1ModelStatusSpec.md)                                                     |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_base_model import V1beta1BaseModel
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1BaseModel from a JSON string
-v1beta1_base_model_instance = V1beta1BaseModel.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1BaseModel.to_json())
-
-# convert the object into a dict
-v1beta1_base_model_dict = v1beta1_base_model_instance.to_dict()
-# create an instance of V1beta1BaseModel from a dict
-v1beta1_base_model_from_dict = V1beta1BaseModel.from_dict(v1beta1_base_model_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

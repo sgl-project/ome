@@ -12,22 +12,4 @@ TrainingJob is the Schema for the TrainingJobs API
 | **spec**        | [**V1beta1TrainingJobSpec**](V1beta1TrainingJobSpec.md)                                                     |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **status**      | [**V1beta1TrainingJobStatus**](V1beta1TrainingJobStatus.md)                                                 |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_training_job import V1beta1TrainingJob
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1TrainingJob from a JSON string
-v1beta1_training_job_instance = V1beta1TrainingJob.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1TrainingJob.to_json())
-
-# convert the object into a dict
-v1beta1_training_job_dict = v1beta1_training_job_instance.to_dict()
-# create an instance of V1beta1TrainingJob from a dict
-v1beta1_training_job_from_dict = V1beta1TrainingJob.from_dict(v1beta1_training_job_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

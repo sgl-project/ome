@@ -18,6 +18,19 @@ import pprint
 import re  # noqa: F401
 from typing import Any, ClassVar, Dict, List, Optional, Set
 
+from kubernetes.client import (
+    V1Affinity,
+    V1Container,
+    V1EphemeralContainer,
+    V1HostAlias,
+    V1LocalObjectReference,
+    V1PodDNSConfig,
+    V1PodReadinessGate,
+    V1PodSecurityContext,
+    V1Toleration,
+    V1TopologySpreadConstraint,
+    V1Volume,
+)
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing_extensions import Self
 

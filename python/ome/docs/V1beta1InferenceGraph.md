@@ -12,22 +12,4 @@ InferenceGraph is the Schema for the InferenceGraph API for multiple models
 | **spec**        | [**V1beta1InferenceGraphSpec**](V1beta1InferenceGraphSpec.md)                                               |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **status**      | [**V1beta1InferenceGraphStatus**](V1beta1InferenceGraphStatus.md)                                           |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_inference_graph import V1beta1InferenceGraph
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1InferenceGraph from a JSON string
-v1beta1_inference_graph_instance = V1beta1InferenceGraph.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1InferenceGraph.to_json())
-
-# convert the object into a dict
-v1beta1_inference_graph_dict = v1beta1_inference_graph_instance.to_dict()
-# create an instance of V1beta1InferenceGraph from a dict
-v1beta1_inference_graph_from_dict = V1beta1InferenceGraph.from_dict(v1beta1_inference_graph_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

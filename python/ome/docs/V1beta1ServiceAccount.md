@@ -12,22 +12,4 @@ ServiceAccount represents a service account within a project
 | **spec**        | [**V1beta1ServiceAccountSpec**](V1beta1ServiceAccountSpec.md)                                               |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **status**      | [**V1beta1ServiceAccountStatus**](V1beta1ServiceAccountStatus.md)                                           |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_service_account import V1beta1ServiceAccount
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1ServiceAccount from a JSON string
-v1beta1_service_account_instance = V1beta1ServiceAccount.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1ServiceAccount.to_json())
-
-# convert the object into a dict
-v1beta1_service_account_dict = v1beta1_service_account_instance.to_dict()
-# create an instance of V1beta1ServiceAccount from a dict
-v1beta1_service_account_from_dict = V1beta1ServiceAccount.from_dict(v1beta1_service_account_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

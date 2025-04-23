@@ -10,22 +10,4 @@ Exactly one InferenceTarget field must be specified
 | **service_name** | **str** | named reference for InferenceService                      | [optional] |
 | **service_url**  | **str** | InferenceService URL, mutually exclusive with ServiceName | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_inference_target import V1beta1InferenceTarget
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1InferenceTarget from a JSON string
-v1beta1_inference_target_instance = V1beta1InferenceTarget.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1InferenceTarget.to_json())
-
-# convert the object into a dict
-v1beta1_inference_target_dict = v1beta1_inference_target_instance.to_dict()
-# create an instance of V1beta1InferenceTarget from a dict
-v1beta1_inference_target_from_dict = V1beta1InferenceTarget.from_dict(v1beta1_inference_target_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

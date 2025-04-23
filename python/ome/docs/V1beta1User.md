@@ -12,22 +12,4 @@ User represents a user within a project
 | **spec**        | [**V1beta1UserSpec**](V1beta1UserSpec.md)                                                                   |                                                                                                                                                                                                                                                                                                    |
 | **status**      | [**V1beta1UserStatus**](V1beta1UserStatus.md)                                                               |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_user import V1beta1User
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1User from a JSON string
-v1beta1_user_instance = V1beta1User.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1User.to_json())
-
-# convert the object into a dict
-v1beta1_user_dict = v1beta1_user_instance.to_dict()
-# create an instance of V1beta1User from a dict
-v1beta1_user_from_dict = V1beta1User.from_dict(v1beta1_user_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

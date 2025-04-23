@@ -12,22 +12,4 @@ BenchmarkJob is the schema for the BenchmarkJobs API
 | **spec**        | [**V1beta1BenchmarkJobSpec**](V1beta1BenchmarkJobSpec.md)                                                   |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **status**      | [**V1beta1BenchmarkJobStatus**](V1beta1BenchmarkJobStatus.md)                                               |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_benchmark_job import V1beta1BenchmarkJob
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1BenchmarkJob from a JSON string
-v1beta1_benchmark_job_instance = V1beta1BenchmarkJob.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1BenchmarkJob.to_json())
-
-# convert the object into a dict
-v1beta1_benchmark_job_dict = v1beta1_benchmark_job_instance.to_dict()
-# create an instance of V1beta1BenchmarkJob from a dict
-v1beta1_benchmark_job_from_dict = V1beta1BenchmarkJob.from_dict(v1beta1_benchmark_job_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

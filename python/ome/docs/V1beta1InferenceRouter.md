@@ -7,24 +7,6 @@ InferenceRouter defines the router for each InferenceGraph node with one or mult
 | Name            | Type                                                      | Description                                                                                                                                                                                                                                                                                                                                                             | Notes           |
 |-----------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|
 | **router_type** | **str**                                                   | RouterType - &#x60;Sequence:&#x60; chain multiple inference steps with input/output from previous step - &#x60;Splitter:&#x60; randomly routes to the target service according to the weight - &#x60;Ensemble:&#x60; routes the request to multiple models and then merge the responses - &#x60;Switch:&#x60; routes the request to one of the steps based on condition | [default to ''] |
-| **steps**       | [**List[V1beta1InferenceStep]**](V1beta1InferenceStep.md) | Steps defines destinations for the current router node                                                                                                                                                                                                                                                                                                                  | [optional]      |
-
-## Example
-
-```python
-from ome.models.v1beta1_inference_router import V1beta1InferenceRouter
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1InferenceRouter from a JSON string
-v1beta1_inference_router_instance = V1beta1InferenceRouter.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1InferenceRouter.to_json())
-
-# convert the object into a dict
-v1beta1_inference_router_dict = v1beta1_inference_router_instance.to_dict()
-# create an instance of V1beta1InferenceRouter from a dict
-v1beta1_inference_router_from_dict = V1beta1InferenceRouter.from_dict(v1beta1_inference_router_dict)
-```
+| **steps**       | [**list[V1beta1InferenceStep]**](V1beta1InferenceStep.md) | Steps defines destinations for the current router node                                                                                                                                                                                                                                                                                                                  | [optional]      |
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

@@ -7,8 +7,54 @@ This example demonstrates how to use the OME client to create, get, update, and 
 import json
 import time
 
-from ome.api.ome_client import OMEClient
+from kubernetes import client
+
+from ome import (
+    OMEClient,
+    V1beta1InferenceService,
+    V1beta1InferenceServiceSpec,
+    V1beta1ModelSpec,
+    V1beta1PredictorSpec,
+    constants,
+)
 from ome.utils.logger import logger
+
+
+def create_inference_service(name, namespace="default"):
+    """
+    Create a new inference service
+    """
+    ome_client = OMEClient()
+
+    logger.info(f"Creating inference service {name}...")
+    api_version = constants.OME_V1BETA1
+    isvc_spec = V1beta1InferenceService(
+        api_version=api_version,
+        kind=constants.OME_KIND_INFERENCESERVICE,
+        metadata=client.V1ObjectMeta(
+            name=name,
+            namespace=namespace,
+        ),
+        spec=V1beta1InferenceServiceSpec(
+            predictor=V1beta1PredictorSpec(
+                min_replicas=1,
+                max_replicas=1,
+                model=V1beta1ModelSpec(
+                    base_model="e5-mistral-7b-instruct",
+                    protocol_version="openAI",
+                ),
+            )
+        ),
+    )
+    response = ome_client.inference_service.create(
+        inferenceservice=isvc_spec,
+        namespace=namespace,
+    )
+
+    # Pretty-print the JSON response
+    pretty_response = json.dumps(response, indent=2)
+    logger.info(f"Inference service details:\n{pretty_response}")
+    return response
 
 
 def get_inference_service(name, namespace="default"):
@@ -90,22 +136,27 @@ def main():
         # Wait a moment for the service to initialize
         time.sleep(5)
 
+        isvc_name = "e5-mistral-7b-instruct"
+        namespace = "default"
+
+        create_inference_service(name=isvc_name, namespace=namespace)
+
         # Get the inference service
         get_inference_service(
-            name="llama-4-scout-17b-16e-instruct",
-            namespace="llama-4-scout-17b-16e-instruct",
+            name=isvc_name,
+            namespace=namespace,
         )
 
         # Check if the service is ready
         check_inference_service_status(
-            name="llama-4-scout-17b-16e-instruct",
-            namespace="llama-4-scout-17b-16e-instruct",
+            name=isvc_name,
+            namespace=namespace,
         )
 
         # Wait for the service to be ready
         wait_for_inference_service_ready(
-            name="llama-4-scout-17b-16e-instruct",
-            namespace="llama-4-scout-17b-16e-instruct",
+            name=isvc_name,
+            namespace=namespace,
         )
 
     except Exception as e:

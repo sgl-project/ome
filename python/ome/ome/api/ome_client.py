@@ -5,7 +5,7 @@ from kubernetes import client, config
 
 from ome.api.resources.inference_service import InferenceServiceClient
 from ome.constants import constants
-from ome.models import V1beta1InferenceServiceSpec
+from ome.models import V1beta1InferenceService
 from ome.utils import utils
 
 
@@ -100,7 +100,7 @@ class OMEClient:
     # For backwards compatibility
     def create_inference_service(
         self,
-        inferenceservice: V1beta1InferenceServiceSpec,
+        inferenceservice: V1beta1InferenceService,
         namespace: Optional[str] = None,
         watch: bool = False,
         timeout_seconds: int = 600,
@@ -133,7 +133,7 @@ class OMEClient:
     def patch_inference_service(
         self,
         name: str,
-        inferenceservice: V1beta1InferenceServiceSpec,
+        inferenceservice: V1beta1InferenceService,
         namespace: Optional[str] = None,
         watch: bool = False,
         timeout_seconds: int = 600,
@@ -150,7 +150,7 @@ class OMEClient:
     def replace_inference_service(
         self,
         name: str,
-        inferenceservice: V1beta1InferenceServiceSpec,
+        inferenceservice: V1beta1InferenceService,
         namespace: Optional[str] = None,
         watch: bool = False,
         timeout_seconds: int = 600,

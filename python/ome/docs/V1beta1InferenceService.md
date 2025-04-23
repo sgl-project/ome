@@ -12,22 +12,4 @@ InferenceService is the Schema for the InferenceServices API
 | **spec**        | [**V1beta1InferenceServiceSpec**](V1beta1InferenceServiceSpec.md)                                           |                                                                                                                                                                                                                                                                                                    | [optional] |
 | **status**      | [**V1beta1InferenceServiceStatus**](V1beta1InferenceServiceStatus.md)                                       |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_inference_service import V1beta1InferenceService
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1InferenceService from a JSON string
-v1beta1_inference_service_instance = V1beta1InferenceService.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1InferenceService.to_json())
-
-# convert the object into a dict
-v1beta1_inference_service_dict = v1beta1_inference_service_instance.to_dict()
-# create an instance of V1beta1InferenceService from a dict
-v1beta1_inference_service_from_dict = V1beta1InferenceService.from_dict(v1beta1_inference_service_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

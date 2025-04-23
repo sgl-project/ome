@@ -12,22 +12,4 @@ RateLimit represents rate limit configurations for a project
 | **spec**        | [**V1beta1RateLimitSpec**](V1beta1RateLimitSpec.md)                                                         |                                                                                                                                                                                                                                                                                                    |
 | **status**      | [**V1beta1RateLimitStatus**](V1beta1RateLimitStatus.md)                                                     |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_rate_limit import V1beta1RateLimit
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1RateLimit from a JSON string
-v1beta1_rate_limit_instance = V1beta1RateLimit.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1RateLimit.to_json())
-
-# convert the object into a dict
-v1beta1_rate_limit_dict = v1beta1_rate_limit_instance.to_dict()
-# create an instance of V1beta1RateLimit from a dict
-v1beta1_rate_limit_from_dict = V1beta1RateLimit.from_dict(v1beta1_rate_limit_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

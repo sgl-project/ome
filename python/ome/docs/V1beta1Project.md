@@ -12,22 +12,4 @@ Project represents an AI platform project
 | **spec**        | [**V1beta1ProjectSpec**](V1beta1ProjectSpec.md)                                                             |                                                                                                                                                                                                                                                                                                    |
 | **status**      | [**V1beta1ProjectStatus**](V1beta1ProjectStatus.md)                                                         |                                                                                                                                                                                                                                                                                                    | [optional] |
 
-## Example
-
-```python
-from ome.models.v1beta1_project import V1beta1Project
-
-# TODO update the JSON string below
-json = "{}"
-# create an instance of V1beta1Project from a JSON string
-v1beta1_project_instance = V1beta1Project.from_json(json)
-# print the JSON string representation of the object
-print(V1beta1Project.to_json())
-
-# convert the object into a dict
-v1beta1_project_dict = v1beta1_project_instance.to_dict()
-# create an instance of V1beta1Project from a dict
-v1beta1_project_from_dict = V1beta1Project.from_dict(v1beta1_project_dict)
-```
-
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
