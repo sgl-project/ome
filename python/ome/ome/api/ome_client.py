@@ -3,7 +3,13 @@ from typing import Any, Dict, Optional, Union
 
 from kubernetes import client, config
 
+from ome.api.resources.base_model import BaseModelClient
+from ome.api.resources.cluster_base_model import ClusterBaseModelClient
+from ome.api.resources.fine_tuned_weight import FineTunedWeightClient
+from ome.api.resources.fine_tuning_job import FineTuningJobClient
 from ome.api.resources.inference_service import InferenceServiceClient
+from ome.api.resources.project import ProjectClient
+from ome.api.resources.service_account import ServiceAccountClient
 from ome.constants import constants
 from ome.models import V1beta1InferenceService
 from ome.utils import utils
@@ -80,22 +86,29 @@ class OMEClient:
 
         # Initialize resource clients
         self._inference_service = InferenceServiceClient(self._base_client)
-
-        # Add other resource clients as they become available
-        # self._training_job = TrainingJobClient(self._base_client)
-        # self._base_model = BaseModelClient(self._base_client)
-        # etc.
+        self._cluster_base_model = ClusterBaseModelClient(self._base_client)
+        self._base_model = BaseModelClient(self._base_client)
+        self._fine_tuned_weight = FineTunedWeightClient(self._base_client)
 
     @property
     def inference_service(self) -> InferenceServiceClient:
         """Get the InferenceService client"""
         return self._inference_service
 
-    # Add properties for other resource clients
-    # @property
-    # def training_job(self) -> TrainingJobClient:
-    #     """Get the TrainingJob client"""
-    #     return self._training_job
+    @property
+    def cluster_base_model(self) -> ClusterBaseModelClient:
+        """Get the ClusterBaseModel client"""
+        return self._cluster_base_model
+
+    @property
+    def base_model(self) -> BaseModelClient:
+        """Get the BaseModel client"""
+        return self._base_model
+
+    @property
+    def fine_tuned_weight(self) -> FineTunedWeightClient:
+        """Get the FineTunedWeight client"""
+        return self._fine_tuned_weight
 
     # For backwards compatibility
     def create_inference_service(

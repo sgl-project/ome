@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Union
 
 from kubernetes import client
 
-from ome.api.watch import inference_service_watch
+from ome.api.watch import ResourceWatch
 from ome.constants import constants
 from ome.models import V1beta1InferenceService
 from ome.utils import utils
@@ -55,10 +55,9 @@ class InferenceServiceClient:
             )
 
         if watch:
-            inference_service_watch(
-                name=outputs["metadata"]["name"],
-                namespace=namespace,
-                timeout_seconds=timeout_seconds,
+            watcher = ResourceWatch()
+            watcher.watch_inference_service(
+                outputs["metadata"]["name"], namespace, timeout_seconds
             )
         else:
             return outputs
@@ -85,9 +84,8 @@ class InferenceServiceClient:
 
         if name:
             if watch:
-                inference_service_watch(
-                    name=name, namespace=namespace, timeout_seconds=timeout_seconds
-                )
+                watcher = ResourceWatch()
+                watcher.watch_inference_service(name, namespace, timeout_seconds)
             else:
                 try:
                     return self._base_client.api_instance.get_namespaced_custom_object(
@@ -105,9 +103,8 @@ class InferenceServiceClient:
                     )
         else:
             if watch:
-                inference_service_watch(
-                    namespace=namespace, timeout_seconds=timeout_seconds
-                )
+                watcher = ResourceWatch()
+                watcher.watch_inference_service(namespace, timeout_seconds)
             else:
                 try:
                     return self._base_client.api_instance.list_namespaced_custom_object(
@@ -163,10 +160,9 @@ class InferenceServiceClient:
         if watch:
             # Sleep 3 to avoid status still be True within a very short time.
             time.sleep(3)
-            inference_service_watch(
-                name=outputs["metadata"]["name"],
-                namespace=namespace,
-                timeout_seconds=timeout_seconds,
+            watcher = ResourceWatch()
+            watcher.watch_inference_service(
+                outputs["metadata"]["name"], namespace, timeout_seconds
             )
         else:
             return outputs
@@ -215,11 +211,12 @@ class InferenceServiceClient:
             )
 
         if watch:
-            inference_service_watch(
-                name=outputs["metadata"]["name"],
-                namespace=namespace,
-                timeout_seconds=timeout_seconds,
-                generation=outputs["metadata"]["generation"],
+            watcher = ResourceWatch()
+            watcher.watch_inference_service(
+                outputs["metadata"]["name"],
+                namespace,
+                timeout_seconds,
+                outputs["metadata"]["generation"],
             )
         else:
             return outputs
@@ -278,40 +275,23 @@ class InferenceServiceClient:
                 return status.lower() == "true"
         return False
 
+    @staticmethod
     def wait_ready(
-        self,
-        name: str,
+        name: Optional[str] = None,
         namespace: Optional[str] = None,
-        watch: bool = False,
         timeout_seconds: int = 600,
-        polling_interval: int = 10,
-        version: str = constants.OME_V1BETA1_VERSION,
+        generation: int = 0,
     ):
         """
-        Waiting for inference service ready, print out the inference service if timeout.
-        :param name: inference service name
+        Wait until the inference service is ready
+        :param name: name of the inference service
         :param namespace: defaults to current or default namespace
-        :param watch: True to watch the service until timeout elapsed or status is ready
-        :param timeout_seconds: timeout seconds for waiting, default to 600s.
-               Print out the InferenceService if timeout.
-        :param polling_interval: The time interval to poll status
-        :param version: api group version
-        :return:
+        :param timeout_seconds: timeout seconds for watch, default to 600s
+        :param generation: expected generation to be observed
+        :return: None
         """
-        if watch:
-            inference_service_watch(
-                name=name, namespace=namespace, timeout_seconds=timeout_seconds
-            )
-        else:
-            for _ in range(round(timeout_seconds / polling_interval)):
-                time.sleep(polling_interval)
-                if self.is_ready(name, namespace=namespace, version=version):
-                    return
+        if namespace is None:
+            namespace = utils.get_default_target_namespace()
 
-            current_isvc = self.get(name, namespace=namespace, version=version)
-            raise RuntimeError(
-                "Timeout to start the InferenceService {}. \
-                               The InferenceService is as following: {}".format(
-                    name, current_isvc
-                )
-            )
+        watcher = ResourceWatch()
+        watcher.watch_inference_service(name, namespace, timeout_seconds, generation)

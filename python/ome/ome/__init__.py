@@ -15,13 +15,15 @@ from __future__ import absolute_import
 
 __version__ = "0.1"
 
-# import apis into sdk package
-from ome.constants import constants
 from ome.api.ome_client import OMEClient
 from ome.api.resources.inference_service import InferenceServiceClient
+
 # import ApiClient
 from ome.api_client import ApiClient
 from ome.configuration import Configuration
+
+# import apis into sdk package
+from ome.constants import constants
 from ome.exceptions import (
     ApiException,
     ApiKeyError,
