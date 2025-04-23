@@ -29,6 +29,6 @@ spec:
   modelParameterSize: 200B
   modelCapabilities:
     - "CHAT"
-  maxTokens: 200,000
+  maxTokens: 200000
 
 {{- end }}
