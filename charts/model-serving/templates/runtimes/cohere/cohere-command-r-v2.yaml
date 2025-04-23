@@ -18,15 +18,6 @@ spec:
   supportedModelFormats:
     - autoSelect: true
       modelArchitecture: CohereForCausalLM
-      version: "1.6"
-      modelFormat:
-        name: tensorrtllm
-        version: 'v0.11.0'
-      modelFramework:
-        name: tensorrtllm
-        version: 'v0.11.0'
-    - autoSelect: true
-      modelArchitecture: CohereForCausalLM
       version: "1.2"
       modelFormat:
         name: tensorrtllm
