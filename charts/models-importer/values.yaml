@@ -248,6 +248,22 @@ gpt-4o-mini-2024-07-18:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+gpt-4o-search-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-search-preview-2025-03-11:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-search-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-search-preview-2025-03-11:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 gpt-4-1:
   enabled: false
   lifecyclePhase: "ACTIVE"
