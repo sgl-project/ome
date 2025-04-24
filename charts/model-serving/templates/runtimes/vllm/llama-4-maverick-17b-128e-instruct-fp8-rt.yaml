@@ -73,6 +73,7 @@ spec:
           --served-model-name=vllm-model \
           --tensor-parallel-size=8 \
           --max-model-len=524288 \
+          --limit-mm-per-prompt=image=10 \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --enable-auto-tool-choice \
           --tool-call-parser=pythonic \
