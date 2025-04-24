@@ -83,8 +83,7 @@ spec:
           --trust-remote-code \
           --enable-torch-compile \
           --torch-compile-max-bs 1 \
-          --enable-reasoning \
-          --reasoning-parser DeepSeek-R1
+          --reasoning-parser deepseek-r1
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

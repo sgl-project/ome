@@ -71,11 +71,11 @@ spec:
           --host=0.0.0.0 \
           --port={{ .Values.sglang.port }} \
           --enable-metrics \
+          --log-requests \
           --model-path="$MODEL_PATH" \
           --tp 1 \
           --mem-frac=0.9 \
-          --chat-template llama_3_vision \
-          --tool-call-parser=llama3
+          --chat-template llama_3_vision
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

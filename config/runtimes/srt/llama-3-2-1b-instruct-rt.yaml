@@ -47,7 +47,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.0.post1.6b67f9b-srt-cu121
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124
       ports:
         - containerPort: 8080
           name: http1
@@ -62,6 +62,7 @@ spec:
           --host=0.0.0.0 \
           --port=8080 \
           --enable-metrics \
+          --log-requests \
           --model-path="$MODEL_PATH" \
           --tp 1 \
           --mem-frac=0.9

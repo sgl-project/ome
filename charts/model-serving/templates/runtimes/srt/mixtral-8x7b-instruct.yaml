@@ -70,6 +70,7 @@ spec:
           --host=0.0.0.0 \
           --port={{ .Values.sglang.port }} \
           --enable-metrics \
+          --log-requests \
           --model="$MODEL_PATH"\
           --tp 2 \
           --mem-frac=0.9
