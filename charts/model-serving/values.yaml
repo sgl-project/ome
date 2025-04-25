@@ -22,6 +22,11 @@ command_a_032025:
   minReplicas: 1
   maxReplicas: 1
 
+command_a_032025_drcc:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 cohere_rerank:
   enabled: false
   minReplicas: 1
@@ -142,7 +147,7 @@ cohere:
 
   commandAImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.8.1-03192025"
+    tag: "v0.8.1-04092025"
   
   readinessProbe:
     httpGet:

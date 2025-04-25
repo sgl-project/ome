@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "cohere-command-1-trt"
+    models.ome.io/runtime: "cohere-command-a-vllm-drcc"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "command-a-032025-drcc" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "command-a-032025-drcc" "isInternal" }}"
@@ -37,9 +37,9 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_COHERE
+        - name: SMALL_COHERE_4
           quotaUnit: 1
           default: true
-    internalName: "command-a-032025"
+    internalName: "command-a-032025-drcc"
     type: "Serving"
 {{- end }}

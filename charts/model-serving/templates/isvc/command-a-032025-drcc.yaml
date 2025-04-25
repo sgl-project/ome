@@ -1,0 +1,20 @@
+{{- if .Values.command_a_032025_drcc.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-a-032025-drcc
+  namespace: command-a-032025-drcc
+spec:
+  predictor:
+    model:
+      runtime: cohere-command-a-vllm-drcc
+      baseModel: command-a-032025-drcc
+      protocolVersion: cohere
+    minReplicas: {{ .Values.command_a_032025_drcc.minReplicas}}
+    maxReplicas: {{ .Values.command_a_032025_drcc.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-a-032025-drcc
+{{- end }}
