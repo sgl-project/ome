@@ -114,8 +114,6 @@
       "description": "BaseModelSpec defines the desired state of BaseModel",
       "type": "object",
       "required": [
-        "modelFormat",
-        "modelFramework",
         "storage"
       ],
       "properties": {

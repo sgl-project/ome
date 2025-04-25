@@ -61,7 +61,7 @@ type StorageSpec struct {
 
 // BaseModelSpec defines the desired state of BaseModel
 type BaseModelSpec struct {
-	// +required
+	// +optional
 	ModelFormat ModelFormat `json:"modelFormat"`
 
 	// +optional
@@ -70,7 +70,7 @@ type BaseModelSpec struct {
 	ModelType *string `json:"modelType,omitempty"`
 
 	// ModelFramework of the model, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
-	// +required
+	// +optional
 	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
 
 	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"

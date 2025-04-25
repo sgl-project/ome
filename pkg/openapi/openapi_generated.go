@@ -497,7 +497,7 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
-				Required: []string{"modelFormat", "modelFramework", "storage"},
+				Required: []string{"storage"},
 			},
 		},
 		Dependencies: []string{
