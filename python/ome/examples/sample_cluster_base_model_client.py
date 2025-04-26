@@ -73,14 +73,14 @@ def create_cluster_base_model(name):
             compartment_id="ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva",
             model_format=V1beta1ModelFormat(name="safetensors", version="1"),
             model_framework=V1beta1ModelFrameworkSpec(
-                name="transformers", version="4.46.3"
+                name="transformers", version="4.33.1"
             ),
             model_architecture="DeepseekV3ForCausalLM",
             model_parameter_size="685B",
             max_tokens=163840,
             model_capabilities=["TEXT_GENERATION"],
             storage=V1beta1StorageSpec(
-                storage_uri="oci://n/idqj093njucb/b/model-store/o/deepseek-ai/deepseek-v3-032",
+                storage_uri="oci://n/idqj093njucb/b/model-store/o/deepseek-ai/deepseek-v3",
                 path=f"/raid/models/deepseek-ai/{name}",
                 node_affinity=client.V1NodeAffinity(
                     required_during_scheduling_ignored_during_execution=client.V1NodeSelector(
@@ -88,7 +88,7 @@ def create_cluster_base_model(name):
                     )
                 ),
             ),
-            model_configuration=json.dumps(model_config),
+            # model_configuration=json.dumps(model_config),
         ),
     )
 
@@ -216,11 +216,12 @@ def main():
     model_name = "sample-deepseek-model"
 
     try:
+        delete_cluster_base_model(model_name)
         # Create a new cluster base model
         create_cluster_base_model(model_name)
 
         # Wait for it to be ready
-        wait_for_cluster_base_model_ready(model_name)
+        # wait_for_cluster_base_model_ready(model_name)
 
         # Get the cluster base model details
         get_cluster_base_model(model_name)
@@ -238,7 +239,7 @@ def main():
         get_cluster_base_model(model_name)
 
         # Uncomment to delete the cluster base model
-        # delete_cluster_base_model(model_name)
+        delete_cluster_base_model(model_name)
 
     except Exception as e:
         logger.error(f"Error: {e}")

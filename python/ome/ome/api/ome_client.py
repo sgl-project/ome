@@ -6,10 +6,7 @@ from kubernetes import client, config
 from ome.api.resources.base_model import BaseModelClient
 from ome.api.resources.cluster_base_model import ClusterBaseModelClient
 from ome.api.resources.fine_tuned_weight import FineTunedWeightClient
-from ome.api.resources.fine_tuning_job import FineTuningJobClient
 from ome.api.resources.inference_service import InferenceServiceClient
-from ome.api.resources.project import ProjectClient
-from ome.api.resources.service_account import ServiceAccountClient
 from ome.constants import constants
 from ome.models import V1beta1InferenceService
 from ome.utils import utils
