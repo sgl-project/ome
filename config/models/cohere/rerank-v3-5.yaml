@@ -15,7 +15,7 @@ metadata:
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
-  displayName: cohere.rerank
+  displayName: cohere.rerank-v3.5
   storage:
     storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/rerank-v3-5"
     path: /raid/models/cohere/rerank-v3-5

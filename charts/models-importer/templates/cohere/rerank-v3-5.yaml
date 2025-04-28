@@ -16,7 +16,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: cohere.rerank
+  displayName: cohere.rerank-v3.5
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-rerank-v3-5" "osBucket" }}/o/{{ index .Values "cohere-rerank-v3-5" "vendor" }}/{{ index .Values "cohere-rerank-v3-5" "osPrefixOverride" }}"
     path: /mnt/data/models/cohere/rerank-v3-5
