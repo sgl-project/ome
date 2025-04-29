@@ -53,8 +53,9 @@ spec:
                     operator: DoesNotExist
       volumes:
       - name: host-models
-        persistentVolumeClaim:
-          claimName: ome-model-agent-pvc
+        hostPath:
+          path: /raid/models
+          type: Directory
       containers:
       - name: model-agent
         image: ko://bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/model-agent

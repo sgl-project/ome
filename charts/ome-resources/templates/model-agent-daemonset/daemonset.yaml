@@ -22,9 +22,10 @@ spec:
       nodeSelector:
         {{- toYaml .Values.modelAgent.nodeSelector | nindent 8 }}
       volumes:
-      - name: host-models
-        persistentVolumeClaim:
-          claimName: ome-model-agent-pvc
+        - name: host-models
+          hostPath:
+            path: {{ .Values.modelAgent.hostPath }}
+            type: Directory
       containers:
       - name: model-agent
         image: "{{ .Values.modelAgent.image.repository }}:{{ .Values.modelAgent.image.tag }}"
