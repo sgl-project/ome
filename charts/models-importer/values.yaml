@@ -152,6 +152,22 @@ cohere-embed-multilingual-v3-0:
   enabled: false
   lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
 
+cohere-embed-english-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-english-light-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-multilingual-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-multilingual-light-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 cohere-command-r-plus-v1-2-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
