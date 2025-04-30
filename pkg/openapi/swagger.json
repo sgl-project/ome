@@ -2476,7 +2476,8 @@
         },
         "name": {
           "description": "Unique name for the step within this node",
-          "type": "string"
+          "type": "string",
+          "default": ""
         },
         "nodeName": {
           "description": "The node name for routing as next step",

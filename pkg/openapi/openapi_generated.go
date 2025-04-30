@@ -4448,6 +4448,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceStep(ref common.ReferenceCallback) com
 					"name": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Unique name for the step within this node",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},

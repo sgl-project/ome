@@ -6,4 +6,3 @@ resources:
   - clusterrolebinding.yaml
   - daemonset.yaml
   - serviceaccount.yaml
-  - storage.yaml

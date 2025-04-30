@@ -270,8 +270,7 @@ const (
 // +k8s:openapi-gen=true
 type InferenceStep struct {
 	// Unique name for the step within this node
-	// +optional
-	StepName string `json:"name,omitempty"`
+	StepName string `json:"name"`
 
 	// Node or service used to process this step
 	InferenceTarget `json:",inline"`

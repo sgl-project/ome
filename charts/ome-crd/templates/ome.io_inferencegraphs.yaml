@@ -522,6 +522,8 @@ spec:
                           weight:
                             format: int64
                             type: integer
+                        required:
+                        - name
                         type: object
                       type: array
                       x-kubernetes-list-map-keys:
