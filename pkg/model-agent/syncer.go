@@ -113,8 +113,13 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		return fmt.Errorf("syncer got empty task")
 	}
 
+	// Get model info for logging
+	modelInfo := getModelInfoForLogging(task)
+	s.logger.Infof("Processing syncer task: %s, type: %s", modelInfo, task.TaskType)
+
 	casperUri, destPath, err := getTargetDirPath(task.BaseModel, task.ClusterBaseModel, s.modelRootDir, s.modelRootDirOnHost)
 	if err != nil {
+		s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 		s.markModelOnNodeFailed(task)
 		return err
 	}
@@ -125,18 +130,25 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		// use a single download function for now
 		fallthrough
 	case DownloadOverride:
+		s.logger.Infof("Starting download for model %s", modelInfo)
 		err := utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-			return s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter)
+			downloadErr := s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter)
+			if downloadErr != nil {
+				s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
+					modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
+			}
+			return downloadErr
 		})
 		if err != nil {
+			s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
 			s.markModelOnNodeFailed(task)
 			return err
 		}
 
 		if task.BaseModel != nil {
-			s.logger.Infof("successfully downloaded the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
+			s.logger.Infof("Successfully downloaded BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
 		} else {
-			s.logger.Infof("successfully downloaded the ClusterBaseModel %s", task.ClusterBaseModel.Name)
+			s.logger.Infof("Successfully downloaded ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 
 		// mark model as Ready
@@ -148,24 +160,39 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 
 		err = s.nodeLabeler.processOp(nodeLabelOp)
 		if err != nil {
+			s.logger.Errorf("Failed to mark model %s as Ready: %v", modelInfo, err)
 			return err
 		}
 	case Delete:
+		s.logger.Infof("Starting deletion for model %s", modelInfo)
 		err := s.deleteModel(destPath)
 		if err != nil {
+			s.logger.Errorf("Failed to delete model %s: %v", modelInfo, err)
 			return err
 		}
 		if task.BaseModel != nil {
-			s.logger.Infof("successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
+			s.logger.Infof("Successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
 		} else {
-			s.logger.Infof("successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
+			s.logger.Infof("Successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 	}
 
 	return nil
 }
 
+func getModelInfoForLogging(task *SyncerTask) string {
+	if task.BaseModel != nil {
+		return fmt.Sprintf("BaseModel %s/%s", task.BaseModel.Namespace, task.BaseModel.Name)
+	} else if task.ClusterBaseModel != nil {
+		return fmt.Sprintf("ClusterBaseModel %s", task.ClusterBaseModel.Name)
+	}
+	return "unknown model"
+}
+
 func (s *Syncer) markModelOnNodeFailed(task *SyncerTask) {
+	modelInfo := getModelInfoForLogging(task)
+	s.logger.Infof("Marking model %s as Failed on node", modelInfo)
+
 	nodeLabelOp := &NodeLabelOp{
 		ModelStateOnNode: Failed,
 		BaseModel:        task.BaseModel,
@@ -174,7 +201,9 @@ func (s *Syncer) markModelOnNodeFailed(task *SyncerTask) {
 
 	err := s.nodeLabeler.processOp(nodeLabelOp)
 	if err != nil {
-		s.logger.Errorf("node label failed with error: %s", err.Error())
+		s.logger.Errorf("Failed to mark model %s as Failed on node: %v", modelInfo, err)
+	} else {
+		s.logger.Infof("Successfully marked model %s as Failed on node", modelInfo)
 	}
 }
 
@@ -301,20 +330,17 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 		return nil
 	}
 
-	s.logger.Infof("Making call to object storage with endpoint %s", s.casperDataStore.CasperClient.Endpoint())
 	objects, err := s.casperDataStore.ListObjects(*uri)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list objects: %w", err)
 	}
 
 	if len(objects) == 0 {
 		return fmt.Errorf("no objects found under namespace %s, bucket %s, object prefix %s", uri.Namespace, uri.BucketName, uri.Prefix)
 	}
 
-	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
-
 	if shapeFilter.IsTensorrtLLMModel {
-		s.logger.Infof("TensorRTLLM Model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
+		s.logger.Infof("TensorRTLLM Model detected. Start filtering model files that don't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
 		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
 		for _, object := range objects {
 			if object.Name != nil {
@@ -324,17 +350,23 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 			}
 		}
 		objects = shapeFilteredObjects
+
+		if len(objects) == 0 {
+			return fmt.Errorf("no suitable objects found for shape %s", shapeFilter.ShapeAlias)
+		}
+		s.logger.Infof("Found %d objects applicable for shape %s", len(objects), shapeFilter.ShapeAlias)
 	}
 
 	objectsChannel := prepareObjectsChannel(objects)
 
-	s.logger.Info("Start to filter objects...")
 	filteredObjects := s.casperDataStore.FilterObjectsMultiThreads(DefaultFilterFilesThreads, s.logger, uri, destPath, objectsChannel, uri.Prefix)
 
 	// 4. Split files per size into two groups
 	smallFiles := make([]objectstorage.ObjectSummary, 0)
 	largeFiles := make([]objectstorage.ObjectSummary, 0)
+	var totalFiles int
 	for object := range filteredObjects {
+		totalFiles++
 		if object.Size == nil || *object.Size < int64(BigFileSizeInMB)*int64(casper.MB) {
 			smallFiles = append(smallFiles, object)
 		} else {
@@ -342,42 +374,143 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 		}
 	}
 
+	if totalFiles == 0 {
+		s.logger.Info("No files need to be downloaded or updated (all files exist with matching MD5 checksums)")
+		return nil
+	}
+
 	// Download small files with multi threads
-	s.logger.Infof("Downloading small files, %d in total", len(smallFiles))
-	downloadSmallFiles(smallFiles, s.casperDataStore, uri, destPath, s.logger)
+	if len(smallFiles) > 0 {
+		s.logger.Infof("Downloading small files, %d in total", len(smallFiles))
+		smallFilesErrors := downloadSmallFiles(smallFiles, s.casperDataStore, uri, destPath, s.logger)
+		if len(smallFilesErrors) > 0 {
+			errMsgs := make([]string, 0, len(smallFilesErrors))
+			for file, err := range smallFilesErrors {
+				errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", file, err))
+			}
+			return fmt.Errorf("errors downloading small files: %s", strings.Join(errMsgs, "; "))
+		}
+	}
 
-	// Download large files in multipart way with multi threads
-	s.logger.Infof("Downloading large files, %d in total", len(largeFiles))
-	downloadLargeFilesWithMultiThreads(largeFiles, s.casperDataStore, uri, destPath, s.logger)
+	// Download large files in a multipart way with multi threads
+	if len(largeFiles) > 0 {
+		s.logger.Infof("Downloading large files, %d in total", len(largeFiles))
+		largeFilesErrors := downloadLargeFilesWithMultiThreads(largeFiles, s.casperDataStore, uri, destPath, s.logger)
+		if len(largeFilesErrors) > 0 {
+			errMsgs := make([]string, 0, len(largeFilesErrors))
+			for file, err := range largeFilesErrors {
+				errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", file, err))
+			}
+			return fmt.Errorf("errors downloading large files: %s", strings.Join(errMsgs, "; "))
+		}
+	}
 
+	// Perform final verification of all downloaded files
+	s.logger.Info("Performing final integrity verification of all downloaded files...")
+	verificationStartTime := time.Now()
+	verificationErrors := s.verifyDownloadedFiles(objects, uri, destPath)
+	verificationDuration := time.Since(verificationStartTime)
+
+	if len(verificationErrors) > 0 {
+		s.logger.Errorf("Final verification failed for %d files", len(verificationErrors))
+		errMsgs := make([]string, 0, len(verificationErrors))
+		for file, err := range verificationErrors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", file, err))
+			s.logger.Errorf("Verification failed for %s: %v", file, err)
+		}
+		return fmt.Errorf("integrity verification failed for %d/%d files: %s",
+			len(verificationErrors), len(objects), strings.Join(errMsgs, "; "))
+	}
+
+	s.logger.Infof("All files downloaded and verified successfully (%d files, verification took %v)",
+		len(objects), verificationDuration.Round(time.Millisecond))
 	return nil
+}
+
+// verifyDownloadedFiles performs a final integrity check on all downloaded files
+func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, uri *casper.ObjectURI, destPath string) map[string]error {
+	errors := make(map[string]error)
+
+	for _, object := range objects {
+		if object.Name == nil || object.Md5 == nil {
+			s.logger.Warnf("Skipping verification for object without name or MD5")
+			continue // Skip objects without a name or MD5
+		}
+
+		objectPath := *object.Name
+		filePath := filepath.Join(destPath, casper.ExtractNonPrefixObjectName(objectPath, uri.Prefix))
+
+		// Check if the file exists
+		_, err := os.Stat(filePath)
+		if err != nil {
+			errors[objectPath] = fmt.Errorf("file does not exist: %w", err)
+			continue
+		}
+
+		// Verify MD5
+		match, err := s.casperDataStore.VerifyFileMd5(filePath, object.Md5, s.logger)
+		if err != nil {
+			errors[objectPath] = fmt.Errorf("MD5 verification error: %w", err)
+			continue
+		}
+
+		if !match {
+			errors[objectPath] = fmt.Errorf("MD5 mismatch detected in final verification")
+		}
+	}
+
+	return errors
 }
 
 func (s *Syncer) deleteModel(destPath string) error {
 	return os.RemoveAll(destPath)
 }
 
-func downloadSmallFiles(files []objectstorage.ObjectSummary, casperDataStore casper.CasperDataStore, originalUri *casper.ObjectURI, target string, logger *zap.SugaredLogger) {
+func downloadSmallFiles(files []objectstorage.ObjectSummary, casperDataStore casper.CasperDataStore, originalUri *casper.ObjectURI, target string, logger *zap.SugaredLogger) map[string]error {
 	// prepare downloading for small files (setting up local target file folder)
 	filesToDownload := prepareFilesToDownload(files, casperDataStore, originalUri, target)
 
-	// Multithread downloading objects and saving to FSS
+	// Multi-thread downloading all small files (in memory)
 	downloadedFiles := casperDataStore.DownloadWithMultiThreads(DefaultSmallFilesDownloadThreads, logger, filesToDownload)
-	for downloadedFile := range downloadedFiles {
-		if downloadedFile.Err != nil {
-			panic(downloadedFile.Err)
+	errors := make(map[string]error)
+
+	// Create a map of objects by name for easier lookup
+	fileMap := make(map[string]objectstorage.ObjectSummary)
+	for _, file := range files {
+		if file.Name != nil {
+			fileMap[*file.Name] = file
 		}
 	}
+
+	// Process downloaded files
+	fileNum := 1
+	for downloadedFile := range downloadedFiles {
+		if downloadedFile.Err != nil {
+			// Since we can't access the unexported fields directly, just use a generic name with an index
+			errorKey := fmt.Sprintf("file-%d", fileNum)
+			errors[errorKey] = downloadedFile.Err
+			fileNum++
+		}
+	}
+	return errors
 }
 
-func downloadLargeFilesWithMultiThreads(objects []objectstorage.ObjectSummary, casperDataStore casper.CasperDataStore, originalUri *casper.ObjectURI, target string, logger *zap.SugaredLogger) {
+func downloadLargeFilesWithMultiThreads(objects []objectstorage.ObjectSummary, casperDataStore casper.CasperDataStore, originalUri *casper.ObjectURI, target string, logger *zap.SugaredLogger) map[string]error {
 	// Multi-thread downloading objects and saving to NFS
 	downloadedFiles := MultipartDownloadWithMultiThreads(objects, DefaultDownloadThreads, casperDataStore, originalUri, target, originalUri.Prefix, logger)
+	errors := make(map[string]error)
+
+	// Process downloaded files
+	fileNum := 1
 	for downloadedFile := range downloadedFiles {
 		if downloadedFile.Err != nil {
-			panic(downloadedFile.Err)
+			// Since we can't access the unexported fields directly, just use a generic name with an index
+			errorKey := fmt.Sprintf("file-%d", fileNum)
+			errors[errorKey] = downloadedFile.Err
+			fileNum++
 		}
 	}
+	return errors
 }
 
 func prepareFilesToDownload(objects []objectstorage.ObjectSummary, casperDataStore casper.CasperDataStore, originalUri *casper.ObjectURI, target string) chan *casper.FileToDownload {

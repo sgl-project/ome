@@ -62,6 +62,8 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, prefix str
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", source.Namespace, source.BucketName, source.ObjectName)
 
+	logger := zap.NewNop().Sugar() // Use no-op logger since we don't have one passed in
+
 	response, err := cds.GetObject(source)
 	if err != nil {
 		return err
@@ -70,11 +72,11 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, prefix str
 	defer func(responseContent io.ReadCloser) {
 		err := responseContent.Close()
 		if err != nil {
-			fmt.Printf("failed to close the response content, error: %+v", err)
+			logger.Warnf("[%s] Failed to close response content: %v", source.ObjectName, err)
 		}
 	}(responseContent)
 
-	// Write downloaded object to the target file
+	// Write a downloaded object to the target file
 	targetFilePath := filepath.Join(target, ExtractNonPrefixObjectName(source.ObjectName, prefix))
 
 	err = os.MkdirAll(path.Dir(targetFilePath), os.ModePerm)
@@ -84,12 +86,54 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, prefix str
 			path.Dir(targetFilePath), target, err)
 	}
 
-	err = CopyReaderToFilePath(responseContent, targetFilePath)
+	// Use a temporary file for download
+	tempTargetFilePath := targetFilePath + ".temp"
+
+	err = CopyReaderToFilePath(responseContent, tempTargetFilePath)
 	if err != nil {
+		logger.Errorf("[%s] Failed to write to temporary file: %v", source.ObjectName, err)
+		err := os.Remove(tempTargetFilePath)
+		if err != nil {
+			logger.Warnf("[%s] Failed to clean up temporary file after error: %v", source.ObjectName, err)
+		}
 		return fmt.Errorf(
 			"failed to load downloaded object %s to the target path %s, error: %+v",
 			objectFullName, target, err)
 	}
+	logger.Infof("[%s] Successfully wrote to temporary file", source.ObjectName)
+
+	// Verify MD5 checksum if available
+	if response.ContentMd5 != nil {
+		match, verifyErr := cds.VerifyFileMd5(tempTargetFilePath, response.ContentMd5, logger)
+		if verifyErr != nil {
+			logger.Errorf("[%s] MD5 verification failed with error: %v", source.ObjectName, verifyErr)
+			err := os.Remove(tempTargetFilePath)
+			if err != nil {
+				logger.Warnf("[%s] Failed to clean up temporary file after verification error: %v", source.ObjectName, err)
+			}
+			return fmt.Errorf("failed to verify MD5 checksum after download: %w", verifyErr)
+		}
+
+		if !match {
+			logger.Errorf("[%s] MD5 checksum mismatch - downloaded file is corrupt", source.ObjectName)
+			err := os.Remove(tempTargetFilePath)
+			if err != nil {
+				logger.Warnf("[%s] Failed to clean up corrupt temporary file: %v", source.ObjectName, err)
+			}
+			return fmt.Errorf("MD5 checksum verification failed after download for %s", objectFullName)
+		}
+		logger.Infof("[%s] MD5 verification successful", source.ObjectName)
+	} else {
+		logger.Warnf("[%s] No MD5 checksum available for verification", source.ObjectName)
+	}
+
+	// Only move a file to the final location after successful verification
+	if err = os.Rename(tempTargetFilePath, targetFilePath); err != nil {
+		logger.Errorf("[%s] Failed to rename temporary file to final location: %v", source.ObjectName, err)
+		return fmt.Errorf("failed to rename temporary file after verification: %w", err)
+	}
+	logger.Infof("[%s] Download completed successfully", source.ObjectName)
+
 	return nil
 }
 
@@ -269,55 +313,64 @@ func (cds *CasperDataStore) ObjectExists(logger *zap.SugaredLogger, source Objec
 	if objectMd5 == nil || objectLength == nil {
 		headResponse, err := cds.HeadObject(source)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to get object metadata: %w", err)
 		}
 		objectMd5 = headResponse.ContentMd5
 		objectLength = headResponse.ContentLength
 	}
 
 	if objectLength != nil && fileInfo.Size() != *objectLength {
+		logger.Warnf("File size mismatch for %s: expected %d, got %d",
+			targetFilePath, *objectLength, fileInfo.Size())
 		return false, nil
 	}
 
 	if objectMd5 == nil {
+		logger.Warnf("No MD5 available for %s, cannot verify integrity", source.ObjectName)
 		return false, nil
 	}
 
-	var finalMd5 string
-	var matched bool
+	// For multipart uploads that have a special MD5 format
 	if strings.Contains(*objectMd5, "==-") {
-		matched, err = multipartMd5Matched(targetFilePath, objectMd5, logger)
+		matched, err := multipartMd5Matched(targetFilePath, objectMd5, logger)
 		if err != nil {
-			logger.Infof("Failed to get multipart md5 for %s, error: %s", targetFilePath, err)
+			logger.Errorf("Failed to verify multipart MD5 for %s: %v", targetFilePath, err)
+			// Propagate the error to the caller so it can be properly handled
+			return false, fmt.Errorf("MD5 verification error: %w", err)
 		}
 
 		if matched {
-			logger.Infof("multipart md5 matched, source %s, target:%s, finalMd5: %s", source.ObjectName, targetFilePath, finalMd5)
+			logger.Infof("Multipart MD5 matched for %s", source.ObjectName)
 			return true, nil
 		}
 
+		logger.Warnf("Multipart MD5 mismatch for %s", source.ObjectName)
 		return false, nil
 	}
 
 	file, err := os.Open(targetFilePath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to open file for MD5 verification: %w", err)
 	}
 
 	defer func() {
 		if err := file.Close(); err != nil {
-			panic(err)
+			logger.Errorf("Failed to close file after MD5 verification: %v", err)
 		}
 	}()
 
 	fileMd5 := md5.New()
 	if _, err := io.Copy(fileMd5, file); err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to calculate MD5 hash: %w", err)
 	}
 
-	if *objectMd5 == base64.StdEncoding.EncodeToString(fileMd5.Sum(nil)) {
+	calculatedMd5 := base64.StdEncoding.EncodeToString(fileMd5.Sum(nil))
+	if *objectMd5 == calculatedMd5 {
+		logger.Infof("MD5 hash matched for %s", source.ObjectName)
 		return true, nil
 	}
 
+	logger.Warnf("MD5 hash mismatch for %s: expected %s, got %s",
+		source.ObjectName, *objectMd5, calculatedMd5)
 	return false, nil
 }
