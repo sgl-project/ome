@@ -15,6 +15,10 @@ spec:
         app.kubernetes.io/component: "ome-model-agent-daemonset"
         control-plane: ome-model-agent-daemonset
         logging-forward: enabled
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       priorityClassName: system-node-critical
       serviceAccountName: ome-model-agent
@@ -60,6 +64,10 @@ spec:
       - name: model-agent
         image: ko://bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/model-agent
         imagePullPolicy: Always
+        ports:
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
         args: 
         - --models-root-dir-on-host
         - /raid/models

@@ -13,6 +13,8 @@ import (
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	modelagent "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/model-agent"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -112,6 +114,10 @@ func setupHealthServer(port int, modelsRootDir string, logger *Logger) *http.Ser
 	healthz.InstallPathHandler(mux, "/healthz", modelagent.NewModelAgentHealthCheck(modelsRootDir))
 	healthz.InstallLivezHandler(mux, healthz.PingHealthz)
 
+	// Register Prometheus metrics handler
+	modelagent.RegisterMetricsHandler(mux)
+	logger.Info("Registered Prometheus metrics endpoint at /metrics")
+
 	return &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: mux,
@@ -148,6 +154,24 @@ func runCommand(cmd *cobra.Command, args []string) {
 		}
 	}()
 
+	// Register Go and process collectors (safely, without panicking if already registered)
+	reg := prometheus.DefaultRegisterer
+	if err := reg.Register(collectors.NewGoCollector()); err != nil {
+		// Ignore "already exists" errors, warn about others
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			logger.Warnf("Error registering Go collector: %v", err)
+		}
+	}
+	if err := reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			logger.Warnf("Error registering Process collector: %v", err)
+		}
+	}
+
+	// Initialize metrics
+	metrics := modelagent.NewMetrics(nil)
+	logger.Info("Initialized Prometheus metrics")
+
 	// create download task communication channel
 	syncerTaskChan := make(chan *modelagent.SyncerTask)
 
@@ -177,6 +201,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 		cfg.modelsRootDirOnHost,
 		syncerTaskChan,
 		nodeLabeler,
+		metrics,
 		logger)
 	if err != nil {
 		logger.Fatalf("Failed to create syncer: %v", err)

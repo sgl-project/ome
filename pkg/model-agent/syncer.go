@@ -50,6 +50,7 @@ type Syncer struct {
 	casperDataStore    casper.CasperDataStore
 	syncerChan         <-chan *SyncerTask
 	nodeLabeler        *NodeLabeler
+	metrics            *Metrics
 	logger             *zap.SugaredLogger
 }
 
@@ -59,6 +60,7 @@ func NewSyncer(authType string,
 	modelRootDirOnHost string,
 	syncerChan <-chan *SyncerTask,
 	nodeLabeler *NodeLabeler,
+	metrics *Metrics,
 	logger *zap.SugaredLogger) (*Syncer, error) {
 	casperDataStore, err := NewCasperDataStore(authType)
 	if err != nil {
@@ -73,6 +75,7 @@ func NewSyncer(authType string,
 		casperDataStore:    casperDataStore,
 		syncerChan:         syncerChan,
 		nodeLabeler:        nodeLabeler,
+		metrics:            metrics,
 		logger:             logger,
 	}, nil
 }
@@ -117,9 +120,18 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 	modelInfo := getModelInfoForLogging(task)
 	s.logger.Infof("Processing syncer task: %s, type: %s", modelInfo, task.TaskType)
 
+	// Get model type, namespace, and name for metrics
+	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
+
 	casperUri, destPath, err := getTargetDirPath(task.BaseModel, task.ClusterBaseModel, s.modelRootDir, s.modelRootDirOnHost)
 	if err != nil {
 		s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
+
+		// Record failed download in metrics
+		if task.TaskType == Download || task.TaskType == DownloadOverride {
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "target_path_error")
+		}
+
 		s.markModelOnNodeFailed(task)
 		return err
 	}
@@ -131,6 +143,10 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		fallthrough
 	case DownloadOverride:
 		s.logger.Infof("Starting download for model %s", modelInfo)
+
+		// Record time for metrics
+		downloadStartTime := time.Now()
+
 		err := utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
 			downloadErr := s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter)
 			if downloadErr != nil {
@@ -139,11 +155,27 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 			}
 			return downloadErr
 		})
+
+		// Calculate download duration
+		downloadDuration := time.Since(downloadStartTime)
+
 		if err != nil {
 			s.logger.Errorf("All download attempts failed for model %s: %v", modelInfo, err)
+
+			// Record download failure in metrics
+			errorType := "download_error"
+			if strings.Contains(err.Error(), "MD5") {
+				errorType = "md5_verification_error"
+			}
+			s.metrics.RecordFailedDownload(modelType, namespace, name, errorType)
+
 			s.markModelOnNodeFailed(task)
 			return err
 		}
+
+		// Record successful download in metrics
+		s.metrics.RecordSuccessfulDownload(modelType, namespace, name)
+		s.metrics.ObserveDownloadDuration(modelType, namespace, name, downloadDuration)
 
 		if task.BaseModel != nil {
 			s.logger.Infof("Successfully downloaded BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
@@ -330,6 +362,13 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 		return nil
 	}
 
+	startTime := time.Now()
+	defer func() {
+		// Record download duration regardless of success/failure
+		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
+	}()
+
+	s.logger.Infof("Making call to object storage with endpoint %s", s.casperDataStore.CasperClient.Endpoint())
 	objects, err := s.casperDataStore.ListObjects(*uri)
 	if err != nil {
 		return fmt.Errorf("failed to list objects: %w", err)
@@ -338,6 +377,8 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	if len(objects) == 0 {
 		return fmt.Errorf("no objects found under namespace %s, bucket %s, object prefix %s", uri.Namespace, uri.BucketName, uri.Prefix)
 	}
+
+	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
 
 	if shapeFilter.IsTensorrtLLMModel {
 		s.logger.Infof("TensorRTLLM Model detected. Start filtering model files that don't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
@@ -359,14 +400,19 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 
 	objectsChannel := prepareObjectsChannel(objects)
 
+	s.logger.Info("Start to filter objects...")
 	filteredObjects := s.casperDataStore.FilterObjectsMultiThreads(DefaultFilterFilesThreads, s.logger, uri, destPath, objectsChannel, uri.Prefix)
 
 	// 4. Split files per size into two groups
 	smallFiles := make([]objectstorage.ObjectSummary, 0)
 	largeFiles := make([]objectstorage.ObjectSummary, 0)
 	var totalFiles int
+	var totalBytes int64
 	for object := range filteredObjects {
 		totalFiles++
+		if object.Size != nil {
+			totalBytes += *object.Size
+		}
 		if object.Size == nil || *object.Size < int64(BigFileSizeInMB)*int64(casper.MB) {
 			smallFiles = append(smallFiles, object)
 		} else {
@@ -411,6 +457,9 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	verificationErrors := s.verifyDownloadedFiles(objects, uri, destPath)
 	verificationDuration := time.Since(verificationStartTime)
 
+	// Record verification duration
+	s.metrics.ObserveVerificationDuration(verificationDuration)
+
 	if len(verificationErrors) > 0 {
 		s.logger.Errorf("Final verification failed for %d files", len(verificationErrors))
 		errMsgs := make([]string, 0, len(verificationErrors))
@@ -422,14 +471,33 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 			len(verificationErrors), len(objects), strings.Join(errMsgs, "; "))
 	}
 
+	// Record bytes transferred - only accurate for new/updated files
+	if totalBytes > 0 {
+		s.logger.Infof("Downloaded a total of %d bytes (%d MB)", totalBytes, totalBytes/int64(1024*1024))
+	}
+
 	s.logger.Infof("All files downloaded and verified successfully (%d files, verification took %v)",
 		len(objects), verificationDuration.Round(time.Millisecond))
 	return nil
 }
 
-// verifyDownloadedFiles performs a final integrity check on all downloaded files
 func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, uri *casper.ObjectURI, destPath string) map[string]error {
 	errors := make(map[string]error)
+	totalFiles := len(objects)
+	verifiedCount := 0
+
+	s.logger.Infof("Starting verification of %d files", totalFiles)
+
+	// Parse model type, namespace, and name from URI for metrics
+	modelType := "unknown"
+	namespace := "unknown"
+	name := "unknown"
+
+	// Attempt to extract model info from URI
+	pathParts := strings.Split(uri.Prefix, "/")
+	if len(pathParts) > 0 {
+		name = pathParts[len(pathParts)-1]
+	}
 
 	for _, object := range objects {
 		if object.Name == nil || object.Md5 == nil {
@@ -444,6 +512,7 @@ func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, ur
 		_, err := os.Stat(filePath)
 		if err != nil {
 			errors[objectPath] = fmt.Errorf("file does not exist: %w", err)
+			s.metrics.RecordVerification(modelType, namespace, name, false)
 			continue
 		}
 
@@ -451,12 +520,26 @@ func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, ur
 		match, err := s.casperDataStore.VerifyFileMd5(filePath, object.Md5, s.logger)
 		if err != nil {
 			errors[objectPath] = fmt.Errorf("MD5 verification error: %w", err)
+			s.metrics.RecordVerification(modelType, namespace, name, false)
 			continue
 		}
 
 		if !match {
 			errors[objectPath] = fmt.Errorf("MD5 mismatch detected in final verification")
+			s.metrics.RecordVerification(modelType, namespace, name, false)
+		} else {
+			verifiedCount++
+			s.metrics.RecordVerification(modelType, namespace, name, true)
+			if verifiedCount%10 == 0 || verifiedCount == totalFiles {
+				s.logger.Infof("Verified %d/%d files", verifiedCount, totalFiles)
+			}
 		}
+	}
+
+	if len(errors) == 0 {
+		s.logger.Infof("All %d files successfully verified", totalFiles)
+	} else {
+		s.logger.Warnf("%d/%d files failed verification", len(errors), totalFiles)
 	}
 
 	return errors
