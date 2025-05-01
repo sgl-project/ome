@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"knative.dev/pkg/kmp"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
@@ -15,7 +17,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -250,13 +251,9 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 	}
 	newBaseModel := new.(*v1beta1.BaseModel)
 
-	if oldBaseModel.GetResourceVersion() == newBaseModel.GetResourceVersion() {
-		return
-	}
-
 	if w.shouldDownloadModel(oldBaseModel.Spec.Storage) &&
 		!w.shouldDownloadModel(newBaseModel.Spec.Storage) {
-		// shape config changed, delete from current node
+		// shape config changed, delete it from the current node
 		w.logger.Infof("Target shapes excluded BaseModel update: %s in namespace %s, deleting", newBaseModel.GetName(), newBaseModel.GetNamespace())
 		w.deleteBaseModel(new)
 		return
@@ -267,16 +264,25 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	var needRefresh bool = true
-	if equality.Semantic.DeepEqual(oldBaseModel.Spec.Storage.StorageUri, newBaseModel.Spec.Storage.StorageUri) &&
-		equality.Semantic.DeepEqual(oldBaseModel.Spec.Storage.Path, newBaseModel.Spec.Storage.Path) &&
-		equality.Semantic.DeepEqual(oldBaseModel.Spec.Storage.SchemaPath, newBaseModel.Spec.Storage.SchemaPath) &&
-		equality.Semantic.DeepEqual(oldBaseModel.Spec.Storage.Parameters, newBaseModel.Spec.Storage.Parameters) &&
-		equality.Semantic.DeepEqual(oldBaseModel.Spec.Storage.StorageKey, newBaseModel.Spec.Storage.StorageKey) {
-		needRefresh = false
+	hasChanges := false
+	for _, diff := range []struct {
+		name     string
+		old, new interface{}
+	}{
+		{"Labels", oldBaseModel.Labels, newBaseModel.Labels},
+		{"Annotations", oldBaseModel.Annotations, newBaseModel.Annotations},
+		{"Spec", oldBaseModel.Spec, newBaseModel.Spec},
+	} {
+		result, err := kmp.SafeDiff(diff.old, diff.new)
+		if err != nil {
+			w.logger.Errorf("Failed to diff %s for BaseModel: %s in namespace %s",
+				diff.name, newBaseModel.Name, newBaseModel.Namespace)
+			return
+		}
+		hasChanges = hasChanges || (result != "")
 	}
 
-	if needRefresh && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
+	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
 		w.logger.Infof("BaseModel %s need refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
 
 		nodeLabelOp := &NodeLabelOp{
@@ -320,13 +326,9 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	if oldClusterBaseModel.GetResourceVersion() == newClusterBaseModel.GetResourceVersion() {
-		return
-	}
-
 	if w.shouldDownloadModel(oldClusterBaseModel.Spec.Storage) &&
 		!w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
-		// shape config changed, delete from current node
+		// shape config changed, delete it from the current node
 		w.logger.Infof("Target shapes excluded ClusterBaseModel %s, deleting", newClusterBaseModel.GetName())
 		w.deleteClusterBaseModel(new)
 		return
@@ -337,16 +339,25 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 		return
 	}
 
-	var needRefresh bool = true
-	if equality.Semantic.DeepEqual(oldClusterBaseModel.Spec.Storage.StorageUri, newClusterBaseModel.Spec.Storage.StorageUri) &&
-		equality.Semantic.DeepEqual(oldClusterBaseModel.Spec.Storage.Path, newClusterBaseModel.Spec.Storage.Path) &&
-		equality.Semantic.DeepEqual(oldClusterBaseModel.Spec.Storage.SchemaPath, newClusterBaseModel.Spec.Storage.SchemaPath) &&
-		equality.Semantic.DeepEqual(oldClusterBaseModel.Spec.Storage.Parameters, newClusterBaseModel.Spec.Storage.Parameters) &&
-		equality.Semantic.DeepEqual(oldClusterBaseModel.Spec.Storage.StorageKey, newClusterBaseModel.Spec.Storage.StorageKey) {
-		needRefresh = false
+	hasChanges := false
+	for _, diff := range []struct {
+		name     string
+		old, new interface{}
+	}{
+		{"Labels", oldClusterBaseModel.Labels, newClusterBaseModel.Labels},
+		{"Annotations", oldClusterBaseModel.Annotations, newClusterBaseModel.Annotations},
+		{"Spec", oldClusterBaseModel.Spec, newClusterBaseModel.Spec},
+	} {
+		result, err := kmp.SafeDiff(diff.old, diff.new)
+		if err != nil {
+			w.logger.Errorf("Failed to diff %s for BaseModel: %s in namespace %s",
+				diff.name, newClusterBaseModel.Name, newClusterBaseModel.Namespace)
+			return
+		}
+		hasChanges = hasChanges || (result != "")
 	}
 
-	if needRefresh && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
+	if hasChanges && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
 		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
 
 		nodeLabelOp := &NodeLabelOp{

@@ -329,7 +329,7 @@ func TestShouldDownloadModel(t *testing.T) {
 	}
 }
 
-// Helper function to return string pointer
+// Helper function to return a string pointer
 func stringPtr(s string) *string {
 	return &s
 }
@@ -916,7 +916,7 @@ func TestShouldDownloadModelFallback(t *testing.T) {
 	}
 }
 
-// Test edge cases for nodeMatchesExpression function
+// Test edge cases for the nodeMatchesExpression function
 func TestNodeMatchesExpressionEdgeCases(t *testing.T) {
 	// Create a test logger
 	logger, _ := zap.NewDevelopment()
