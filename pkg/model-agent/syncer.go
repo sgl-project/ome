@@ -149,7 +149,7 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 		downloadStartTime := time.Now()
 
 		err := utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-			downloadErr := s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter)
+			downloadErr := s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter, task)
 			if downloadErr != nil {
 				s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
 					modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
@@ -356,7 +356,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 	}
 }
 
-func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter) error {
+func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter, task *SyncerTask) error {
 	// If this is a vendor storage URI, skip download operations
 	if uri.IsVendor {
 		s.logger.Infof("Vendor storage URI detected, skipping download operations for %s/%s/%s", uri.Namespace, uri.BucketName, uri.Prefix)
@@ -455,7 +455,7 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	// Perform final verification of all downloaded files
 	s.logger.Info("Performing final integrity verification of all downloaded files...")
 	verificationStartTime := time.Now()
-	verificationErrors := s.verifyDownloadedFiles(objects, uri, destPath)
+	verificationErrors := s.verifyDownloadedFiles(objects, uri, destPath, task)
 	verificationDuration := time.Since(verificationStartTime)
 
 	// Record verification duration
@@ -482,23 +482,15 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	return nil
 }
 
-func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, uri *casper.ObjectURI, destPath string) map[string]error {
+func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, uri *casper.ObjectURI, destPath string, task *SyncerTask) map[string]error {
 	errors := make(map[string]error)
 	totalFiles := len(objects)
 	verifiedCount := 0
 
 	s.logger.Infof("Starting verification of %d files", totalFiles)
 
-	// Parse model type, namespace, and name from URI for metrics
-	modelType := "unknown"
-	namespace := "unknown"
-	name := "unknown"
-
-	// Attempt to extract model info from URI
-	pathParts := strings.Split(uri.Prefix, "/")
-	if len(pathParts) > 0 {
-		name = pathParts[len(pathParts)-1]
-	}
+	// Get proper model information for metrics from the task
+	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 
 	for _, object := range objects {
 		if object.Name == nil || object.Md5 == nil {
