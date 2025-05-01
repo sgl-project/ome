@@ -5,6 +5,9 @@ metadata:
   name: nl2sql-m1-base-7b
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "nl2sql-m1-base-7b" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "nl2sql-m1-base-7b" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "nl2sql-m1-base-7b" "timeDedicatedRetired" }}"
   annotations:
     models.ome.io/runtime: "vllm-nl2rqs-7b-v1"
     models.ome.io/category: "SMALL"

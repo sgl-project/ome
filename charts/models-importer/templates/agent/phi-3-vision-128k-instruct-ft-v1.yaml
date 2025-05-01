@@ -5,6 +5,9 @@ metadata:
   name: phi-3-vision-128k-instruct-ft-v1
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "phi-3-vision-128k-instruct-ft-v1" "timeDedicatedRetired" }}"
   annotations:
     models.ome.io/runtime: "vllm-phi-3-vision-128k-instruct"
     models.ome.io/category: "SMALL"

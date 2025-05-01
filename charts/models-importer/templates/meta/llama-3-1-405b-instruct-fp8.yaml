@@ -5,6 +5,9 @@ metadata:
   name: llama-3-1-405b-instruct-fp8
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "llama-3-1-405b-instruct-fp8" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "llama-3-1-405b-instruct-fp8" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "llama-3-1-405b-instruct-fp8" "timeDedicatedRetired" }}"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
     {{- if index .Values "llama-3-1-405b-instruct-fp8" "singleNode" }}

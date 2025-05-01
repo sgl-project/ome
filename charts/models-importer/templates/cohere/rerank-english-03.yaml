@@ -5,6 +5,9 @@ metadata:
   name: rerank-english-03
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "cohere-rerank-english-03" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "cohere-rerank-english-03" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "cohere-rerank-english-03" "timeDedicatedRetired" }}"
   annotations:
     models.ome.io/runtime: "cohere-rerank-v3"
     models.ome.io/category: "SMALL"

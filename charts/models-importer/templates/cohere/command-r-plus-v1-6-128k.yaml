@@ -5,6 +5,9 @@ metadata:
   name: command-r-plus-v1-6-128k
   labels:
     genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "cohere-command-r-plus-v1-6-chat" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "cohere-command-r-plus-v1-6-chat" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "cohere-command-r-plus-v1-6-chat" "timeDedicatedRetired" }}"
   annotations:
     models.ome.io/runtime: "cohere-command-r-v3"
     models.ome.io/category: "LARGE"
