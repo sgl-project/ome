@@ -1,6 +1,7 @@
 package model_agent
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
 	"os"
 	"path"
@@ -380,8 +381,8 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 
 	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
 
-	if shapeFilter.IsTensorrtLLMModel {
-		s.logger.Infof("TensorRTLLM Model detected. Start filtering model files that don't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
+	if shapeFilter.IsTensorrtLLMModel && shapeFilter.ModelType == string(constants.ServingBaseModel) {
+		s.logger.Infof("TensorRTLLM Serving model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
 		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
 		for _, object := range objects {
 			if object.Name != nil {

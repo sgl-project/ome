@@ -43,6 +43,7 @@ type Watcher struct {
 type TensorRTLLMShapeFilter struct {
 	IsTensorrtLLMModel bool
 	ShapeAlias         string
+	ModelType          string
 }
 
 func NewWatcher(nodeShape string,
@@ -181,6 +182,11 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 			IsTensorrtLLMModel = true
 		}
 
+		modelType := string(constants.ServingBaseModel)
+		if modelTypeFromMetadata, ok := baseModel.Spec.AdditionalMetadata["type"]; ok {
+			modelType = modelTypeFromMetadata
+		}
+
 		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 		syncerTask := &SyncerTask{
 			TaskType:  Download,
@@ -188,6 +194,7 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 				IsTensorrtLLMModel: IsTensorrtLLMModel,
 				ShapeAlias:         w.nodeShapeAlias,
+				ModelType:          modelType,
 			},
 		}
 
@@ -230,12 +237,18 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 			IsTensorrtLLMModel = true
 		}
 
+		modelType := string(constants.ServingBaseModel)
+		if modelTypeFromMetadata, ok := clusterBaseModel.Spec.AdditionalMetadata["type"]; ok {
+			modelType = modelTypeFromMetadata
+		}
+
 		syncerTask := &SyncerTask{
 			TaskType:         Download,
 			ClusterBaseModel: clusterBaseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 				IsTensorrtLLMModel: IsTensorrtLLMModel,
 				ShapeAlias:         w.nodeShapeAlias,
+				ModelType:          modelType,
 			},
 		}
 
@@ -300,12 +313,17 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 			IsTensorrtLLMModel = true
 		}
 
+		modelType := string(constants.ServingBaseModel)
+		if modelTypeFromMetadata, ok := newBaseModel.Spec.AdditionalMetadata["type"]; ok {
+			modelType = modelTypeFromMetadata
+		}
 		syncerTask := &SyncerTask{
 			TaskType:  DownloadOverride,
 			BaseModel: newBaseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 				IsTensorrtLLMModel: IsTensorrtLLMModel,
 				ShapeAlias:         w.nodeShapeAlias,
+				ModelType:          modelType,
 			},
 		}
 
@@ -375,12 +393,18 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 			IsTensorrtLLMModel = true
 		}
 
+		modelType := string(constants.ServingBaseModel)
+		if modelTypeFromMetadata, ok := newClusterBaseModel.Spec.AdditionalMetadata["type"]; ok {
+			modelType = modelTypeFromMetadata
+		}
+
 		syncerTask := &SyncerTask{
 			TaskType:         DownloadOverride,
 			ClusterBaseModel: newClusterBaseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
 				IsTensorrtLLMModel: IsTensorrtLLMModel,
 				ShapeAlias:         w.nodeShapeAlias,
+				ModelType:          modelType,
 			},
 		}
 
