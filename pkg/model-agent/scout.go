@@ -24,13 +24,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type Watcher struct {
+type Scount struct {
 	baseModelLister        omev1beta1lister.BaseModelLister
 	baseModelSynced        cache.InformerSynced
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
 	clusterBaseModelSynced cache.InformerSynced
 	informerFactory        omev1beta1informers.SharedInformerFactory
-	syncerChan             chan<- *SyncerTask
+	gopherChan             chan<- *GopherTask
 	nodeName               string
 	nodeInfo               *v1.Node
 	nodeShape              string
@@ -46,15 +46,15 @@ type TensorRTLLMShapeFilter struct {
 	ModelType          string
 }
 
-func NewWatcher(nodeShape string,
+func NewScout(nodeShape string,
 	nodeName string,
 	baseModelInformer omev1beta1.BaseModelInformer,
 	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
 	informerFactory omev1beta1informers.SharedInformerFactory,
-	syncerChan chan<- *SyncerTask,
+	gopherChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
 	nodeLabeler *NodeLabeler,
-	logger *zap.SugaredLogger) (*Watcher, error) {
+	logger *zap.SugaredLogger) (*Scount, error) {
 
 	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(nodeShape)
 	if err != nil {
@@ -67,7 +67,7 @@ func NewWatcher(nodeShape string,
 		return nil, fmt.Errorf("failed to get node info for node %s: %w", nodeName, err)
 	}
 
-	watcher := &Watcher{
+	scout := &Scount{
 		nodeShape:              nodeShape,
 		nodeShapeAlias:         nodeShapeAlias,
 		nodeInfo:               nodeInfo,
@@ -76,7 +76,7 @@ func NewWatcher(nodeShape string,
 		clusterBaseModelLister: clusterBaseModelInformer.Lister(),
 		clusterBaseModelSynced: clusterBaseModelInformer.Informer().HasSynced,
 		informerFactory:        informerFactory,
-		syncerChan:             syncerChan,
+		gopherChan:             gopherChan,
 		nodeName:               nodeName,
 		kubeClient:             kubeClient,
 		nodeLabeler:            nodeLabeler,
@@ -95,7 +95,7 @@ func NewWatcher(nodeShape string,
 			cache.DefaultWatchErrorHandler(r, err)
 
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
-				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting watcher to exit.", name, err.Error())
+				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", name, err.Error())
 			}
 		})
 
@@ -107,28 +107,28 @@ func NewWatcher(nodeShape string,
 	logger.Info("Setting up event handlers")
 
 	if _, err := baseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    watcher.downloadBaseModel,
-		UpdateFunc: watcher.downloadIfBaseModelNeedRefresh,
-		DeleteFunc: watcher.deleteBaseModel,
+		AddFunc:    scout.downloadBaseModel,
+		UpdateFunc: scout.downloadIfBaseModelNeedRefresh,
+		DeleteFunc: scout.deleteBaseModel,
 	}); err != nil {
 		return nil, err
 	}
 
 	if _, err := clusterBaseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    watcher.downloadClusterBaseModel,
-		UpdateFunc: watcher.downloadIfClusterBaseModelNeedRefresh,
-		DeleteFunc: watcher.deleteClusterBaseModel,
+		AddFunc:    scout.downloadClusterBaseModel,
+		UpdateFunc: scout.downloadIfClusterBaseModelNeedRefresh,
+		DeleteFunc: scout.deleteClusterBaseModel,
 	}); err != nil {
 		return nil, err
 	}
 
-	return watcher, nil
+	return scout, nil
 }
 
-func (w *Watcher) Run(stopCh <-chan struct{}) error {
+func (w *Scount) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 
-	w.logger.Info("Starting watcher")
+	w.logger.Info("Starting scout")
 	w.logger.Info("Starting informer cache")
 	go w.informerFactory.Start(stopCh)
 
@@ -143,13 +143,13 @@ func (w *Watcher) Run(stopCh <-chan struct{}) error {
 	}
 
 	<-stopCh
-	close(w.syncerChan)
-	w.logger.Info("Shutting down watcher")
+	close(w.gopherChan)
+	w.logger.Info("Shutting down scout")
 
 	return nil
 }
 
-func (w *Watcher) downloadBaseModel(obj interface{}) {
+func (w *Scount) downloadBaseModel(obj interface{}) {
 	baseModel, ok := obj.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to BaseModel", obj)
@@ -188,7 +188,7 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 		}
 
 		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
-		syncerTask := &SyncerTask{
+		gopherTask := &GopherTask{
 			TaskType:  Download,
 			BaseModel: baseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
@@ -198,11 +198,11 @@ func (w *Watcher) downloadBaseModel(obj interface{}) {
 			},
 		}
 
-		w.syncerChan <- syncerTask
+		w.gopherChan <- gopherTask
 	}
 }
 
-func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
+func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 	clusterBaseModel, ok := obj.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to clusterBaseModel", obj)
@@ -242,7 +242,7 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 			modelType = modelTypeFromMetadata
 		}
 
-		syncerTask := &SyncerTask{
+		gopherTask := &GopherTask{
 			TaskType:         Download,
 			ClusterBaseModel: clusterBaseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
@@ -252,11 +252,11 @@ func (w *Watcher) downloadClusterBaseModel(obj interface{}) {
 			},
 		}
 
-		w.syncerChan <- syncerTask
+		w.gopherChan <- gopherTask
 	}
 }
 
-func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
+func (w *Scount) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 	oldBaseModel, ok := old.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", old)
@@ -317,7 +317,7 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 		if modelTypeFromMetadata, ok := newBaseModel.Spec.AdditionalMetadata["type"]; ok {
 			modelType = modelTypeFromMetadata
 		}
-		syncerTask := &SyncerTask{
+		gopherTask := &GopherTask{
 			TaskType:  DownloadOverride,
 			BaseModel: newBaseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
@@ -327,11 +327,11 @@ func (w *Watcher) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 			},
 		}
 
-		w.syncerChan <- syncerTask
+		w.gopherChan <- gopherTask
 	}
 }
 
-func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
+func (w *Scount) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 	oldClusterBaseModel, ok := old.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", old)
@@ -398,7 +398,7 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 			modelType = modelTypeFromMetadata
 		}
 
-		syncerTask := &SyncerTask{
+		gopherTask := &GopherTask{
 			TaskType:         DownloadOverride,
 			ClusterBaseModel: newClusterBaseModel,
 			TensorRTLLMShapeFilter: &TensorRTLLMShapeFilter{
@@ -408,11 +408,11 @@ func (w *Watcher) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 			},
 		}
 
-		w.syncerChan <- syncerTask
+		w.gopherChan <- gopherTask
 	}
 }
 
-func (w *Watcher) deleteBaseModel(obj interface{}) {
+func (w *Scount) deleteBaseModel(obj interface{}) {
 	baseModel, ok := obj.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to BaseModel", obj)
@@ -431,15 +431,15 @@ func (w *Watcher) deleteBaseModel(obj interface{}) {
 		return
 	}
 
-	syncerTask := &SyncerTask{
+	gopherTask := &GopherTask{
 		TaskType:  Delete,
 		BaseModel: baseModel,
 	}
 
-	w.syncerChan <- syncerTask
+	w.gopherChan <- gopherTask
 }
 
-func (w *Watcher) deleteClusterBaseModel(obj interface{}) {
+func (w *Scount) deleteClusterBaseModel(obj interface{}) {
 	clusterBaseModel, ok := obj.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", obj)
@@ -457,16 +457,16 @@ func (w *Watcher) deleteClusterBaseModel(obj interface{}) {
 		return
 	}
 
-	syncerTask := &SyncerTask{
+	gopherTask := &GopherTask{
 		TaskType:         Delete,
 		ClusterBaseModel: clusterBaseModel,
 	}
 
-	w.syncerChan <- syncerTask
+	w.gopherChan <- gopherTask
 }
 
 // shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity
-func (w *Watcher) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
+func (w *Scount) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
 	if storage == nil {
 		// If storage is nil, default to true (backward compatibility)
 		return true
@@ -515,7 +515,7 @@ func (w *Watcher) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
 	return true
 }
 
-func (w *Watcher) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
+func (w *Scount) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
 	// Check match expressions
 	for _, expr := range term.MatchExpressions {
 		if !w.nodeMatchesExpression(expr) {
@@ -533,7 +533,7 @@ func (w *Watcher) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
 	return true
 }
 
-func (w *Watcher) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
+func (w *Scount) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
 	// Get the field value based on whether it's a label or field selector
 	var values []string
 	var exists bool
@@ -614,7 +614,7 @@ func (w *Watcher) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
 }
 
 // Keep the legacy implementation but modify it to check annotations in the model object
-func (w *Watcher) matchTargetShape(targetShapes string) bool {
+func (w *Scount) matchTargetShape(targetShapes string) bool {
 	// For backward compatibility - this functionality is now integrated into shouldDownloadModel
 	// matched if target shape not specified
 	if len(targetShapes) == 0 {

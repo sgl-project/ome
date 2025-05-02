@@ -1,7 +1,6 @@
 package model_agent
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"fmt"
 	"os"
 	"path"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
@@ -29,81 +30,81 @@ var (
 	DefaultFilterFilesThreads        = 10
 )
 
-type SyncerTaskType string
+type GopherTaskType string
 
 const (
-	Download         SyncerTaskType = "Download"
-	DownloadOverride SyncerTaskType = "DownloadOverride"
-	Delete           SyncerTaskType = "Delete"
+	Download         GopherTaskType = "Download"
+	DownloadOverride GopherTaskType = "DownloadOverride"
+	Delete           GopherTaskType = "Delete"
 )
 
-type SyncerTask struct {
-	TaskType               SyncerTaskType
+type GopherTask struct {
+	TaskType               GopherTaskType
 	BaseModel              *v1beta1.BaseModel
 	ClusterBaseModel       *v1beta1.ClusterBaseModel
 	TensorRTLLMShapeFilter *TensorRTLLMShapeFilter
 }
 
-type Syncer struct {
+type Gopher struct {
 	downloadRetry      int
 	modelRootDir       string
 	modelRootDirOnHost string
 	casperDataStore    casper.CasperDataStore
-	syncerChan         <-chan *SyncerTask
+	gopherChan         <-chan *GopherTask
 	nodeLabeler        *NodeLabeler
 	metrics            *Metrics
 	logger             *zap.SugaredLogger
 }
 
-func NewSyncer(authType string,
+func NewGopher(authType string,
 	downloadRetry int,
 	modelRootDir string,
 	modelRootDirOnHost string,
-	syncerChan <-chan *SyncerTask,
+	gopherChan <-chan *GopherTask,
 	nodeLabeler *NodeLabeler,
 	metrics *Metrics,
-	logger *zap.SugaredLogger) (*Syncer, error) {
+	logger *zap.SugaredLogger) (*Gopher, error) {
 	casperDataStore, err := NewCasperDataStore(authType)
 	if err != nil {
 		logger.Errorf("Not able to initalize the casper data store: %s", err.Error())
 		return nil, err
 	}
 
-	return &Syncer{
+	return &Gopher{
 		downloadRetry:      downloadRetry,
 		modelRootDir:       modelRootDir,
 		modelRootDirOnHost: modelRootDirOnHost,
 		casperDataStore:    casperDataStore,
-		syncerChan:         syncerChan,
+		gopherChan:         gopherChan,
 		nodeLabeler:        nodeLabeler,
 		metrics:            metrics,
 		logger:             logger,
 	}, nil
 }
 
-func (s *Syncer) Run(stopCh <-chan struct{}, numWorker int) {
-	s.logger.Info("Starting syncer")
+func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
+	s.logger.Info("Starting gopher workers")
 
 	for i := 0; i < numWorker; i++ {
 		go wait.Until(s.runWorker, time.Second, stopCh)
 	}
 
-	s.logger.Info("Started syncer workers")
+	s.logger.Info("Started gopher workers")
 	<-stopCh
-	s.logger.Info("Shutting down syncer workers")
+	s.logger.Info("Shutting down gopher workers")
 }
 
-func (s *Syncer) runWorker() {
+func (s *Gopher) runWorker() {
 	for {
 		select {
-		case task, ok := <-s.syncerChan:
+		case task, ok := <-s.gopherChan:
 			if ok {
 				err := s.processTask(task)
 				if err != nil {
-					s.logger.Errorf("Syncer task failed with error: %s", err.Error())
+					s.logger.Errorf("Gopher task failed with error: %s", err.Error())
 				}
 			} else {
-				s.logger.Info("syncer channel closed, worker exits.")
+				s.logger.Info("gopher channel closed, worker exits.")
 				return
 			}
 		default:
@@ -112,14 +113,14 @@ func (s *Syncer) runWorker() {
 	}
 }
 
-func (s *Syncer) processTask(task *SyncerTask) error {
+func (s *Gopher) processTask(task *GopherTask) error {
 	if task.BaseModel == nil && task.ClusterBaseModel == nil {
-		return fmt.Errorf("syncer got empty task")
+		return fmt.Errorf("gopher got empty task")
 	}
 
 	// Get model info for logging
 	modelInfo := getModelInfoForLogging(task)
-	s.logger.Infof("Processing syncer task: %s, type: %s", modelInfo, task.TaskType)
+	s.logger.Infof("Processing gopher task: %s, type: %s", modelInfo, task.TaskType)
 
 	// Get model type, namespace, and name for metrics
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
@@ -213,7 +214,7 @@ func (s *Syncer) processTask(task *SyncerTask) error {
 	return nil
 }
 
-func getModelInfoForLogging(task *SyncerTask) string {
+func getModelInfoForLogging(task *GopherTask) string {
 	if task.BaseModel != nil {
 		return fmt.Sprintf("BaseModel %s/%s", task.BaseModel.Namespace, task.BaseModel.Name)
 	} else if task.ClusterBaseModel != nil {
@@ -222,7 +223,7 @@ func getModelInfoForLogging(task *SyncerTask) string {
 	return "unknown model"
 }
 
-func (s *Syncer) markModelOnNodeFailed(task *SyncerTask) {
+func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 	modelInfo := getModelInfoForLogging(task)
 	s.logger.Infof("Marking model %s as Failed on node", modelInfo)
 
@@ -356,7 +357,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.Cl
 	}
 }
 
-func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter, task *SyncerTask) error {
+func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter, task *GopherTask) error {
 	// If this is a vendor storage URI, skip download operations
 	if uri.IsVendor {
 		s.logger.Infof("Vendor storage URI detected, skipping download operations for %s/%s/%s", uri.Namespace, uri.BucketName, uri.Prefix)
@@ -482,7 +483,7 @@ func (s *Syncer) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	return nil
 }
 
-func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, uri *casper.ObjectURI, destPath string, task *SyncerTask) map[string]error {
+func (s *Gopher) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, uri *casper.ObjectURI, destPath string, task *GopherTask) map[string]error {
 	errors := make(map[string]error)
 	totalFiles := len(objects)
 	verifiedCount := 0
@@ -538,7 +539,7 @@ func (s *Syncer) verifyDownloadedFiles(objects []objectstorage.ObjectSummary, ur
 	return errors
 }
 
-func (s *Syncer) deleteModel(destPath string) error {
+func (s *Gopher) deleteModel(destPath string) error {
 	return os.RemoveAll(destPath)
 }
 

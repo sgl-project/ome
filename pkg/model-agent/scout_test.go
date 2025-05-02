@@ -44,8 +44,8 @@ func TestShouldDownloadModel(t *testing.T) {
 		},
 	}
 
-	// Create a test watcher with minimal fields needed for the test
-	watcher := &Watcher{
+	// Create a test scount with minimal fields needed for the test
+	scount := &Scount{
 		nodeName:       "test-node",
 		nodeInfo:       testNode,
 		nodeShape:      "GPU.A10.2",
@@ -321,7 +321,7 @@ func TestShouldDownloadModel(t *testing.T) {
 	// Run tests
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := watcher.shouldDownloadModel(tc.storageSpec)
+			result := scount.shouldDownloadModel(tc.storageSpec)
 			if result != tc.expectedResult {
 				t.Errorf("%s: Expected %v but got %v. %s", tc.name, tc.expectedResult, result, tc.description)
 			}
@@ -356,8 +356,8 @@ func TestNodeMatchesExpression(t *testing.T) {
 		},
 	}
 
-	// Create a test watcher with minimal fields needed
-	watcher := &Watcher{
+	// Create a test scount with minimal fields needed
+	scount := &Scount{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -541,7 +541,7 @@ func TestNodeMatchesExpression(t *testing.T) {
 	// Run tests
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := watcher.nodeMatchesExpression(tc.expr)
+			result := scount.nodeMatchesExpression(tc.expr)
 			if result != tc.expectedResult {
 				t.Errorf("%s: Expected %v but got %v. %s", tc.name, tc.expectedResult, result, tc.description)
 			}
@@ -570,8 +570,8 @@ func TestNodeMatchesSelectorTerm(t *testing.T) {
 		},
 	}
 
-	// Create a test watcher with minimal fields needed
-	watcher := &Watcher{
+	// Create a test scount with minimal fields needed
+	scount := &Scount{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -653,7 +653,7 @@ func TestNodeMatchesSelectorTerm(t *testing.T) {
 	// Run tests
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := watcher.nodeMatchesSelectorTerm(tc.term)
+			result := scount.nodeMatchesSelectorTerm(tc.term)
 			if result != tc.expectedResult {
 				t.Errorf("%s: Expected %v but got %v. %s", tc.name, tc.expectedResult, result, tc.description)
 			}
@@ -681,8 +681,8 @@ func TestNodeMatchesSelectorTermWithMatchFields(t *testing.T) {
 		},
 	}
 
-	// Create a test watcher with minimal fields needed
-	watcher := &Watcher{
+	// Create a test scount with minimal fields needed
+	scount := &Scount{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -805,7 +805,7 @@ func TestNodeMatchesSelectorTermWithMatchFields(t *testing.T) {
 	// Run tests
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := watcher.nodeMatchesSelectorTerm(tc.term)
+			result := scount.nodeMatchesSelectorTerm(tc.term)
 			if result != tc.expectedResult {
 				t.Errorf("%s: Expected %v but got %v. %s", tc.name, tc.expectedResult, result, tc.description)
 			}
@@ -900,15 +900,15 @@ func TestShouldDownloadModelFallback(t *testing.T) {
 				},
 			}
 
-			// Create a test watcher with the node
-			watcher := &Watcher{
+			// Create a test scount with the node
+			scount := &Scount{
 				nodeName:  "test-node",
 				nodeInfo:  testNode,
 				nodeShape: tc.nodeShape,
 				logger:    sugaredLogger,
 			}
 
-			result := watcher.shouldDownloadModel(tc.storageSpec)
+			result := scount.shouldDownloadModel(tc.storageSpec)
 			if result != tc.expectedResult {
 				t.Errorf("%s: Expected %v but got %v. %s", tc.name, tc.expectedResult, result, tc.description)
 			}
@@ -938,8 +938,8 @@ func TestNodeMatchesExpressionEdgeCases(t *testing.T) {
 		},
 	}
 
-	// Create a test watcher with minimal fields needed
-	watcher := &Watcher{
+	// Create a test scount with minimal fields needed
+	scount := &Scount{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -997,7 +997,7 @@ func TestNodeMatchesExpressionEdgeCases(t *testing.T) {
 	// Run tests
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := watcher.nodeMatchesExpression(tc.expr)
+			result := scount.nodeMatchesExpression(tc.expr)
 			if result != tc.expectedResult {
 				t.Errorf("%s: Expected %v but got %v. %s", tc.name, tc.expectedResult, result, tc.description)
 			}

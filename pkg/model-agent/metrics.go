@@ -239,8 +239,8 @@ func RegisterMetricsHandler(mux *http.ServeMux) {
 	mux.Handle("/metrics", promhttp.Handler())
 }
 
-// GetModelTypeNamespaceAndName extracts the model type, namespace, and name from a syncer task
-func GetModelTypeNamespaceAndName(task *SyncerTask) (string, string, string) {
+// GetModelTypeNamespaceAndName extracts the model type, namespace, and name from a gopher task
+func GetModelTypeNamespaceAndName(task *GopherTask) (string, string, string) {
 	if task.BaseModel != nil {
 		return "BaseModel", task.BaseModel.Namespace, task.BaseModel.Name
 	} else if task.ClusterBaseModel != nil {

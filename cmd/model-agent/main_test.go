@@ -92,7 +92,7 @@ func TestDefaultConfig(t *testing.T) {
 	cfg = config{}
 
 	// Set up default flags
-	testCmd.Flags().IntVar(&cfg.healthCheckPort, "health-check-port", 8080, "Address for readiness and liveness health check")
+	testCmd.Flags().IntVar(&cfg.port, "health-check-port", 8080, "Address for readiness and liveness health check")
 	testCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
 	testCmd.Flags().StringVar(&cfg.modelsRootDir, "models-root-dir", "/raid/models", "container's root dir for storing all models")
 	testCmd.Flags().IntVar(&cfg.nodeLabelRetry, "node-label-retry", 2, "retry times for node label update")
@@ -105,7 +105,7 @@ func TestDefaultConfig(t *testing.T) {
 	initConfig(testCmd, nil)
 
 	// Verify default values
-	assert.Equal(t, 8080, cfg.healthCheckPort)
+	assert.Equal(t, 8080, cfg.port)
 	assert.Equal(t, "/raid/models", cfg.modelsRootDir)
 	assert.Equal(t, "/raid/models", cfg.modelsRootDirOnHost)
 	assert.Equal(t, 2, cfg.nodeLabelRetry)
@@ -126,7 +126,7 @@ func TestInitializeLogger(t *testing.T) {
 func TestSetupHealthServer(t *testing.T) {
 	setupTestEnv(t)
 	logger, _ := initializeLogger()
-	server := setupHealthServer(8080, "/tmp", logger)
+	server := setupServer(8080, "/tmp", logger)
 	require.NotNil(t, server)
 	assert.Equal(t, ":8080", server.Addr)
 
@@ -238,7 +238,7 @@ func TestCreateOmeClient(t *testing.T) {
 func TestHealthCheckEndpoint(t *testing.T) {
 	setupTestEnv(t)
 	logger, _ := initializeLogger()
-	server := setupHealthServer(18080, "/tmp", logger)
+	server := setupServer(18080, "/tmp", logger)
 	require.NotNil(t, server)
 
 	// Start server in background

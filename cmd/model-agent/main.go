@@ -33,7 +33,7 @@ var rootCmd = &cobra.Command{
 }
 
 type config struct {
-	healthCheckPort     int
+	port                int
 	modelsRootDir       string
 	modelsRootDirOnHost string
 	nodeName            string
@@ -64,7 +64,7 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().IntVar(&cfg.healthCheckPort, "health-check-port", 8080, "Address for readiness and liveness health check")
+	rootCmd.Flags().IntVar(&cfg.port, "health-check-port", 8080, "Address for readiness and liveness health check")
 	rootCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
 	rootCmd.Flags().StringVar(&cfg.modelsRootDir, "models-root-dir", "/raid/models", "folder for all models' root dir for the model-agent")
 	rootCmd.Flags().IntVar(&cfg.nodeLabelRetry, "node-label-retry", 2, "number of retries for the node labeling operations")
@@ -109,7 +109,7 @@ func initializeLogger() (*Logger, error) {
 	return zapLogger.Sugar(), nil
 }
 
-func setupHealthServer(port int, modelsRootDir string, logger *Logger) *http.Server {
+func setupServer(port int, modelsRootDir string, logger *Logger) *http.Server {
 	mux := http.NewServeMux()
 	healthz.InstallPathHandler(mux, "/healthz", modelagent.NewModelAgentHealthCheck(modelsRootDir))
 	healthz.InstallLivezHandler(mux, healthz.PingHealthz)
@@ -173,55 +173,55 @@ func runCommand(cmd *cobra.Command, args []string) {
 	logger.Info("Initialized Prometheus metrics")
 
 	// create download task communication channel
-	syncerTaskChan := make(chan *modelagent.SyncerTask)
+	gopherTaskChan := make(chan *modelagent.GopherTask)
 
 	// create node labeler
 	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry)
 
-	// create watcher
-	watcher, err := modelagent.NewWatcher(
+	// create scout
+	scout, err := modelagent.NewScout(
 		nodeShape,
 		cfg.nodeName,
 		baseModelsInformer,
 		clusterBaseModelsInformer,
 		omev1beta1InformerFactory,
-		syncerTaskChan,
+		gopherTaskChan,
 		kubeClient,
 		nodeLabeler,
 		logger)
 	if err != nil {
-		logger.Fatalf("Failed to create watcher: %v", err)
+		logger.Fatalf("Failed to create scout: %v", err)
 	}
 
-	// create syncer
-	syncer, err := modelagent.NewSyncer(
+	// create gopher
+	gopher, err := modelagent.NewGopher(
 		cfg.downloadAuthType,
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
 		cfg.modelsRootDirOnHost,
-		syncerTaskChan,
+		gopherTaskChan,
 		nodeLabeler,
 		metrics,
 		logger)
 	if err != nil {
-		logger.Fatalf("Failed to create syncer: %v", err)
+		logger.Fatalf("Failed to create gopher: %v", err)
 	}
 
 	// create and start health checker
-	server := setupHealthServer(cfg.healthCheckPort, cfg.modelsRootDir, logger)
+	server := setupServer(cfg.port, cfg.modelsRootDir, logger)
 	go func() {
-		logger.Infof("Starting health check server on port %d", cfg.healthCheckPort)
+		logger.Infof("Starting health check server on port %d", cfg.port)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Errorf("Health check server error: %v", err)
 		}
 	}()
 
-	// start syncer
-	go syncer.Run(stopCh, cfg.numDownloadWorker)
+	// start gopher
+	go gopher.Run(stopCh, cfg.numDownloadWorker)
 
-	// start watcher
-	if err := watcher.Run(stopCh); err != nil {
-		logger.Fatalf("Error running watcher: %v", err)
+	// start scout
+	if err := scout.Run(stopCh); err != nil {
+		logger.Fatalf("Error running scout: %v", err)
 	}
 }
 
