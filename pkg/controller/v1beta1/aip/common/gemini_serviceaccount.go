@@ -3,9 +3,14 @@ package common
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+	"cloud.google.com/go/iam/admin/apiv1/adminpb"
+	"cloud.google.com/go/iam/apiv1/iampb"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +27,9 @@ import (
 // GeminiServiceAccount implements ProjectScoped and ResourceOperation
 type GeminiServiceAccount struct {
 	ResourceBase
-	Resource *v1beta1.ServiceAccount
+	Resource         *v1beta1.ServiceAccount
+	iamClient        GcpIamClient
+	gcpProjectClient GcpProjectClient
 }
 
 // NewGeminiServiceAccount creates a new ServiceAccount resource handler
@@ -38,9 +45,51 @@ func NewGeminiServiceAccount(c client.Client, cs kubernetes.Interface, log logr.
 	}
 }
 
+// GetGcpProjectClient initializes the GCP project client with proper error handling
+func (sa *GeminiServiceAccount) GetGcpProjectClient(ctx context.Context) (GcpProjectClient, error) {
+	if sa.gcpProjectClient != nil {
+		// For unit testing
+		return sa.gcpProjectClient, nil
+	}
+	project, err := sa.GetProject(ctx, sa.Resource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project for the service account %s: %w", sa.Resource.Name, err)
+	}
+
+	org, err := sa.GetOrganizationFromProject(ctx, project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization when creating gcp client: %w", err)
+	}
+
+	gcpProjectClient, err := sa.InitializeGcpProjectClient(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP project client: %w", err)
+	}
+
+	return gcpProjectClient, nil
+}
+
+func (sa *GeminiServiceAccount) GetIamClient(ctx context.Context, project *v1beta1.Project) (GcpIamClient, error) {
+	if sa.iamClient != nil {
+		// for unit testing
+		return sa.iamClient, nil
+	}
+
+	org, err := sa.GetOrganizationFromProject(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+
+	iamClient, err := sa.InitializeGcpIamClient(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create iam client:%w", err)
+	}
+
+	return iamClient, nil
+}
+
 // Create implements ResourceOperation
 func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
-	// TODO: implementation with GCP resource management SDK
 	project, err := sa.GetProject(ctx, sa.Resource)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusProjectError, err)
@@ -64,7 +113,50 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 			fmt.Errorf("project ID not available for project %s", project.Name))
 	}
 
-	// TODO: Need to create service account with GCP SDK
+	if *sa.Resource.Spec.Name == "omcpminb2" {
+		// For testing, we already manually set up this secret user-geminitest
+		keyId := "user-testing-gemini"
+		creationTime := metav1.NewTime(time.Now())
+		sa.Resource.Status = v1beta1.ServiceAccountStatus{
+			ServiceAccountId: &keyId,
+			CreationTime:     &creationTime,
+		}
+		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusCreated)
+	}
+
+	serviceAccountId := strings.ToLower(GenerateId("user-", sa.Resource.UID))
+	projectId := project.Status.ProjectId
+	createReq := &adminpb.CreateServiceAccountRequest{
+		Name:      "projects/" + projectId,
+		AccountId: serviceAccountId,
+		ServiceAccount: &adminpb.ServiceAccount{
+			DisplayName: serviceAccountId,
+		},
+	}
+
+	iamClient, err := sa.GetIamClient(ctx, project)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError, err)
+	}
+	defer iamClient.Close()
+	svc, err := iamClient.CreateServiceAccount(ctx, createReq)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError,
+			fmt.Errorf("failed to create service account:%s", err))
+	}
+
+	sa.Log.Info("GCP service account created", "displayName", svc.DisplayName, "serviceAccountId", serviceAccountId)
+	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", serviceAccountId, projectId)
+
+	// Generate key for the newly created service account
+	keyResp, err := iamClient.CreateServiceAccountKey(ctx, &adminpb.CreateServiceAccountKeyRequest{
+		Name: fmt.Sprintf("projects/%s/serviceAccounts/%s", projectId, saEmail),
+	})
+
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError,
+			fmt.Errorf("failed to create service account key:%s", err))
+	}
 
 	// Add service account key to common secret
 	aiPlatformConfig, err := controllerconfig.NewAIPlatformConfig(sa.Clientset)
@@ -82,21 +174,77 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 		commonSecret.StringData = map[string]string{}
 	}
 
-	// For testing, we already manually set up this secret user-geminitest
-	keyId := "user-testing-gemini"
+	commonSecret.StringData[serviceAccountId] = string(keyResp.PrivateKeyData)
+
+	if err := sa.Client.Update(ctx, commonSecret); err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusSecretError, err)
+	}
+
+	// Assign vertex Ai access to the sa
+	if err := sa.AssignVertexAiRole(ctx, projectId, serviceAccountId); err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError, err)
+	}
+
 	// Update status
 	creationTime := metav1.NewTime(time.Now())
 	sa.Resource.Status = v1beta1.ServiceAccountStatus{
-		ServiceAccountId: &keyId,
+		ServiceAccountId: &serviceAccountId,
 		CreationTime:     &creationTime,
 	}
 	return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusCreated)
 }
 
+func (sa *GeminiServiceAccount) AssignVertexAiRole(ctx context.Context, projectId string, serviceAccountId string) error {
+	gcpProjectClient, err := sa.GetGcpProjectClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create GCP project Client: %w", err)
+	}
+
+	defer gcpProjectClient.Close()
+
+	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", serviceAccountId, projectId)
+	resource := fmt.Sprintf("projects/%s", projectId)
+
+	getReq := &iampb.GetIamPolicyRequest{Resource: resource}
+	policy, err := gcpProjectClient.GetIamPolicy(ctx, getReq)
+	if err != nil {
+		return fmt.Errorf("failed to get iam policy:%w", err)
+	}
+
+	var bindings []*iampb.Binding
+	binding := &iampb.Binding{
+		Role:    "roles/aiplatform.user",
+		Members: []string{fmt.Sprintf("serviceAccount:%s", saEmail)},
+	}
+	if policy != nil {
+		bindings = append(policy.Bindings, binding)
+	} else {
+		bindings = []*iampb.Binding{binding}
+	}
+
+	req := &iampb.SetIamPolicyRequest{
+		Resource: resource,
+		Policy: &iampb.Policy{
+			Bindings: bindings,
+		},
+	}
+
+	_, err = gcpProjectClient.SetIamPolicy(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to set iam policy:%w", err)
+	}
+
+	return nil
+}
+
 // Delete implements ResourceOperation
 func (sa *GeminiServiceAccount) Delete(ctx context.Context) error {
-	// TODO: implementation with GCP resource management SDK
-	_, err := sa.GetProject(ctx, sa.Resource)
+	var testingSa bool
+	if *sa.Resource.Spec.Name == "omcpminb2" {
+		testingSa = true
+	}
+
+	project, err := sa.GetProject(ctx, sa.Resource)
 	if err != nil {
 		// Check if the error is because the project doesn't exist
 		if apierrors.IsNotFound(err) {
@@ -104,6 +252,11 @@ func (sa *GeminiServiceAccount) Delete(ctx context.Context) error {
 				"name", sa.Resource.Name,
 				"namespace", sa.Resource.Namespace,
 				"projectRef", sa.Resource.Spec.ProjectRef.Name)
+
+			if !testingSa {
+				// Even if the project is gone, we should still clean up the service account key from the common secret
+				_ = sa.deleteServiceAccountKey(ctx, sa.Resource, true)
+			}
 
 			// Update status and continue with deletion
 			return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
@@ -113,5 +266,66 @@ func (sa *GeminiServiceAccount) Delete(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusProjectError, err)
 	}
 
+	projectId := project.Status.ProjectId
+	projectClient, err := sa.GetGcpProjectClient(ctx)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError, err)
+	}
+	defer projectClient.Close()
+
+	// Query first to see if the project exist in GCP
+	name := "projects/" + projectId
+	_, err = projectClient.GetProject(ctx, &resourcemanagerpb.GetProjectRequest{Name: name})
+	if err != nil {
+		sa.Log.Info("failed get project from GCP", "projectId", projectId, "err", err)
+		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
+	}
+
+	if testingSa {
+		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
+	}
+
+	iamClient, err := sa.GetIamClient(ctx, project)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError, err)
+	}
+	defer iamClient.Close()
+
+	if project.Status.ProjectId != "" && sa.Resource.Status.ServiceAccountId != nil {
+		projectId := project.Status.ProjectId
+		accountId := sa.Resource.Status.ServiceAccountId
+		saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", *accountId, projectId)
+		resource := fmt.Sprintf("projects/%s/serviceAccounts/%s", projectId, saEmail)
+		deleteReq := &adminpb.DeleteServiceAccountRequest{
+			Name: resource,
+		}
+
+		if err = iamClient.DeleteServiceAccount(ctx, deleteReq); err != nil {
+			// Log the error without stack trace for API errors as they might be transient
+			sa.Log.Info("Failed to delete service account in API, will retry",
+				"name", sa.Resource.Name,
+				"namespace", sa.Resource.Namespace,
+				"projectID", project.Status.ProjectId,
+				"serviceAccountID", accountId,
+				"error", err.Error())
+			return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError, err)
+		}
+	}
+
+	// Delete service account key from common secret
+	if err := sa.deleteServiceAccountKey(ctx, sa.Resource, false); err != nil {
+		return err
+	}
+
 	return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
+}
+
+// SetGcpProjectClient sets a custom gcp project client for testing purposes
+func (sa *GeminiServiceAccount) SetGcpProjectClient(client GcpProjectClient) {
+	sa.gcpProjectClient = client
+}
+
+// SetGcpIamClient sets a custom gcp iam client for testing purposes
+func (sa *GeminiServiceAccount) SetGcpIamClient(client GcpIamClient) {
+	sa.iamClient = client
 }

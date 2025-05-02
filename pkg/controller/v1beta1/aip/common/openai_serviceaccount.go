@@ -176,19 +176,7 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 				"projectRef", sa.Resource.Spec.ProjectRef.Name)
 
 			// Even if the project is gone, we should still clean up the service account key from the common secret
-			aiPlatformConfig, configErr := controllerconfig.NewAIPlatformConfig(sa.Clientset)
-			if configErr != nil {
-				sa.Log.Error(configErr, "Failed to get AIPlatform config")
-				// Update status but don't return error to avoid requeuing
-				_ = sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError)
-			} else if sa.Resource.Status.ServiceAccountId != nil {
-				// Try to delete the key from the common secret
-				if secretErr := sa.deleteServiceAccountKeyFromSecret(ctx, sa.Resource, aiPlatformConfig); secretErr != nil {
-					sa.Log.Error(secretErr, "Failed to delete service account key from common secret")
-					// Update status but don't return error to avoid requeuing
-					_ = sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusSecretError)
-				}
-			}
+			_ = sa.deleteServiceAccountKey(ctx, sa.Resource, true)
 
 			// Update status and continue with deletion
 			return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
@@ -218,15 +206,8 @@ func (sa *OpenAIServiceAccount) Delete(ctx context.Context) error {
 	}
 
 	// Delete service account key from common secret
-	aiPlatformConfig, err := controllerconfig.NewAIPlatformConfig(sa.Clientset)
-	if err != nil {
-		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
-	}
-
-	if sa.Resource.Status.ServiceAccountId != nil {
-		if err := sa.deleteServiceAccountKeyFromSecret(ctx, sa.Resource, aiPlatformConfig); err != nil {
-			return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusSecretError, err)
-		}
+	if err := sa.deleteServiceAccountKey(ctx, sa.Resource, false); err != nil {
+		return err
 	}
 
 	return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)

@@ -4,12 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	admin "cloud.google.com/go/iam/admin/apiv1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
+	billing "cloud.google.com/go/billing/apiv1"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	"github.com/go-logr/logr"
+	googleOption "google.golang.org/api/option"
+	serviceusage "google.golang.org/api/serviceusage/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -77,6 +83,20 @@ func (r *ResourceBase) getSecret(ctx context.Context, ref *v1beta1.SecretReferen
 	return secret, nil
 }
 
+func (r *ResourceBase) getAdminSecret(ctx context.Context, org *v1beta1.Organization) ([]byte, error) {
+	secret, err := r.getSecret(ctx, org.Spec.SecretRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get admin secret: %w", err)
+	}
+
+	adminSecret := secret.Data[org.Spec.SecretRef.Key]
+	if adminSecret == nil {
+		return nil, fmt.Errorf("Admin secret is empty in secret %s", org.Spec.SecretRef.Name)
+	}
+
+	return adminSecret, nil
+}
+
 // InitializeClient initializes an OpenAI client using organization credentials
 func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organization) (*openaisdk.Client, error) {
 	if org.Spec.Vendor == nil {
@@ -103,4 +123,82 @@ func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organi
 	}
 
 	return openaisdk.NewClient(opts...), nil
+}
+
+// InitializeGcpProjectClient initializes a GCP Project client using organization credentials
+func (r *ResourceBase) InitializeGcpProjectClient(ctx context.Context, org *v1beta1.Organization) (GcpProjectClient, error) {
+	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get admin secret: %w", err)
+	}
+
+	gcpProjectClient, err := resourcemanager.NewProjectsClient(ctx, googleOption.WithCredentialsJSON(adminSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP project client: %w", err)
+	}
+	return &RealGcpProjectClient{client: gcpProjectClient}, nil
+}
+
+// InitializeGcpBillingClient initializes a GCP Billing client using organization credentials
+func (r *ResourceBase) InitializeGcpBillingClient(ctx context.Context, org *v1beta1.Organization) (GcpBillingClient, error) {
+	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+
+	if err != nil {
+		return nil, err
+	}
+
+	billingClient, err := billing.NewCloudBillingClient(ctx, googleOption.WithCredentialsJSON(adminSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP billing client: %w", err)
+	}
+
+	return &RealGcpBillingClient{client: billingClient}, nil
+}
+
+// InitializeGcpServiceUsage initializes a GCP Service usage client using organization credentials
+func (r *ResourceBase) InitializeGcpServiceUsage(ctx context.Context, org *v1beta1.Organization) (GcpServiceUsageClient, error) {
+	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+
+	if err != nil {
+		return nil, err
+	}
+
+	svc, err := serviceusage.NewService(ctx, googleOption.WithCredentialsJSON(adminSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create service usage client:%w", err)
+	}
+
+	return &RealGcpServiceUsageClient{service: svc}, nil
+}
+
+// InitializeGcpIamClient initializes a GCP iam client using organization credentials
+func (r *ResourceBase) InitializeGcpIamClient(ctx context.Context, org *v1beta1.Organization) (GcpIamClient, error) {
+	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get admin secret: %w", err)
+	}
+
+	iamClient, err := admin.NewIamClient(ctx, googleOption.WithCredentialsJSON(adminSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCP iam client:%w", err)
+	}
+
+	return &RealGcpIamClient{client: iamClient}, nil
+}
+
+func (r *ResourceBase) GetGcpAdminSecret(ctx context.Context, org *v1beta1.Organization) ([]byte, error) {
+	if org.Spec.Vendor == nil {
+		return nil, fmt.Errorf("vendor is not specified for organization %s", org.Name)
+	}
+
+	if *org.Spec.Vendor != "google" {
+		return nil, fmt.Errorf("unsupported vendor: %s (expected: google)", *org.Spec.Vendor)
+	}
+
+	adminSecret, err := r.getAdminSecret(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get admin secret: %w", err)
+	}
+
+	return adminSecret, nil
 }

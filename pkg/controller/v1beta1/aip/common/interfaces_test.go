@@ -2,6 +2,12 @@ package common
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -240,6 +246,221 @@ func TestResourceBase_InitializeClient(t *testing.T) {
 		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
 
 		_, err := rb.InitializeClient(context.Background(), orgUnsupported)
+		assert.Error(t, err)
+	})
+}
+
+func generateFakePKCS1PrivateKey() []byte {
+	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	privateKeyPEM := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		},
+	)
+
+	return privateKeyPEM
+}
+
+func generateGcpTestData(t *testing.T) (ResourceBase, *v1beta1.Organization) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1beta1.AddToScheme(scheme))
+	require.NoError(t, v1.AddToScheme(scheme))
+
+	fakePrivateKey := string(generateFakePKCS1PrivateKey())
+	fakePrivateKey = strings.Replace(fakePrivateKey, "\n", "\\n", -1)
+
+	gcpKey := fmt.Sprintf(`{
+  "type": "service_account",
+  "project_id": "fake-project",
+  "private_key_id": "some-key-id",
+  "private_key": "%s",
+  "client_email": "fake@fake-project.iam.gserviceaccount.com",
+  "client_id": "fake-client-id",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/fake@fake-project.iam.gserviceaccount.com"
+}`, fakePrivateKey)
+	gcpKeyData := []byte(gcpKey)
+
+	org := &v1beta1.Organization{
+		ObjectMeta: metav1.ObjectMeta{Name: "genai-google-0001"},
+		Spec: v1beta1.OrganizationSpec{
+			Vendor: vendorPtr("google"),
+			SecretRef: &v1beta1.SecretReference{
+				Name:      "google-admin-key",
+				Namespace: "genai-google",
+				Key:       "GOOGLE_ADMIN_API_KEY",
+			},
+		},
+	}
+
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "google-admin-key",
+			Namespace: "genai-google",
+		},
+		Data: map[string][]byte{
+			"GOOGLE_ADMIN_API_KEY": gcpKeyData,
+		},
+	}
+
+	// Create fake client
+	fakeClient := cfake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(org, secret).
+		Build()
+
+	// Create resource base
+	rb := ResourceBase{
+		Client:    fakeClient,
+		Clientset: kfake.NewSimpleClientset(),
+	}
+
+	return rb, org
+}
+func TestResourceBase_InitializeGcpProjectClient(t *testing.T) {
+	rb, org := generateGcpTestData(t)
+
+	t.Run("InitializeGcpProjectClient", func(t *testing.T) {
+		client, err := rb.InitializeGcpProjectClient(context.Background(), org)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("InitializeGcpProjectClient_NoSecret", func(t *testing.T) {
+		// Create org with non-existent secret
+		orgNoSecret := org.DeepCopy()
+		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		_, err := rb.InitializeGcpProjectClient(context.Background(), orgNoSecret)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpProjectClient_NoVendor", func(t *testing.T) {
+		// Create org with no vendor
+		orgNoVendor := org.DeepCopy()
+		orgNoVendor.Spec.Vendor = nil
+
+		_, err := rb.InitializeGcpProjectClient(context.Background(), orgNoVendor)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpProjectClient_UnsupportedVendor", func(t *testing.T) {
+		// Create org with unsupported vendor
+		orgUnsupported := org.DeepCopy()
+		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
+
+		_, err := rb.InitializeGcpProjectClient(context.Background(), orgUnsupported)
+		assert.Error(t, err)
+	})
+}
+func TestResourceBase_InitializeGcpBillingClient(t *testing.T) {
+	rb, org := generateGcpTestData(t)
+
+	t.Run("InitializeGcpBillingClient", func(t *testing.T) {
+		client, err := rb.InitializeGcpBillingClient(context.Background(), org)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("InitializeGcpBillingClient_NoSecret", func(t *testing.T) {
+		// Create org with non-existent secret
+		orgNoSecret := org.DeepCopy()
+		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		_, err := rb.InitializeGcpBillingClient(context.Background(), orgNoSecret)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpBillingClient_NoVendor", func(t *testing.T) {
+		// Create org with no vendor
+		orgNoVendor := org.DeepCopy()
+		orgNoVendor.Spec.Vendor = nil
+
+		_, err := rb.InitializeGcpBillingClient(context.Background(), orgNoVendor)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpBillingClient_UnsupportedVendor", func(t *testing.T) {
+		// Create org with unsupported vendor
+		orgUnsupported := org.DeepCopy()
+		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
+
+		_, err := rb.InitializeGcpBillingClient(context.Background(), orgUnsupported)
+		assert.Error(t, err)
+	})
+}
+func TestResourceBase_InitializeGcpIamClient(t *testing.T) {
+	rb, org := generateGcpTestData(t)
+
+	t.Run("InitializeGcpIamClient", func(t *testing.T) {
+		client, err := rb.InitializeGcpIamClient(context.Background(), org)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("InitializeGcpIamClient_NoSecret", func(t *testing.T) {
+		// Create org with non-existent secret
+		orgNoSecret := org.DeepCopy()
+		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		_, err := rb.InitializeGcpIamClient(context.Background(), orgNoSecret)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpIamClient_NoVendor", func(t *testing.T) {
+		// Create org with no vendor
+		orgNoVendor := org.DeepCopy()
+		orgNoVendor.Spec.Vendor = nil
+
+		_, err := rb.InitializeGcpIamClient(context.Background(), orgNoVendor)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpIamClient_UnsupportedVendor", func(t *testing.T) {
+		// Create org with unsupported vendor
+		orgUnsupported := org.DeepCopy()
+		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
+
+		_, err := rb.InitializeGcpIamClient(context.Background(), orgUnsupported)
+		assert.Error(t, err)
+	})
+}
+func TestResourceBase_InitializeGcpServiceUsage(t *testing.T) {
+	rb, org := generateGcpTestData(t)
+
+	t.Run("InitializeGcpServiceUsage", func(t *testing.T) {
+		client, err := rb.InitializeGcpServiceUsage(context.Background(), org)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+
+	t.Run("InitializeGcpServiceUsage_NoSecret", func(t *testing.T) {
+		// Create org with non-existent secret
+		orgNoSecret := org.DeepCopy()
+		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		_, err := rb.InitializeGcpServiceUsage(context.Background(), orgNoSecret)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpServiceUsage_NoVendor", func(t *testing.T) {
+		// Create org with no vendor
+		orgNoVendor := org.DeepCopy()
+		orgNoVendor.Spec.Vendor = nil
+
+		_, err := rb.InitializeGcpServiceUsage(context.Background(), orgNoVendor)
+		assert.Error(t, err)
+	})
+
+	t.Run("InitializeGcpServiceUsage_UnsupportedVendor", func(t *testing.T) {
+		// Create org with unsupported vendor
+		orgUnsupported := org.DeepCopy()
+		orgUnsupported.Spec.Vendor = vendorPtr(v1beta1.VendorUnsupported)
+
+		_, err := rb.InitializeGcpServiceUsage(context.Background(), orgUnsupported)
 		assert.Error(t, err)
 	})
 }

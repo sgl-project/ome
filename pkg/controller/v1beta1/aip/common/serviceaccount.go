@@ -184,6 +184,34 @@ func (r *ResourceBase) GetOrganization(ctx context.Context, sa *v1beta1.ServiceA
 	return org, nil
 }
 
+func (r *ResourceBase) deleteServiceAccountKey(ctx context.Context, sa *v1beta1.ServiceAccount, noReque bool) error {
+	aiPlatformConfig, configErr := controllerconfig.NewAIPlatformConfig(r.Clientset)
+	if configErr != nil {
+		if noReque {
+			r.Log.Error(configErr, "Failed to get AIPlatform config")
+			// Update status but don't return error to avoid requeuing
+			_ = r.updateServiceAccountCondition(ctx, sa, v1beta1.ServiceAccountStatusConfigError)
+			return nil
+		} else {
+			return r.updateServiceAccountConditionWithError(ctx, sa, v1beta1.ServiceAccountStatusConfigError, configErr)
+		}
+	} else if sa.Status.ServiceAccountId != nil {
+		// Try to delete the key from the common secret
+		if secretErr := r.deleteServiceAccountKeyFromSecret(ctx, sa, aiPlatformConfig); secretErr != nil {
+			if noReque {
+				r.Log.Error(secretErr, "Failed to delete service account key from common secret")
+				// Update status but don't return error to avoid requeuing
+				_ = r.updateServiceAccountCondition(ctx, sa, v1beta1.ServiceAccountStatusSecretError)
+				return nil
+			} else {
+				return r.updateServiceAccountConditionWithError(ctx, sa, v1beta1.ServiceAccountStatusSecretError, secretErr)
+			}
+		}
+	}
+
+	return nil
+}
+
 // deleteServiceAccountKeyFromSecret removes a key from the common secret
 func (r *ResourceBase) deleteServiceAccountKeyFromSecret(ctx context.Context, sa *v1beta1.ServiceAccount, aiPlatformConfig *controllerconfig.AIPlatformConfig) error {
 	// Safety check - ensure we have a service account ID
