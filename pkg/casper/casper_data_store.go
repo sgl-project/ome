@@ -73,14 +73,14 @@ func (cds *CasperDataStore) DownloadBasedOnObjectSize(source ObjectURI, target s
 	object := objectSummary[0]
 
 	if object.Size == nil {
-		fmt.Printf("Regular download %s \n", source.ObjectName)
+		cds.logger.Infof("Regular download %s \n", source.ObjectName)
 		err = cds.Download(source, target, excludeBucketPath)
 	} else if *(object.Size) < (int64(sizeThresholdInMB) * int64(MB)) {
-		fmt.Printf("Regular download %s, size: %d \n", source.ObjectName, *(object.Size))
+		cds.logger.Infof("Regular download %s, size: %d \n", source.ObjectName, *(object.Size))
 		err = cds.Download(source, target, excludeBucketPath)
 	} else {
-		fmt.Printf("Multipart download %s, size: %d \n", source.ObjectName, *(object.Size))
-		err = cds.MultipartDownload(source, target, true, &object, int(downloadingChunkSize), int(downloadingThread))
+		cds.logger.Infof("Multipart download %s, size: %d \n", source.ObjectName, *(object.Size))
+		err = cds.MultipartDownload(source, target, true, &object, downloadingChunkSize, downloadingThread)
 	}
 
 	if err != nil {
@@ -99,9 +99,14 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, excludeBuc
 		return err
 	}
 	responseContent := response.Content
-	defer responseContent.Close()
+	defer func(responseContent io.ReadCloser) {
+		err := responseContent.Close()
+		if err != nil {
+			cds.logger.Errorf("Failed to close response content: %+v", err)
+		}
+	}(responseContent)
 
-	// Write downloaded object to the target file
+	// Write the downloaded object to the target file
 	var targetFilePath string
 	if excludeBucketPath {
 		targetFilePath = filepath.Join(target, ExtractPureObjectName(source.ObjectName))
@@ -153,7 +158,7 @@ func (cds *CasperDataStore) Upload(source string, target ObjectURI) error {
 		tmp := fileInfo.Size()
 		uploadObjectSize = &tmp
 	} else {
-		// When source is pure string content which needs to be uploaded
+		// When the source is pure string content which needs to be uploaded
 		putObjectBody = io.NopCloser(strings.NewReader(source))
 		tmp := int64(len(source))
 		uploadObjectSize = &tmp
@@ -286,7 +291,7 @@ func (cds *CasperDataStore) ListObjects(target ObjectURI) ([]objectstorage.Objec
 	return allObjects, nil
 }
 
-func (cds *CasperDataStore) ObjectExists(logger logging.Interface, source ObjectURI, target string, objectMd5 *string, objectLength *int64) (bool, error) {
+func (cds *CasperDataStore) ObjectExists(source ObjectURI, target string, objectMd5 *string, objectLength *int64) (bool, error) {
 	var err error
 	targetFilePath := filepath.Join(target, source.ObjectName)
 	fileInfo, err := os.Stat(targetFilePath)
@@ -318,13 +323,13 @@ func (cds *CasperDataStore) ObjectExists(logger logging.Interface, source Object
 	var finalMd5 string
 	var matched bool
 	if strings.Contains(*objectMd5, "==-") {
-		matched, err = multipartMd5Matched(targetFilePath, objectMd5, logger)
+		matched, err = multipartMd5Matched(targetFilePath, objectMd5, cds.logger)
 		if err != nil {
-			logger.Infof("Failed to get multipart md5 for %s, error: %s", targetFilePath, err)
+			cds.logger.Infof("Failed to get multipart md5 for %s, error: %s", targetFilePath, err)
 		}
 
 		if matched {
-			logger.Infof("multipart md5 matched, source %s, target:%s, finalMd5: %s", source.ObjectName, targetFilePath, finalMd5)
+			cds.logger.Infof("multipart md5 matched, source %s, target:%s, finalMd5: %s", source.ObjectName, targetFilePath, finalMd5)
 			return true, nil
 		}
 

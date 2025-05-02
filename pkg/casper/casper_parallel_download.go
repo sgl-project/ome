@@ -22,12 +22,12 @@ import (
 type ChunkUnit int
 
 const (
-	MB                            ChunkUnit = 1000000
-	SMALL_CHUNK_SIZE_IN_BYTE      int       = 25 * 1000000
-	SMALL_CHUNK_FILE_BUFFER_SIZE  int       = 100000
-	SMALL_CHUNK_SIZE_50MB_IN_BYTE int       = 50 * 1000000
-	LARGE_CHUNK_SIZE_IN_BYTE      int       = 500 * 1024 * 1024
-	LARGE_CHUNK_FILE_BUFFER_SIZE  int       = 65536
+	MB                       ChunkUnit = 1000000
+	SmallChunkSizeInByte     int       = 25 * 1000000
+	SmallChunkFileBufferSize int       = 100000
+	SmallChunkSize50mbInByte int       = 50 * 1000000
+	LargeChunkSizeInByte     int       = 500 * 1024 * 1024
+	LargeChunkFileBufferSize int       = 65536
 )
 
 // PrepareDownloadPart wraps an GetObjectRequest with split part related info
@@ -222,8 +222,8 @@ func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]b
 // We used to upload big files with part size of 500MB, and small files with part size of 25000000.
 // Now we're using 50000000 bytes for all files. This is for back compatibility
 func multipartMd5Matched(targetFilePath string, objectMd5 *string, logger logging.Interface) (bool, error) {
-	chunkSizes := []int{SMALL_CHUNK_SIZE_IN_BYTE, SMALL_CHUNK_SIZE_50MB_IN_BYTE, LARGE_CHUNK_SIZE_IN_BYTE}
-	bufferSize := []int{SMALL_CHUNK_FILE_BUFFER_SIZE, SMALL_CHUNK_FILE_BUFFER_SIZE, LARGE_CHUNK_FILE_BUFFER_SIZE}
+	chunkSizes := []int{SmallChunkSizeInByte, SmallChunkSize50mbInByte, LargeChunkSizeInByte}
+	bufferSize := []int{SmallChunkFileBufferSize, SmallChunkFileBufferSize, LargeChunkFileBufferSize}
 	var err error
 	var finalMd5 string
 	for i, chunkSize := range chunkSizes {
@@ -329,8 +329,8 @@ func NewDownloadedFile(source ObjectURI, targetFilePath string) *DownloadedFile 
 	}
 }
 
-func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, logger logging.Interface, filesToDownload chan *FileToDownload) chan *DownloadedFile {
-	logger.Infof("Download objects with %d threads", downloadThreads)
+func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {
+	cds.logger.Infof("Download objects with %d threads", downloadThreads)
 	result := make(chan *DownloadedFile)
 
 	var wg sync.WaitGroup
@@ -338,7 +338,7 @@ func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, logger
 
 	for i := 0; i < downloadThreads; i++ {
 		go func() {
-			cds.DownloadFiles(filesToDownload, logger, result)
+			cds.DownloadFiles(filesToDownload, result)
 			wg.Done()
 		}()
 	}
@@ -351,15 +351,15 @@ func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, logger
 	return result
 }
 
-func (cds *CasperDataStore) DownloadFiles(filesToDownload chan *FileToDownload, logger logging.Interface, result chan *DownloadedFile) {
+func (cds *CasperDataStore) DownloadFiles(filesToDownload chan *FileToDownload, result chan *DownloadedFile) {
 	for fileToDownload := range filesToDownload {
-		err := cds.DownloadFile(fileToDownload, logger)
+		err := cds.DownloadFile(fileToDownload)
 		downloadedFile := &DownloadedFile{
 			source:         fileToDownload.source,
 			targetFilePath: fileToDownload.targetFilePath,
 		}
 		if err != nil {
-			logger.Errorf("Error in downloading, err: %s ", err)
+			cds.logger.Errorf("Error in downloading, err: %s ", err)
 			downloadedFile.Err = err
 		}
 
@@ -367,7 +367,7 @@ func (cds *CasperDataStore) DownloadFiles(filesToDownload chan *FileToDownload, 
 	}
 }
 
-func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload, logger logging.Interface) error {
+func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload) error {
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", fileToDownload.source.Namespace, fileToDownload.source.BucketName, fileToDownload.source.ObjectName)
 
@@ -379,14 +379,14 @@ func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload, logger 
 	defer func(responseContent io.ReadCloser) {
 		err := responseContent.Close()
 		if err != nil {
-			logger.Errorf("Failed to close response content: %+v", err)
+			cds.logger.Errorf("Failed to close response content: %+v", err)
 		}
 	}(responseContent)
 
 	if response.ContentLength == nil {
-		logger.Infof("Download %s", fileToDownload.source.ObjectName)
+		cds.logger.Infof("Download %s", fileToDownload.source.ObjectName)
 	} else {
-		logger.Infof("Download %s, size: %d", fileToDownload.source.ObjectName, *(response.ContentLength))
+		cds.logger.Infof("Download %s, size: %d", fileToDownload.source.ObjectName, *(response.ContentLength))
 	}
 
 	// Write downloaded object to the target file
@@ -399,8 +399,8 @@ func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload, logger 
 	return nil
 }
 
-func (cds *CasperDataStore) FilterObjectsMultiThreads(threads int, logger logging.Interface, objectStoreUri *ObjectURI, target string, objectSummaries chan objectstorage.ObjectSummary) chan objectstorage.ObjectSummary {
-	logger.Infof("Filter objects with %d threads", threads)
+func (cds *CasperDataStore) FilterObjectsMultiThreads(threads int, objectStoreUri *ObjectURI, target string, objectSummaries chan objectstorage.ObjectSummary) chan objectstorage.ObjectSummary {
+	cds.logger.Infof("Filter objects with %d threads", threads)
 	result := make(chan objectstorage.ObjectSummary)
 
 	var wg sync.WaitGroup
@@ -408,7 +408,7 @@ func (cds *CasperDataStore) FilterObjectsMultiThreads(threads int, logger loggin
 
 	for i := 0; i < threads; i++ {
 		go func() {
-			cds.FilterObjects(objectSummaries, logger, objectStoreUri, target, result)
+			cds.FilterObjects(objectSummaries, objectStoreUri, target, result)
 			wg.Done()
 		}()
 	}
@@ -421,7 +421,7 @@ func (cds *CasperDataStore) FilterObjectsMultiThreads(threads int, logger loggin
 	return result
 }
 
-func (cds *CasperDataStore) FilterObjects(objectSummaries chan objectstorage.ObjectSummary, logger logging.Interface, objectStoreUri *ObjectURI, target string, result chan objectstorage.ObjectSummary) {
+func (cds *CasperDataStore) FilterObjects(objectSummaries chan objectstorage.ObjectSummary, objectStoreUri *ObjectURI, target string, result chan objectstorage.ObjectSummary) {
 	for object := range objectSummaries {
 		objectURI := ObjectURI{
 			Namespace:  objectStoreUri.Namespace,
@@ -429,14 +429,14 @@ func (cds *CasperDataStore) FilterObjects(objectSummaries chan objectstorage.Obj
 			ObjectName: *object.Name,
 		}
 
-		exist, err := cds.ObjectExists(logger, objectURI, target, object.Md5, object.Size)
+		exist, err := cds.ObjectExists(objectURI, target, object.Md5, object.Size)
 		if err != nil {
-			logger.Errorf("Error when check object existence: %s", err)
+			cds.logger.Errorf("Error when check object existence: %s", err)
 			panic(err)
 		}
 
 		if exist {
-			logger.Infof("%s already exists with md5 check.", objectURI.ObjectName)
+			cds.logger.Infof("%s already exists with md5 check.", objectURI.ObjectName)
 		} else {
 			result <- object
 		}
