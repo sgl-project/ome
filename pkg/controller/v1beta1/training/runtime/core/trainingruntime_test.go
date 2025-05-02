@@ -166,11 +166,11 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 							{
 								Name:  constants.TrainingPathPrefixEnvVarKey,
-								Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+								Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 							},
 							{
 								Name:  constants.TrainingBaselineModelEnvVarKey,
-								Value: constants.ModelStorePVCMountPath,
+								Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 							},
 						},
 					).
@@ -342,11 +342,11 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 							{
 								Name:  constants.TrainingPathPrefixEnvVarKey,
-								Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+								Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 							},
 							{
 								Name:  constants.TrainingBaselineModelEnvVarKey,
-								Value: constants.ModelStorePVCMountPath,
+								Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 							},
 						},
 					).
@@ -455,11 +455,11 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 							},
 							{
 								Name:  constants.TrainingPathPrefixEnvVarKey,
-								Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+								Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 							},
 							{
 								Name:  constants.TrainingBaselineModelEnvVarKey,
-								Value: constants.ModelStorePVCMountPath,
+								Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 							},
 						},
 					).

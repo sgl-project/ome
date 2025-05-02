@@ -165,16 +165,6 @@ func (r *TrainingRuntime) ValidateObjects(ctx context.Context, old, new *omev1be
 func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor *string) []corev1.Volume {
 	var podVolumes []corev1.Volume
 
-	pvcSourceVolume := corev1.Volume{
-		Name: constants.ModelStorePVCSourceName,
-		VolumeSource: corev1.VolumeSource{
-			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: constants.GetPvcName(trainJob.Name, trainJob.Namespace, *trainJob.Spec.ModelConfig.InputModel),
-			},
-		},
-	}
-	podVolumes = append(podVolumes, pvcSourceVolume)
-
 	emptyDirDataVolume := corev1.Volume{
 		Name: constants.DataEmptyDirName,
 		VolumeSource: corev1.VolumeSource{
@@ -183,9 +173,8 @@ func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor
 	}
 	podVolumes = append(podVolumes, emptyDirDataVolume)
 
-	// Create EmptyDir volume for model, only for cohere training init container
 	if *vendor == "cohere" {
-		emptyDirModelVolume := corev1.Volume{
+		emptyDirModelVolumeInitContainer := corev1.Volume{
 			Name: constants.EmptyDirVolumeSourceName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{
@@ -193,7 +182,7 @@ func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor
 				},
 			},
 		}
-		podVolumes = append(podVolumes, emptyDirModelVolume)
+		podVolumes = append(podVolumes, emptyDirModelVolumeInitContainer)
 
 		baseModelNameVolume := corev1.Volume{
 			Name: *trainJob.Spec.ModelConfig.InputModel,
@@ -204,6 +193,16 @@ func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor
 			},
 		}
 		podVolumes = append(podVolumes, baseModelNameVolume)
+	} else {
+		pvcSourceVolume := corev1.Volume{
+			Name: constants.ModelStorePVCSourceName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: constants.GetPvcName(trainJob.Name, trainJob.Namespace, *trainJob.Spec.ModelConfig.InputModel),
+				},
+			},
+		}
+		podVolumes = append(podVolumes, pvcSourceVolume)
 	}
 
 	regionFileVolume := corev1.Volume{

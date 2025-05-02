@@ -226,8 +226,8 @@ func (b *Builder) Trainer(info *runtime.Info, trainJob *omev1beta1.TrainingJob) 
 						b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].Env = trainerEnvs
 					}
 
-					pathPrefixEnv := getPathPrefixEnv(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey], trainJob.Name)
-					baselineModelEnv := getBaselineModelEnv(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey])
+					pathPrefixEnv := getPathPrefixEnv(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey], trainJob)
+					baselineModelEnv := getBaselineModelEnv(trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey], trainJob)
 
 					b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].Env = append(b.Spec.ReplicatedJobs[i].Template.Spec.Template.Spec.Containers[j].Env, pathPrefixEnv, baselineModelEnv)
 
@@ -262,7 +262,7 @@ func (b *Builder) Build() *jobsetv1alpha2.JobSet {
 	return &b.JobSet
 }
 
-func getPathPrefixEnv(runtime string, tjobName string) corev1.EnvVar {
+func getPathPrefixEnv(runtime string, trainJob *omev1beta1.TrainingJob) corev1.EnvVar {
 	if runtime == "peft" {
 		return corev1.EnvVar{
 			Name:  constants.TrainingPathPrefixEnvVarKey,
@@ -271,31 +271,38 @@ func getPathPrefixEnv(runtime string, tjobName string) corev1.EnvVar {
 	} else {
 		return corev1.EnvVar{
 			Name:  constants.TrainingPathPrefixEnvVarKey,
-			Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, utils.GetFineTunedModelName(tjobName)),
+			Value: filepath.Join(constants.CohereStorePathPrefix, utils.GetFineTunedModelName(trainJob.Name)),
 		}
 	}
-
 }
 
-func getBaselineModelEnv(runtime string) corev1.EnvVar {
+func getBaselineModelEnv(runtime string, trainJob *omev1beta1.TrainingJob) corev1.EnvVar {
 	if runtime == "peft" {
 		return corev1.EnvVar{
 			Name:  constants.TrainingBaselineModelEnvVarKey,
 			Value: constants.ModelStorePVCMountPath,
 		}
 	} else {
+		finetunedModelName := utils.GetFineTunedModelName(trainJob.Name)
 		return corev1.EnvVar{
 			Name:  constants.TrainingBaselineModelEnvVarKey,
-			Value: constants.ModelStorePVCMountPath,
+			Value: getCohereBaselineModelEnvValue(finetunedModelName, runtime),
 		}
 	}
 }
 
-func getVolumeMounts(runtime string, tjob *omev1beta1.TrainingJob) []corev1.VolumeMount {
+func getCohereBaselineModelEnvValue(fineTunedModelName string, runtime string) string {
+	if runtime == "cohere" {
+		return filepath.Join(constants.CohereStorePathPrefix, fineTunedModelName, "ckpt-0")
+	} else {
+		return filepath.Join(constants.CohereStorePathPrefix, fineTunedModelName)
+	}
+}
+
+func getVolumeMounts(runtime string, trainJob *omev1beta1.TrainingJob) []corev1.VolumeMount {
 	var vms []corev1.VolumeMount
 
 	if runtime == "peft" {
-		// model-storage PVC volume mount for sidecar container
 		modelPVCSourceVolumeMount := corev1.VolumeMount{
 			Name:      constants.ModelStorePVCSourceName,
 			MountPath: constants.ModelStorePVCMountPath,
@@ -303,7 +310,6 @@ func getVolumeMounts(runtime string, tjob *omev1beta1.TrainingJob) []corev1.Volu
 		}
 		vms = append(vms, modelPVCSourceVolumeMount)
 
-		// data empty dir volume mount for sidecar container
 		dataEmptyDirVolumeMount := corev1.VolumeMount{
 			Name:      constants.DataEmptyDirName,
 			MountPath: constants.TrainingDataEmptyDirMountPath,
@@ -311,56 +317,21 @@ func getVolumeMounts(runtime string, tjob *omev1beta1.TrainingJob) []corev1.Volu
 		}
 		vms = append(vms, dataEmptyDirVolumeMount)
 	} else {
-		modelPVCSourceVolumeMount := corev1.VolumeMount{
-			Name:      constants.ModelStorePVCSourceName,
-			MountPath: constants.ModelStorePVCMountPath,
-			ReadOnly:  false,
-		}
-		vms = append(vms, modelPVCSourceVolumeMount)
-
+		finetunedModelName := utils.GetFineTunedModelName(trainJob.Name)
 		modelEmptyDirVolumeMount := corev1.VolumeMount{
-			Name:      constants.ModelEmptyDirName,
-			MountPath: getModelEmptyDirMountPath(runtime, tjob),
+			Name:      constants.EmptyDirVolumeSourceName,
+			MountPath: filepath.Join(constants.CohereStorePathPrefix, finetunedModelName),
 			ReadOnly:  false,
 		}
 		vms = append(vms, modelEmptyDirVolumeMount)
 
-		// data empty dir volume mount for init container
 		dataEmptyDirVolumeMount := corev1.VolumeMount{
 			Name:      constants.DataEmptyDirName,
-			MountPath: constants.CohereTrainingInitDataEmptyDirMountPath,
+			MountPath: filepath.Join(constants.CohereStorePathPrefix, finetunedModelName, "/input/data/training/"),
 			ReadOnly:  false,
 		}
 		vms = append(vms, dataEmptyDirVolumeMount)
 	}
 
-	regionADRealmHostPathVolumeMounts := getRegionADRealmHostPathVolumeMounts()
-	vms = append(vms, regionADRealmHostPathVolumeMounts...)
-
 	return vms
-}
-
-func getModelEmptyDirMountPath(runtime string, tjob *omev1beta1.TrainingJob) string {
-	modelEmptyDirMountPath := filepath.Join(constants.CohereTrainingInitModelEmptyDirMountPathTensorRT)
-	if runtime == "cohere" {
-		modelEmptyDirMountPath = filepath.Join(constants.CohereTrainingInitModelEmptyDirMountPathFastTransformer, tjob.Spec.Annotations[constants.ModelNameConfigKey])
-	}
-	return modelEmptyDirMountPath
-}
-
-func getRegionADRealmHostPathVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      constants.RegionFileVolumeName,
-			MountPath: constants.RegionFileVolumeMountPath,
-		},
-		{
-			Name:      constants.ADFileVolumeName,
-			MountPath: constants.ADFileVolumeMountPath,
-		},
-		{
-			Name:      constants.RealmFileVolumeName,
-			MountPath: constants.RealmFileVolumeMountPath,
-		},
-	}
 }

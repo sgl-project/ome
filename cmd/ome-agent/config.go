@@ -71,6 +71,10 @@ func configProvider(cli *cobra.Command, module AgentModule) fx.Option {
 			if err != nil {
 				return nil, err
 			}
+			err = v.BindEnv("training_data_directory", "TRAINING_DATA_DIRECTORY")
+			if err != nil {
+				return nil, err
+			}
 			err = v.BindEnv("training_data.bucket_name", "TRAINING_DATA_BUCKET_NAME")
 			if err != nil {
 				return nil, err
@@ -144,10 +148,6 @@ func cohereFTConfigProvider(runtime string) error {
 	if err != nil {
 		return err
 	}
-	err = v.BindEnv("cohere_ft.serving_strategy", "COHERE_FT_SERVING_STRATEGY")
-	if err != nil {
-		return err
-	}
 	err = v.BindEnv("cohere_ft.train_epochs", "COHERE_FT_TRAIN_EPOCHS")
 	if err != nil {
 		return err
@@ -174,9 +174,12 @@ func cohereFTConfigProvider(runtime string) error {
 		if err != nil {
 			return err
 		}
-		err = v.BindEnv("cohere_ft.n_last_layers", "COHERE_FT_N_LAST_LAYERS")
-		if err != nil {
-			return err
+
+		if v.Get("cohere_ft.strategy") == "vanilla" {
+			err = v.BindEnv("cohere_ft.n_last_layers", "COHERE_FT_N_LAST_LAYERS")
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if runtime == string(CohereCommandR) {
@@ -184,14 +187,25 @@ func cohereFTConfigProvider(runtime string) error {
 		if err != nil {
 			return err
 		}
-		if v.Get("cohere_ft.serving_strategy") == "vanilla" {
-			err = v.BindEnv("cohere_ft.tensor_parallel_size", "COHERE_FT_TENSOR_PARALLEL_SIZE")
+
+		err = v.BindEnv("cohere_ft.serving_strategy", "COHERE_FT_SERVING_STRATEGY")
+		if err != nil {
+			return err
+		}
+
+		err = v.BindEnv("cohere_ft.tensor_parallel_size", "COHERE_FT_TENSOR_PARALLEL_SIZE")
+		if err != nil {
+			return err
+		}
+
+		if v.Get("cohere_ft.strategy") == "tfew" || v.Get("cohere_ft.strategy") == "lora" && v.Get("cohere_ft.tensor_parallel_size") == "1" {
+			err = v.BindEnv("zipped_fine_tuned_weight_directory", "ZIPPED_MERGED_MODEL_PATH")
 			if err != nil {
 				return err
 			}
 		}
 
-		if v.Get("cohere_finetune_details.strategy") == "lora" {
+		if v.Get("cohere_ft.strategy") == "lora" {
 			err = v.BindEnv("cohere_ft.lora_config.rank", "COHERE_FT_LORA_CONFIG_RANK")
 			if err != nil {
 				return err

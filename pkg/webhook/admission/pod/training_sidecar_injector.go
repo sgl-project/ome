@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
@@ -50,7 +51,7 @@ func (tsi *TrainingSidecarInjector) injectTrainingSidecar(pod *v1.Pod) error {
 		return err
 	}
 
-	trainingSidecarMounts := tsi.getVolumeMounts()
+	trainingSidecarMounts := tsi.getVolumeMounts(pod)
 	trainingSidecarEnvs := tsi.getTrainingSidecarEnvs(pod)
 
 	securityContext, err := tsi.getMainContainerSecurityContext(pod)
@@ -84,15 +85,33 @@ func (tsi *TrainingSidecarInjector) validate() error {
 	return nil
 }
 
-func (tsi *TrainingSidecarInjector) getVolumeMounts() []v1.VolumeMount {
-	var trainingSidecarMounts []v1.VolumeMount
+func (tsi *TrainingSidecarInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMount {
+	runtimeType := pod.ObjectMeta.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
 
-	dataEmptyDirVolumeMount := v1.VolumeMount{
-		Name:      constants.DataEmptyDirName,
-		MountPath: constants.TrainingDataEmptyDirMountPath,
-		ReadOnly:  false,
+	var trainingSidecarMounts []v1.VolumeMount
+	if runtimeType == "peft" {
+		dataEmptyDirVolumeMount := v1.VolumeMount{
+			Name:      constants.DataEmptyDirName,
+			MountPath: constants.TrainingDataEmptyDirMountPath,
+			ReadOnly:  false,
+		}
+		trainingSidecarMounts = append(trainingSidecarMounts, dataEmptyDirVolumeMount)
+	} else {
+		finetunedModelName := utils.GetFineTunedModelName(pod.ObjectMeta.Labels[constants.TrainingJobPodLabelKey])
+		modelEmptyDirVolumeMount := v1.VolumeMount{
+			Name:      constants.EmptyDirVolumeSourceName,
+			MountPath: filepath.Join(constants.CohereStorePathPrefix, finetunedModelName),
+			ReadOnly:  false,
+		}
+		trainingSidecarMounts = append(trainingSidecarMounts, modelEmptyDirVolumeMount)
+
+		dataEmptyDirVolumeMount := v1.VolumeMount{
+			Name:      constants.DataEmptyDirName,
+			MountPath: filepath.Join(constants.CohereStorePathPrefix, finetunedModelName, "/input/data/training/"),
+			ReadOnly:  false,
+		}
+		trainingSidecarMounts = append(trainingSidecarMounts, dataEmptyDirVolumeMount)
 	}
-	trainingSidecarMounts = append(trainingSidecarMounts, dataEmptyDirVolumeMount)
 
 	// Add region/ad/realm host path volume mounts
 	regionADRealmHostPathVolumeMounts := []v1.VolumeMount{
@@ -117,12 +136,12 @@ func (tsi *TrainingSidecarInjector) getVolumeMounts() []v1.VolumeMount {
 func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.EnvVar {
 	trainingSidecarEnvVars := make([]v1.EnvVar, 0)
 
-	sidecarRuntime := pod.ObjectMeta.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
+	runtimeType := pod.ObjectMeta.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
 	trainingName := pod.ObjectMeta.Labels[constants.TrainingJobPodLabelKey]
 	// Set env vars from values set in trainingSidecar config map
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
 		Name:  constants.RuntimeEnvVarKey,
-		Value: sidecarRuntime,
+		Value: runtimeType,
 	})
 
 	if obo_token, ok := pod.ObjectMeta.Annotations[constants.OboTokenConfigKey]; ok {
@@ -136,6 +155,11 @@ func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.En
 			Value: "true",
 		})
 	}
+
+	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
+		Name:  constants.AgentCompartmentIDEnvVarKey,
+		Value: tsi.CompartmentId,
+	})
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
 		Name:  constants.TrainingNameEnvVarKey,
@@ -160,11 +184,6 @@ func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.En
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
 		Name:  constants.AgentAuthTypeEnvVarKey,
 		Value: "InstancePrincipal",
-	})
-
-	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
-		Name:  constants.LogMetricsIntervalInStepsEnvVarKey,
-		Value: "10",
 	})
 
 	trainingSidecarEnvVars = append(trainingSidecarEnvVars, v1.EnvVar{
@@ -202,23 +221,29 @@ func (tsi *TrainingSidecarInjector) getTrainingSidecarEnvs(pod *v1.Pod) *[]v1.En
 		Value: tsi.Namespace,
 	})
 
-	if sidecarRuntime == "peft" {
+	if runtimeType == "peft" {
 		peftEnvVars := tsi.getPeftEnvVars(pod)
 		trainingSidecarEnvVars = append(trainingSidecarEnvVars, peftEnvVars...)
 	} else {
-		cohereEnvVars := tsi.getCohereEnvVars(trainingName, pod, sidecarRuntime)
+		cohereEnvVars := tsi.getCohereEnvVars(trainingName, pod, runtimeType)
 		trainingSidecarEnvVars = append(trainingSidecarEnvVars, cohereEnvVars...)
 	}
 
 	return &trainingSidecarEnvVars
 }
 
-func (tsi *TrainingSidecarInjector) getCohereEnvVars(trainingName string, pod *v1.Pod, sidecarRuntime string) []v1.EnvVar {
+func (tsi *TrainingSidecarInjector) getCohereEnvVars(trainingName string, pod *v1.Pod, runtimeType string) []v1.EnvVar {
+	fineTunedModelName := utils.GetFineTunedModelName(trainingName)
 	cohereEnvVars := make([]v1.EnvVar, 0)
 
 	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 		Name:  constants.CohereTrainingSidecarNameEnvVarKey,
 		Value: trainingName,
+	})
+
+	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
+		Name:  constants.TrainingDataDirectoryEnvVarKey,
+		Value: filepath.Join(constants.CohereStorePathPrefix, fineTunedModelName, "/input/data/training/"),
 	})
 
 	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
@@ -251,33 +276,24 @@ func (tsi *TrainingSidecarInjector) getCohereEnvVars(trainingName string, pod *v
 		Value: pod.ObjectMeta.Annotations[constants.ModelSizeConfigKey],
 	})
 
-	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
-		Name:  constants.CohereModelNameEnvVarKey,
-		Value: pod.ObjectMeta.Annotations[constants.BaseModelConfigKey],
-	})
-
 	strategy := pod.ObjectMeta.Annotations[constants.StrategyConfigKey]
 	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 		Name:  constants.StrategyEnvVarKey,
 		Value: strategy,
 	})
 
-	fineTunedModelName := utils.GetFineTunedModelName(trainingName)
-	if sidecarRuntime == "cohere" {
+	if runtimeType == "cohere" {
 		cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 			Name:  constants.CohereLogTrainStatusEveryStepEnvVarKey,
 			Value: pod.ObjectMeta.Annotations[constants.LogTrainStatusEveryStepConfigKey],
 		})
 
-		cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
-			Name:  constants.CohereNLastLayersEnvVarKey,
-			Value: pod.ObjectMeta.Annotations[constants.NLastLayersConfigKey],
-		})
-
-		cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
-			Name:  constants.ServingStrategyEnvVarKey,
-			Value: string(constants.LoraServingStrategy),
-		})
+		if strategy == "vanilla" {
+			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
+				Name:  constants.CohereNLastLayersEnvVarKey,
+				Value: pod.ObjectMeta.Annotations[constants.NLastLayersConfigKey],
+			})
+		}
 
 		cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 			Name:  constants.ModelDirectoryEnvVarKey,
@@ -285,25 +301,41 @@ func (tsi *TrainingSidecarInjector) getCohereEnvVars(trainingName string, pod *v
 		})
 
 	} else {
-		cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
-			Name:  constants.ServingStrategyEnvVarKey,
-			Value: string(constants.VanillaServingStrategy),
-		})
+		if strings.Contains(pod.ObjectMeta.Annotations[constants.BaseModelConfigKey], constants.CohereCommandRV2Version) {
+			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
+				Name:  constants.CohereModelNameEnvVarKey,
+				Value: constants.CommandRBaseModelV2,
+			})
+		}
 
 		cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 			Name:  constants.CohereTensorParallelEnvVarKey,
 			Value: pod.ObjectMeta.Annotations[constants.TensorParallelConfigKey],
 		})
 
-		if isCommandRFTWeightMerged(strategy, pod.ObjectMeta.Annotations[constants.TensorParallelConfigKey]) {
+		if utils.IsCommandRFTWeightMerged(strategy, pod.ObjectMeta.Annotations[constants.TensorParallelConfigKey]) {
 			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 				Name:  constants.ModelDirectoryEnvVarKey,
 				Value: filepath.Join(constants.CohereStorePathPrefix, fineTunedModelName),
+			})
+
+			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
+				Name:  constants.ServingStrategyEnvVarKey,
+				Value: string(constants.VanillaServingStrategy),
+			})
+
+			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
+				Name:  constants.ZippedMergedModelPathEnvVarKey,
+				Value: filepath.Join(constants.CohereStorePathPrefix, fineTunedModelName, fineTunedModelName+constants.CohereCommandRFTMergedModelWeightSuffix),
 			})
 		} else {
 			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 				Name:  constants.ModelDirectoryEnvVarKey,
 				Value: filepath.Join(constants.CohereStorePathPrefix, fineTunedModelName, constants.CohereCommandRLoraTrainingModelDirectory),
+			})
+			cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
+				Name:  constants.ServingStrategyEnvVarKey,
+				Value: string(constants.LoraServingStrategy),
 			})
 		}
 
@@ -332,6 +364,11 @@ func (tsi *TrainingSidecarInjector) getPeftEnvVars(pod *v1.Pod) []v1.EnvVar {
 	})
 
 	peftEnvVars = append(peftEnvVars, v1.EnvVar{
+		Name:  constants.TrainingDataDirectoryEnvVarKey,
+		Value: "/mnt/data",
+	})
+
+	peftEnvVars = append(peftEnvVars, v1.EnvVar{
 		Name:  constants.PeftModelNameEnvVarKey,
 		Value: pod.ObjectMeta.Annotations[constants.ModelNameConfigKey],
 	})
@@ -342,18 +379,13 @@ func (tsi *TrainingSidecarInjector) getPeftEnvVars(pod *v1.Pod) []v1.EnvVar {
 	})
 
 	peftEnvVars = append(peftEnvVars, v1.EnvVar{
-		Name:  constants.AgentCompartmentIDEnvVarKey,
-		Value: tsi.CompartmentId,
-	})
-
-	peftEnvVars = append(peftEnvVars, v1.EnvVar{
-		Name:  constants.LogModelMetricsIntervalInStepsEnvVarKey,
+		Name:  constants.LogMetricsIntervalInStepsEnvVarKey,
 		Value: "10",
 	})
 
 	peftEnvVars = append(peftEnvVars, v1.EnvVar{
 		Name:  constants.PeftTypeEnvVarKey,
-		Value: "lora",
+		Value: pod.ObjectMeta.Annotations[constants.StrategyConfigKey],
 	})
 
 	peftEnvVars = append(peftEnvVars, v1.EnvVar{
@@ -420,8 +452,4 @@ func (tsi *TrainingSidecarInjector) createTrainingSidecarContainer(trainingSidec
 		VolumeMounts:             trainingSidecarMounts,
 		SecurityContext:          securityContext,
 	}
-}
-
-func isCommandRFTWeightMerged(trainingStrategy string, tensorParallel string) bool {
-	return trainingStrategy == "tfew" || trainingStrategy == "lora" && tensorParallel == "1"
 }

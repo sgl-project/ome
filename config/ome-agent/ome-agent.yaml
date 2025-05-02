@@ -62,6 +62,7 @@ training_metrics:
   bucket_name: "model-training-metrics"
   namespace: ""
   object_name: ""
+training_data_directory: ""
 cohere_ft:
   name:                       ""
   size:                       "6b"

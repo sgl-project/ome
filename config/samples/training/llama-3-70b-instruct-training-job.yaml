@@ -11,7 +11,7 @@ spec:
     inputModel: llama-3-70b-instruct-ft
   datasets:
     storageUri: oci://n/idqj093njucb/b/beiwen_test/o/sales_pitch_generation_train.jsonl
-  hyperparameterConfig:
+  hyperParameterTuningConfig:
     method: "bayes"
     metric:
       name: hyperparameter-metric

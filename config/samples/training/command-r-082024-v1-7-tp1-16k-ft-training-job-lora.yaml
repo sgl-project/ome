@@ -1,14 +1,14 @@
 apiVersion: ome.io/v1beta1
 kind: TrainingJob
 metadata:
-  name: "ft-llama-3-1-70b-instruct"
+  name: "ft-command-2-35b-v20-1-0-float32-v1-7-16k-lora"
   namespace: "dac-training-test"
 spec:
   runtimeRef:
-    name: llama-3-1-70b-instruct-ft
+    name: cohere-command-r-v3-ft
   trainer: {}
   modelConfig:
-    inputModel: llama-3-1-70b-instruct-ft
+    inputModel: command2-35b-v20-1-0-float32-v1-7-16k-ft
   datasets:
     storageUri: oci://n/idqj093njucb/b/beiwen_test/o/sales_pitch_generation_train.jsonl
   hyperParameterTuningConfig:
@@ -26,6 +26,5 @@ spec:
         "learningRate": "0.01",
         "logModelMetricsIntervalInSteps": "10",
         "loraR": "8",
-        "loraAlpha": "32",
-        "loraDropout": "0.1"
+        "loraAlpha": "32"
       }

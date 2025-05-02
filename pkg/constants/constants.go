@@ -699,12 +699,13 @@ var (
 	LearningRateConfigKey             = "learningRate"
 	ModelDirectoryEnvVarKey           = AgentAppName + "_" + "MODEL_DIRECTORY"
 	ZippedModelPathEnvVarKey          = "ZIPPED_MODEL_PATH"
-	ZippedMergedModelPathEnvVarKey    = "ZIPPED_MERGED_MODEL_PATH"
+	ZippedMergedModelPathEnvVarKey    = AgentAppName + "_" + "ZIPPED_MERGED_MODEL_PATH"
 	LoraTrainingConfig                = "lora"
 	RuntimeEnvVarKey                  = AgentAppName + "_" + "RUNTIME"
 	LoraConfigRankConfigKey           = "loraR"
 	ModelVendorConfigKey              = "vendor"
 	TrainingNameEnvVarKey             = AgentAppName + "_" + "TRAINING_NAME"
+	TrainingDataDirectoryEnvVarKey    = AgentAppName + "_" + "TRAINING_DATA_DIRECTORY"
 
 	/*
 	 * Constants specific to cohere training sidecar
@@ -752,13 +753,12 @@ var (
 	PeftLoraConfigAlphaEnvVarKey        = AgentAppName + "_" + "PEFT_FT_LORA_ALPHA"
 	PeftLearningRateEnvVarKey           = AgentAppName + "_" + "PEFT_FT_LEARNING_RATE"
 
-	LoraAlphaConfigKey                      = "loraAlpha"
-	LoraDropoutEnvVarKey                    = AgentAppName + "_" + "PEFT_FT_LORA_DROPOUT"
-	LoraDropoutConfigKey                    = "loraDropout"
-	PeftModelNameEnvVarKey                  = AgentAppName + "_" + "PEFT_FT_MODEL_NAME"
-	ModelNameConfigKey                      = "modelName"
-	LogModelMetricsIntervalInStepsEnvVarKey = AgentAppName + "_" + "LOG_MODEL_METRICS_INTERVAL_IN_STEPS"
-	PeftTypeEnvVarKey                       = AgentAppName + "_" + "PEFT_FT_PEFT_TYPE"
+	LoraAlphaConfigKey     = "loraAlpha"
+	LoraDropoutEnvVarKey   = AgentAppName + "_" + "PEFT_FT_LORA_DROPOUT"
+	LoraDropoutConfigKey   = "loraDropout"
+	PeftModelNameEnvVarKey = AgentAppName + "_" + "PEFT_FT_MODEL_NAME"
+	ModelNameConfigKey     = "modelName"
+	PeftTypeEnvVarKey      = AgentAppName + "_" + "PEFT_FT_PEFT_TYPE"
 )
 
 // Training pod volume name constants
@@ -797,18 +797,18 @@ const (
 	CohereTrainingRuntimePrefix                             = "cohere-finetuning"
 	CohereStorePathPrefix                                   = "/mnt/cohere/"
 	CohereTrainingInitModelEmptyDirMountPathFastTransformer = "/model/fastertransformer"
-	CohereTrainingInitModelEmptyDirMountPathTensorRT        = "/model/tensorrtllm"
-	CohereTrainingInitDataEmptyDirMountPath                 = "/input"
 	CohereTrainingLargeGpuRequest                           = "8"
 	CohereCommandRFTMergedModelWeightSuffix                 = "-merged-weight"
-	CohereCommandRV1Version                                 = "v19.0.0"
-	CohereCommandRV2Version                                 = "v20.1.0"
+	CohereCommandRV1Version                                 = "v19-0-0"
+	CohereCommandRV2Version                                 = "v20-1-0"
+	CommandRBaseModelV1                                     = "command_r"
+	CommandRBaseModelV2                                     = "command_r_v2"
 	CohereCommandRLoraTrainingModelDirectory                = "output"
 	CohereTrainingPathPrefixEnvVarKey                       = "PATH_PREFIX"
 	CohereTrainingBaselineModelEnvVarKey                    = "BASELINE_MODEL"
 	CohereMultiLoraBaseModelNameKeyword                     = "multi_lora"
 	CohereCommandRFTRuntimePrefix                           = "cohere-commandr"
-	CohereCommandRMergedWeightsDirectory                    = "model/tensorrtllm"
+	CohereCommandRMergedWeightsDirectory                    = "model/tensorrt_llm"
 	CohereCommandRTFewFTWeightsDirectory                    = "output/tfew_weights"
 	CohereCommandRLoraFineTunedWeightsDirectory             = "output/"
 	CohereTrainingConfigPbtxt                               = "config.pbtxt"
@@ -867,20 +867,6 @@ const (
 var (
 	// JobCompletionIndexFieldPath is the field path for the Job completion index annotation.
 	JobCompletionIndexFieldPath string = fmt.Sprintf("metadata.annotations['%s']", batchv1.JobCompletionIndexAnnotation)
-)
-
-type CommandRTensorParallelSize string
-
-const (
-	CommandR16KFTTensorParallelSize  CommandRTensorParallelSize = "1"
-	CommandR128KFTTensorParallelSize CommandRTensorParallelSize = "4"
-)
-
-type CommandRBaseModelVersion string
-
-const (
-	CommandRBaseModelV1 CommandRBaseModelVersion = "command_r"
-	CommandRBaseModelV2 CommandRBaseModelVersion = "command_r_v2"
 )
 
 // constants related to training endpoint call

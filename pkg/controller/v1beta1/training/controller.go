@@ -347,13 +347,19 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	if trainJob.Spec.Annotations == nil {
 		trainJob.Spec.Annotations = make(map[string]string)
 	}
+	if trainJob.Spec.Labels == nil {
+		trainJob.Spec.Labels = make(map[string]string)
+	}
 	if *baseModel.Spec.Vendor == "cohere" {
 		trainJob.Spec.Annotations[constants.ModelInitInjectionKey] = "true"
+		trainJob.Spec.Annotations[constants.BaseModelDecryptionKeyName] = baseModel.Annotations[constants.BaseModelDecryptionKeyName]
+		trainJob.Spec.Annotations[constants.BaseModelDecryptionSecretName] = baseModel.Annotations[constants.BaseModelDecryptionSecretName]
+		trainJob.Spec.Labels[constants.BaseModelTypeLabelKey] = string(constants.FinetuningBaseModel)
 	}
 	trainJob.Spec.Annotations[constants.TrainingSidecarInjectionKey] = "true"
 
-	trainingSidecarRuntime := trainingRuntime.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
-	trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey] = trainingSidecarRuntime
+	trainingSidecarRuntimeType := trainingRuntime.Annotations[constants.TrainingRuntimeTypeAnnotationKey]
+	trainJob.Spec.Annotations[constants.TrainingRuntimeTypeAnnotationKey] = trainingSidecarRuntimeType
 
 	if trainJob.Spec.Datasets.Parameters != nil {
 		params := *trainJob.Spec.Datasets.Parameters
@@ -397,6 +403,13 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	}
 	trainJob.Spec.Annotations[constants.EarlyStoppingThresholdConfigKey] = v.(string)
 
+	strategy, err := utils.GetHyperparameterValueByKey(constants.StrategyConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+	if err != nil {
+		r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.StrategyConfigKey)
+		return err
+	}
+	trainJob.Spec.Annotations[constants.StrategyConfigKey] = strategy.(string)
+
 	bucketName := utils.ExtractBucketNameFromObjectStorageUri(*trainJob.Spec.Datasets.StorageUri)
 	trainJob.Spec.Annotations[constants.TrainingDataBucketConfigKey] = bucketName
 
@@ -409,7 +422,7 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	baseModelName := utils.ExtractObjectFileNameFromObjectStorageUri(*baseModel.Spec.Storage.StorageUri)
 	trainJob.Spec.Annotations[constants.ModelNameConfigKey] = baseModelName
 
-	if trainingSidecarRuntime == "peft" {
+	if trainingSidecarRuntimeType == "peft" {
 		trainJob.Spec.Annotations[constants.ModelVendorConfigKey] = *baseModel.Spec.Vendor
 
 		v, err = utils.GetHyperparameterValueByKey(constants.LoraConfigRankConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
@@ -434,17 +447,9 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 		trainJob.Spec.Annotations[constants.LoraDropoutConfigKey] = v.(string)
 
 	} else {
-		trainJob.Spec.Annotations[constants.BaseModelConfigKey] = baseModel.Name
 		trainJob.Spec.Annotations[constants.ModelSizeConfigKey] = *baseModel.Spec.ModelParameterSize
 
-		strategy, err := utils.GetHyperparameterValueByKey(constants.StrategyConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
-		if err != nil {
-			r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.StrategyConfigKey)
-			return err
-		}
-		trainJob.Spec.Annotations[constants.StrategyConfigKey] = strategy.(string)
-
-		if trainingSidecarRuntime == "cohere" {
+		if trainingSidecarRuntimeType == "cohere" {
 			v, err = utils.GetHyperparameterValueByKey(constants.LogTrainStatusEveryStepConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
 			if err != nil {
 				r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.LogTrainStatusEveryStepConfigKey)
@@ -452,13 +457,17 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 			}
 			trainJob.Spec.Annotations[constants.LogTrainStatusEveryStepConfigKey] = v.(string)
 
-			v, err = utils.GetHyperparameterValueByKey(constants.NLastLayersConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
-			if err != nil {
-				r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.NLastLayersConfigKey)
-				return err
+			if strategy == "vanilla" {
+				v, err = utils.GetHyperparameterValueByKey(constants.NLastLayersConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
+				if err != nil {
+					r.Log.Error(err, "Error getting hyperparameter", "namespace", trainJob.Namespace, "name", trainJob.Name, "hyperparameter", constants.NLastLayersConfigKey)
+					return err
+				}
+				trainJob.Spec.Annotations[constants.NLastLayersConfigKey] = v.(string)
 			}
-			trainJob.Spec.Annotations[constants.NLastLayersConfigKey] = v.(string)
 		} else {
+			trainJob.Spec.Annotations[constants.BaseModelConfigKey] = baseModel.Name
+
 			tensorParallel, err := utils.GetTensorParallelSize(baseModel)
 			if err != nil {
 				return err

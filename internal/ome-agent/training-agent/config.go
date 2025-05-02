@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	InputCasperConfigName      = "input"
-	OutputCasperConfigName     = "output"
-	TrainingDataStoreDirectory = "/mnt/data"
+	InputCasperConfigName  = "input"
+	OutputCasperConfigName = "output"
 )
 
 type Config struct {
@@ -27,7 +26,7 @@ type Config struct {
 	ModelDirectory                string                           `mapstructure:"model_directory" validate:"required"`
 	ZippedModelPath               string                           `validate:"required"`
 	ZippedMergedModelPath         string
-	TrainingDataStoreDirectory    string                 `validate:"required"`
+	TrainingDataStoreDirectory    string                 `mapstructure:"training_data_directory" validate:"required"`
 	TrainingDataObjectStoreURI    *casper.ObjectURI      `mapstructure:"training_data" validate:"required"`
 	ModelObjectStoreURI           *casper.ObjectURI      `mapstructure:"model" validate:"required"`
 	TrainingMetricsObjectStoreURI *casper.ObjectURI      `mapstructure:"training_metrics" validate:"required"`
@@ -57,9 +56,7 @@ func (c *Config) Apply(opts ...Option) error {
 
 // NewTrainingAgentConfig builds and returns a new configuration from the given options.
 func NewTrainingAgentConfig(opts ...Option) (*Config, error) {
-	c := &Config{
-		TrainingDataStoreDirectory: TrainingDataStoreDirectory,
-	}
+	c := &Config{}
 	if err := c.Apply(opts...); err != nil {
 		return nil, err
 	}

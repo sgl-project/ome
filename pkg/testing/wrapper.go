@@ -109,6 +109,14 @@ func (j *JobSetWrapper) Volumes(vendor string) *JobSetWrapper {
 func getPodVolumes(vendor *string) []corev1.Volume {
 	var podVolumes []corev1.Volume
 
+	emptyDirDataVolume := corev1.Volume{
+		Name: constants.DataEmptyDirName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+	podVolumes = append(podVolumes, emptyDirDataVolume)
+
 	pvcSourceVolume := corev1.Volume{
 		Name: constants.ModelStorePVCSourceName,
 		VolumeSource: corev1.VolumeSource{
@@ -118,14 +126,6 @@ func getPodVolumes(vendor *string) []corev1.Volume {
 		},
 	}
 	podVolumes = append(podVolumes, pvcSourceVolume)
-
-	emptyDirDataVolume := corev1.Volume{
-		Name: constants.DataEmptyDirName,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
-	}
-	podVolumes = append(podVolumes, emptyDirDataVolume)
 
 	// Create EmptyDir volume for model, only for cohere training init container
 	if *vendor == "cohere" {
@@ -249,12 +249,12 @@ func getEnvs() []corev1.EnvVar {
 	envs := make([]corev1.EnvVar, 0)
 	envs = append(envs, corev1.EnvVar{
 		Name:  constants.TrainingPathPrefixEnvVarKey,
-		Value: filepath.Join(constants.TrainingDataEmptyDirMountPath, "t-job"),
+		Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 	})
 
 	envs = append(envs, corev1.EnvVar{
 		Name:  constants.TrainingBaselineModelEnvVarKey,
-		Value: constants.ModelStorePVCMountPath,
+		Value: filepath.Join(constants.CohereStorePathPrefix, "t-job"),
 	})
 
 	return envs
@@ -262,12 +262,8 @@ func getEnvs() []corev1.EnvVar {
 
 func getVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		{Name: "model-storage", MountPath: "/mnt/models"},
-		{Name: "model", MountPath: "/model/tensorrtllm"},
-		{Name: "data", MountPath: "/input"},
-		{Name: "region", MountPath: "/etc/region"},
-		{Name: "etc-avalability-domain", MountPath: "/etc/availability-domain"},
-		{Name: "etc-identity-realm", MountPath: "/etc/identity-realm"},
+		{Name: "model-empty-dir", MountPath: "/mnt/cohere/t-job"},
+		{Name: "data", MountPath: "/mnt/cohere/t-job/input/data/training"},
 	}
 }
 

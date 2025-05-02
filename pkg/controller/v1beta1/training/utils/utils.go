@@ -140,3 +140,8 @@ func GetShortTrainJobName(name string) string {
 	}
 	return name
 }
+
+// IsCommandRFTWeightMerged check if it is command-r finetune weight merged.
+func IsCommandRFTWeightMerged(trainingStrategy string, tensorParallel string) bool {
+	return trainingStrategy == "tfew" || (trainingStrategy == "lora" && tensorParallel == "1")
+}
