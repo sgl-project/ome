@@ -225,6 +225,7 @@ func (cds *CasperDataStore) VerifyFileMd5(filePath string, expectedMd5 *string, 
 	return matched, nil
 }
 
+//nolint:unused
 func calculateMultipartMd5(partSizeInByte int, bufferSizeInByte int, targetFilePath string, logger *zap.SugaredLogger) (string, error) {
 	file, err := os.Open(targetFilePath)
 	if err != nil {
@@ -257,6 +258,7 @@ func calculateMultipartMd5(partSizeInByte int, bufferSizeInByte int, targetFileP
 	return fmt.Sprintf("%s-%d", base64.StdEncoding.EncodeToString(fileMd5.Sum(nil)), count), nil
 }
 
+//nolint:unused
 func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]byte, bool) {
 	md5Calculator := md5.New()
 	eof := false
@@ -281,6 +283,8 @@ func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]b
 
 // We used to upload big files with part size of 500MB, and small files with part size of 25000000.
 // Now we're using 50000000 bytes for all files. This is for back compatibility
+//
+//nolint:unused
 func multipartMd5Matched(targetFilePath string, objectMd5 *string, logger *zap.SugaredLogger) (bool, error) {
 	chunkSizes := []int{SmallChunkSizeInByte, SmallChunkSize50mbInByte, LargeChunkSizeInByte}
 	bufferSize := []int{SmallChunkFileBufferSize, SmallChunkFileBufferSize, LargeChunkFileBufferSize}
