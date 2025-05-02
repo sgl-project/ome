@@ -332,20 +332,8 @@ func (cds *CasperDataStore) ObjectExists(logger *zap.SugaredLogger, source Objec
 
 	// For multipart uploads that have a special MD5 format
 	if strings.Contains(*objectMd5, "==-") {
-		matched, err := multipartMd5Matched(targetFilePath, objectMd5, logger)
-		if err != nil {
-			logger.Errorf("Failed to verify multipart MD5 for %s: %v", targetFilePath, err)
-			// Propagate the error to the caller so it can be properly handled
-			return false, fmt.Errorf("MD5 verification error: %w", err)
-		}
-
-		if matched {
-			logger.Infof("Multipart MD5 matched for %s", source.ObjectName)
-			return true, nil
-		}
-
-		logger.Warnf("Multipart MD5 mismatch for %s", source.ObjectName)
-		return false, nil
+		logger.Infof("Ignoring MD5 verification for %s", source.ObjectName)
+		return true, nil
 	}
 
 	file, err := os.Open(targetFilePath)
