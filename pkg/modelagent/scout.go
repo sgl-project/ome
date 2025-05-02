@@ -1,10 +1,9 @@
-package model_agent
+package modelagent
 
 import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"knative.dev/pkg/kmp"
 
@@ -33,7 +32,6 @@ type Scount struct {
 	gopherChan             chan<- *GopherTask
 	nodeName               string
 	nodeInfo               *v1.Node
-	nodeShape              string
 	nodeShapeAlias         string
 	kubeClient             *kubernetes.Clientset
 	nodeLabeler            *NodeLabeler
@@ -46,8 +44,7 @@ type TensorRTLLMShapeFilter struct {
 	ModelType          string
 }
 
-func NewScout(nodeShape string,
-	nodeName string,
+func NewScout(nodeName string,
 	baseModelInformer omev1beta1.BaseModelInformer,
 	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
 	informerFactory omev1beta1informers.SharedInformerFactory,
@@ -56,19 +53,17 @@ func NewScout(nodeShape string,
 	nodeLabeler *NodeLabeler,
 	logger *zap.SugaredLogger) (*Scount, error) {
 
-	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(nodeShape)
-	if err != nil {
-		return nil, err
-	}
-
 	// Fetch the complete node info
 	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node info for node %s: %w", nodeName, err)
 	}
+	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(nodeInfo.Labels["beta.kubernetes.io/instance-type"])
+	if err != nil {
+		return nil, err
+	}
 
 	scout := &Scount{
-		nodeShape:              nodeShape,
 		nodeShapeAlias:         nodeShapeAlias,
 		nodeInfo:               nodeInfo,
 		baseModelLister:        baseModelInformer.Lister(),
@@ -91,7 +86,7 @@ func NewScout(nodeShape string,
 
 	for name, informer := range informers {
 		err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
-			// Pipe to default handler first, which just logs the error
+			// Pipe to the default handler first, which just logs the error
 			cache.DefaultWatchErrorHandler(r, err)
 
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
@@ -108,7 +103,7 @@ func NewScout(nodeShape string,
 
 	if _, err := baseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    scout.downloadBaseModel,
-		UpdateFunc: scout.downloadIfBaseModelNeedRefresh,
+		UpdateFunc: scout.updateBaseModel,
 		DeleteFunc: scout.deleteBaseModel,
 	}); err != nil {
 		return nil, err
@@ -116,7 +111,7 @@ func NewScout(nodeShape string,
 
 	if _, err := clusterBaseModelInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    scout.downloadClusterBaseModel,
-		UpdateFunc: scout.downloadIfClusterBaseModelNeedRefresh,
+		UpdateFunc: scout.updateClusterBaseModel,
 		DeleteFunc: scout.deleteClusterBaseModel,
 	}); err != nil {
 		return nil, err
@@ -171,16 +166,7 @@ func (w *Scount) downloadBaseModel(obj interface{}) {
 			return
 		}
 
-		if state, ok := w.nodeInfo.Labels[constants.GetModelsLabelWithUid(baseModel.UID)]; ok {
-			if state == string(Ready) {
-				return
-			}
-		}
-
-		IsTensorrtLLMModel := false
-		if baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
-			IsTensorrtLLMModel = true
-		}
+		IsTensorrtLLMModel := baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
 		modelType := string(constants.ServingBaseModel)
 		if modelTypeFromMetadata, ok := baseModel.Spec.AdditionalMetadata["type"]; ok {
@@ -224,18 +210,9 @@ func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 			return
 		}
 
-		if state, ok := w.nodeInfo.Labels[constants.GetModelsLabelWithUid(clusterBaseModel.UID)]; ok {
-			if state == string(Ready) {
-				return
-			}
-		}
-
 		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
 
-		IsTensorrtLLMModel := false
-		if clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
-			IsTensorrtLLMModel = true
-		}
+		IsTensorrtLLMModel := clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
 		modelType := string(constants.ServingBaseModel)
 		if modelTypeFromMetadata, ok := clusterBaseModel.Spec.AdditionalMetadata["type"]; ok {
@@ -256,7 +233,7 @@ func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 	}
 }
 
-func (w *Scount) downloadIfBaseModelNeedRefresh(old, new interface{}) {
+func (w *Scount) updateBaseModel(old, new interface{}) {
 	oldBaseModel, ok := old.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", old)
@@ -296,7 +273,7 @@ func (w *Scount) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 	}
 
 	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
-		w.logger.Infof("BaseModel %s need refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
+		w.logger.Infof("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
 
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Updating,
@@ -308,10 +285,7 @@ func (w *Scount) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 			return
 		}
 
-		IsTensorrtLLMModel := false
-		if newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
-			IsTensorrtLLMModel = true
-		}
+		IsTensorrtLLMModel := newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
 		modelType := string(constants.ServingBaseModel)
 		if modelTypeFromMetadata, ok := newBaseModel.Spec.AdditionalMetadata["type"]; ok {
@@ -331,7 +305,7 @@ func (w *Scount) downloadIfBaseModelNeedRefresh(old, new interface{}) {
 	}
 }
 
-func (w *Scount) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
+func (w *Scount) updateClusterBaseModel(old, new interface{}) {
 	oldClusterBaseModel, ok := old.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", old)
@@ -388,10 +362,7 @@ func (w *Scount) downloadIfClusterBaseModelNeedRefresh(old, new interface{}) {
 			return
 		}
 
-		IsTensorrtLLMModel := false
-		if newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM {
-			IsTensorrtLLMModel = true
-		}
+		IsTensorrtLLMModel := newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
 		modelType := string(constants.ServingBaseModel)
 		if modelTypeFromMetadata, ok := newClusterBaseModel.Spec.AdditionalMetadata["type"]; ok {
@@ -499,18 +470,6 @@ func (w *Scount) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
 		}
 	}
 
-	// If neither NodeSelector nor NodeAffinity are specified, fallback to annotation-based matching for backward compatibility
-	// TODO remove this fallback in the future once we deprecate the annotation
-	if len(storage.NodeSelector) == 0 &&
-		(storage.NodeAffinity == nil || storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil ||
-			len(storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms) == 0) {
-
-		// Check if target shape annotation exists on the node
-		if targetShapes, ok := w.nodeInfo.Annotations[constants.TargetInstanceShapes]; ok && targetShapes != "" {
-			return w.matchTargetShape(targetShapes)
-		}
-	}
-
 	// Default to true if no other conditions are specified
 	return true
 }
@@ -608,21 +567,6 @@ func (w *Scount) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
 		}
 		// Fall back to string comparison if not numeric
 		return values[0] < expr.Values[0]
-	}
-
-	return false
-}
-
-// Keep the legacy implementation but modify it to check annotations in the model object
-func (w *Scount) matchTargetShape(targetShapes string) bool {
-	// For backward compatibility - this functionality is now integrated into shouldDownloadModel
-	// matched if target shape not specified
-	if len(targetShapes) == 0 {
-		return true
-	}
-
-	if strings.Contains(targetShapes, w.nodeShape) {
-		return true
 	}
 
 	return false

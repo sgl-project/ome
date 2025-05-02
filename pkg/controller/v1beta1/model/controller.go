@@ -11,7 +11,7 @@ import (
 
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	modelagent "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/model-agent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"

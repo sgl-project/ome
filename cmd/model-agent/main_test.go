@@ -7,13 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 )
 
@@ -152,78 +148,6 @@ func TestCreateKubeClient(t *testing.T) {
 	}
 	client := createKubeClient(config)
 	require.NotNil(t, client)
-}
-
-func TestGetNodeShape(t *testing.T) {
-	setupTestEnv(t)
-	tests := []struct {
-		name          string
-		nodeName      string
-		setupNode     func() *corev1.Node
-		expectedShape string
-		shouldPanic   bool
-	}{
-		{
-			name:     "valid node shape",
-			nodeName: "test-node",
-			setupNode: func() *corev1.Node {
-				return &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-node",
-						Labels: map[string]string{
-							constants.NodeInstanceShapeLabel: "VM.Standard.E4.Flex",
-						},
-					},
-				}
-			},
-			expectedShape: "VM.Standard.E4.Flex",
-			shouldPanic:   false,
-		},
-		{
-			name:     "missing shape label",
-			nodeName: "test-node",
-			setupNode: func() *corev1.Node {
-				return &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "test-node",
-						Labels: map[string]string{},
-					},
-				}
-			},
-			shouldPanic: true,
-		},
-		{
-			name:     "empty shape label",
-			nodeName: "test-node",
-			setupNode: func() *corev1.Node {
-				return &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-node",
-						Labels: map[string]string{
-							constants.NodeInstanceShapeLabel: "",
-						},
-					},
-				}
-			},
-			shouldPanic: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create fake client with test node
-			client := fake.NewSimpleClientset(tt.setupNode())
-
-			if tt.shouldPanic {
-				assert.Panics(t, func() {
-					getNodeShape(client, tt.nodeName)
-				})
-			} else {
-				shape := getNodeShape(client, tt.nodeName)
-				assert.Equal(t, tt.expectedShape, shape)
-			}
-		})
-	}
 }
 
 func TestCreateOmeClient(t *testing.T) {

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casperagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	casperutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/model-agent"
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -134,14 +134,13 @@ func (fa *FineTunedAdapterInjector) createInitContainer(envs []v1.EnvVar, mounts
 }
 
 // getFineTunedWeightUri retrieves the fine-tuned weight uri from the fine-tuned weight CR
-func (fa *FineTunedAdapterInjector) getFineTunedWeightUri() (*casper.ObjectURI, error) {
+func (fa *FineTunedAdapterInjector) getFineTunedWeightUri() (*storage.OCIStorageComponents, error) {
 	fineTunedWeight, err := isvcutils.GetFineTunedWeight(fa.client, fa.fineTunedWeightName)
 	if err != nil {
 		return nil, err
 	}
 
-	storageUri := fineTunedWeight.Spec.Storage.StorageUri
-	osUri, err := casperutils.NewObjectStorageUri(*storageUri)
+	osUri, err := storage.ParseOCIStorageURI(*fineTunedWeight.Spec.Storage.StorageUri)
 	if err != nil {
 		return nil, err
 	}
@@ -150,16 +149,16 @@ func (fa *FineTunedAdapterInjector) getFineTunedWeightUri() (*casper.ObjectURI, 
 }
 
 // getModelInitEnvs generates environment variables for the Model Init container.
-func (fa *FineTunedAdapterInjector) getModelInitEnvs(pod *v1.Pod, fineTunedWeightUri *casper.ObjectURI) ([]v1.EnvVar, error) {
+func (fa *FineTunedAdapterInjector) getModelInitEnvs(pod *v1.Pod, fineTunedWeightUri *storage.OCIStorageComponents) ([]v1.EnvVar, error) {
 	envVars := []v1.EnvVar{
 		{Name: constants.AgentAuthTypeEnvVarKey, Value: fa.AuthType},
 		{Name: constants.AgentCompartmentIDEnvVarKey, Value: fa.CompartmentId},
 		{Name: constants.AgentRegionEnvVarKey, Value: fa.Region},
 		{Name: constants.AgentUnzippedFineTunedWeightDirectory, Value: constants.InitContainerModelFinalDefaultPath},
 		{Name: constants.AgentZippedFineTunedWeightDirectory, Value: constants.FineTunedModelDownloadDefaultMountPath},
-		{Name: constants.AgentModelBucketNameEnvVarKey, Value: fineTunedWeightUri.BucketName},
+		{Name: constants.AgentModelBucketNameEnvVarKey, Value: fineTunedWeightUri.Bucket},
 		{Name: constants.AgentModelNamespaceEnvVarKey, Value: fineTunedWeightUri.Namespace},
-		{Name: constants.AgentModelObjectName, Value: fineTunedWeightUri.ObjectName},
+		{Name: constants.AgentModelObjectName, Value: fineTunedWeightUri.Prefix},
 	}
 
 	return envVars, nil

@@ -1,4 +1,4 @@
-package model_agent
+package modelagent
 
 import (
 	"testing"

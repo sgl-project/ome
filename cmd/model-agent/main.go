@@ -11,14 +11,12 @@ import (
 
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	modelagent "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/model-agent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -96,7 +94,7 @@ func initializeLogger() (*Logger, error) {
 		ErrorOutputPaths: []string{"stderr"},
 	}
 
-	// Use more human-friendly timestamp format for console encoder
+	// Use a more human-friendly timestamp format for console encoder
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	if logEncoder == "console" {
 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -133,9 +131,6 @@ func runCommand(cmd *cobra.Command, args []string) {
 
 	inClusterKubeConfig := getKubeConfig()
 	kubeClient := createKubeClient(inClusterKubeConfig)
-
-	// Get node shape for backward compatibility
-	nodeShape := getNodeShape(kubeClient, cfg.nodeName)
 
 	omev1beta1ClientSet := createOmeClient(inClusterKubeConfig)
 	var omev1beta1InformerFactoryOpts []omev1beta1informers.SharedInformerOption
@@ -180,7 +175,6 @@ func runCommand(cmd *cobra.Command, args []string) {
 
 	// create scout
 	scout, err := modelagent.NewScout(
-		nodeShape,
 		cfg.nodeName,
 		baseModelsInformer,
 		clusterBaseModelsInformer,
@@ -207,7 +201,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 		logger.Fatalf("Failed to create gopher: %v", err)
 	}
 
-	// create and start health checker
+	// setup server for health check and metrics
 	server := setupServer(cfg.port, cfg.modelsRootDir, logger)
 	go func() {
 		logger.Infof("Starting health check server on port %d", cfg.port)
@@ -239,24 +233,6 @@ func getKubeConfig() *rest.Config {
 		panic(err.Error())
 	}
 	return config
-}
-
-func getNodeShape(client kubernetes.Interface, nodeName string) string {
-	opts := metav1.GetOptions{}
-	node, err := client.CoreV1().Nodes().Get(context.TODO(), nodeName, opts)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	if nodeShape, ok := node.ObjectMeta.Labels[constants.NodeInstanceShapeLabel]; ok {
-		if len(nodeShape) > 0 {
-			return nodeShape
-		} else {
-			panic(fmt.Errorf("%s label is empty for node %s", constants.NodeInstanceShapeLabel, nodeName))
-		}
-	} else {
-		panic(fmt.Errorf("%s label not found for node %s", constants.NodeInstanceShapeLabel, nodeName))
-	}
 }
 
 func main() {

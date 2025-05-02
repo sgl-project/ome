@@ -1,4 +1,4 @@
-package model_agent
+package modelagent
 
 import (
 	"context"
@@ -43,9 +43,9 @@ type NodeLabeler struct {
 }
 
 type patchStringValue struct {
-	Op    string `json:"op"`
+	Op    string `json:"op,omitempty"`
 	Path  string `json:"path"`
-	Value string `json:"value"`
+	Value string `json:"value,omitempty"`
 }
 
 func NewNodeLabeler(nodeName string, namespace string, kubeClient *kubernetes.Clientset, opRetry int) *NodeLabeler {
@@ -90,7 +90,7 @@ func (n *NodeLabeler) processOp(op *NodeLabelOp) error {
 }
 
 func (n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
-	var notFound bool = false
+	var notFound = false
 	existedConfigMap, err := n.kubeClient.CoreV1().ConfigMaps(n.namespace).Get(context.TODO(), n.nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -131,7 +131,7 @@ func getPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
 		}
 
 		if op.BaseModel != nil && len(op.BaseModel.UID) == 0 {
-			return []byte{}, fmt.Errorf("node labeler get BaseModel %s in namespace %s with empty UID", op.ClusterBaseModel.Name, op.ClusterBaseModel.Namespace)
+			return []byte{}, fmt.Errorf("node labeler get BaseModel %s in namespace %s with empty UID", op.BaseModel.Name, op.BaseModel.Namespace)
 		}
 
 		if op.ClusterBaseModel == nil && op.BaseModel == nil {

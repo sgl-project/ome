@@ -1,4 +1,4 @@
-package model_agent
+package modelagent
 
 import (
 	"testing"
@@ -48,7 +48,6 @@ func TestShouldDownloadModel(t *testing.T) {
 	scount := &Scount{
 		nodeName:       "test-node",
 		nodeInfo:       testNode,
-		nodeShape:      "GPU.A10.2",
 		nodeShapeAlias: "a10",
 		logger:         sugaredLogger,
 	}
@@ -850,16 +849,6 @@ func TestShouldDownloadModelFallback(t *testing.T) {
 			description:    "Should match when node shape is in target shapes annotation",
 		},
 		{
-			name: "shape not in target shapes annotation",
-			nodeAnnotations: map[string]string{
-				constants.TargetInstanceShapes: "GPU.A100.8,GPU.H100.8",
-			},
-			nodeShape:      "GPU.A10.2",
-			storageSpec:    &v1beta1.StorageSpec{},
-			expectedResult: false,
-			description:    "Should not match when node shape is not in target shapes annotation",
-		},
-		{
 			name: "empty target shapes annotation",
 			nodeAnnotations: map[string]string{
 				constants.TargetInstanceShapes: "",
@@ -902,10 +891,9 @@ func TestShouldDownloadModelFallback(t *testing.T) {
 
 			// Create a test scount with the node
 			scount := &Scount{
-				nodeName:  "test-node",
-				nodeInfo:  testNode,
-				nodeShape: tc.nodeShape,
-				logger:    sugaredLogger,
+				nodeName: "test-node",
+				nodeInfo: testNode,
+				logger:   sugaredLogger,
 			}
 
 			result := scount.shouldDownloadModel(tc.storageSpec)
