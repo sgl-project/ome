@@ -32,4 +32,7 @@ func main() {
 
 	fmt.Println("\n=== Running Project Rate Limit Examples ===")
 	examples.ProjectRateLimitExample()
+
+	fmt.Println("\n=== Running Audit Log Examples ===")
+	examples.AuditLogExample()
 }
