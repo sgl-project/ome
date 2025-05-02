@@ -22,14 +22,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-var rootCmd = &cobra.Command{
-	Use:              "start",
-	Short:            "Starts the model agent",
-	Long:             `Starts the model agent to watch the base model custom resources and update the node labels`,
-	Run:              runCommand,
-	PersistentPreRun: initConfig,
-}
-
+// config holds all configuration parameters for the model agent
 type config struct {
 	port                int
 	modelsRootDir       string
@@ -42,26 +35,28 @@ type config struct {
 	namespace           string
 }
 
-var cfg config
+// Logger type alias for zap.SugaredLogger
+type Logger = zap.SugaredLogger
 
-func initConfig(_ *cobra.Command, _ []string) {
-	nodeName, ok := os.LookupEnv("NODE_NAME")
-	if !ok {
-		panic("NODE_NAME environment variable is not set for model-agent")
-	}
-	if nodeName == "" {
-		panic("NODE_NAME environment variable is empty")
-	}
-	cfg.nodeName = nodeName
-}
-
+// Global variables
 var (
+	cfg            config
 	logLevel       string
 	logEncoder     string
 	logDevelopment bool
+
+	rootCmd = &cobra.Command{
+		Use:              "start",
+		Short:            "Starts the model agent",
+		Long:             `Starts the model agent to watch the base model custom resources and update the node labels`,
+		Run:              runCommand,
+		PersistentPreRun: initConfig,
+	}
 )
 
+// init sets up command line flags
 func init() {
+	// Main configuration flags
 	rootCmd.Flags().IntVar(&cfg.port, "health-check-port", 8080, "Address for readiness and liveness health check")
 	rootCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
 	rootCmd.Flags().StringVar(&cfg.modelsRootDir, "models-root-dir", "/raid/models", "folder for all models' root dir for the model-agent")
@@ -77,8 +72,19 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&logDevelopment, "zap-development", false, "Development mode")
 }
 
-type Logger = zap.SugaredLogger
+// initConfig validates required environment variables
+func initConfig(_ *cobra.Command, _ []string) {
+	nodeName, ok := os.LookupEnv("NODE_NAME")
+	if !ok {
+		panic("NODE_NAME environment variable is not set for model-agent")
+	}
+	if nodeName == "" {
+		panic("NODE_NAME environment variable is empty")
+	}
+	cfg.nodeName = nodeName
+}
 
+// initializeLogger creates and configures a zap logger with the specified settings
 func initializeLogger() (*Logger, error) {
 	level, err := zapcore.ParseLevel(logLevel)
 	if err != nil {
@@ -100,21 +106,30 @@ func initializeLogger() (*Logger, error) {
 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 
-	zapLogger, err := config.Build()
+	logger, err := config.Build()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+		return nil, fmt.Errorf("failed to build logger: %w", err)
 	}
-	return zapLogger.Sugar(), nil
+
+	return logger.Sugar(), nil
 }
 
+// setupServer configures an HTTP server for health checks and metrics
 func setupServer(port int, modelsRootDir string, logger *Logger) *http.Server {
 	mux := http.NewServeMux()
+
+	// Add health check endpoint
 	healthz.InstallPathHandler(mux, "/healthz", modelagent.NewModelAgentHealthCheck(modelsRootDir))
+
+	// Add liveness check
 	healthz.InstallLivezHandler(mux, healthz.PingHealthz)
 
-	// Register Prometheus metrics handler
+	// Add metrics endpoint
 	modelagent.RegisterMetricsHandler(mux)
 	logger.Info("Registered Prometheus metrics endpoint at /metrics")
+
+	logger.Infof("Health check server configured with port %d", port)
+	logger.Infof("Health check configured for models root dir: %s", modelsRootDir)
 
 	return &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
@@ -122,41 +137,28 @@ func setupServer(port int, modelsRootDir string, logger *Logger) *http.Server {
 	}
 }
 
-func runCommand(cmd *cobra.Command, args []string) {
-	logger, err := initializeLogger()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		os.Exit(1)
-	}
+// setupKubernetesClients creates the Kubernetes and OME clients
+func setupKubernetesClients() (*kubernetes.Clientset, *omev1beta1client.Clientset, error) {
+	kubeConfig := getKubeConfig()
+	kubeClient := createKubeClient(kubeConfig)
+	omeClient := createOmeClient(kubeConfig)
+	return kubeClient, omeClient, nil
+}
 
-	inClusterKubeConfig := getKubeConfig()
-	kubeClient := createKubeClient(inClusterKubeConfig)
-
-	omev1beta1ClientSet := createOmeClient(inClusterKubeConfig)
-	var omev1beta1InformerFactoryOpts []omev1beta1informers.SharedInformerOption
-	omev1beta1InformerFactory := omev1beta1informers.NewSharedInformerFactoryWithOptions(omev1beta1ClientSet, 0, omev1beta1InformerFactoryOpts...)
-	baseModelsInformer := omev1beta1InformerFactory.Ome().V1beta1().BaseModels()
-	clusterBaseModelsInformer := omev1beta1InformerFactory.Ome().V1beta1().ClusterBaseModels()
-
-	// global stop signal
-	stopCh := kubeapiserver.SetupSignalHandler()
-	ctx, cancel := context.WithCancel(context.TODO())
-	go func() {
-		select {
-		case <-stopCh:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
+// initializePrometheusMetrics sets up Prometheus metrics and registers collectors
+func initializePrometheusMetrics(logger *Logger) *modelagent.Metrics {
 	// Register Go and process collectors (safely, without panicking if already registered)
 	reg := prometheus.DefaultRegisterer
+
+	// Register Go collector
 	if err := reg.Register(collectors.NewGoCollector()); err != nil {
 		// Ignore "already exists" errors, warn about others
 		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 			logger.Warnf("Error registering Go collector: %v", err)
 		}
 	}
+
+	// Register Process collector
 	if err := reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
 		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 			logger.Warnf("Error registering Process collector: %v", err)
@@ -166,28 +168,46 @@ func runCommand(cmd *cobra.Command, args []string) {
 	// Initialize metrics
 	metrics := modelagent.NewMetrics(nil)
 	logger.Info("Initialized Prometheus metrics")
+	return metrics
+}
 
-	// create download task communication channel
-	gopherTaskChan := make(chan *modelagent.GopherTask)
+// setupInformers initializes the Kubernetes informers for watching resources
+func setupInformers(omeClient *omev1beta1client.Clientset) (omev1beta1informers.SharedInformerFactory, error) {
+	var omeInformerOpts []omev1beta1informers.SharedInformerOption
+	omeInformerFactory := omev1beta1informers.NewSharedInformerFactoryWithOptions(omeClient, 0, omeInformerOpts...)
+	return omeInformerFactory, nil
+}
 
-	// create node labeler
+// initializeComponents creates and initializes all the model agent components
+func initializeComponents(
+	kubeClient *kubernetes.Clientset,
+	omeInformerFactory omev1beta1informers.SharedInformerFactory,
+	metrics *modelagent.Metrics,
+	gopherTaskChan chan *modelagent.GopherTask,
+	logger *Logger,
+) (*modelagent.Scount, *modelagent.Gopher, error) {
+	// Get informers
+	baseModelsInformer := omeInformerFactory.Ome().V1beta1().BaseModels()
+	clusterBaseModelsInformer := omeInformerFactory.Ome().V1beta1().ClusterBaseModels()
+
+	// Create node labeler
 	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry)
 
-	// create scout
+	// Create scout
 	scout, err := modelagent.NewScout(
 		cfg.nodeName,
 		baseModelsInformer,
 		clusterBaseModelsInformer,
-		omev1beta1InformerFactory,
+		omeInformerFactory,
 		gopherTaskChan,
 		kubeClient,
 		nodeLabeler,
 		logger)
 	if err != nil {
-		logger.Fatalf("Failed to create scout: %v", err)
+		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
 	}
 
-	// create gopher
+	// Create gopher
 	gopher, err := modelagent.NewGopher(
 		cfg.downloadAuthType,
 		cfg.downloadRetry,
@@ -198,10 +218,63 @@ func runCommand(cmd *cobra.Command, args []string) {
 		metrics,
 		logger)
 	if err != nil {
-		logger.Fatalf("Failed to create gopher: %v", err)
+		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)
 	}
 
-	// setup server for health check and metrics
+	return scout, gopher, nil
+}
+
+// runCommand is the main entry point executed by Cobra
+func runCommand(cmd *cobra.Command, args []string) {
+	// Initialize logger
+	logger, err := initializeLogger()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Setup Kubernetes clients
+	kubeClient, omeClient, err := setupKubernetesClients()
+	if err != nil {
+		logger.Fatalf("Failed to setup Kubernetes clients: %v", err)
+	}
+
+	// Setup informers
+	omeInformerFactory, err := setupInformers(omeClient)
+	if err != nil {
+		logger.Fatalf("Failed to setup informers: %v", err)
+	}
+
+	// Setup metrics
+	metrics := initializePrometheusMetrics(logger)
+
+	// Setup signal handling
+	stopCh := kubeapiserver.SetupSignalHandler()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-stopCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	// Create a download task communication channel
+	gopherTaskChan := make(chan *modelagent.GopherTask)
+
+	// Initialize components
+	scout, gopher, err := initializeComponents(
+		kubeClient,
+		omeInformerFactory,
+		metrics,
+		gopherTaskChan,
+		logger,
+	)
+	if err != nil {
+		logger.Fatalf("Failed to initialize components: %v", err)
+	}
+
+	// Set up a health check server
 	server := setupServer(cfg.port, cfg.modelsRootDir, logger)
 	go func() {
 		logger.Infof("Starting health check server on port %d", cfg.port)
@@ -210,27 +283,30 @@ func runCommand(cmd *cobra.Command, args []string) {
 		}
 	}()
 
-	// start gopher
+	// Start gopher (download workers)
 	go gopher.Run(stopCh, cfg.numDownloadWorker)
 
-	// start scout
+	// Start scout (watchers)
 	if err := scout.Run(stopCh); err != nil {
 		logger.Fatalf("Error running scout: %v", err)
 	}
 }
 
+// createKubeClient creates a Kubernetes client from the provided config
 func createKubeClient(kubeConfig *rest.Config) *kubernetes.Clientset {
 	return kubernetes.NewForConfigOrDie(kubeConfig)
 }
 
+// createOmeClient creates an OME client from the provided config
 func createOmeClient(kubeConfig *rest.Config) *omev1beta1client.Clientset {
 	return omev1beta1client.NewForConfigOrDie(kubeConfig)
 }
 
+// getKubeConfig creates and returns a Kubernetes REST config
 func getKubeConfig() *rest.Config {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err.Error())
+		panic(fmt.Sprintf("Failed to create in-cluster Kubernetes config: %v", err))
 	}
 	return config
 }
