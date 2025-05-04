@@ -1,4 +1,4 @@
-package hf_download
+package download
 
 type HFModel struct {
 	Type          string `json:"type"`

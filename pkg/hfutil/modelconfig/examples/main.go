@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hf_model_config"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/modelconfig"
 )
 
 // Create a temporary example configuration
@@ -109,7 +109,7 @@ func main() {
 		}
 
 		// Load the model config
-		config, err := hf_model_config.LoadModelConfig(configPath)
+		config, err := modelconfig.LoadModelConfig(configPath)
 		if err != nil {
 			fmt.Printf("Error loading model config: %v\n", err)
 			continue
@@ -118,9 +118,9 @@ func main() {
 		// Use the common interface to access model information
 		fmt.Printf("Model type: %s\n", config.GetModelType())
 		fmt.Printf("Architecture: %s\n", config.GetArchitecture())
-		fmt.Printf("Parameters: %s\n", hf_model_config.FormatParamCount(config.GetParameterCount()))
+		fmt.Printf("Parameters: %s\n", modelconfig.FormatParamCount(config.GetParameterCount()))
 		fmt.Printf("Context length: %d tokens\n", config.GetContextLength())
-		fmt.Printf("Model size: %s\n", hf_model_config.FormatSize(config.GetModelSizeBytes()))
+		fmt.Printf("Model size: %s\n", modelconfig.FormatSize(config.GetModelSizeBytes()))
 		fmt.Printf("Has vision capabilities: %v\n", config.HasVision())
 		fmt.Printf("Torch dtype: %s\n", config.GetTorchDtype())
 		fmt.Printf("Transformers version: %s\n", config.GetTransformerVersion())

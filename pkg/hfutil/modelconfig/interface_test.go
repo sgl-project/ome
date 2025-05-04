@@ -1,4 +1,4 @@
-package hf_model_config
+package modelconfig
 
 import (
 	"os"

@@ -1,4 +1,4 @@
-package hf_download
+package download
 
 import (
 	"encoding/json"

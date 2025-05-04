@@ -1,18 +1,18 @@
 package main
 
 import (
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hf_download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
 // HFDownloadAgent implements the AgentModule interface for HuggingFace download agent
 type HFDownloadAgent struct {
-	agent *hf_download.HFDownloadAgent
+	agent *download.HFDownloadAgent
 }
 
 // Name returns the name of the agent
@@ -45,7 +45,7 @@ func (h *HFDownloadAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		hf_download.Module,
+		download.Module,
 		fx.Populate(&h.agent),
 	}
 }
