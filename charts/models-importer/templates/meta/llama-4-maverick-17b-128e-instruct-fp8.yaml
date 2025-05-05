@@ -39,6 +39,7 @@ spec:
         - name: LARGE_GENERIC_2
           quotaUnit: 1
           default: true
+    image-text-to-text: "true"
   modelConfiguration:
     {
       "architectures": [
