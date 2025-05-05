@@ -603,6 +603,7 @@ const (
 	KnativeServiceKind      = "Service"
 	RayClusterKind          = "RayCluster"
 	VolcanoQueueKind        = "Queue"
+	KEDAScaledObjectKind    = "ScaledObject"
 	VolcanoJobKind          = "Job"
 	LWSKind                 = "LeaderWorkerSet"
 	KueueClusterQueueKind   = "ClusterQueue"

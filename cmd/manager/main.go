@@ -93,11 +93,8 @@ func init() {
 	istionetworking.GatewayUnmarshaler.AllowUnknownFields = true
 
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
-	utilruntime.Must(kedav1.AddToScheme(scheme))
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(volcanobatch.AddToScheme(scheme))
-	utilruntime.Must(volcano.AddToScheme(scheme))
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
 	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
 }
@@ -243,6 +240,9 @@ func main() {
 		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
 		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
+		{volcano.SchemeGroupVersion, constants.VolcanoQueue, volcano.AddToScheme},
+		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
+		{kedav1.SchemeGroupVersion, constants.KEDAScaledObjectKind, kedav1.AddToScheme},
 	}
 
 	for _, s := range optionalSchemes {

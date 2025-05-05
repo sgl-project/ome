@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
+	vbatchv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"strings"
@@ -13,6 +16,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	clusterQueueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation/reconcilers/kueueclusterqueue"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation/utils"
+	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -423,12 +427,30 @@ func (r *CapacityReservationReconciler) SetupWithManager(mgr ctrl.Manager, capac
 		}
 	})
 
-	return ctrl.NewControllerManagedBy(mgr).
+	volcanoJobFound, err := generalutils.IsCrdAvailable(r.ClientConfig, volbatchv1alpha1.SchemeGroupVersion.String(), constants.VolcanoJobKind)
+	if err != nil {
+		return err
+	}
+
+	volcanoQueueFound, err := generalutils.IsCrdAvailable(r.ClientConfig, vbatchv1beta1.SchemeGroupVersion.String(), constants.VolcanoQueueKind)
+	if err != nil {
+		return err
+	}
+
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&omev1beta1.ClusterCapacityReservation{}).
 		Owns(&kueuev1beta1.ClusterQueue{}).
 		Watches(
 			&omev1beta1.InferenceService{},
 			eventHandler,
-			builder.WithPredicates(predicates)).
-		Complete(r)
+			builder.WithPredicates(predicates))
+
+	if volcanoJobFound {
+		ctrlBuilder.Owns(&volbatchv1alpha1.Job{})
+	}
+	if volcanoQueueFound {
+		ctrlBuilder.Owns(&vbatchv1beta1.Queue{})
+	}
+
+	return ctrlBuilder.Complete(r)
 }

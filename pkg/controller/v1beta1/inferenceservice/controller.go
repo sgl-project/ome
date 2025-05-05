@@ -354,6 +354,11 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		return err
 	}
 
+	kedaFound, err := utils.IsCrdAvailable(r.ClientConfig, kedav1.SchemeGroupVersion.String(), constants.KEDAScaledObjectKind)
+	if err != nil {
+		return err
+	}
+
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta2.InferenceService{}).
 		Owns(&appsv1.Deployment{}).
@@ -372,6 +377,12 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		ctrlBuilder = ctrlBuilder.Owns(&ray.RayCluster{})
 	} else {
 		r.Log.Info("The InferenceService controller won't watch ray.io/v1/RayCluster resources because the CRD is not available.")
+	}
+
+	if kedaFound {
+		ctrlBuilder = ctrlBuilder.Owns(&kedav1.ScaledObject{})
+	} else {
+		r.Log.Info("The InferenceService controller won't watch keda.sh/v1/ScaledObject resources because the CRD is not available.")
 	}
 
 	if lwsFound {
