@@ -1,0 +1,20 @@
+{{- if .Values.embed_v4.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: embed-v4
+  namespace: embed-v4
+spec:
+  predictor:
+    model:
+      runtime: cohere-embed-v4
+      baseModel: embed-v4
+      protocolVersion: cohere
+    minReplicas: {{ .Values.embed_v4.minReplicas}}
+    maxReplicas: {{ .Values.embed_v4.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: embed-v4
+{{- end }}

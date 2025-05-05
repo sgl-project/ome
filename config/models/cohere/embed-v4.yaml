@@ -1,0 +1,43 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: embed-v4
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "cohere-embed-v4"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "false"
+    models.ome.io/internal: "false"
+    models.ome.io/lifecycle-phase: "ACTIVE"
+    ome.io/base-model-decryption-key-name: "embed"
+    ome.io/base-model-decryption-secret-name: "embed-dek"
+spec:
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  disabled: false
+  displayName: cohere.embed-v4.0
+  storage:
+    storageUri: oci://n/idqj093njucb/b/partner-models/o/cohere/embed-v4-0-04152025
+    path: /raid/models/cohere/embed-v4-0-04152025
+  vendor: cohere
+  version: "4.0"
+  modelFormat:
+    name: onnx
+    version: '1'
+  modelFramework:
+    name: onnxruntime
+    version: '1'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 500M
+  modelCapabilities:
+    - "TEXT_EMBEDDINGS"
+  maxTokens: 128000
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: EMBED_COHERE
+          quotaUnit: 1
+          default: true
+    internalName: "embed-v4-0-04152025"
+    type: "Serving"
+    image-text-to-text: "true"

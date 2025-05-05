@@ -168,6 +168,10 @@ cohere-embed-multilingual-light-image-v3-0:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+cohere-embed-v4-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 cohere-command-r-plus-v1-2-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"

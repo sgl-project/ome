@@ -72,6 +72,11 @@ embed_multilingual_image_03:
   minReplicas: 1
   maxReplicas: 1
 
+embed_v4:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 command_r_082024_v1_7_tp1_128k:
   enabled: false
   minReplicas: 1
@@ -117,7 +122,11 @@ cohere:
   commandRSmallv1Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.5.12"
-  
+
+  embedv4Image:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.8.1-04092025"
+
   embedv3Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.7.5-110124-oci"
