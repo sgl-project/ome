@@ -35,7 +35,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: EMBED_COHERE
+        - name: RERANK_COHERE
           quotaUnit: 1
           default: true
     internalName: "rerank-v3-5"
