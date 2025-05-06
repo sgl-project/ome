@@ -219,6 +219,7 @@ cohere-command-1-v15-6-1-trt:
 cohere-command-1-v16-0-0-trt:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "LARGE_COHERE_V2"
 
 cohere-rerank-english-03:
   enabled: false

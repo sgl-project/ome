@@ -34,11 +34,15 @@ spec:
     - "TEXT_GENERATION"
   maxTokens: 4096
   additionalMetadata:
+    {{/* this model will use large_cohere in ord, large_cohere_v2 in other regions*/}}
+    {{- $cfg := index .Values "cohere-command-1-v16-0-0-trt" "compatibleDACShapes" -}}
+    {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_COHERE
+        - name: {{ $cfg }}
           quotaUnit: 1
           default: true
+    {{ end }}
     internalName: "command_52b_v16.0.0_xznlji4x_pref_fp16_trt"
     type: "Serving"
 {{- end }}
