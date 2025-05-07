@@ -7,8 +7,8 @@ metadata:
   annotations:
     models.ome.io/runtime: ""
     models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "False"
-    models.ome.io/internal: "False"
+    models.ome.io/experimental: "false"
+    models.ome.io/internal: "false"
     models.ome.io/lifecycle-phase: "ACTIVE"
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva

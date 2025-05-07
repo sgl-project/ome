@@ -7,8 +7,8 @@ metadata:
   annotations:
     models.ome.io/runtime: "vllm-nl2rqs-7b-v2"
     models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "True"
-    models.ome.io/internal: "False"
+    models.ome.io/experimental: "true"
+    models.ome.io/internal: "false"
     models.ome.io/lifecycle-phase: "ACTIVE"
 spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
