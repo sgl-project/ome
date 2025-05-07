@@ -26,8 +26,8 @@ spec:
         name: tensorrtllm
         version: 'v0.9.0'
   modelSizeRange:
-    min: 15B
-    max: 20B
+    min: 20B
+    max: 30B
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

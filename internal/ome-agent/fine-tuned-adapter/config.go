@@ -15,8 +15,8 @@ type Config struct {
 	AnotherLogger logging.Interface
 
 	FineTunedWeightURI               *casper.ObjectURI       `mapstructure:"model" validate:"required"`
-	unzippedFineTunedWeightDirectory string                  `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
-	zippedFineTunedWeightDirectory   string                  `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
+	UnzippedFineTunedWeightDirectory string                  `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
+	ZippedFineTunedWeightDirectory   string                  `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
 	ObjectStorageDataStore           *casper.CasperDataStore `validate:"required"`
 }
 

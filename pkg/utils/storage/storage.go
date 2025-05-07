@@ -28,9 +28,10 @@ const (
 
 // OCIStorageComponents represents the components of an OCI storage URI
 type OCIStorageComponents struct {
-	Namespace string
-	Bucket    string
-	Prefix    string
+	Namespace  string
+	Bucket     string
+	Prefix     string
+	ObjectName string
 }
 
 // PVCStorageComponents represents the components of a PVC storage URI

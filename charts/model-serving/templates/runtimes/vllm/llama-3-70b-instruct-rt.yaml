@@ -71,6 +71,8 @@ spec:
           value: '30000'
         - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
           value: '120'
+        - name: SERVED_MODEL_NAME # Pass it as env var for the case where model supports Fine-Tuning
+          value: {{ .Values.vllm.serveModelName }}
       args:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
@@ -78,7 +80,7 @@ spec:
           --model="$MODEL_PATH" \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
-          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --served-model-name="$SERVED_MODEL_NAME" \
           --tensor-parallel-size=4 \
           --max-model-len=8192 \
           --gpu-memory-utilization=0.9 \

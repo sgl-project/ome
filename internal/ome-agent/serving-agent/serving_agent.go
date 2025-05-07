@@ -77,8 +77,8 @@ OuterLoop:
 
 func (s *ServingSidecar) applyFinetunedModelChanges() {
 	ftModelInfofilePath := s.Config.FineTunedWeightInfoFilePath
-	unzippedFtModelDir := s.Config.unzippedFineTunedWeightDirectory
-	zippedFtModelDir := s.Config.zippedFineTunedWeightDirectory
+	unzippedFtModelDir := s.Config.UnzippedFineTunedWeightDirectory
+	zippedFtModelDir := s.Config.ZippedFineTunedWeightDirectory
 
 	// Step 1: Get the list of fine-tune models info
 	objectURIs, ftModelNames, err := readObjectURIsFromFile(ftModelInfofilePath)

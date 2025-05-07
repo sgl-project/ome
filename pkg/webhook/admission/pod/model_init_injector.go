@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/go-playground/validator/v10"
 	v1 "k8s.io/api/core/v1"
@@ -116,12 +118,13 @@ func (mi *ModelInitInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMount {
 	baseModelName := pod.ObjectMeta.Annotations[constants.BaseModelName]
 	return []v1.VolumeMount{
 		{
-			Name:      constants.EmptyDirVolumeSourceName,
-			MountPath: constants.InitContainerModelFinalDefaultPath,
+			Name:      constants.ModelEmptyDirVolumeName,
+			MountPath: constants.ModelDefaultMountPath,
+			SubPath:   mi.getBaseModelVolumeMountSubPath(pod),
 		},
 		{
 			Name:      baseModelName,
-			MountPath: constants.InitContainerModelSourceDefaultPath,
+			MountPath: constants.ModelDefaultSourcePath,
 		},
 	}
 }
@@ -170,8 +173,8 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 		{Name: constants.AgentSecretNameEnvVarKey, Value: pod.ObjectMeta.Annotations[constants.BaseModelDecryptionSecretName]},
 		{Name: constants.AgentDisableModelDecryptionEnvVarKey, Value: mi.getAnnotationOrDefault(pod, constants.DisableModelDecryption, "false")},
 		{Name: constants.AgentBaseModelTypeEnvVarKey, Value: mi.getLabelOrDefault(pod, constants.BaseModelTypeLabelKey, string(constants.ServingBaseModel))},
-		{Name: constants.AgentLocalPathEnvVarKey, Value: constants.InitContainerModelSourceDefaultPath},
-		{Name: constants.AgentModelStoreDirectoryEnvVarKey, Value: constants.InitContainerModelFinalDefaultPath},
+		{Name: constants.AgentLocalPathEnvVarKey, Value: constants.ModelDefaultSourcePath},
+		{Name: constants.AgentModelStoreDirectoryEnvVarKey, Value: constants.ModelDefaultMountPath},
 		{Name: constants.AgentRegionEnvVarKey, Value: mi.Region},
 	}
 
@@ -215,4 +218,11 @@ func (mi *ModelInitInjector) getLabelOrDefault(pod *v1.Pod, key, defaultValue st
 		return value
 	}
 	return defaultValue
+}
+
+func (mi *ModelInitInjector) getBaseModelVolumeMountSubPath(pod *v1.Pod) string {
+	if isvcutils.IsCohereCommand1TFewFTServing(&pod.ObjectMeta) {
+		return constants.BaseModelVolumeMountSubPath
+	}
+	return ""
 }

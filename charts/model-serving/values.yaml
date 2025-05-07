@@ -1,6 +1,6 @@
 vllm:
   port: 8080
-  serveModelName: vllm-model
+  serveModelName: vllm-model # served model name for non-fine-tuned vllm serving
   commonImage:
     repository: fra.ocir.io/idqj093njucb/official-vllm-openai
     tag: 0.5.3.post1.7f8d612d-log

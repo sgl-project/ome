@@ -1,14 +1,14 @@
 apiVersion: ome.io/v1beta1
 kind: TrainingJob
 metadata:
-  name: "ft-6b-v-15-6-0-vanilla"
+  name: "ft-command-6b-v-14-2-0"
   namespace: "dac-training-test"
 spec:
   runtimeRef:
     name: cohere-command-ft
   trainer: {}
   modelConfig:
-    inputModel: 6b-v15-6-gen
+    inputModel: 6b-v14-2-gen
   datasets:
     storageUri: oci://n/idqj093njucb/b/beiwen_test/o/sales_pitch_generation_train.jsonl
   hyperParameterTuningConfig:
@@ -18,12 +18,11 @@ spec:
       goal: maximize
     parameters:
       {
-        "strategy": "vanilla",
-        "trainingBatchSize": "8",
-        "totalTrainingEpochs": "3",
+        "strategy": "tfew",
+        "trainingBatchSize": "16",
+        "totalTrainingEpochs": "1",
         "earlyStoppingPatience": "6",
         "earlyStoppingThreshold": "0.01",
-        "learningRate": "0.00001",
-        "logModelMetricsIntervalInSteps": "10",
-        "nLastLayers": "14"
+        "learningRate": "0.01",
+        "logModelMetricsIntervalInSteps": "10"
       }

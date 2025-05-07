@@ -44,7 +44,7 @@ func (tjd *TrainingJobDefaulter) Default(ctx context.Context, obj runtime.Object
 		panic(err)
 	}
 
-	trainingJobMutatorLogger.Info("Config: ", cfg)
+	trainingJobMutatorLogger.Info("Config", "config", cfg)
 
 	DefaultTrainingJob(tjob)
 	return nil

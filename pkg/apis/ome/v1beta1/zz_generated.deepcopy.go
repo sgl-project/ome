@@ -1338,7 +1338,7 @@ func (in *FineTunedWeightSpec) DeepCopyInto(out *FineTunedWeightSpec) {
 		**out = **in
 	}
 	in.HyperParameters.DeepCopyInto(&out.HyperParameters)
-	in.ModelExtension.DeepCopyInto(&out.ModelExtension)
+	in.ModelExtensionSpec.DeepCopyInto(&out.ModelExtensionSpec)
 	in.Configuration.DeepCopyInto(&out.Configuration)
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage

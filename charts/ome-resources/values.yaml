@@ -97,8 +97,8 @@ ome:
       cpuRequest: 15
       cpuLimit: 15
     fineTunedAdapter:
-      memoryRequest: 150Gi
-      memoryLimit: 180Gi
+      memoryRequest: 300Gi
+      memoryLimit: 320Gi
       cpuRequest: 15
       cpuLimit: 15
 

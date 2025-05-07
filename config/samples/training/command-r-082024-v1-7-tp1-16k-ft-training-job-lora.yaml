@@ -21,10 +21,9 @@ spec:
         "strategy": "lora",
         "trainingBatchSize": "16",
         "totalTrainingEpochs": "1",
-        "earlyStoppingPatience": "6",
-        "earlyStoppingThreshold": "0.01",
-        "learningRate": "0.01",
-        "logModelMetricsIntervalInSteps": "10",
+        "earlyStoppingPatience": "10",
+        "earlyStoppingThreshold": "0.001",
+        "learningRate": "0.0001",
         "loraR": "8",
         "loraAlpha": "32"
       }

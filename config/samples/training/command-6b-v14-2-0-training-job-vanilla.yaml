@@ -18,12 +18,12 @@ spec:
       goal: maximize
     parameters:
       {
-        "strategy": "tfew",
+        "strategy": "vanilla",
         "trainingBatchSize": "16",
         "totalTrainingEpochs": "1",
         "earlyStoppingPatience": "6",
         "earlyStoppingThreshold": "0.01",
-        "learningRate": "0.01",
+        "learningRate": "0.00001",
         "logModelMetricsIntervalInSteps": "10",
-        "nLastLayers": "0"
+        "nLastLayers": "14"
       }

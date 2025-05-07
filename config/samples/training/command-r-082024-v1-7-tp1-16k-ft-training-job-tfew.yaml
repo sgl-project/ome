@@ -19,11 +19,9 @@ spec:
     parameters:
       {
         "strategy": "tfew",
-        "trainingBatchSize": "8",
-        "totalTrainingEpochs": "3",
-        "earlyStoppingPatience": "6",
-        "earlyStoppingThreshold": "0.01",
-        "learningRate": "0.01",
-        "logModelMetricsIntervalInSteps": "10",
-        "nLastLayers": "0"
+        "trainingBatchSize": "16",
+        "totalTrainingEpochs": "1",
+        "earlyStoppingPatience": "10",
+        "earlyStoppingThreshold": "0.001",
+        "learningRate": "0.01"
       }

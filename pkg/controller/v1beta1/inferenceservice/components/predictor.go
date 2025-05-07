@@ -3,6 +3,8 @@ package components
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strconv"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
@@ -14,6 +16,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	trainingutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 
 	"github.com/go-logr/logr"
@@ -33,12 +36,14 @@ var _ Component = &Predictor{}
 
 // Predictor reconciles resources for this component.
 type Predictor struct {
-	client                 client.Client
-	clientset              kubernetes.Interface
-	scheme                 *runtime.Scheme
-	inferenceServiceConfig *controllerconfig.InferenceServicesConfig
-	deploymentMode         constants.DeploymentModeType
-	Log                    logr.Logger
+	client                            client.Client
+	clientset                         kubernetes.Interface
+	scheme                            *runtime.Scheme
+	inferenceServiceConfig            *controllerconfig.InferenceServicesConfig
+	deploymentMode                    constants.DeploymentModeType
+	fineTunedServing                  bool
+	fineTunedServingWithMergedWeights bool
+	Log                               logr.Logger
 }
 
 // NewPredictor creates a new Predictor instance.
@@ -301,13 +306,21 @@ func (p *Predictor) setMultiNodeMReferences(isvc *v1beta1.InferenceService, mnr 
 }
 
 // reconcileObjectMeta reconciles the object metadata.
-func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, fineTunedWeights []*v1beta1.FineTunedWeight) (metav1.ObjectMeta, ctrl.Result, error) {
+func (p *Predictor) reconcileObjectMeta(
+	isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	runtimeName string,
+	baseModelSpec v1beta1.BaseModelSpec,
+	baseModelMeta metav1.ObjectMeta,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
+) (metav1.ObjectMeta, ctrl.Result, error) {
+
 	annotations, err := p.processAnnotations(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
 	if err != nil {
 		return metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
 
-	labels, err := p.processLabels(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta)
+	labels, err := p.processLabels(isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
 	if err != nil {
 		return metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
@@ -322,7 +335,14 @@ func (p *Predictor) reconcileObjectMeta(isvc *v1beta1.InferenceService, sRuntime
 }
 
 // processAnnotations processes the annotations for the predictor.
-func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, fineTunedWeights []*v1beta1.FineTunedWeight) (map[string]string, error) {
+func (p *Predictor) processAnnotations(
+	isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	runtimeName string,
+	baseModelSpec v1beta1.BaseModelSpec,
+	baseModelMeta metav1.ObjectMeta,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
+) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
@@ -331,19 +351,48 @@ func (p *Predictor) processAnnotations(isvc *v1beta1.InferenceService, sRuntime 
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
-	p.processServingAnnotations(annotations, isvc, sRuntime, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
+	mergedAnnotations := utils.Union(sRuntimeAnnotations, annotations, isvc.Spec.Predictor.Annotations)
 
-	return utils.Union(sRuntimeAnnotations, annotations, isvc.Spec.Predictor.Annotations), nil
+	err := p.processServingAnnotations(isvc, mergedAnnotations, runtimeName, baseModelSpec, baseModelMeta, fineTunedWeights)
+	if err != nil {
+		return mergedAnnotations, errors.Wrapf(err, "failed to process serving annotations")
+	}
+	return mergedAnnotations, nil
 }
 
 // processServingAnnotations processes the annotations for the predictor.
-func (p *Predictor) processServingAnnotations(annotations map[string]string, isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta, fineTunedWeights []*v1beta1.FineTunedWeight) {
-	if isvcutils.LoadingMergedFineTunedWeights(fineTunedWeights) {
-		// Delete the original model init injection
+func (p *Predictor) processServingAnnotations(
+	isvc *v1beta1.InferenceService,
+	annotations map[string]string,
+	runtimeName string,
+	baseModelSpec v1beta1.BaseModelSpec,
+	baseModelMeta metav1.ObjectMeta,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
+) error {
+	if p.fineTunedServing {
+		// TODO: Inject serving sidecar for fine-tuned weights downloading for stacked serving case
+
+		// Inject ft adapter for single/non-stacked fine-tuned weight downloading
+		annotations[constants.FineTunedAdapterInjectionKey] = fineTunedWeights[0].Name
+
+		// Add fine-tuned weight ft strategy, required by ft adapter & serving sidecar
+		fineTunedWeightFTStrategy, err := trainingutils.GetHyperparameterValueByKey(constants.StrategyConfigKey, fineTunedWeights[0].Spec.HyperParameters)
+		if err != nil || fineTunedWeightFTStrategy == nil {
+			p.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", fineTunedWeights[0].Name, "namespace", isvc.Namespace)
+			return err
+		}
+
+		annotations[constants.FineTunedWeightFTStrategyKey] = fineTunedWeightFTStrategy.(string)
+	}
+
+	if p.fineTunedServingWithMergedWeights {
+		// For FT serving using merged FT weights, no need base model, so just delete the original model init injection
+		p.Log.Info("Fine-tuned serving with merged weights, deleting model init annotation", "namespace", isvc.Namespace)
 		delete(annotations, constants.ModelInitInjectionKey)
 
-		annotations[constants.FineTunedAdapterInjectionKey] = fineTunedWeights[0].Name
+		annotations[constants.FTServingWithMergedWeightsAnnotationKey] = "true"
 	} else {
+		// Add model init required annotations
 		baseModelDecryptionKeyName, ok := baseModelMeta.Annotations[constants.BaseModelDecryptionKeyName]
 		if ok {
 			annotations[constants.BaseModelDecryptionKeyName] = baseModelDecryptionKeyName
@@ -352,16 +401,24 @@ func (p *Predictor) processServingAnnotations(annotations map[string]string, isv
 		if ok {
 			annotations[constants.BaseModelDecryptionSecretName] = baseModelDecryptionSecretName
 		}
-
-		annotations[constants.BaseModelName] = baseModelMeta.Name
-		annotations[constants.ServingRuntimeKeyName] = runtimeName
-		annotations[constants.BaseModelFormat] = baseModelSpec.ModelFormat.Name
-		annotations[constants.BaseModelFormatVersion] = *baseModelSpec.ModelFormat.Version
 	}
+	annotations[constants.BaseModelName] = baseModelMeta.Name
+	annotations[constants.BaseModelVendorAnnotationKey] = isvcutils.GetBaseModelVendor(baseModelSpec)
+	annotations[constants.ServingRuntimeKeyName] = runtimeName
+	annotations[constants.BaseModelFormat] = baseModelSpec.ModelFormat.Name
+	annotations[constants.BaseModelFormatVersion] = *baseModelSpec.ModelFormat.Version
+	return nil
 }
 
-// processlabels processes the label for the predictor.
-func (p *Predictor) processLabels(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, runtimeName string, baseModelSpec v1beta1.BaseModelSpec, baseModelMeta metav1.ObjectMeta) (map[string]string, error) {
+// processLabels processes the label for the predictor.
+func (p *Predictor) processLabels(
+	isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	runtimeName string,
+	baseModelSpec v1beta1.BaseModelSpec,
+	baseModelMeta metav1.ObjectMeta,
+	fineTunedWeights []*v1beta1.FineTunedWeight,
+) (map[string]string, error) {
 	predictorLabels := isvc.Spec.Predictor.Labels
 	sRuntimeLabels := sRuntime.ServingRuntimePodSpec.Labels
 
@@ -380,8 +437,28 @@ func (p *Predictor) processLabels(isvc *v1beta1.InferenceService, sRuntime v1bet
 			constants.InferenceServiceBaseModelNameLabelKey: baseModelMeta.Name,
 			constants.InferenceServiceBaseModelSizeLabelKey: baseModelCategory,
 			constants.BaseModelTypeLabelKey:                 string(constants.ServingBaseModel),
+			constants.BaseModelVendorLabelKey:               isvcutils.GetBaseModelVendor(baseModelSpec),
+			constants.ServingRuntimeLabelKey:                runtimeName,
+			constants.FTServingLabelKey:                     strconv.FormatBool(p.fineTunedServing),
 		},
 	)
+
+	// Conditionally add fine-tuned serving related labels
+	if p.fineTunedServing {
+		ftStrategyParameter, err := trainingutils.GetHyperparameterValueByKey(constants.StrategyConfigKey, fineTunedWeights[0].Spec.HyperParameters)
+		if err != nil {
+			p.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", fineTunedWeights[0].Name, "namespace", isvc.Namespace)
+			return nil, err
+		}
+
+		fineTunedWeightFTStrategy := ""
+		if ftStrategyParameter != nil {
+			fineTunedWeightFTStrategy = ftStrategyParameter.(string)
+		}
+
+		labels[constants.FTServingWithMergedWeightsLabelKey] = strconv.FormatBool(p.fineTunedServingWithMergedWeights)
+		labels[constants.FineTunedWeightFTStrategyLabelKey] = fineTunedWeightFTStrategy
+	}
 
 	return labels, nil
 }
@@ -417,7 +494,12 @@ func (p *Predictor) buildObjectMeta(isvc *v1beta1.InferenceService, sRuntime v1b
 }
 
 // reconcileWorkerPodSpec reconciles the worker pod spec for the predictor.
-func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRuntime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta, baseModel *v1beta1.BaseModelSpec) (v1.PodSpec, ctrl.Result, error) {
+func (p *Predictor) reconcileWorkerPodSpec(
+	isvc *v1beta1.InferenceService,
+	sRuntime v1beta1.ServingRuntimeSpec,
+	objectMeta *metav1.ObjectMeta,
+	baseModel *v1beta1.BaseModelSpec,
+) (v1.PodSpec, ctrl.Result, error) {
 	// Early return if no worker specs are defined
 	if sRuntime.WorkerPodSpec == nil && isvc.Spec.Predictor.Worker == nil {
 		return v1.PodSpec{}, ctrl.Result{}, nil
@@ -442,6 +524,7 @@ func (p *Predictor) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, sRunt
 
 	// Update volume mounts and pod spec
 	p.updateVolumeMounts(isvc, workerContainer, objectMeta, baseModel)
+	p.updateEnvVariables(isvc, workerContainer, baseModel, objectMeta)
 	p.updateWorkerPodSpec(
 		isvc,
 		sRuntime,
@@ -569,7 +652,12 @@ func (p *Predictor) createMergedWorkerPodSpec(isvc *v1beta1.InferenceService, sR
 }
 
 // updateVolumeMounts updates the volume mounts for the predictor.
-func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta, baseModel *v1beta1.BaseModelSpec) {
+func (p *Predictor) updateVolumeMounts(
+	isvc *v1beta1.InferenceService,
+	container *v1.Container,
+	objectMeta *metav1.ObjectMeta,
+	baseModel *v1beta1.BaseModelSpec,
+) {
 	p.Log.Info("Update volume mounts", "inference service", isvc.Name, "namespace", isvc.Namespace)
 
 	if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
@@ -578,10 +666,33 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 			MountPath: *baseModel.Storage.Path,
 			ReadOnly:  true,
 		}
-		isvcutils.UpdateVolumeMounts(container, &vm)
-		isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-			{Name: "MODEL_PATH", Value: *baseModel.Storage.Path},
-		})
+		isvcutils.AppendVolumeMount(container, &vm)
+	}
+
+	if p.fineTunedServing {
+		defaultModelVolumeMount := v1.VolumeMount{
+			Name:      constants.ModelEmptyDirVolumeName,
+			MountPath: constants.ModelDefaultMountPath,
+		}
+		isvcutils.AppendVolumeMountIfNotExist(container, &defaultModelVolumeMount)
+
+		if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
+			// Update to have `base` sub-path in model volume mount for cohere tfew stacked serving case
+			defaultModelVolumeMountWithSubPath := v1.VolumeMount{
+				Name:      constants.ModelEmptyDirVolumeName,
+				MountPath: filepath.Join(constants.ModelDefaultMountPath, objectMeta.Annotations[constants.BaseModelFormat]),
+				SubPath:   constants.BaseModelVolumeMountSubPath,
+			}
+			isvcutils.UpdateVolumeMount(container, &defaultModelVolumeMountWithSubPath)
+
+			tfewFineTunedWeightVolumeMount := v1.VolumeMount{
+				Name:      constants.ModelEmptyDirVolumeName,
+				MountPath: filepath.Join(constants.CohereTFewFineTunedWeightVolumeMountPath, objectMeta.Annotations[constants.BaseModelFormat]),
+				ReadOnly:  true,
+				SubPath:   constants.FineTunedWeightVolumeMountSubPath,
+			}
+			isvcutils.AppendVolumeMount(container, &tfewFineTunedWeightVolumeMount)
+		}
 	}
 
 	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
@@ -599,6 +710,37 @@ func (p *Predictor) updateVolumeMounts(isvc *v1beta1.InferenceService, container
 			SubPath:   constants.OutputBlocklistSubPath,
 		}
 		container.VolumeMounts = append(container.VolumeMounts, outputBlocklistVolumeMount)
+	}
+}
+
+func (p *Predictor) updateEnvVariables(
+	isvc *v1beta1.InferenceService,
+	container *v1.Container,
+	baseModel *v1beta1.BaseModelSpec,
+	objectMeta *metav1.ObjectMeta) {
+	if baseModel.Vendor == nil {
+		p.Log.Info("Warning: no vendor given in base model spec - no env var added/updated")
+	} else if *baseModel.Vendor == string(constants.Meta) {
+		modelMountPath := *baseModel.Storage.Path
+		if p.fineTunedServing {
+			// For FT serving case, update model mount path and served model name
+			modelMountPath = constants.ModelDefaultMountPath
+
+			isvcutils.UpdateEnvVars(container, &v1.EnvVar{
+				Name: constants.ServedModelNameEnvVarKey, Value: filepath.Join(
+					constants.LLamaVllmFTServingServedModelNamePrefix,
+					objectMeta.Annotations[constants.FineTunedAdapterInjectionKey])},
+			)
+		}
+		isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+			{Name: constants.ModelPathEnvVarKey, Value: modelMountPath},
+		})
+	} else if *baseModel.Vendor == string(constants.Cohere) {
+		if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
+			isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+				{Name: constants.TFewWeightPathEnvVarKey, Value: constants.CohereTFewFineTunedWeightDefaultPath},
+			})
+		}
 	}
 }
 
@@ -625,6 +767,18 @@ func (p *Predictor) updatePodSpec(isvc *v1beta1.InferenceService,
 				},
 			},
 		},
+	}
+
+	if isvcutils.IsEmptyModelDirVolumeRequired(objectMeta.Annotations) {
+		emptyModelDirVolume := v1.Volume{
+			Name: constants.ModelEmptyDirVolumeName,
+			VolumeSource: v1.VolumeSource{
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					Medium: v1.StorageMediumMemory,
+				},
+			},
+		}
+		podSpec.Volumes = utils.AppendVolumeIfNotExists(podSpec.Volumes, emptyModelDirVolume)
 	}
 
 	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
@@ -776,11 +930,16 @@ func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.
 
 // reconcileFineTunedWeights reconciles the fine-tuned weights for the predictor.
 func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([]*v1beta1.FineTunedWeight, ctrl.Result, error) {
-	if len(isvc.Spec.Predictor.Model.FineTunedWeights) == 0 {
+	numOfFineTunedWeights := len(isvc.Spec.Predictor.Model.FineTunedWeights)
+	if numOfFineTunedWeights == 0 {
 		return nil, ctrl.Result{}, nil
 	}
 
-	if len(isvc.Spec.Predictor.Model.FineTunedWeights) > 1 {
+	p.Log.Info("FT serving mode", "Number of fine-tuned weights", numOfFineTunedWeights)
+	p.fineTunedServing = true
+
+	// TODO: lift here when start supporting stacked FT serving
+	if numOfFineTunedWeights > 1 {
 		return nil, ctrl.Result{}, fmt.Errorf("stacked fine-tuned serving is not supported yet")
 	}
 
@@ -794,6 +953,14 @@ func (p *Predictor) reconcileFineTunedWeights(isvc *v1beta1.InferenceService) ([
 
 		allFineTunedWeights = append(allFineTunedWeights, fineTunedWeight)
 	}
+
+	// Determine if loading a merged fine-tuned weights
+	loadingMergedFineTunedWeights, err := isvcutils.LoadingMergedFineTunedWeight(allFineTunedWeights)
+	if err != nil {
+		p.Log.Error(err, "Failed to determine if loading merged fine-tuned weights")
+		return allFineTunedWeights, ctrl.Result{}, err
+	}
+	p.fineTunedServingWithMergedWeights = loadingMergedFineTunedWeights
 
 	return allFineTunedWeights, ctrl.Result{}, nil
 }
@@ -817,7 +984,8 @@ func (p *Predictor) updateModelTransitionStatus(isvc *v1beta1.InferenceService, 
 }
 
 // reconcilePodSpec reconciles the pod spec.
-func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService,
+func (p *Predictor) reconcilePodSpec(
+	isvc *v1beta1.InferenceService,
 	sRuntime v1beta1.ServingRuntimeSpec,
 	objectMeta *metav1.ObjectMeta,
 	baseModel *v1beta1.BaseModelSpec,
@@ -838,6 +1006,7 @@ func (p *Predictor) reconcilePodSpec(isvc *v1beta1.InferenceService,
 	}
 
 	p.updateVolumeMounts(isvc, container, objectMeta, baseModel)
+	p.updateEnvVariables(isvc, container, baseModel, objectMeta)
 	p.updatePodSpec(isvc, sRuntime, omeContainerIdx, container, &podSpec, objectMeta, baseModel)
 
 	return podSpec, ctrl.Result{}, nil

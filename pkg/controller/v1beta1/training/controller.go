@@ -98,11 +98,17 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
+	trainingRuntime, err := utils.GetTrainingRuntime(r.Client, trainJob.Spec.RuntimeRef.Name, trainJob.Namespace)
+	if err != nil {
+		r.Log.Error(err, "Error getting training runtime", "namespace", req.NamespacedName, "name", trainJob.Name, "training runtime", trainJob.Spec.RuntimeRef.Name)
+		return ctrl.Result{}, nil
+	}
+
 	finetuneWeights := &v1beta1.FineTunedWeight{}
 	if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: utils.GetFineTunedModelName(trainJob.Name)}, finetuneWeights); err != nil {
 		if apierr.IsNotFound(err) {
 			// Finetune weights not found, create a new one
-			finetuneWeights = r.createFinetuneWeights(&trainJob, *configMap)
+			finetuneWeights = r.createFinetuneWeights(&trainJob, *configMap, trainingRuntime)
 			if err = r.Client.Create(ctx, finetuneWeights); err != nil {
 				if apierr.IsAlreadyExists(err) {
 					// Requeue it when model already exists
@@ -144,12 +150,6 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if result, err := r.reconcilePVPVC(&trainJob, baseModel.Spec); err != nil {
 		r.Log.Error(err, "Error reconciling PV/PVC for train job", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return result, err
-	}
-
-	trainingRuntime, err := utils.GetTrainingRuntime(r.Client, trainJob.Spec.RuntimeRef.Name, trainJob.Namespace)
-	if err != nil {
-		r.Log.Error(err, "Error getting training runtime", "namespace", req.NamespacedName, "name", trainJob.Name, "training runtime", trainJob.Spec.RuntimeRef.Name)
-		return ctrl.Result{}, nil
 	}
 
 	if err := r.prepareJobAnnotations(&trainJob, baseModel, trainingRuntime); err != nil {
@@ -495,7 +495,7 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	return nil
 }
 
-func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.TrainingJob, configMap v1.ConfigMap) *v1beta1.FineTunedWeight {
+func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.TrainingJob, configMap v1.ConfigMap, trainingRuntime *v1beta1.TrainingRuntimeSpec) *v1beta1.FineTunedWeight {
 	strategy, err := utils.GetHyperparameterValueByKey(constants.StrategyConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
 	if err != nil {
 		strategy = "lora"
@@ -508,6 +508,11 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 		if err := json.Unmarshal([]byte(trainingSidecarConfigVal), trainingSidecarConfig); err != nil {
 			panic(fmt.Errorf("unable to unmarshal %v json string: %w", constants.TrainingSidecarConfigMapKeyName, err))
 		}
+	}
+
+	fineTunedWeightConfiguration, err := r.prepareFineTuneWeightConfiguration(trainingRuntime)
+	if err != nil {
+		panic(fmt.Errorf("failed to prepare FineTunedWeight configuration for TrainingJob %s: %+v", trainJob.Name, err))
 	}
 
 	storageUri := "oci://n/" + trainingSidecarConfig.Namespace + "/b/" + trainingSidecarConfig.FineTunedModelBucket + "/o/" + utils.GetFineTunedModelName(trainJob.Name)
@@ -525,6 +530,7 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 			},
 			ModelType:       &modelType,
 			HyperParameters: trainJob.Spec.HyperParameterTuningConfig.Parameters,
+			Configuration:   fineTunedWeightConfiguration,
 			Storage: &v1beta1.StorageSpec{
 				StorageUri: &storageUri,
 			},
@@ -534,4 +540,25 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 		},
 		Status: v1beta1.ModelStatusSpec{},
 	}
+}
+
+func (r *TrainingJobReconciler) prepareFineTuneWeightConfiguration(trainingRuntime *v1beta1.TrainingRuntimeSpec) (runtime.RawExtension, error) {
+	var mergedFineTunedWeight bool
+	if trainingRuntime.Annotations[constants.TrainingRuntimeTypeAnnotationKey] == string(constants.PeftTrainingRuntime) ||
+		trainingRuntime.Annotations[constants.TrainingRuntimeTypeAnnotationKey] == string(constants.CohereCommandRTrainingTraining) {
+		mergedFineTunedWeight = true
+	} else {
+		mergedFineTunedWeight = false
+	}
+
+	configuration := map[string]interface{}{
+		constants.FineTunedWeightMergedWeightsConfigKey: mergedFineTunedWeight,
+	}
+
+	configurationRaw, err := json.Marshal(configuration)
+	if err != nil {
+		r.Log.Error(err, "Failed to marshal FineTunedWeight configuration", "configuration", configuration)
+		return runtime.RawExtension{}, err
+	}
+	return runtime.RawExtension{Raw: configurationRaw}, nil
 }

@@ -19,13 +19,13 @@ spec:
     parameters:
       {
         "strategy": "lora",
-        "trainingBatchSize": "16",
-        "totalTrainingEpochs": "1",
-        "earlyStoppingPatience": "6",
-        "earlyStoppingThreshold": "0.01",
-        "learningRate": "0.01",
+        "trainingBatchSize": "8",
+        "totalTrainingEpochs": "3",
+        "earlyStoppingPatience": "15",
+        "earlyStoppingThreshold": "0.0001",
+        "learningRate": "0.0002",
         "logModelMetricsIntervalInSteps": "10",
         "loraR": "8",
-        "loraAlpha": "32",
+        "loraAlpha": "8",
         "loraDropout": "0.1"
       }

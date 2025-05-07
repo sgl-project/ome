@@ -99,7 +99,7 @@ func (tsi *TrainingSidecarInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMoun
 	} else {
 		finetunedModelName := utils.GetFineTunedModelName(pod.ObjectMeta.Labels[constants.TrainingJobPodLabelKey])
 		modelEmptyDirVolumeMount := v1.VolumeMount{
-			Name:      constants.EmptyDirVolumeSourceName,
+			Name:      constants.ModelEmptyDirVolumeName,
 			MountPath: filepath.Join(constants.CohereStorePathPrefix, finetunedModelName),
 			ReadOnly:  false,
 		}

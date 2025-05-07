@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ft-serving-cohere-command-r-082024-lora
+  namespace: amaaaaaabgjpxjqafj7egs4ha32dmch5kvaymcsq432v22n5l57cu7eag622
+spec:
+  predictor:
+    maxReplicas: 1
+    minReplicas: 1
+    model:
+      baseModel: command-r-082024-v1-7-tp1-128k
+      fineTunedWeights:
+        - amaaaaaabgjpxjqavijjcozns2xfo2rmejt4gahtti7pphdtday2okbmhpbq # a fine-tuned model weight trained against ft base model command2-35b-v20-1-0-float32-v1-7-16k-ft using LoRA FT strategy
+      protocolVersion: cohere
+      # runtime: cohere-command-r-small-vnext # Comment runtime for runtime auto-selection

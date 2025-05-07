@@ -46,14 +46,45 @@ func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 }
 
 func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
-	inject, ok := annotations[constants.ModelInitInjectionKey]
-	return !ok || inject != "true"
+	return annotations[constants.ModelInitInjectionKey] != "true" &&
+		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
 }
 
-func LoadingMergedFineTunedWeights(fineTunedWeights []*v1beta1.FineTunedWeight) bool {
-	// TODO: FineTunedWeight should have a indicator about if it is a merged weights
-	// TODO: The webhook should validate if only one merged weights is attached
-	return len(fineTunedWeights) == 1
+func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (bool, error) {
+	mergedFineTunedWeights, err := IsMergedFineTunedWeight(fineTunedWeights[0])
+	if err != nil {
+		return false, err
+	}
+	return len(fineTunedWeights) == 1 && mergedFineTunedWeights, nil
+}
+
+func IsMergedFineTunedWeight(fineTunedWeight *v1beta1.FineTunedWeight) (bool, error) {
+	if fineTunedWeight != nil {
+		var configMap map[string]interface{}
+		if err := json.Unmarshal(fineTunedWeight.Spec.Configuration.Raw, &configMap); err != nil {
+			return false, err
+		}
+		if mergedWeights, exists := configMap[constants.FineTunedWeightMergedWeightsConfigKey]; exists && mergedWeights == true {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func IsEmptyModelDirVolumeRequired(annotations map[string]string) bool {
+	modelInitInject := annotations[constants.ModelInitInjectionKey]
+	fineTunedAdapterInject := annotations[constants.FineTunedAdapterInjectionKey]
+
+	return modelInitInject == "true" || len(fineTunedAdapterInject) > 0
+}
+
+func IsCohereCommand1TFewFTServing(servingPodObjectMeta *metav1.ObjectMeta) bool {
+	if servingPodObjectMeta.Annotations[constants.BaseModelVendorAnnotationKey] == string(constants.Cohere) &&
+		servingPodObjectMeta.Annotations[constants.FineTunedWeightFTStrategyKey] == string(constants.TFewTrainingStrategy) &&
+		servingPodObjectMeta.Annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true" {
+		return true
+	}
+	return false
 }
 
 func SetPodLabelsFromAnnotations(metadata *metav1.ObjectMeta) {
@@ -230,16 +261,62 @@ func UpdateImageTag(container *v1.Container, runtimeVersion *string, servingRunt
 	}
 }
 
-func UpdateVolumeMounts(container *v1.Container, volumeMount *v1.VolumeMount) {
+func AppendVolumeMount(container *v1.Container, volumeMount *v1.VolumeMount) {
 	container.VolumeMounts = append(container.VolumeMounts, *volumeMount)
 }
 
-func UpdateContainerArgs(container *v1.Container, args *[]string) {
+func UpdateVolumeMount(container *v1.Container, volumeMount *v1.VolumeMount) {
+	if volumeMount == nil {
+		return
+	}
+	var updated bool
+	for i, vm := range container.VolumeMounts {
+		if vm.Name == volumeMount.Name {
+			container.VolumeMounts[i].MountPath = volumeMount.MountPath
+			container.VolumeMounts[i].SubPath = volumeMount.SubPath
+			container.VolumeMounts[i].ReadOnly = volumeMount.ReadOnly
+			updated = true
+			break
+		}
+	}
+
+	// If the volume mount does not exist, append it to the list.
+	if !updated {
+		container.VolumeMounts = append(container.VolumeMounts, *volumeMount)
+	}
+}
+
+func AppendVolumeMountIfNotExist(container *v1.Container, volumeMount *v1.VolumeMount) {
+	for i := range container.VolumeMounts {
+		if container.VolumeMounts[i].Name == volumeMount.Name {
+			return
+		}
+	}
+	container.VolumeMounts = append(container.VolumeMounts, *volumeMount)
+}
+
+func AppendContainerArgs(container *v1.Container, args *[]string) {
 	container.Args = append(container.Args, *args...)
 }
 
 func AppendEnvVars(container *v1.Container, envVars *[]v1.EnvVar) {
 	container.Env = append(container.Env, *envVars...)
+}
+
+func UpdateEnvVars(container *v1.Container, envVar *v1.EnvVar) {
+	var updated bool
+	for i, existingEnvVar := range container.Env {
+		if existingEnvVar.Name == envVar.Name {
+			// If it exists, update its value.
+			container.Env[i].Value = envVar.Value
+			updated = true
+			break
+		}
+	}
+	// If the environment variable does not exist, append it to the list.
+	if !updated {
+		container.Env = append(container.Env, *envVar)
+	}
 }
 
 // ListPodsByLabel Get a PodList by label.
@@ -283,4 +360,12 @@ func GetOmeContainerIndex(containers []v1.Container) int {
 		}
 	}
 	return -1
+}
+
+func GetBaseModelVendor(baseModel v1beta1.BaseModelSpec) string {
+	baseModelVendor := "Unknown"
+	if baseModel.Vendor != nil {
+		baseModelVendor = *baseModel.Vendor
+	}
+	return baseModelVendor
 }

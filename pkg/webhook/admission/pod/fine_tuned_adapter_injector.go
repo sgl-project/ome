@@ -72,7 +72,7 @@ func (fa *FineTunedAdapterInjector) injectFineTunedAdapter(pod *v1.Pod) error {
 
 	modelInitMounts := fa.getVolumeMounts(pod)
 
-	fineTunedWeightUri, _ := fa.getFineTunedWeightUri()
+	fineTunedWeightUri, _ := fa.getFineTunedWeightUri(pod)
 
 	initEnvs, err := fa.getModelInitEnvs(pod, fineTunedWeightUri)
 	if err != nil {
@@ -94,15 +94,15 @@ func (fa *FineTunedAdapterInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMoun
 	mounts := []v1.VolumeMount{}
 
 	fineTunedWeightVolumeMount := v1.VolumeMount{
-		Name:      constants.EmptyDirVolumeSourceName,
-		MountPath: constants.InitContainerModelFinalDefaultPath,
+		Name:      constants.ModelEmptyDirVolumeName,
+		MountPath: fa.getFineTunedWeightVolumeMountPath(pod),
 		ReadOnly:  false,
+		SubPath:   fa.getFineTunedWeightVolumeMountSubPath(pod),
 	}
 	fineTunedWeightDownloadMount := v1.VolumeMount{
-		Name:      constants.EmptyDirVolumeSourceName,
-		MountPath: constants.FineTunedModelDownloadDefaultMountPath,
+		Name:      constants.ModelEmptyDirVolumeName,
+		MountPath: constants.FineTunedWeightDownloadMountPath,
 		ReadOnly:  false,
-		SubPath:   constants.FineTunedModelDownloadDefaultSubPath,
 	}
 
 	mounts = append(mounts, fineTunedWeightDownloadMount)
@@ -113,7 +113,7 @@ func (fa *FineTunedAdapterInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMoun
 // createInitContainer constructs the init container configuration.
 func (fa *FineTunedAdapterInjector) createInitContainer(envs []v1.EnvVar, mounts []v1.VolumeMount, securityContext *v1.SecurityContext) *v1.Container {
 	return &v1.Container{
-		Name:                     constants.ModelInitContainerName,
+		Name:                     constants.FineTunedAdapterContainerName,
 		Image:                    fa.Image,
 		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 		Env:                      envs,
@@ -134,7 +134,7 @@ func (fa *FineTunedAdapterInjector) createInitContainer(envs []v1.EnvVar, mounts
 }
 
 // getFineTunedWeightUri retrieves the fine-tuned weight uri from the fine-tuned weight CR
-func (fa *FineTunedAdapterInjector) getFineTunedWeightUri() (*storage.OCIStorageComponents, error) {
+func (fa *FineTunedAdapterInjector) getFineTunedWeightUri(pod *v1.Pod) (*storage.OCIStorageComponents, error) {
 	fineTunedWeight, err := isvcutils.GetFineTunedWeight(fa.client, fa.fineTunedWeightName)
 	if err != nil {
 		return nil, err
@@ -143,6 +143,11 @@ func (fa *FineTunedAdapterInjector) getFineTunedWeightUri() (*storage.OCIStorage
 	osUri, err := storage.ParseOCIStorageURI(*fineTunedWeight.Spec.Storage.StorageUri)
 	if err != nil {
 		return nil, err
+	}
+
+	if mergedFineTunedWeights := pod.ObjectMeta.Annotations[constants.FTServingWithMergedWeightsAnnotationKey]; mergedFineTunedWeights == "true" {
+		osUri.Prefix = fmt.Sprintf("%s%s", osUri.Prefix, constants.MergedModelWeightZippedFileSuffix)
+		osUri.ObjectName = fmt.Sprintf("%s%s", osUri.ObjectName, constants.MergedModelWeightZippedFileSuffix)
 	}
 
 	return osUri, nil
@@ -154,8 +159,8 @@ func (fa *FineTunedAdapterInjector) getModelInitEnvs(pod *v1.Pod, fineTunedWeigh
 		{Name: constants.AgentAuthTypeEnvVarKey, Value: fa.AuthType},
 		{Name: constants.AgentCompartmentIDEnvVarKey, Value: fa.CompartmentId},
 		{Name: constants.AgentRegionEnvVarKey, Value: fa.Region},
-		{Name: constants.AgentUnzippedFineTunedWeightDirectory, Value: constants.InitContainerModelFinalDefaultPath},
-		{Name: constants.AgentZippedFineTunedWeightDirectory, Value: constants.FineTunedModelDownloadDefaultMountPath},
+		{Name: constants.AgentUnzippedFineTunedWeightDirectory, Value: fa.getFineTunedWeightVolumeMountPath(pod)},
+		{Name: constants.AgentZippedFineTunedWeightDirectory, Value: constants.FineTunedWeightDownloadMountPath},
 		{Name: constants.AgentModelBucketNameEnvVarKey, Value: fineTunedWeightUri.Bucket},
 		{Name: constants.AgentModelNamespaceEnvVarKey, Value: fineTunedWeightUri.Namespace},
 		{Name: constants.AgentModelObjectName, Value: fineTunedWeightUri.Prefix},
@@ -164,10 +169,10 @@ func (fa *FineTunedAdapterInjector) getModelInitEnvs(pod *v1.Pod, fineTunedWeigh
 	return envVars, nil
 }
 
-// containerExists checks if the Model Init container is already in the pod.
+// containerExists checks if the fine-tuned adapter container is already in the pod.
 func (fa *FineTunedAdapterInjector) containerExists(pod *v1.Pod) bool {
 	for _, container := range pod.Spec.InitContainers {
-		if container.Name == constants.ModelInitContainerName {
+		if container.Name == constants.FineTunedAdapterContainerName {
 			return true
 		}
 	}
@@ -204,4 +209,22 @@ func (fa *FineTunedAdapterInjector) getMainContainerSecurityContext(pod *v1.Pod)
 		}
 	}
 	return nil, fmt.Errorf("no main container %s specified", constants.MainContainerName)
+}
+
+func (fa *FineTunedAdapterInjector) getFineTunedWeightVolumeMountPath(pod *v1.Pod) string {
+	if isvcutils.IsCohereCommand1TFewFTServing(&pod.ObjectMeta) {
+		return constants.CohereTFewFineTunedWeightVolumeMountPath
+	} else {
+		return constants.ModelDefaultMountPath
+	}
+}
+
+func (fa *FineTunedAdapterInjector) getFineTunedWeightVolumeMountSubPath(pod *v1.Pod) string {
+	if pod.ObjectMeta.Annotations[constants.BaseModelFormat] == constants.TensorRTLLM {
+		return constants.TensorRTModelVolumeMountSubPath
+	}
+	if isvcutils.IsCohereCommand1TFewFTServing(&pod.ObjectMeta) {
+		return constants.FineTunedWeightVolumeMountSubPath
+	}
+	return ""
 }

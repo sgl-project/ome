@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ft-serving-cohere-command-light-vanilla-v14-2
+  namespace: amaaaaaabgjpxjqatv6m5gib3hdwg4zdze4wdkipnkg3ofkkvjhnadgv24ha
+spec:
+  predictor:
+    maxReplicas: 1
+    minReplicas: 1
+    model:
+      baseModel: cohere-command-medium
+      fineTunedWeights:
+        - amaaaaaabgjpxjqalw2iwuqfgotw2ffpj4mdu2osfv2yvx35kgamrhtnufrq # a fine-tuned model weight trained against ft base model 6b-v14-2-gen using Vanilla FT strategy
+      protocolVersion: cohere
+      # runtime: cohere-command-1-small # Comment runtime for runtime auto-selection

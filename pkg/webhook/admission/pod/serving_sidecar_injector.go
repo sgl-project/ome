@@ -125,18 +125,18 @@ func (ss *ServingSidecarInjector) getFineTunedWeightFTStrategy(pod *v1.Pod) (str
 func (ss *ServingSidecarInjector) getVolumeMounts(pod *v1.Pod, fineTunedWeightFTStrategy string) []v1.VolumeMount {
 	servingSidecarMounts := []v1.VolumeMount{}
 
-	fineTunedWeightMountPath := filepath.Join(constants.FineTunedModelDefaultPathPrefix, fineTunedWeightFTStrategy)
+	fineTunedWeightMountPath := filepath.Join(constants.ModelDefaultMountPathPrefix, fineTunedWeightFTStrategy)
 	fineTunedWeightVolumeMount := v1.VolumeMount{
-		Name:      constants.EmptyDirVolumeSourceName,
+		Name:      constants.ModelEmptyDirVolumeName,
 		MountPath: fineTunedWeightMountPath,
 		ReadOnly:  false,
-		SubPath:   constants.FineTunedModelFinalDefaultSubPath,
+		SubPath:   constants.FineTunedWeightVolumeMountSubPath,
 	}
 	fineTunedWeightDownloadMount := v1.VolumeMount{
-		Name:      constants.EmptyDirVolumeSourceName,
-		MountPath: constants.FineTunedModelDownloadDefaultMountPath,
+		Name:      constants.ModelEmptyDirVolumeName,
+		MountPath: constants.FineTunedWeightDownloadMountPath,
 		ReadOnly:  false,
-		SubPath:   constants.FineTunedModelDownloadDefaultSubPath,
+		SubPath:   constants.FineTunedWeightDownloadVolumeMountSubPath,
 	}
 
 	servingSidecarMounts = append(servingSidecarMounts, fineTunedWeightDownloadMount)
@@ -150,8 +150,8 @@ func (ss *ServingSidecarInjector) getServingSidecarEnvs(fineTunedWeightFTStrateg
 		{Name: constants.AgentCompartmentIDEnvVarKey, Value: ss.CompartmentId},
 		{Name: constants.AgentRegionEnvVarKey, Value: ss.Region},
 		{Name: constants.AgentFineTunedWeightInfoFilePath, Value: constants.AgentFineTunedWeightInfoFilePath},
-		{Name: constants.AgentUnzippedFineTunedWeightDirectory, Value: filepath.Join(constants.FineTunedModelDefaultPathPrefix, fineTunedWeightFTStrategy)},
-		{Name: constants.AgentZippedFineTunedWeightDirectory, Value: constants.FineTunedModelDownloadDefaultMountPath},
+		{Name: constants.AgentUnzippedFineTunedWeightDirectory, Value: filepath.Join(constants.ModelDefaultMountPathPrefix, fineTunedWeightFTStrategy)},
+		{Name: constants.AgentZippedFineTunedWeightDirectory, Value: constants.FineTunedWeightDownloadMountPath},
 	}
 
 	return envVars

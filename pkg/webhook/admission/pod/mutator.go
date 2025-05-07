@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,6 +119,18 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 			return err
 		}
 	}
+
+	// Now sort InitContainers to ensure the order (Model Init must run before FineTuned Adapter)
+	sort.SliceStable(pod.Spec.InitContainers, func(i, j int) bool {
+		// Logic to ensure Model Init runs first, then FineTuned Adapter
+		if pod.Spec.InitContainers[i].Name == constants.ModelInitContainerName && pod.Spec.InitContainers[j].Name == constants.FineTunedAdapterContainerName {
+			return true // Model Init must come first
+		}
+		if pod.Spec.InitContainers[i].Name == constants.FineTunedAdapterContainerName && pod.Spec.InitContainers[j].Name == constants.ModelInitContainerName {
+			return false // FineTuned Adapter must come second
+		}
+		return i < j // For all other containers, retain original order
+	})
 
 	return nil
 }

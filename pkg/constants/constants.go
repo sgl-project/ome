@@ -155,9 +155,11 @@ var (
 	ServingSidecarInjectionKey               = OMEAPIGroupName + "/inject-serving-sidecar"
 	FineTunedWeightFTStrategyKey             = OMEAPIGroupName + "/fine-tuned-weight-ft-strategy"
 	BaseModelName                            = OMEAPIGroupName + "/base-model-name"
+	BaseModelVendorAnnotationKey             = OMEAPIGroupName + "/base-model-vendor"
 	ServingRuntimeKeyName                    = OMEAPIGroupName + "/serving-runtime"
 	BaseModelFormat                          = OMEAPIGroupName + "/base-model-format"
 	BaseModelFormatVersion                   = OMEAPIGroupName + "/base-model-format-version"
+	FTServingWithMergedWeightsAnnotationKey  = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
 	ServiceType                              = OMEAPIGroupName + "/service-type"
 	LoadBalancerIP                           = OMEAPIGroupName + "/load-balancer-ip"
 	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
@@ -195,6 +197,11 @@ var (
 	InferenceServiceBaseModelNameLabelKey = "base-model-name"
 	InferenceServiceBaseModelSizeLabelKey = "base-model-size"
 	BaseModelTypeLabelKey                 = "base-model-type"
+	BaseModelVendorLabelKey               = "base-model-vendor"
+	FTServingLabelKey                     = "fine-tuned-serving"
+	FTServingWithMergedWeightsLabelKey    = "fine-tuned-serving-with-merged-weights"
+	ServingRuntimeLabelKey                = "serving-runtime"
+	FineTunedWeightFTStrategyLabelKey     = "fine-tuned-weight-ft-strategy"
 )
 
 // PrioriryClass
@@ -370,6 +377,13 @@ const (
 	ContainerPrometheusMetricsPortEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PORT"
 	ContainerPrometheusMetricsPathEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PATH"
 	QueueProxyAggregatePrometheusMetricsPortEnvVarKey = "AGGREGATE_PROMETHEUS_METRICS_PORT"
+
+	// Cohere specific
+	TFewWeightPathEnvVarKey = "TFEW_PATH"
+
+	// Llama specific
+	ModelPathEnvVarKey       = "MODEL_PATH"
+	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
 )
 
 type InferenceServiceComponent string
@@ -446,6 +460,7 @@ const (
 	MultiNodeProberContainerName    = "multinode-prober"
 	StorageInitializerContainerName = "storage-initializer"
 	ModelInitContainerName          = "model-init"
+	FineTunedAdapterContainerName   = "fine-tuned-adapter"
 	ServingSidecarContainerName     = "serving-sidecar"
 	MultiNodeProberContainerPort    = 8080
 	DACMainTaskName                 = "reservation"
@@ -477,15 +492,24 @@ const (
 
 // Cohere volume mount paths
 const (
-	EmptyDirVolumeSourceName               = "model-empty-dir"
-	InitContainerModelSourceDefaultPath    = "/mnt/model"
-	InitContainerModelFinalDefaultPath     = "/opt/ml/model"
-	ContainerModelFinalDefaultSubPath      = "base"
-	FineTunedModelDownloadDefaultMountPath = "/mnt/finetuned/download"
-	FineTunedModelDownloadDefaultSubPath   = "download"
-	FineTunedModelFinalDefaultSubPath      = "finetuned"
-	FineTunedModelDefaultPathPrefix        = "/opt/ml"
-	FineTunedModelInfoFilePath             = "/mnt/ft-model-info.json"
+	ModelEmptyDirVolumeName                   = "model-empty-dir"
+	ModelDefaultSourcePath                    = "/mnt/model"
+	ModelDefaultMountPathPrefix               = "/opt/ml"
+	ModelDefaultMountPath                     = "/opt/ml/model"
+	FineTunedWeightDownloadMountPath          = "/mnt/finetuned/download"
+	CohereTFewFineTunedWeightVolumeMountPath  = "/opt/ml/tfew"
+	CohereTFewFineTunedWeightDefaultPath      = "/opt/ml/tfew/fastertransformer/1"
+	FineTunedWeightInfoFilePath               = "/mnt/ft-model-info.json"
+	BaseModelVolumeMountSubPath               = "base"
+	FineTunedWeightDownloadVolumeMountSubPath = "download"
+	FineTunedWeightVolumeMountSubPath         = "finetuned"
+	TensorRTModelVolumeMountSubPath           = "tensorrt_llm"
+)
+
+// Constants used for inference container arguments
+const (
+	LLamaVllmServedModelNameArgName         = "--served-model-name"
+	LLamaVllmFTServingServedModelNamePrefix = "/data"
 )
 
 // DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
@@ -669,6 +693,14 @@ const (
 	CohereCommandRTrainingSidecar TrainingSidecarRuntime = "cohere-commandr"
 )
 
+type TrainingRuntimeType string
+
+const (
+	PeftTrainingRuntime            TrainingRuntimeType = "peft"
+	CohereCommand1TrainingRuntime  TrainingRuntimeType = "cohere"
+	CohereCommandRTrainingTraining TrainingRuntimeType = "cohere-commandr"
+)
+
 // Training sidecar env variable key names and config key names
 
 var (
@@ -719,7 +751,6 @@ var (
 	ModelSizeConfigKey                     = "modelSize"
 	StrategyEnvVarKey                      = AgentAppName + "_" + "COHERE_FT_STRATEGY"
 	StrategyConfigKey                      = "strategy"
-	TrainingConfigTypeConfigKey            = "trainingConfigType"
 	CohereTrainingSidecarNameEnvVarKey     = AgentAppName + "_" + "COHERE_FT_NAME"
 	CohereLearningRateEnvVarKey            = AgentAppName + "_" + "COHERE_FT_LEARNING_RATE"
 	CohereBatchSizeEnvVarKey               = AgentAppName + "_" + "COHERE_FT_TRAIN_BATCH_SIZE"
@@ -863,6 +894,20 @@ const (
 
 	// TorchEnvMasterPort is the env name for the master node port.
 	TorchEnvMasterPort string = "PET_MASTER_PORT"
+)
+
+// FineTunedWeight related constants
+const (
+	FineTunedWeightMergedWeightsConfigKey = "merged_weights"
+	StackedServingConfigKey               = "stacked_serving"
+)
+
+type ModelVendor string
+
+const (
+	Meta   ModelVendor = "meta"
+	Cohere ModelVendor = "cohere"
+	OpenAI ModelVendor = "openai"
 )
 
 var (

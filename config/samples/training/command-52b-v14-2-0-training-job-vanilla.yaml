@@ -23,7 +23,7 @@ spec:
         "totalTrainingEpochs": "3",
         "earlyStoppingPatience": "6",
         "earlyStoppingThreshold": "0.01",
-        "learningRate": "0.01",
+        "learningRate": "0.0000006",
         "logModelMetricsIntervalInSteps": "10",
-        "nLastLayers": "0"
+        "nLastLayers": "15"
       }

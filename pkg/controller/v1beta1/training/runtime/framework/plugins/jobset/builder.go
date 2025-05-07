@@ -319,7 +319,7 @@ func getVolumeMounts(runtime string, trainJob *omev1beta1.TrainingJob) []corev1.
 	} else {
 		finetunedModelName := utils.GetFineTunedModelName(trainJob.Name)
 		modelEmptyDirVolumeMount := corev1.VolumeMount{
-			Name:      constants.EmptyDirVolumeSourceName,
+			Name:      constants.ModelEmptyDirVolumeName,
 			MountPath: filepath.Join(constants.CohereStorePathPrefix, finetunedModelName),
 			ReadOnly:  false,
 		}

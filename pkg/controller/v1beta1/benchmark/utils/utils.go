@@ -125,7 +125,7 @@ func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container,
 		ReadOnly:  true,
 	}
 
-	isvcutils.UpdateVolumeMounts(container, &volumeMount)
+	isvcutils.AppendVolumeMount(container, &volumeMount)
 	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
 		{Name: "MODEL_PATH", Value: *baseModel.Storage.Path},
 	})

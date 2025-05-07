@@ -175,7 +175,7 @@ func (r *TrainingRuntime) getPodVolumes(trainJob *omev1beta1.TrainingJob, vendor
 
 	if *vendor == "cohere" {
 		emptyDirModelVolumeInitContainer := corev1.Volume{
-			Name: constants.EmptyDirVolumeSourceName,
+			Name: constants.ModelEmptyDirVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{
 					Medium: corev1.StorageMediumMemory,

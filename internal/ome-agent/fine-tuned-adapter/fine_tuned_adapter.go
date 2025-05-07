@@ -31,15 +31,16 @@ func NewFineTunedAdapter(config *Config) (*FineTunedAdapter, error) {
 func (m *FineTunedAdapter) Start() error {
 	m.logger.Infof("Start downloading the fine-tuned weight")
 
-	err := os.MkdirAll(m.Config.zippedFineTunedWeightDirectory, os.ModePerm)
+	err := os.MkdirAll(m.Config.ZippedFineTunedWeightDirectory, os.ModePerm)
 	if err != nil {
+		m.logger.Errorf("Failed to create zipped fine-tuned model directory %s", m.Config.ZippedFineTunedWeightDirectory)
 		return err
 	}
 
 	// 1. Download the fine-tuned weight
 	err = m.Config.ObjectStorageDataStore.DownloadBasedOnObjectSize(
 		*m.Config.FineTunedWeightURI,
-		m.Config.zippedFineTunedWeightDirectory,
+		m.Config.ZippedFineTunedWeightDirectory,
 		true,
 		int(BigFileSizeInMB),
 		int(DefaultDownloadChunkSizeInMB),
@@ -49,12 +50,12 @@ func (m *FineTunedAdapter) Start() error {
 		return err
 	}
 
-	fineTunedWeightPath := filepath.Join(m.Config.unzippedFineTunedWeightDirectory, casper.ExtractPureObjectName(m.Config.FineTunedWeightURI.ObjectName))
+	fineTunedWeightPath := filepath.Join(m.Config.ZippedFineTunedWeightDirectory, casper.ExtractPureObjectName(m.Config.FineTunedWeightURI.ObjectName))
 	m.logger.Infof("Finished downloading the fine-tuned weight %s", m.Config.FineTunedWeightURI.ObjectName)
 
 	// 2. Unzip the fine-tuned weight to the required path
 	m.logger.Infof("Start unzipping the fine-tuned weight %s", m.Config.FineTunedWeightURI.ObjectName)
-	err = zipper.Unzip(fineTunedWeightPath, m.Config.unzippedFineTunedWeightDirectory)
+	err = zipper.Unzip(fineTunedWeightPath, m.Config.UnzippedFineTunedWeightDirectory)
 	if err != nil {
 		return err
 	}

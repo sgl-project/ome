@@ -130,7 +130,7 @@ func getPodVolumes(vendor *string) []corev1.Volume {
 	// Create EmptyDir volume for model, only for cohere training init container
 	if *vendor == "cohere" {
 		emptyDirModelVolume := corev1.Volume{
-			Name: constants.EmptyDirVolumeSourceName,
+			Name: constants.ModelEmptyDirVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{
 					Medium: corev1.StorageMediumMemory,

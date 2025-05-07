@@ -206,7 +206,7 @@ type FineTunedWeightSpec struct {
 	HyperParameters runtime.RawExtension `json:"hyperParameters,omitempty"`
 
 	// ModelExtension is the common extension of the model
-	ModelExtension ModelExtensionSpec `json:",inline"`
+	ModelExtensionSpec `json:",inline"`
 
 	// Configuration of the fine-tuned weight, stored as generic JSON for flexibility
 	// +optional
