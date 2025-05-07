@@ -718,28 +718,31 @@ func (p *Predictor) updateEnvVariables(
 	container *v1.Container,
 	baseModel *v1beta1.BaseModelSpec,
 	objectMeta *metav1.ObjectMeta) {
-	if baseModel.Vendor == nil {
-		p.Log.Info("Warning: no vendor given in base model spec - no env var added/updated")
-	} else if *baseModel.Vendor == string(constants.Meta) {
-		modelMountPath := *baseModel.Storage.Path
-		if p.fineTunedServing {
-			// For FT serving case, update model mount path and served model name
-			modelMountPath = constants.ModelDefaultMountPath
-
+	if !p.fineTunedServing {
+		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
+			p.Log.Info("Base model serving - adding Model_PATH env variable", "inference service", isvc.Name, "namespace", isvc.Namespace, "base model", isvc.Spec.Model.Name)
+			isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+				{Name: constants.ModelPathEnvVarKey, Value: *baseModel.Storage.Path},
+			})
+		}
+	} else {
+		if baseModel.Vendor == nil {
+			p.Log.Info("Warning: no vendor given in base model spec - no env var added/updated")
+		} else if *baseModel.Vendor == string(constants.Meta) {
 			isvcutils.UpdateEnvVars(container, &v1.EnvVar{
 				Name: constants.ServedModelNameEnvVarKey, Value: filepath.Join(
 					constants.LLamaVllmFTServingServedModelNamePrefix,
 					objectMeta.Annotations[constants.FineTunedAdapterInjectionKey])},
 			)
-		}
-		isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-			{Name: constants.ModelPathEnvVarKey, Value: modelMountPath},
-		})
-	} else if *baseModel.Vendor == string(constants.Cohere) {
-		if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
 			isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-				{Name: constants.TFewWeightPathEnvVarKey, Value: constants.CohereTFewFineTunedWeightDefaultPath},
+				{Name: constants.ModelPathEnvVarKey, Value: constants.ModelDefaultMountPath},
 			})
+		} else if *baseModel.Vendor == string(constants.Cohere) {
+			if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
+				isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+					{Name: constants.TFewWeightPathEnvVarKey, Value: constants.CohereTFewFineTunedWeightDefaultPath},
+				})
+			}
 		}
 	}
 }
