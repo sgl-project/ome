@@ -240,7 +240,7 @@ func main() {
 		{ray.SchemeGroupVersion, constants.RayClusterKind, ray.AddToScheme},
 		{knservingv1.SchemeGroupVersion, constants.KnativeServiceKind, knservingv1.AddToScheme},
 		{lws.SchemeGroupVersion, constants.LWSKind, lws.AddToScheme},
-		{volcano.SchemeGroupVersion, constants.VolcanoQueue, volcano.AddToScheme},
+		{volcano.SchemeGroupVersion, constants.VolcanoQueueKind, volcano.AddToScheme},
 		{volcanobatch.SchemeGroupVersion, constants.VolcanoJobKind, volcanobatch.AddToScheme},
 		{kedav1.SchemeGroupVersion, constants.KEDAScaledObjectKind, kedav1.AddToScheme},
 	}
