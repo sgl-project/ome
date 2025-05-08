@@ -364,3 +364,11 @@ grok-3:
 grok-3-mini:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+grok-3-fast:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-mini-fast:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
