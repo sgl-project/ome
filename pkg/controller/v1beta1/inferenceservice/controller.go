@@ -365,7 +365,8 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
 		Owns(&v1.PersistentVolume{}).
-		Owns(&v1.PersistentVolumeClaim{})
+		Owns(&v1.PersistentVolumeClaim{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{})
 
 	if ksvcFound {
 		ctrlBuilder = ctrlBuilder.Owns(&knservingv1.Service{})
@@ -396,11 +397,6 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	} else {
 		r.Log.Info("The InferenceService controller won't watch networking.istio.io/v1beta1/VirtualService resources because the CRD is not available.")
 	}
-
-	// Watch both KEDA ScaledObject and Kubernetes HPA resources
-	ctrlBuilder = ctrlBuilder.
-		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Owns(&kedav1.ScaledObject{})
 
 	return ctrlBuilder.Complete(r)
 }

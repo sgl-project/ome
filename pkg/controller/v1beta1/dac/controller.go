@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusters,verbs=get;list;watch;create;update;patch;delete
@@ -702,11 +703,19 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 		}
 	})
 
-	return ctrl.NewControllerManagedBy(mgr).
+	volcanoJobFound, err := generalutils.IsCrdAvailable(r.ClientConfig, volbatchv1alpha1.SchemeGroupVersion.String(), constants.VolcanoJobKind)
+	if err != nil {
+		return err
+	}
+
+	volcanoQueueFound, err := generalutils.IsCrdAvailable(r.ClientConfig, schedulingv1beta1.SchemeGroupVersion.String(), constants.VolcanoQueueKind)
+	if err != nil {
+		return err
+	}
+
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta2.DedicatedAICluster{}).
 		Owns(&corev1.Namespace{}).
-		Owns(&schedulingv1beta1.Queue{}).
-		Owns(&volbatchv1alpha1.Job{}).
 		Owns(&kueuev1beta1.ClusterQueue{}).
 		Owns(&kueuev1beta1.LocalQueue{}).
 		Owns(&appsv1.Deployment{}).
@@ -717,6 +726,19 @@ func (r *DedicatedAIClusterReconciler) SetupWithManager(mgr ctrl.Manager, dacRec
 		Watches(
 			&v1beta2.TrainingJob{},
 			eventHandler,
-			builder.WithPredicates(predicates)).
-		Complete(r)
+			builder.WithPredicates(predicates))
+
+	if volcanoJobFound {
+		ctrlBuilder.Owns(&volbatchv1alpha1.Job{})
+	} else {
+		r.Log.Info("The DAC controller won't watch batch.volcano.sh/v1alpha1/Job resources because the CRD is not available.")
+	}
+
+	if volcanoQueueFound {
+		ctrlBuilder.Owns(&schedulingv1beta1.Queue{})
+	} else {
+		r.Log.Info("The DAC controller won't watch scheduling.volcano.sh/v1beta1/Queue resources because the CRD is not available.")
+	}
+
+	return ctrlBuilder.Complete(r)
 }
