@@ -48,7 +48,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.4.post1.c78ab524-fastapi-fix
       ports:
         - containerPort: 8080
           name: http1
@@ -67,7 +67,6 @@ spec:
           --served-model-name=vllm-model \
           --tensor-parallel-size=1 \
           --gpu-memory-utilization=0.8 \
-          --embedding-mode \
           --enforce-eager \
       volumeMounts:
         - mountPath: /dev/shm

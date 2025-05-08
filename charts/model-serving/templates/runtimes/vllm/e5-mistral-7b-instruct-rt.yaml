@@ -57,7 +57,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.e5_mistral_7b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.e5_mistral_7b_instruct.image.tag | default .Values.vllm.commonImage.tag }}
+      image: {{ .Values.e5_mistral_7b_instruct.image.repository | default .Values.vllm.latestImage.repository }}:{{ .Values.e5_mistral_7b_instruct.image.tag | default .Values.vllm.latestImage.tag }}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1
@@ -76,7 +76,6 @@ spec:
           --served-model-name={{ .Values.vllm.serveModelName }} \
           --tensor-parallel-size=1 \
           --gpu-memory-utilization=0.8 \
-          --embedding-mode \
           --enforce-eager \
       volumeMounts:
         - mountPath: /dev/shm
