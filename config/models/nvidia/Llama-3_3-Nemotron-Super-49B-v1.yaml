@@ -28,7 +28,7 @@ spec:
     name: safetensors
     version: "1"
   modelArchitecture: DeciLMForCausalLM
-  modelParameterSize: 70B
+  modelParameterSize: 49B
   modelCapabilities:
     - "CHAT"
   maxTokens: 131072
