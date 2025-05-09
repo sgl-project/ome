@@ -56,6 +56,11 @@ replacements:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.io
   - fieldPaths:
+    - webhooks.*.clientConfig.service.name
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: capacityreservation.ome.io
+  - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
     options:
@@ -96,6 +101,11 @@ replacements:
     select:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.io
+  - fieldPaths:
+    - webhooks.*.clientConfig.service.namespace
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: capacityreservation.ome.io
   - fieldPaths:
     - spec.commonName
     - spec.dnsNames.0
@@ -154,6 +164,14 @@ replacements:
     select:
       kind: ValidatingWebhookConfiguration
       name: servingruntime.ome.io
+  - fieldPaths:
+    - metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      delimiter: '/'
+      index: 0
+    select:
+      kind: ValidatingWebhookConfiguration
+      name: capacityreservation.ome.io
 
 patches:
 - path: manager_image_patch.yaml
@@ -168,3 +186,4 @@ patches:
 - path: isvc_conversion_webhook.yaml
 - path: cainjection_conversion_webhook.yaml
 - path: benchmarkjob_validationwebhook_cainjection_patch.yaml
+- path: capacityreservation_validationwebhook_cainjection_patch.yaml

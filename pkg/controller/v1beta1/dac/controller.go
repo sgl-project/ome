@@ -19,6 +19,7 @@ import (
 	nsreconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/namespace"
 	volcanoJobReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/volcanojob"
 	queueReconciler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/reconcilers/volcanoqueue"
+	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	volbatchv1alpha1 "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
-	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=dedicatedaiclusters,verbs=get;list;watch;create;update;patch;delete

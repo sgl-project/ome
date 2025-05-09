@@ -1,0 +1,8 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: capacityreservation.ome.io
+  annotations:
+    cert-manager.io/inject-ca-from: $(omeNamespace)/serving-cert
+webhooks:
+  - name: capacityreservation.ome-webhook-server.validator 

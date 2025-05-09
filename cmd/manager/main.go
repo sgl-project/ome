@@ -8,28 +8,24 @@ import (
 	"net/http"
 	"os"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/isvc"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
-
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/project"
 	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/serviceaccount"
 	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
 	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
 	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
 	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/benchmark"
+	capacityreservation "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/capacityreservation"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/isvc"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/pod"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/servingruntime"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/webhook/admission/training"
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	zaplog "go.uber.org/zap"
@@ -55,6 +51,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
 	volcanobatch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
@@ -397,6 +394,11 @@ func main() {
 		setupLog.Info("Registering benchmark job validator webhook to the webhook server")
 		hookServer.Register("/validate-ome-io-v1beta1-benchmarkjob", &webhook.Admission{
 			Handler: &benchmark.BenchmarkJobValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
+		})
+
+		setupLog.Info("Registering capacity reservation validator webhook to the webhook server")
+		hookServer.Register("/validate-ome-io-v1beta1-capacityreservation", &webhook.Admission{
+			Handler: &capacityreservation.CapacityReservationValidator{Client: mgr.GetClient(), Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
