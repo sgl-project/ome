@@ -9,16 +9,46 @@ resources:
   - agent/nl2rqs-7b-v3.yaml
   - agent/nl2rqs-7b-v4.yaml
   - agent/nl2sql-m1-base-7b.yaml
+  - cohere/6b-v14-2-gen.yaml
+  - cohere/6b-v15-6-gen.yaml
+  - cohere/52b-v14-2-gen.yaml
+  - cohere/52b-v15-6-gen.yaml
+  - cohere/cohere-rerank.yaml
+  - cohere/command2-35b-v19-0-0-float32-v1-2-16k-ft.yaml
+  - cohere/command2-35b-v20-1-0-float32-v1-7-16k-ft.yaml
+  - cohere/command-1-6b-v14-2-0.yaml
+  - cohere/command-1-6b-v15-6-0.yaml
+  - cohere/command-1-52b-v14-2-0.yaml
+  - cohere/command-1-52b-v15-6-0.yaml
+  - cohere/command-1-52b-v16-0-0.yaml
+  - cohere/command-1-v15-6-0-trt.yaml
+  - cohere/command-1-v15-6-1-trt.yaml
+  - cohere/command-1-v16-0-0-trt.yaml
+  - cohere/command-a-032025.yaml
+  - cohere/command-a-032025-drcc.yaml
+  - cohere/command-r-082024-v1-6-tp4-128k.yaml
+  - cohere/command-r-082024-v1-7-tp1-16k.yaml
   - cohere/command-r-082024-v1-7-tp1-128k.yaml
   - cohere/command-r-bs128-16k.yaml
   - cohere/command-r-plus-082024-v1-6-128k.yaml
   - cohere/command-r-plus-v1-2.yaml
   - cohere/command-r-v1-2-16k.yaml
+  - cohere/command-r-v1-3-16k.yaml
+  - cohere/command-r-v1-6-16k.yaml
+  - cohere/command-r-plus-v1-6-128k.yaml
   - cohere/embed-english-light-v2-0.yaml
   - cohere/embed-english-light-v3-0.yaml
   - cohere/embed-english-v3-0.yaml
   - cohere/embed-multilingual-light-v3-0.yaml
   - cohere/embed-multilingual-v3-0.yaml
+  - cohere/embed-english-image-v3-0.yaml
+  - cohere/embed-english-light-image-v3-0.yaml
+  - cohere/embed-multilingual-image-v3-0.yaml
+  - cohere/embed-multilingual-light-image-v3-0.yaml
+  - cohere/embed-v4.yaml
+  - cohere/rerank-english-v3-0.yaml
+  - cohere/rerank-multilingual-v3-0.yaml
+  - cohere/rerank-v3-5.yaml
   - meta/Llama-3.1-70B-Instruct.yaml
   - meta/Llama-3.1-405B-Instruct-FP8.yaml
   - meta/Llama-3.2-1B-Instruct.yaml

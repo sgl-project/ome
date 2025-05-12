@@ -25,6 +25,15 @@ spec:
       modelFramework:
         name: onnxruntime
         version: '1'
+    - autoSelect: true
+      modelArchitecture: CohereForCausalLM
+      version: "4.0"
+      modelFormat:
+        name: onnx
+        version: '1'
+      modelFramework:
+        name: onnxruntime
+        version: '1'
   modelSizeRange:
     min: 610M
     max: 690M
