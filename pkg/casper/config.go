@@ -12,12 +12,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Viper keys must match the `mapstructure` tags defined in the Config struct
 const (
-	CasperConfigViperKeyNameKey = "casper_config_viper_prefix"
-
-	/*
-	 * These Viper key name have to be consistent with mapstructure tags in the struct definition
-	 */
 	NameViperKeyName           = "name"
 	AuthTypeViperKeyName       = "auth_type"
 	CompartmentIdViperKeyName  = "compartment_id"
@@ -26,26 +22,28 @@ const (
 	OboTokenViperKeyName       = "obo_token"
 )
 
+// Config holds the configuration parameters required to initialize a CasperDataStore.
+// Fields are populated using `viper`, environment values, or explicitly through Options.
 type Config struct {
-	AnotherLogger  logging.Interface
-	Name           string                         `mapstructure:"name"`
-	AuthType       *principals.AuthenticationType `mapstructure:"auth_type" validate:"required"`
-	CompartmentId  *string                        `mapstructure:"compartment_id"`
-	Region         string                         `mapstructure:"region_override"`
-	EnableOboToken bool                           `mapstructure:"enable_obo_token"`
-	OboToken       string                         `mapstructure:"obo_token" validate:"required_if=EnableOboToken true"`
+	AnotherLogger  logging.Interface              // Optional: Named logger for diagnostics
+	Name           string                         `mapstructure:"name"`                                                 // Name for the configuration (useful in multi-store setup)
+	AuthType       *principals.AuthenticationType `mapstructure:"auth_type" validate:"required"`                        // Authentication method (e.g., instance principal, API key)
+	CompartmentId  *string                        `mapstructure:"compartment_id"`                                       // OCI Compartment OCID
+	Region         string                         `mapstructure:"region_override"`                                      // Optional region override
+	EnableOboToken bool                           `mapstructure:"enable_obo_token"`                                     // Whether OBO token should be used
+	OboToken       string                         `mapstructure:"obo_token" validate:"required_if=EnableOboToken true"` // Token used when OBO is enabled
 }
 
-// Option represents a server configuration option.
+// Option defines a functional configuration override for building a Config.
 type Option func(*Config) error
 
-// Apply applies the given options to the configuration.
+// Apply applies a sequence of configuration options to the Config instance.
+// It returns the first error encountered or nil if all options succeed.
 func (c *Config) Apply(opts ...Option) error {
 	for _, o := range opts {
 		if o == nil {
 			continue
 		}
-
 		if err := o(c); err != nil {
 			return err
 		}
@@ -53,58 +51,57 @@ func (c *Config) Apply(opts ...Option) error {
 	return nil
 }
 
-// NewConfig builds and returns a new configuration from the given options.
+// NewConfig constructs and returns a new Config by applying the given options.
+// Returns an error if any option application fails.
 func NewConfig(opts ...Option) (*Config, error) {
 	c := &Config{}
 	if err := c.Apply(opts...); err != nil {
 		return nil, err
 	}
-
 	return c, nil
 }
 
-// WithViper attempts to resolve the configuration using Viper.
+// WithViper returns a configuration Option that populates the Config fields using Viper.
+// Assumes the config keys match the constants defined above.
 func WithViper(v *viper.Viper) Option {
 	return func(c *Config) error {
-		prefix := v.GetString(CasperConfigViperKeyNameKey)
-		if prefix != "" {
-			prefix = prefix + "."
-		}
+		c.Name = v.GetString(NameViperKeyName)
+		c.CompartmentId = common.String(v.GetString(CompartmentIdViperKeyName))
+		c.Region = v.GetString(RegionViperKeyName)
+		c.EnableOboToken = v.GetBool(EnableOboTokenViperKeyName)
+		c.OboToken = v.GetString(OboTokenViperKeyName)
 
-		c.Name = v.GetString(fmt.Sprintf("%s%s", prefix, NameViperKeyName))
-		c.CompartmentId = common.String(v.GetString(fmt.Sprintf("%s%s", prefix, CompartmentIdViperKeyName)))
-		c.Region = v.GetString(fmt.Sprintf("%s%s", prefix, RegionViperKeyName))
-		c.EnableOboToken = v.GetBool(fmt.Sprintf("%s%s", prefix, EnableOboTokenViperKeyName))
-		c.OboToken = v.GetString(fmt.Sprintf("%s%s", prefix, OboTokenViperKeyName))
-
-		if err := v.UnmarshalKey(fmt.Sprintf("%s%s", prefix, AuthTypeViperKeyName), &c.AuthType); err != nil {
+		if err := v.UnmarshalKey(AuthTypeViperKeyName, &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
 		return nil
 	}
 }
 
-// WithEnv attempts to resolve the configuration using Environment module.
+// WithEnv returns an Option that allows populating the Config from environment variables.
+// Currently a placeholder that returns no error.
 func WithEnv(env *env.Environment) Option {
 	return func(c *Config) error {
+		// Placeholder for future env-based config resolution
 		return nil
 	}
 }
 
-// WithAnotherLog specifies the logger.
+// WithAnotherLog sets the logger to be used by the Config.
+// Returns an error if the logger is nil.
 func WithAnotherLog(logger logging.Interface) Option {
 	return func(c *Config) error {
 		if logger == nil {
 			return errors.New("nil another logger")
 		}
-
 		c.AnotherLogger = logger
 		return nil
 	}
 }
 
+// Validate performs struct validation on the Config using go-playground/validator.
+// Returns an error if required fields or conditions are not satisfied.
 func (c *Config) Validate() error {
-	// Validate by using go-playground validator
 	validate := validator.New()
 	return validate.Struct(c)
 }

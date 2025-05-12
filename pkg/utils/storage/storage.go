@@ -3,6 +3,8 @@ package storage
 import (
 	"fmt"
 	"strings"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 )
 
 const (
@@ -171,4 +173,89 @@ func ValidateStorageURI(uri string) error {
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)
 	}
+}
+
+// NewObjectURI creates a new ObjectURI from a storage URI string
+// Example URI formats:
+// - oci://namespace@region/bucket/prefix
+// - oci://n/namespace/b/bucket/o/prefix
+func NewObjectURI(uriStr string) (*casper.ObjectURI, error) {
+	if !strings.HasPrefix(uriStr, "oci://") {
+		return nil, fmt.Errorf("URI must start with 'oci://'")
+	}
+
+	// Remove the scheme
+	uriStr = strings.TrimPrefix(uriStr, "oci://")
+
+	// Check for the OCI specific format: n/namespace/b/bucket/o/prefix
+	if strings.HasPrefix(uriStr, "n/") {
+		// Format: n/namespace/b/bucket/o/prefix
+		parts := strings.Split(uriStr, "/")
+		if len(parts) < 5 || parts[0] != "n" || parts[2] != "b" {
+			return nil, fmt.Errorf("invalid OCI URI format, expected 'oci://n/namespace/b/bucket/o/prefix': %s", uriStr)
+		}
+
+		namespace := parts[1]
+		bucketName := parts[3]
+
+		// Validate the marker for the object prefix
+		if len(parts) > 4 && parts[4] != "o" {
+			return nil, fmt.Errorf("invalid OCI URI format, expected 'oci://n/namespace/b/bucket/o/prefix': %s", uriStr)
+		}
+
+		// Extract object prefix (everything after "o/")
+		var prefix string
+		if len(parts) > 5 && parts[4] == "o" {
+			prefix = strings.Join(parts[5:], "/")
+		}
+
+		return &casper.ObjectURI{
+			Namespace:  namespace,
+			BucketName: bucketName,
+			Prefix:     prefix,
+		}, nil
+	}
+
+	// Handle different standard formats (from previous fix)
+	var namespace, region, bucketName, prefix string
+
+	// Check if we have a namespace@region format
+	if strings.Contains(uriStr, "@") {
+		parts := strings.SplitN(uriStr, "@", 2)
+		namespace = parts[0]
+
+		// Split the rest into region and bucket/prefix
+		remainingParts := strings.SplitN(parts[1], "/", 2)
+		region = remainingParts[0]
+
+		if len(remainingParts) > 1 {
+			// Split remaining into bucket and prefix
+			bucketPrefixParts := strings.SplitN(remainingParts[1], "/", 2)
+			bucketName = bucketPrefixParts[0]
+
+			if len(bucketPrefixParts) > 1 {
+				prefix = bucketPrefixParts[1]
+			}
+		}
+	} else {
+		// Handle simpler oci://bucket/prefix format
+		parts := strings.SplitN(uriStr, "/", 2)
+		bucketName = parts[0]
+
+		if len(parts) > 1 {
+			prefix = parts[1]
+		}
+	}
+
+	// Ensure we have at least a bucket name
+	if bucketName == "" {
+		return nil, fmt.Errorf("invalid URI format, missing bucket name: %s", uriStr)
+	}
+
+	return &casper.ObjectURI{
+		Namespace:  namespace,
+		BucketName: bucketName,
+		Prefix:     prefix,
+		Region:     region,
+	}, nil
 }

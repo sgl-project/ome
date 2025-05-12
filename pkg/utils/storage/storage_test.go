@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -497,6 +498,110 @@ func TestValidateVendorStorageURI(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestNewObjectURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		expect      *casper.ObjectURI
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid n/namespace/b/bucket/o/prefix",
+			uri:     "oci://n/myns/b/mybucket/o/myprefix",
+			expect:  &casper.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "myprefix"},
+			wantErr: false,
+		},
+		{
+			name:    "valid n/namespace/b/bucket/o/multi/level/prefix",
+			uri:     "oci://n/myns/b/mybucket/o/dir1/dir2/file.txt",
+			expect:  &casper.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "dir1/dir2/file.txt"},
+			wantErr: false,
+		},
+		{
+			name:    "valid namespace@region/bucket/prefix",
+			uri:     "oci://myns@us-phoenix-1/mybucket/myprefix",
+			expect:  &casper.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: "myprefix"},
+			wantErr: false,
+		},
+		{
+			name:    "valid namespace@region/bucket with no prefix",
+			uri:     "oci://myns@us-phoenix-1/mybucket",
+			expect:  &casper.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: ""},
+			wantErr: false,
+		},
+		{
+			name:    "valid bucket/prefix (no namespace/region)",
+			uri:     "oci://mybucket/myprefix",
+			expect:  &casper.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: "myprefix"},
+			wantErr: false,
+		},
+		{
+			name:    "valid bucket only (no namespace/region/prefix)",
+			uri:     "oci://mybucket",
+			expect:  &casper.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: ""},
+			wantErr: false,
+		},
+		{
+			name:        "missing oci scheme",
+			uri:         "n/myns/b/mybucket/o/myprefix",
+			wantErr:     true,
+			errContains: "must start with 'oci://'",
+		},
+		{
+			name:        "malformed n/namespace/b/bucket/o (too short)",
+			uri:         "oci://n/myns/b/mybucket",
+			wantErr:     true,
+			errContains: "invalid OCI URI format",
+		},
+		{
+			name:        "malformed n/namespace/b/bucket/x/extra",
+			uri:         "oci://n/myns/b/mybucket/x/extra",
+			wantErr:     true,
+			errContains: "invalid OCI URI format",
+		},
+		{
+			name:        "namespace@region missing bucket",
+			uri:         "oci://myns@us-phoenix-1",
+			wantErr:     true,
+			errContains: "missing bucket name",
+		},
+		{
+			name:        "empty string",
+			uri:         "",
+			wantErr:     true,
+			errContains: "must start with 'oci://'",
+		},
+		{
+			name:        "oci:// only",
+			uri:         "oci://",
+			wantErr:     true,
+			errContains: "missing bucket name",
+		},
+		{
+			name:    "oci://n/namespace/b/bucket/o/ (empty prefix)",
+			uri:     "oci://n/myns/b/mybucket/o/",
+			expect:  &casper.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: ""},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewObjectURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, "expected error")
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expect, got)
 		})
 	}
 }

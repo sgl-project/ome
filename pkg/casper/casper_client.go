@@ -2,6 +2,8 @@ package casper
 
 import (
 	"fmt"
+	"net/http"
+	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
@@ -26,6 +28,14 @@ func NewObjectStorageClient(configurationProvider common.ConfigurationProvider, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create objectStorageClient: %s", err.Error())
 		}
+	}
+	client.BaseClient.HTTPClient = &http.Client{
+		Timeout: 20 * time.Minute,
+		Transport: &http.Transport{
+			MaxIdleConns:        200,
+			MaxIdleConnsPerHost: 200,
+			MaxConnsPerHost:     200,
+		},
 	}
 
 	if !utils.IsStringEmptyOrWithWhitespaces(config.Region) {

@@ -50,7 +50,8 @@ func NewLogger(config *Config) (*zap.Logger, error) {
 		core = zapcore.NewTee(logCore, consoleCore)
 	}
 
-	return zap.New(core), nil
+	// Add caller information with proper skip level to show actual source file, not zap internal files
+	return zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1)), nil
 }
 
 func constructEncoderAndLevel(config *Config) (zapcore.Encoder, zapcore.Level, error) {

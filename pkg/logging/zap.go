@@ -14,17 +14,33 @@ func (l zapWrapper) WithError(err error) Interface {
 	return zapWrapper{l.logger.With(zap.Error(err))}
 }
 
-func (l zapWrapper) Debug(msg string)                          { l.logger.Debug(msg) }
-func (l zapWrapper) Info(msg string)                           { l.logger.Info(msg) }
-func (l zapWrapper) Warn(msg string)                           { l.logger.Warn(msg) }
-func (l zapWrapper) Error(msg string)                          { l.logger.Error(msg) }
-func (l zapWrapper) Fatal(msg string)                          { l.logger.Fatal(msg) }
-func (l zapWrapper) Debugf(format string, args ...interface{}) { l.logger.Debug(fmtMsg(format, args)) }
-func (l zapWrapper) Infof(format string, args ...interface{})  { l.logger.Info(fmtMsg(format, args)) }
-func (l zapWrapper) Warnf(format string, args ...interface{})  { l.logger.Warn(fmtMsg(format, args)) }
-func (l zapWrapper) Errorf(format string, args ...interface{}) { l.logger.Error(fmtMsg(format, args)) }
-func (l zapWrapper) Fatalf(format string, args ...interface{}) { l.logger.Fatal(fmtMsg(format, args)) }
+// Add Skip parameter to all logging methods to ensure caller information is preserved
+func (l zapWrapper) Debug(msg string) { l.logger.WithOptions(zap.AddCallerSkip(1)).Debug(msg) }
+func (l zapWrapper) Info(msg string)  { l.logger.WithOptions(zap.AddCallerSkip(1)).Info(msg) }
+func (l zapWrapper) Warn(msg string)  { l.logger.WithOptions(zap.AddCallerSkip(1)).Warn(msg) }
+func (l zapWrapper) Error(msg string) { l.logger.WithOptions(zap.AddCallerSkip(1)).Error(msg) }
+func (l zapWrapper) Fatal(msg string) { l.logger.WithOptions(zap.AddCallerSkip(1)).Fatal(msg) }
+func (l zapWrapper) Debugf(format string, args ...interface{}) {
+	l.logger.WithOptions(zap.AddCallerSkip(1)).Debug(fmtMsg(format, args))
+}
+func (l zapWrapper) Infof(format string, args ...interface{}) {
+	l.logger.WithOptions(zap.AddCallerSkip(1)).Info(fmtMsg(format, args))
+}
+func (l zapWrapper) Warnf(format string, args ...interface{}) {
+	l.logger.WithOptions(zap.AddCallerSkip(1)).Warn(fmtMsg(format, args))
+}
+func (l zapWrapper) Errorf(format string, args ...interface{}) {
+	l.logger.WithOptions(zap.AddCallerSkip(1)).Error(fmtMsg(format, args))
+}
+func (l zapWrapper) Fatalf(format string, args ...interface{}) {
+	l.logger.WithOptions(zap.AddCallerSkip(1)).Fatal(fmtMsg(format, args))
+}
 
+// Create Zap logger with caller information enabled
 func ForZap(logger *zap.Logger) Interface {
+	// If caller isn't already enabled, add it
+	if !logger.Core().Enabled(zap.DebugLevel) {
+		logger = logger.WithOptions(zap.AddCaller())
+	}
 	return zapWrapper{logger: logger}
 }

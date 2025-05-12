@@ -68,18 +68,30 @@ spec:
         - name: metrics
           containerPort: 8080
           protocol: TCP
-        args: 
-        - --models-root-dir-on-host
-        - /raid/models
+        args:
         - --models-root-dir
         - /raid/models
         - --num-download-worker
+        - '2'
+        - --download-auth-type
+        - 'InstancePrincipal'
+        - --concurrency
         - '2'
         env:
         - name: NODE_NAME
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: REGION
+          value: eu-frankfurt-1
+        - name: REALM
+          value: OC1
+        - name: COMPARTMENTID
+          value: >-
+            ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq
+        - name: COMPARTMENT_ID
+          value: >-
+            ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq
         volumeMounts:
         - name: host-models
           readOnly: false
@@ -89,12 +101,15 @@ spec:
             path: /livez
             port: 8080
           initialDelaySeconds: 5
-          periodSeconds: 5
+          periodSeconds: 30
+          timeoutSeconds: 20
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
           initialDelaySeconds: 5
+          periodSeconds: 30
+          timeoutSeconds: 20
         resources:
           limits:
             cpu: '10'

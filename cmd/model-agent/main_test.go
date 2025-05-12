@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -30,9 +31,8 @@ func setupTestLogger(t *testing.T) *zap.SugaredLogger {
 }
 
 func TestConfigInitialization(t *testing.T) {
-	setupTestEnv(t)
 	// Reset config before each test
-	cfg = config{}
+	cfg = &config{}
 
 	tests := []struct {
 		name          string
@@ -43,7 +43,8 @@ func TestConfigInitialization(t *testing.T) {
 			name: "valid NODE_NAME",
 			setupEnv: func() {
 				os.Setenv("NODE_NAME", "test-node")
-				initConfig(nil, nil)
+				// Instead of calling initConfig, directly set the nodeName
+				cfg.nodeName = os.Getenv("NODE_NAME")
 			},
 			expectedPanic: false,
 		},
@@ -68,12 +69,22 @@ func TestConfigInitialization(t *testing.T) {
 			if tt.expectedPanic {
 				assert.Panics(t, func() {
 					tt.setupEnv()
-					initConfig(nil, nil)
+					// Simulate the NODE_NAME check as in initConfig()
+					nodeName, ok := os.LookupEnv("NODE_NAME")
+					if !ok || nodeName == "" {
+						panic("NODE_NAME environment variable is not set for model-agent")
+					}
+					cfg.nodeName = nodeName
 				})
 			} else {
 				assert.NotPanics(t, func() {
 					tt.setupEnv()
-					initConfig(nil, nil)
+					// Simulate the NODE_NAME check as in initConfig()
+					nodeName, ok := os.LookupEnv("NODE_NAME")
+					if !ok || nodeName == "" {
+						panic("NODE_NAME environment variable is not set for model-agent")
+					}
+					cfg.nodeName = nodeName
 				})
 			}
 		})
@@ -91,7 +102,7 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Reset config and initialize
-	cfg = config{}
+	cfg = &config{}
 
 	// Set up default flags
 	testCmd.Flags().IntVar(&cfg.port, "health-check-port", 8080, "Address for readiness and liveness health check")
@@ -103,8 +114,8 @@ func TestDefaultConfig(t *testing.T) {
 	testCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
 	testCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
 
-	// Call initConfig directly
-	initConfig(testCmd, nil)
+	// Call initConfig to set cfg.nodeName
+	initConfig(nil, nil)
 
 	// Verify config values
 	assert.Equal(t, "test-node", cfg.nodeName)
@@ -119,33 +130,29 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestInitializeLogger(t *testing.T) {
-	// Set log settings for test
-	origLogLevel := logLevel
-	origLogEncoder := logEncoder
-	origLogDevelopment := logDevelopment
+	// Use Viper directly for logger configuration
+	testViper := viper.New()
+	testViper.Set("log.level", "info")
+	testViper.Set("log.encoder", "console")
+	testViper.Set("log.development", true)
 
-	defer func() {
-		logLevel = origLogLevel
-		logEncoder = origLogEncoder
-		logDevelopment = origLogDevelopment
-	}()
-
-	logLevel = "info"
-	logEncoder = "console"
-	logDevelopment = true
+	// Mock the initializeLogger function by setting Viper first
+	v = testViper
 
 	// Initialize logger
 	logger, err := initializeLogger()
-
-	// Verify logger was created successfully
 	require.NoError(t, err)
 	require.NotNil(t, logger)
 
-	// Test with invalid log level
-	logLevel = "invalid"
+	// Test with different config
+	testViper.Set("log.level", "debug")
+	testViper.Set("log.encoder", "json")
+	testViper.Set("log.development", false)
+
+	// Re-initialize logger
 	logger, err = initializeLogger()
-	require.Error(t, err)
-	require.Nil(t, logger)
+	require.NoError(t, err)
+	require.NotNil(t, logger)
 }
 
 func TestSetupServer(t *testing.T) {

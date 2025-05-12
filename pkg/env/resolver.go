@@ -211,16 +211,21 @@ func (e *resolver) resolveRegion() string {
 	region, err := e.resolveVar(vars.Region)
 	if err != nil {
 		e.config.logger.WithError(err).Warn("region couldn't be resolved")
-		region, exist := os.LookupEnv(constants.AgentRegionEnvVarKey)
-		if exist {
+
+		// Try AgentRegionEnvVarKey
+		if region, exist := os.LookupEnv(constants.AgentRegionEnvVarKey); exist {
 			return region
-		} else {
-			return "<region not resolved>"
 		}
+
+		// Try generic REGION env var
+		if region, exist := os.LookupEnv("REGION"); exist {
+			return region
+		}
+
+		return "<region not resolved>"
 	}
 
-	actualRegion, ok := e.canonicalRegion(region)
-	if ok {
+	if actualRegion, ok := e.canonicalRegion(region); ok {
 		region = actualRegion
 	}
 

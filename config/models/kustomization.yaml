@@ -6,7 +6,6 @@ resources:
   - agent/mistral-7b-instruct-v0-2-ft-action-v0-1-chat.yaml
   - agent/mistral-7b-instruct-v0-2-ft-thought-v0-0-chat.yaml
   - agent/mistral-7b-instruct-v0-2-ft-thought-v0-1-chat.yaml
-  - agent/mixtral-8x7b-instruct-v0-1-chat.yaml
   - agent/nl2rqs-7b-v3.yaml
   - agent/nl2rqs-7b-v4.yaml
   - agent/nl2sql-m1-base-7b.yaml

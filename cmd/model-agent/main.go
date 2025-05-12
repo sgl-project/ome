@@ -7,32 +7,42 @@ import (
 	"net/http"
 	"os"
 
-	"k8s.io/apiserver/pkg/server/healthz"
+	kubeapiserver "k8s.io/apiserver/pkg/server"
+	ctrl "sigs.k8s.io/controller-runtime"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	kubeapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
 // config holds all configuration parameters for the model agent
 type config struct {
-	port                int
-	modelsRootDir       string
-	modelsRootDirOnHost string
-	nodeName            string
-	nodeLabelRetry      int
-	downloadRetry       int
-	downloadAuthType    string
-	numDownloadWorker   int
-	namespace           string
+	port                 int
+	modelsRootDir        string
+	modelsRootDirOnHost  string
+	nodeName             string
+	nodeLabelRetry       int
+	concurrency          int
+	multipartConcurrency int
+	downloadRetry        int
+	downloadAuthType     string
+	numDownloadWorker    int
+	namespace            string
+	logLevel             string
 }
 
 // Logger type alias for zap.SugaredLogger
@@ -40,36 +50,38 @@ type Logger = zap.SugaredLogger
 
 // Global variables
 var (
-	cfg            config
-	logLevel       string
-	logEncoder     string
-	logDevelopment bool
-
 	rootCmd = &cobra.Command{
-		Use:              "start",
-		Short:            "Starts the model agent",
-		Long:             `Starts the model agent to watch the base model custom resources and update the node labels`,
+		Use:              "model-agent",
+		Short:            "Model agent for Open Model Engine",
 		Run:              runCommand,
 		PersistentPreRun: initConfig,
 	}
+	cfg = &config{}
+	v   = viper.New() // Global viper instance for configuration
 )
 
-// init sets up command line flags
+// init sets up command line flags and binds them to Viper
 func init() {
-	// Main configuration flags
-	rootCmd.Flags().IntVar(&cfg.port, "health-check-port", 8080, "Address for readiness and liveness health check")
-	rootCmd.Flags().StringVar(&cfg.modelsRootDirOnHost, "models-root-dir-on-host", "/raid/models", "host's root dir for storing all models")
-	rootCmd.Flags().StringVar(&cfg.modelsRootDir, "models-root-dir", "/raid/models", "folder for all models' root dir for the model-agent")
-	rootCmd.Flags().IntVar(&cfg.nodeLabelRetry, "node-label-retry", 2, "number of retries for the node labeling operations")
-	rootCmd.Flags().IntVar(&cfg.downloadRetry, "download-retry", 3, "number of retries for the model download operations")
-	rootCmd.Flags().StringVar(&cfg.downloadAuthType, "download-auth-type", "instance-principal", "authentication method for model download")
-	rootCmd.Flags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 3, "number of download workers")
-	rootCmd.Flags().StringVar(&cfg.namespace, "namespace", "ome", "the namespace of the ome model agents daemon set")
+	// Define command-line flags
+	rootCmd.PersistentFlags().IntVar(&cfg.port, "port", 8080, "HTTP port for health checks")
+	rootCmd.PersistentFlags().StringVar(&cfg.modelsRootDir, "models-root-dir", "/mnt/models", "Root directory for models")
+	rootCmd.PersistentFlags().StringVar(&cfg.nodeName, "node-name", "", "Name of the node where agent is running")
+	rootCmd.PersistentFlags().IntVar(&cfg.nodeLabelRetry, "node-label-retry", 5, "Number of retries for node labeling")
+	rootCmd.PersistentFlags().IntVar(&cfg.downloadRetry, "download-retry", 3, "Number of retries for downloading")
+	rootCmd.PersistentFlags().IntVar(&cfg.concurrency, "concurrency", 4, "Number of concurrent download workers per gopher")
+	rootCmd.PersistentFlags().IntVar(&cfg.multipartConcurrency, "multipart-concurrency", 4, "Number of concurrent multipart download workers per gopher")
+	rootCmd.PersistentFlags().StringVar(&cfg.downloadAuthType, "download-auth-type", "InstancePrincipal", "Auth type for downloading models")
+	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
+	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
+	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
-	// Logger flags
-	rootCmd.PersistentFlags().StringVar(&logLevel, "zap-level", "info", "Log level (debug, info, warn, error)")
-	rootCmd.PersistentFlags().StringVar(&logEncoder, "zap-encoder", "console", "Log encoder (console, json)")
-	rootCmd.PersistentFlags().BoolVar(&logDevelopment, "zap-development", false, "Development mode")
+	_ = v.BindPFlags(rootCmd.PersistentFlags())
+
+	v.AutomaticEnv()
+	// Finally, add any explicit bindings
+	_ = v.BindEnv("region", "REGION") // Note: use lowercase keys for consistency
+	_ = v.BindEnv("compartment_id", "COMPARTMENT_ID")
+	_ = v.BindEnv("realm", "REALM")
 }
 
 // initConfig validates required environment variables
@@ -86,15 +98,15 @@ func initConfig(_ *cobra.Command, _ []string) {
 
 // initializeLogger creates and configures a zap logger with the specified settings
 func initializeLogger() (*Logger, error) {
-	level, err := zapcore.ParseLevel(logLevel)
+	level, err := zapcore.ParseLevel(v.GetString("log-level"))
 	if err != nil {
-		return nil, fmt.Errorf("invalid log level %q: %w", logLevel, err)
+		return nil, fmt.Errorf("invalid log level %q: %w", "info", err)
 	}
 
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(level),
-		Development:      logDevelopment,
-		Encoding:         logEncoder,
+		Development:      false,
+		Encoding:         "console",
 		EncoderConfig:    zap.NewProductionEncoderConfig(),
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
@@ -102,7 +114,7 @@ func initializeLogger() (*Logger, error) {
 
 	// Use a more human-friendly timestamp format for console encoder
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	if logEncoder == "console" {
+	if config.Encoding == "console" {
 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 
@@ -139,9 +151,9 @@ func setupServer(port int, modelsRootDir string, logger *Logger) *http.Server {
 
 // setupKubernetesClients creates the Kubernetes and OME clients
 func setupKubernetesClients() (*kubernetes.Clientset, *omev1beta1client.Clientset, error) {
-	kubeConfig := getKubeConfig()
-	kubeClient := createKubeClient(kubeConfig)
-	omeClient := createOmeClient(kubeConfig)
+	cfg := ctrl.GetConfigOrDie()
+	kubeClient := createKubeClient(cfg)
+	omeClient := createOmeClient(cfg)
 	return kubeClient, omeClient, nil
 }
 
@@ -186,18 +198,50 @@ func initializeComponents(
 	gopherTaskChan chan *modelagent.GopherTask,
 	logger *Logger,
 ) (*modelagent.Scount, *modelagent.Gopher, error) {
-	// Get informers
-	baseModelsInformer := omeInformerFactory.Ome().V1beta1().BaseModels()
-	clusterBaseModelsInformer := omeInformerFactory.Ome().V1beta1().ClusterBaseModels()
+	// Create node labeler for labeling the node based on model status
+	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry, logger)
 
-	// Create node labeler
-	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry)
+	// Create an environment instance directly using Viper
+	environment, err := env.FromResolver(
+		env.WithResolverDefaults(),
+		env.WithResolverFromViper(v, ""),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create environment: %w", err)
+	}
 
-	// Create scout
+	// Set up an authentication type from Viper
+	authType := principals.AuthenticationType(v.GetString("download-auth-type"))
+
+	// Convert sugared logger back to a regular zap logger to use ForZap
+	zapLogger := logger.Desugar()
+
+	// Create Casper config with a proper logger adapter
+	casperConfig, err := casper.NewConfig(
+		casper.WithAnotherLog(logging.ForZap(zapLogger)),
+		casper.WithEnv(environment),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create casper config: %w", err)
+	}
+
+	// Set auth type (needs to be a pointer)
+	casperConfig.AuthType = &authType
+
+	// Create CasperDataStore
+	casperDS, err := casper.NewCasperDataStore(casperConfig, environment)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create casper data store: %w", err)
+	}
+
+	// Create a Scout instance
+	baseModelInformer := omeInformerFactory.Ome().V1beta1().BaseModels()
+	clusterBaseModelInformer := omeInformerFactory.Ome().V1beta1().ClusterBaseModels()
+
 	scout, err := modelagent.NewScout(
 		cfg.nodeName,
-		baseModelsInformer,
-		clusterBaseModelsInformer,
+		baseModelInformer,
+		clusterBaseModelInformer,
 		omeInformerFactory,
 		gopherTaskChan,
 		kubeClient,
@@ -207,12 +251,13 @@ func initializeComponents(
 		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
 	}
 
-	// Create gopher
+	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
-		cfg.downloadAuthType,
+		casperDS, // Pass the casper data store directly
+		cfg.concurrency,
+		cfg.multipartConcurrency,
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
-		cfg.modelsRootDirOnHost,
 		gopherTaskChan,
 		nodeLabeler,
 		metrics,
@@ -229,9 +274,12 @@ func runCommand(cmd *cobra.Command, args []string) {
 	// Initialize logger
 	logger, err := initializeLogger()
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Log all Viper config at startup for traceability
+	logger.Infow("Model Agent configuration (Viper)", "allSettings", v.AllSettings())
 
 	// Setup Kubernetes clients
 	kubeClient, omeClient, err := setupKubernetesClients()

@@ -1,20 +1,16 @@
 package casper
 
 import (
-	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"math"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 )
@@ -22,20 +18,20 @@ import (
 type ChunkUnit int
 
 const (
-	MB                       ChunkUnit = 1000000
-	SmallChunkSizeInByte     int       = 25 * 1000000
-	SmallChunkFileBufferSize int       = 100000
-	SmallChunkSize50mbInByte int       = 50 * 1000000
-	LargeChunkSizeInByte     int       = 500 * 1024 * 1024
-	LargeChunkFileBufferSize int       = 65536
+	MB             ChunkUnit = 1000000
+	maxPartRetries int       = 3
 )
 
-// PrepareDownloadPart wraps an GetObjectRequest with split part related info
+// PrepareDownloadPart holds just the info needed to construct a GetObjectRequest at download time
+// (to avoid signing requests too early)
 type PrepareDownloadPart struct {
-	request *objectstorage.GetObjectRequest
-	offset  int64
-	partNum int
-	size    int64
+	namespace string
+	bucket    string
+	object    string
+	byteRange string
+	offset    int64
+	partNum   int
+	size      int64
 }
 
 // DownloadedPart contains the data downloaded from object storage and the body part info
@@ -45,270 +41,6 @@ type DownloadedPart struct {
 	offset   int64
 	partNum  int
 	err      error
-}
-
-func (cds *CasperDataStore) PrepareDownload(source ObjectURI, target string, excludeBucketPath bool) (*FileToDownload, error) {
-	var targetFilePath string
-	if excludeBucketPath {
-		targetFilePath = filepath.Join(target, ExtractPureObjectName(source.ObjectName))
-	} else {
-		targetFilePath = filepath.Join(target, source.ObjectName)
-	}
-
-	err := os.MkdirAll(path.Dir(targetFilePath), os.ModePerm)
-	if err != nil {
-		return &FileToDownload{}, fmt.Errorf(
-			"failed to create the directory %s under the target path %s, error: %+v",
-			path.Dir(targetFilePath), target, err)
-	}
-
-	return &FileToDownload{
-		source:         source,
-		targetFilePath: targetFilePath,
-	}, nil
-}
-
-// MultipartDownload used to download big file, or the download will timeout
-func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, excludeBucketPath bool, objectSummary *objectstorage.ObjectSummary, chunkSizeInMB int, downloadThreads int) error {
-	if source.Namespace == "" {
-		namespace, err := cds.GetNamespace()
-		if err != nil {
-			return fmt.Errorf("error list objects due to no namespace found: %+v", err)
-		}
-		source.Namespace = *namespace
-	}
-
-	if objectSummary == nil {
-		objects, err := cds.ListObjects(source)
-		if err != nil {
-			return err
-		}
-
-		if len(objects) >= 2 {
-			return fmt.Errorf("there are %d objects with the same prefix %s", len(objects), source.ObjectName)
-		}
-
-		if len(objects) == 0 {
-			return fmt.Errorf("there is no object with the prefix %s", source.ObjectName)
-		}
-
-		objectSummary = &objects[0]
-	}
-
-	objectSize := int(*objectSummary.Size)
-	partSize := chunkSizeInMB * int(MB)
-
-	totalParts := objectSize / partSize
-	if objectSize%partSize != 0 {
-		totalParts++
-	}
-
-	prepareDownloadParts := splitToParts(totalParts, partSize, objectSize, source)
-	downloadedParts := multipartDownload(context.Background(), cds.Client, downloadThreads, prepareDownloadParts)
-
-	var targetFilePath string
-	if excludeBucketPath {
-		targetFilePath = filepath.Join(target, ExtractPureObjectName(source.ObjectName))
-	} else {
-		targetFilePath = filepath.Join(target, source.ObjectName)
-	}
-	tempTargetFilePath := targetFilePath + ".temp"
-
-	err := os.Remove(tempTargetFilePath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	err = os.MkdirAll(path.Dir(tempTargetFilePath), os.ModePerm)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to create the directory %s under the target path %s, error: %+v",
-			path.Dir(tempTargetFilePath), target, err)
-	}
-
-	tmpFile, err := os.OpenFile(tempTargetFilePath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-
-	defer func(tmpFile *os.File) {
-		err = tmpFile.Close()
-		if err != nil {
-			cds.logger.Errorf("Failed to close temp file: %+v", err)
-		}
-	}(tmpFile)
-	if err != nil {
-		return err
-	}
-
-	for part := range downloadedParts {
-		if part.err != nil {
-			err = os.Remove(tempTargetFilePath)
-			if err != nil && !os.IsNotExist(err) {
-				return err
-			}
-			return part.err
-		}
-
-		_, err = tmpFile.WriteAt(part.partBody, part.offset)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = os.Rename(tempTargetFilePath, targetFilePath)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// bufferSizeInByte must be divisible by partSizeInByte
-func calculateMultipartMd5(partSizeInByte int, bufferSizeInByte int, targetFilePath string, logger logging.Interface) (string, error) {
-	file, err := os.Open(targetFilePath)
-	if err != nil {
-		logger.Infof("Failed to open target file:%s, error:%s", targetFilePath, err)
-		return "", err
-	}
-
-	defer func() {
-		if err := file.Close(); err != nil {
-			panic(err)
-		}
-	}()
-
-	eof := false
-	allMd5Bytes := make([]byte, 0)
-	var partMd5 []byte
-	count := 0
-	for !eof {
-		partMd5, eof = calculateMd5(file, partSizeInByte, bufferSizeInByte)
-		allMd5Bytes = append(allMd5Bytes, partMd5...)
-		count++
-	}
-
-	fileMd5 := md5.New()
-	if _, err := io.Copy(fileMd5, bytes.NewReader(allMd5Bytes)); err != nil {
-		logger.Infof("Failed to compute multipart md5 for %s, error: %s", targetFilePath, err)
-		return "", err
-	}
-
-	return fmt.Sprintf("%s-%d", base64.StdEncoding.EncodeToString(fileMd5.Sum(nil)), count), nil
-}
-
-func calculateMd5(file *os.File, chunkSizeInByte int, bufferSizeInByte int) ([]byte, bool) {
-	md5Calculator := md5.New()
-	eof := false
-	buf := make([]byte, bufferSizeInByte)
-	for i := 0; i < chunkSizeInByte/bufferSizeInByte; i++ {
-		bytesRead, _ := file.Read(buf)
-		if bytesRead > 0 {
-			_, err := io.Copy(md5Calculator, bytes.NewReader(buf[:bytesRead]))
-			if err != nil {
-				return nil, false
-			}
-		}
-
-		if bytesRead < bufferSizeInByte {
-			eof = true
-			break
-		}
-	}
-
-	return md5Calculator.Sum(nil), eof
-}
-
-// We used to upload big files with part size of 500MB, and small files with part size of 25000000.
-// Now we're using 50000000 bytes for all files. This is for back compatibility
-func multipartMd5Matched(targetFilePath string, objectMd5 *string, logger logging.Interface) (bool, error) {
-	chunkSizes := []int{SmallChunkSizeInByte, SmallChunkSize50mbInByte, LargeChunkSizeInByte}
-	bufferSize := []int{SmallChunkFileBufferSize, SmallChunkFileBufferSize, LargeChunkFileBufferSize}
-	var err error
-	var finalMd5 string
-	for i, chunkSize := range chunkSizes {
-		finalMd5, err = calculateMultipartMd5(chunkSize, bufferSize[i], targetFilePath, logger)
-		if err == nil && *objectMd5 == finalMd5 {
-			return true, nil
-		}
-	}
-
-	return false, err
-}
-
-// splitToParts splits the file to the partSize and build a new struct to prepare for multipart download
-func splitToParts(totalParts, partSize, objectSize int, source ObjectURI) chan *PrepareDownloadPart {
-	prepareDownloadParts := make(chan *PrepareDownloadPart)
-	go func() {
-		defer func() {
-			close(prepareDownloadParts)
-		}()
-
-		for part := 0; part < totalParts; part++ {
-			start := int64(part * partSize)
-			end := int64(math.Min(float64((part+1)*partSize), float64(objectSize)) - 1)
-			bytesRange := strconv.FormatInt(start, 10) + "-" + strconv.FormatInt(end, 10)
-			part := PrepareDownloadPart{
-				request: &objectstorage.GetObjectRequest{
-					NamespaceName: common.String(source.Namespace),
-					BucketName:    common.String(source.BucketName),
-					ObjectName:    common.String(source.ObjectName),
-					// This is the parameter where we control the download size/request
-					Range: common.String("bytes=" + bytesRange),
-				},
-				offset:  start,
-				partNum: part,
-				size:    end - start,
-			}
-
-			prepareDownloadParts <- &part
-		}
-	}()
-
-	return prepareDownloadParts
-}
-
-func multipartDownload(ctx context.Context, osClient *objectstorage.ObjectStorageClient, downloadThreads int, prepareDownloadParts chan *PrepareDownloadPart) chan *DownloadedPart {
-	result := make(chan *DownloadedPart)
-
-	var wg sync.WaitGroup
-	wg.Add(downloadThreads)
-
-	for i := 0; i < downloadThreads; i++ {
-		go func() {
-			downloadFilePart(ctx, osClient, prepareDownloadParts, result)
-			wg.Done()
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(result)
-	}()
-
-	return result
-}
-
-// downloadFilePart wraps objectStorage GetObject API call
-func downloadFilePart(ctx context.Context, osClient *objectstorage.ObjectStorageClient, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart) {
-	for part := range prepareDownloadParts {
-		resp, err := osClient.GetObject(ctx, *part.request)
-		downloadedPart := &DownloadedPart{}
-		if err != nil {
-			fmt.Println("Error in downloading: ", err)
-			downloadedPart.err = err
-		} else {
-			content, _ := io.ReadAll(resp.Content)
-			downloadedPart = &DownloadedPart{
-				size:     int64(len(content)),
-				partBody: content,
-				offset:   part.offset,
-				partNum:  part.partNum,
-			}
-		}
-
-		result <- downloadedPart
-	}
 }
 
 type FileToDownload struct {
@@ -322,23 +54,216 @@ type DownloadedFile struct {
 	Err            error
 }
 
-func NewDownloadedFile(source ObjectURI, targetFilePath string) *DownloadedFile {
-	return &DownloadedFile{
-		source:         source,
-		targetFilePath: targetFilePath,
+//func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, excludeBucketPath bool, chunkSizeInMB int, downloadThreads int) error {
+
+// MultipartDownload used to download big file, or the download will timeout
+func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, opts DownloadOptions) error {
+	downloadOpts := applyDownloadDefaults(&opts)
+	if source.Namespace == "" {
+		namespace, err := cds.GetNamespace()
+		if err != nil {
+			return fmt.Errorf("error list objects due to no namespace found: %+v", err)
+		}
+		source.Namespace = *namespace
 	}
+
+	objects, err := cds.ListObjects(source)
+	if err != nil {
+		return err
+	}
+
+	// Filter for exact object name match
+	var exactMatches []objectstorage.ObjectSummary
+	for _, obj := range objects {
+		if obj.Name != nil && *obj.Name == source.ObjectName {
+			exactMatches = append(exactMatches, obj)
+		}
+	}
+	if len(exactMatches) == 0 {
+		return fmt.Errorf("no object found with exact name %s", source.ObjectName)
+	}
+	if len(exactMatches) > 1 {
+		return fmt.Errorf("multiple objects found with exact name %s", source.ObjectName)
+	}
+
+	objectSummary := &exactMatches[0]
+
+	objectSize := int(*objectSummary.Size)
+	partSize := downloadOpts.ChunkSizeInMB * 1024 * 1024
+	if opts.ChunkSizeInMB <= 0 {
+		partSize = 4 * 1024 * 1024 // Default to 4MB chunks if not set
+		cds.logger.Warnf("ChunkSizeInMB was not set or <= 0 for %s, defaulting to 4MB chunks", source.ObjectName)
+	}
+
+	threads := downloadOpts.Threads
+	if threads < 1 {
+		threads = 16
+	}
+
+	cds.logger.Infof("[%s] Preparing multipart download: size=%d bytes, chunk size=%d bytes, threads=%d",
+		source.ObjectName, objectSize, partSize, threads)
+
+	totalParts := objectSize / partSize
+	if objectSize%partSize != 0 {
+		totalParts++
+	}
+
+	prepareDownloadParts := splitToParts(totalParts, partSize, objectSize, source)
+	downloadedParts := cds.multipartDownload(context.Background(), threads, prepareDownloadParts)
+
+	// Compute the relative local file path by removing the first two path segments (vendor/model)
+	var targetFilePath string
+	if downloadOpts.StripPrefix {
+		targetFilePath = filepath.Join(target, ExtractPureObjectName(source.ObjectName))
+	} else if downloadOpts.JoinWithTailOverlap {
+		targetFilePath = JoinWithTailOverlap(target, source.ObjectName)
+	} else {
+		targetFilePath = filepath.Join(target, source.ObjectName)
+	}
+	tempTargetFilePath := targetFilePath + ".temp"
+
+	// Ensure target directory exists
+	targetDir := filepath.Dir(targetFilePath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory %s: %v", targetDir, err)
+	}
+
+	// Clean up any existing temporary file
+	os.Remove(tempTargetFilePath)
+
+	// Create a new temporary file
+	tmpFile, err := os.Create(tempTargetFilePath)
+	if err != nil {
+		return err
+	}
+
+	// Use a file closure flag to avoid double-closing the file
+	fileClosed := false
+	defer func(tmpFile *os.File) {
+		// Only close if not already closed
+		if !fileClosed {
+			err := tmpFile.Close()
+			if err != nil {
+				cds.logger.Warnf("[%s] Failed to close temporary file: %v", source.ObjectName, err)
+			}
+		}
+	}(tmpFile)
+
+	startTime := time.Now()
+	for part := range downloadedParts {
+		if part.err != nil {
+			err := os.Remove(tempTargetFilePath)
+			if err != nil {
+				cds.logger.Warnf("[%s] Failed to clean up temporary file after error: %v", source.ObjectName, err)
+			}
+			return fmt.Errorf("error downloading part %d: %v", part.partNum, part.err)
+		}
+
+		// Check part size matches expected size
+		if int64(len(part.partBody)) != part.size {
+			cds.logger.Warnf("[%s] Part %d size mismatch: expected %d bytes, got %d bytes",
+				source.ObjectName, part.partNum, part.size, len(part.partBody))
+		}
+
+		// Write the part to the temp file at the correct offset
+		_, err := tmpFile.WriteAt(part.partBody, part.offset)
+		if err != nil {
+			os.Remove(tempTargetFilePath)
+			return fmt.Errorf("failed to write part %d at offset %d: %v", part.partNum, part.offset, err)
+		}
+
+		// Free up memory by clearing the part data
+		part.partBody = nil
+	}
+
+	// Ensure all data is flushed to disk
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temporary file to disk: %v", err)
+	}
+
+	// Close the file explicitly before renaming
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %v", err)
+	}
+	// Mark as closed to prevent deferred function from trying to close again
+	fileClosed = true
+
+	// Rename the temporary file to the final target path
+	if err := os.Rename(tempTargetFilePath, targetFilePath); err != nil {
+		// Try to clean up the temp file if rename fails
+		cleanupErr := os.Remove(tempTargetFilePath)
+		if cleanupErr != nil {
+			cds.logger.Warnf("[%s] Failed to clean up temporary file after rename error: %v",
+				source.ObjectName, cleanupErr)
+		}
+		return fmt.Errorf("failed to rename temporary file to target: %v", err)
+	}
+
+	// Double-check the final file size
+	fileInfo, err := os.Stat(targetFilePath)
+	if err != nil {
+		cds.logger.Warnf("[%s] Failed to stat final file: %v", source.ObjectName, err)
+	} else if fileInfo.Size() != int64(objectSize) {
+		cds.logger.Warnf("[%s] Final file size mismatch: expected %d bytes, got %d bytes",
+			source.ObjectName, objectSize, fileInfo.Size())
+	}
+
+	duration := time.Since(startTime)
+	speedMBs := float64(objectSize) / 1024.0 / 1024.0 / duration.Seconds()
+	cds.logger.Infof("[%s] Multipart download completed in %.2fs (%.2f MB/s)", source.ObjectName, duration.Seconds(), speedMBs)
+	cds.logger.Infof("[%s] Multipart download completed successfully", source.ObjectName)
+	return nil
 }
 
-func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {
-	cds.logger.Infof("Download objects with %d threads", downloadThreads)
-	result := make(chan *DownloadedFile)
+// splitToParts splits the file to the partSize and builds a new struct to prepare for multipart download
+func splitToParts(totalParts, partSize, objectSize int, source ObjectURI) chan *PrepareDownloadPart {
+	prepareDownloadParts := make(chan *PrepareDownloadPart)
+	go func() {
+		defer func() {
+			close(prepareDownloadParts)
+		}()
+
+		for part := 0; part < totalParts; part++ {
+			start := int64(part * partSize)
+			// Calculate end position (inclusive for HTTP Range header)
+			// Note: HTTP Range is inclusive of both start and end bytes
+			end := int64(math.Min(float64((part+1)*partSize-1), float64(objectSize-1)))
+
+			// Ensure we're not requesting beyond file size
+			if start >= int64(objectSize) {
+				break
+			}
+
+			// Format as "bytes=start-end" for HTTP Range header
+			bytesRange := strconv.FormatInt(start, 10) + "-" + strconv.FormatInt(end, 10)
+
+			part := PrepareDownloadPart{
+				namespace: source.Namespace,
+				bucket:    source.BucketName,
+				object:    source.ObjectName,
+				byteRange: "bytes=" + bytesRange,
+				offset:    start,
+				partNum:   part,
+				// Corrected size calculation for inclusive ranges
+				size: end - start + 1,
+			}
+
+			prepareDownloadParts <- &part
+		}
+	}()
+
+	return prepareDownloadParts
+}
+
+func (cds *CasperDataStore) multipartDownload(ctx context.Context, downloadThreads int, prepareDownloadParts chan *PrepareDownloadPart) chan *DownloadedPart {
+	result := make(chan *DownloadedPart)
 
 	var wg sync.WaitGroup
 	wg.Add(downloadThreads)
 
 	for i := 0; i < downloadThreads; i++ {
 		go func() {
-			cds.DownloadFiles(filesToDownload, result)
+			cds.downloadFilePart(ctx, prepareDownloadParts, result)
 			wg.Done()
 		}()
 	}
@@ -351,9 +276,93 @@ func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, filesT
 	return result
 }
 
-func (cds *CasperDataStore) DownloadFiles(filesToDownload chan *FileToDownload, result chan *DownloadedFile) {
+// downloadFilePart wraps objectStorage GetObject API call
+func (cds *CasperDataStore) downloadFilePart(ctx context.Context, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart) {
+	for part := range prepareDownloadParts {
+		var lastErr error
+		var content []byte
+		start := time.Now()
+		for attempt := 1; attempt <= maxPartRetries; attempt++ {
+			resp, err := cds.Client.GetObject(ctx, objectstorage.GetObjectRequest{
+				NamespaceName: common.String(part.namespace),
+				BucketName:    common.String(part.bucket),
+				ObjectName:    common.String(part.object),
+				Range:         common.String(part.byteRange),
+			})
+			if err != nil {
+				cds.logger.Warnf("Error getting object for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, err)
+				lastErr = err
+			} else {
+				// Successfully got the object response
+				var readErr, closeErr error
+				content, readErr = io.ReadAll(resp.Content)
+				closeErr = resp.Content.Close() // Close immediately
+
+				if readErr != nil {
+					cds.logger.Warnf("Error reading response body for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, readErr)
+					lastErr = readErr // Report read error
+				} else if closeErr != nil {
+					cds.logger.Warnf("Error closing response body for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, closeErr)
+					lastErr = closeErr // Report close error if read was ok
+				} else {
+					// Success reading and closing
+					lastErr = nil // Clear any potential previous attempt's error
+					break         // Exit retry loop on success
+				}
+			}
+			if attempt < maxPartRetries && lastErr != nil {
+				time.Sleep(2 * time.Second)
+			}
+		}
+		duration := time.Since(start)
+		speedMBs := float64(len(content)) / 1024.0 / 1024.0 / duration.Seconds()
+		if lastErr == nil {
+			cds.logger.Debugf("[Chunk %d] Downloaded %d bytes in %.2fs (%.2f MB/s) for file %s", part.partNum, len(content), duration.Seconds(), speedMBs, part.object)
+		}
+		if lastErr != nil {
+			// All retries failed for this part
+			result <- &DownloadedPart{
+				err:     lastErr,
+				partNum: part.partNum,
+				offset:  part.offset,
+			}
+			continue
+		}
+		// Success: send the downloaded part
+		result <- &DownloadedPart{
+			size:     int64(len(content)),
+			partBody: content,
+			offset:   part.offset,
+			partNum:  part.partNum,
+		}
+	}
+}
+
+func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {
+	cds.logger.Infof("Download objects with %d threads", downloadThreads)
+	result := make(chan *DownloadedFile)
+
+	var wg sync.WaitGroup
+	wg.Add(downloadThreads)
+
+	for i := 0; i < downloadThreads; i++ {
+		go func() {
+			cds.downloadFiles(filesToDownload, result)
+			wg.Done()
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(result)
+	}()
+
+	return result
+}
+
+func (cds *CasperDataStore) downloadFiles(filesToDownload chan *FileToDownload, result chan *DownloadedFile) {
 	for fileToDownload := range filesToDownload {
-		err := cds.DownloadFile(fileToDownload)
+		err := cds.downloadFile(fileToDownload)
 		downloadedFile := &DownloadedFile{
 			source:         fileToDownload.source,
 			targetFilePath: fileToDownload.targetFilePath,
@@ -367,7 +376,7 @@ func (cds *CasperDataStore) DownloadFiles(filesToDownload chan *FileToDownload, 
 	}
 }
 
-func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload) error {
+func (cds *CasperDataStore) downloadFile(fileToDownload *FileToDownload) error {
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", fileToDownload.source.Namespace, fileToDownload.source.BucketName, fileToDownload.source.ObjectName)
 
@@ -389,7 +398,7 @@ func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload) error {
 		cds.logger.Infof("Download %s, size: %d", fileToDownload.source.ObjectName, *(response.ContentLength))
 	}
 
-	// Write downloaded object to the target file
+	// Write a downloaded object to the target file
 	err = CopyReaderToFilePath(responseContent, fileToDownload.targetFilePath)
 	if err != nil {
 		return fmt.Errorf(
@@ -397,48 +406,4 @@ func (cds *CasperDataStore) DownloadFile(fileToDownload *FileToDownload) error {
 			objectFullName, fileToDownload.targetFilePath, err)
 	}
 	return nil
-}
-
-func (cds *CasperDataStore) FilterObjectsMultiThreads(threads int, objectStoreUri *ObjectURI, target string, objectSummaries chan objectstorage.ObjectSummary) chan objectstorage.ObjectSummary {
-	cds.logger.Infof("Filter objects with %d threads", threads)
-	result := make(chan objectstorage.ObjectSummary)
-
-	var wg sync.WaitGroup
-	wg.Add(threads)
-
-	for i := 0; i < threads; i++ {
-		go func() {
-			cds.FilterObjects(objectSummaries, objectStoreUri, target, result)
-			wg.Done()
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(result)
-	}()
-
-	return result
-}
-
-func (cds *CasperDataStore) FilterObjects(objectSummaries chan objectstorage.ObjectSummary, objectStoreUri *ObjectURI, target string, result chan objectstorage.ObjectSummary) {
-	for object := range objectSummaries {
-		objectURI := ObjectURI{
-			Namespace:  objectStoreUri.Namespace,
-			BucketName: objectStoreUri.BucketName,
-			ObjectName: *object.Name,
-		}
-
-		exist, err := cds.ObjectExists(objectURI, target, object.Md5, object.Size)
-		if err != nil {
-			cds.logger.Errorf("Error when check object existence: %s", err)
-			panic(err)
-		}
-
-		if exist {
-			cds.logger.Infof("%s already exists with md5 check.", objectURI.ObjectName)
-		} else {
-			result <- object
-		}
-	}
 }
