@@ -27,6 +27,7 @@ type OmeV1beta1Interface interface {
 	OrganizationsGetter
 	ProjectsGetter
 	RateLimitsGetter
+	ReplicationJobsGetter
 	ServiceAccountsGetter
 	ServingRuntimesGetter
 	TrainingJobsGetter
@@ -97,6 +98,10 @@ func (c *OmeV1beta1Client) Projects() ProjectInterface {
 
 func (c *OmeV1beta1Client) RateLimits(namespace string) RateLimitInterface {
 	return newRateLimits(c, namespace)
+}
+
+func (c *OmeV1beta1Client) ReplicationJobs(namespace string) ReplicationJobInterface {
+	return newReplicationJobs(c, namespace)
 }
 
 func (c *OmeV1beta1Client) ServiceAccounts(namespace string) ServiceAccountInterface {

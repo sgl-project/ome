@@ -32,6 +32,8 @@ type ProjectExpansion interface{}
 
 type RateLimitExpansion interface{}
 
+type ReplicationJobExpansion interface{}
+
 type ServiceAccountExpansion interface{}
 
 type ServingRuntimeExpansion interface{}

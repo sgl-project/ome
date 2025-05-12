@@ -38,6 +38,8 @@ type Interface interface {
 	Projects() ProjectInformer
 	// RateLimits returns a RateLimitInformer.
 	RateLimits() RateLimitInformer
+	// ReplicationJobs returns a ReplicationJobInformer.
+	ReplicationJobs() ReplicationJobInformer
 	// ServiceAccounts returns a ServiceAccountInformer.
 	ServiceAccounts() ServiceAccountInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
@@ -134,6 +136,11 @@ func (v *version) Projects() ProjectInformer {
 // RateLimits returns a RateLimitInformer.
 func (v *version) RateLimits() RateLimitInformer {
 	return &rateLimitInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// ReplicationJobs returns a ReplicationJobInformer.
+func (v *version) ReplicationJobs() ReplicationJobInformer {
+	return &replicationJobInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ServiceAccounts returns a ServiceAccountInformer.

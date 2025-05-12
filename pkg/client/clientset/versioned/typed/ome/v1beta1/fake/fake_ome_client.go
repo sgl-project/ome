@@ -72,6 +72,10 @@ func (c *FakeOmeV1beta1) RateLimits(namespace string) v1beta1.RateLimitInterface
 	return &FakeRateLimits{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) ReplicationJobs(namespace string) v1beta1.ReplicationJobInterface {
+	return &FakeReplicationJobs{c, namespace}
+}
+
 func (c *FakeOmeV1beta1) ServiceAccounts(namespace string) v1beta1.ServiceAccountInterface {
 	return &FakeServiceAccounts{c, namespace}
 }

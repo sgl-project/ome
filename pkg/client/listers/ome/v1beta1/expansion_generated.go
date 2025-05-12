@@ -86,6 +86,14 @@ type RateLimitListerExpansion interface{}
 // RateLimitNamespaceLister.
 type RateLimitNamespaceListerExpansion interface{}
 
+// ReplicationJobListerExpansion allows custom methods to be added to
+// ReplicationJobLister.
+type ReplicationJobListerExpansion interface{}
+
+// ReplicationJobNamespaceListerExpansion allows custom methods to be added to
+// ReplicationJobNamespaceLister.
+type ReplicationJobNamespaceListerExpansion interface{}
+
 // ServiceAccountListerExpansion allows custom methods to be added to
 // ServiceAccountLister.
 type ServiceAccountListerExpansion interface{}
