@@ -29,7 +29,7 @@ spec:
                 spec:
                   containers:
                     - name: "trainer"
-                      image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.25
+                      image: "{{ .Values.peft_ft.llama_3_70b_instruct_ft.image.repository }}:{{ .Values.peft_ft.llama_3_70b_instruct_ft.image.tag }}"
                       imagePullPolicy: Always
                       resources:
                         limits:

@@ -1,13 +1,13 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterTrainingRuntime
 metadata:
-  name: llama-3-70b-instruct-ft
+  name: cohere-command-light-ft
 spec:
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
-    ome.io/training-runtime-type: peft
+    ome.io/training-runtime-type: cohere
   labels:
     logging-forward: enabled
   mlPolicy:
@@ -29,12 +29,14 @@ spec:
                 spec:
                   containers:
                     - name: "trainer"
-                      image: us-chicago-1.ocir.io/idqj093njucb/ocasgs-peft:0.1.25
+                      image: "{{ .Values.cohere.commandFtImage.repository }}:{{ .Values.cohere.commandFtImage.tag }}"
                       imagePullPolicy: Always
+                      command:
+                        - train
                       resources:
                         limits:
-                          nvidia.com/gpu: '8'
+                          nvidia.com/gpu: '4'
                         requests:
                           cpu: '16'
-                          memory: 500G
-                          nvidia.com/gpu: '8'
+                          memory: 320G
+                          nvidia.com/gpu: '4'

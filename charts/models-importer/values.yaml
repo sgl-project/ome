@@ -1,6 +1,30 @@
 compartmentID: ocid1.compartment.oc1..aaaaaaaazq
 osnamespace: mynamespace
 
+cohere-command-1-6b-v14-2-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-6b-v15-6-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-52b-v14-2-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-52b-v15-6-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+command2-35b-v19-0-0-float32-v1-2-16k-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+command2-35b-v20-1-0-float32-v1-7-16k-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 llama-3-1-405b-instruct-fp8:
   enabled: false
   singleNode: true
@@ -13,6 +37,15 @@ llama-3-1-70b-instruct:
 llama-3-3-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+llama-3-3-70b-instruct-ft:
+  enabled: false
+
+llama-3-1-70b-instruct-ft:
+  enabled: false
+
+llama-3-70b-instruct-ft:
+  enabled: false
 
 llama-3-3-70b-instruct-fp8-dynamic:
   enabled: false

@@ -1,3 +1,4 @@
+{{- if index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
@@ -6,20 +7,20 @@ metadata:
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "false"
-    models.ome.io/internal: "false"
-    models.ome.io/lifecycle-phase: "ACTIVE"
+    models.ome.io/experimental: "{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "lifecyclePhase" }}"
     models.ome.io/training-runtime: "cohere-command-r-ft"
     ome.io/base-model-decryption-key-name: "command_35b"
     ome.io/base-model-decryption-secret-name: "command_35b-dek"
 spec:
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  compartmentID: {{ .Values.compartmentID }}
   disabled: false
   displayName: cohere.command-r-16k
   storage:
-    storageUri: "oci://n/idqj093njucb/b/partner-models/o/cohere/command2_35b_v19.0.0_float32_v1_2_16k"
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "osBucket" }}/o/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "osPrefixOverride" }}"
     path: /mnt/data/models/cohere/command2_35b_v19.0.0_float32_v1_2_16k
-  vendor: cohere
+  vendor: {{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "vendor" }}
   version: "1.2"
   modelFormat:
     name: tensorrtllm
@@ -33,10 +34,11 @@ spec:
     - "CHAT"
   maxTokens: 4096
   additionalMetadata:
-    type: "Finetuning"
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: SMALL_COHERE_V2
           quotaUnit: 8
           default: true
     internalName: "command2_35b_v19.0.0_float32_v1_2_16k"
+    type: "Finetuning"
+{{- end }}

@@ -730,6 +730,7 @@ var (
 	EarlyStoppingThresholdConfigKey   = "earlyStoppingThreshold"
 	EpochsConfigKey                   = "totalTrainingEpochs"
 	LearningRateConfigKey             = "learningRate"
+	TrainingConfigTypeConfigKey       = "strategy"
 	ModelDirectoryEnvVarKey           = AgentAppName + "_" + "MODEL_DIRECTORY"
 	ZippedModelPathEnvVarKey          = "ZIPPED_MODEL_PATH"
 	ZippedMergedModelPathEnvVarKey    = AgentAppName + "_" + "ZIPPED_MERGED_MODEL_PATH"

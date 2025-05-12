@@ -5,7 +5,7 @@ metadata:
   namespace: "dac-training-test"
 spec:
   runtimeRef:
-    name: cohere-command-ft
+    name: cohere-command-light-ft
   trainer: {}
   modelConfig:
     inputModel: 6b-v15-6-gen

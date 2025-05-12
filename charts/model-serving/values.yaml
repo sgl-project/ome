@@ -166,6 +166,18 @@ cohere:
   embedMultiModalImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.8.1-04012025"
+
+  commandFtImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-fax
+    tag: "v0.22.5"
+
+  commandRFtImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-finetuning
+    tag: "v0.2.2"
+
+  commandRV3FtImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-finetuning
+    tag: "v0.5.1"
   
   readinessProbe:
     httpGet:
@@ -259,6 +271,20 @@ llama_3_70b_instruct:
   image:
     repository:
     tag:
+
+peft_ft:
+  llama_3_70b_instruct_ft:
+    image:
+      repository: "us-chicago-1.ocir.io/axoxdievda5j/ocasgs-peft"
+      tag: "0.1.25"
+  llama_3_1_70b_instruct_ft:
+    image:
+      repository: "us-chicago-1.ocir.io/axoxdievda5j/ocasgs-peft"
+      tag: "0.2.16"
+  llama_3_3_70b_instruct_ft:
+    image:
+      repository: "us-chicago-1.ocir.io/axoxdievda5j/ocasgs-peft"
+      tag: "0.2.16"
 
 llama_3_1_70b_instruct:
   enabled: false
