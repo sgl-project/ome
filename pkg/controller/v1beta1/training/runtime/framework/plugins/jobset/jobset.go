@@ -96,6 +96,13 @@ func (j *JobSet) Build(ctx context.Context, runtimeJobTemplate client.Object, in
 		Initializer(trainJob).
 		Suspend(trainJob.Spec.Suspend).
 		Build()
+
+	// Set label for integration with Kueue
+	if kueueEnabled, ok := trainJob.Annotations[constants.KueueEnabledLabelKey]; ok && kueueEnabled == "true" {
+		jobSet.Labels[constants.KueueQueueLabelKey] = trainJob.Namespace
+		jobSet.Labels[constants.KueueWorkloadPriorityClassLabelKey] = constants.DedicatedAiClusterPreemptionWorkloadPriorityClass
+	}
+
 	if err := ctrlutil.SetControllerReference(trainJob, jobSet, j.scheme); err != nil {
 		return nil, err
 	}

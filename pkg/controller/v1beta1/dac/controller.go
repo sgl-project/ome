@@ -635,12 +635,26 @@ func (r *DedicatedAIClusterReconciler) GetDesiredReservationReplicaCount(dac *v1
 	}
 
 	if len(isvcList.Items) == 0 {
-		// check if training job existing
+		// Check if there is any training job (under target namespace) running in progress
 		trainingPodList := &v1beta2.TrainingJobList{}
 		if err := r.List(context.TODO(), trainingPodList, client.InNamespace(dac.Name)); err != nil {
 			return reservationCount, err
 		}
-		if len(trainingPodList.Items) == 0 {
+
+		trainingJobCompleteCount := 0
+		for _, trainingJob := range trainingPodList.Items {
+			completeCondition := metav1.ConditionFalse
+			for _, condition := range trainingJob.Status.Conditions {
+				if condition.Type == "Complete" && condition.Status == metav1.ConditionTrue {
+					completeCondition = metav1.ConditionTrue
+				}
+			}
+			if completeCondition == metav1.ConditionTrue {
+				trainingJobCompleteCount++
+			}
+		}
+
+		if trainingJobCompleteCount == len(trainingPodList.Items) {
 			return reservationCount, nil
 		} else {
 			return 0, nil
