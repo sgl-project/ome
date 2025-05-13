@@ -36,6 +36,7 @@ resources:
   - cohere/command-r-v1-3-16k.yaml
   - cohere/command-r-v1-6-16k.yaml
   - cohere/command-r-plus-v1-6-128k.yaml
+  - cohere/command-r-plus-082024-v1-7-0-a100-tp4-64k-40g.yaml
   - cohere/embed-english-light-v2-0.yaml
   - cohere/embed-english-light-v3-0.yaml
   - cohere/embed-english-v3-0.yaml
