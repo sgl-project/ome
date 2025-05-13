@@ -34,7 +34,7 @@ spec:
       args:
         - |
           python3 -m content_moderator.app \
-          --model-path=$MODEL_PATH \
+          --model-path=/mnt/data/models/olm/content_moderator/ \
           --port=8080
       ports:
         - containerPort: 8080
