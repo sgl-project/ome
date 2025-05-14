@@ -1,6 +1,7 @@
 package modelagent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -13,10 +14,13 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 )
 
 type GopherTaskType string
@@ -42,6 +46,8 @@ type Gopher struct {
 	multipartConcurrency int
 	modelRootDir         string
 	casperDataStore      *casper.CasperDataStore
+	hfDownloadConfig     *download.Config
+	kubeClient           kubernetes.Interface
 	gopherChan           <-chan *GopherTask
 	nodeLabeler          *NodeLabeler
 	metrics              *Metrics
@@ -57,6 +63,8 @@ func NewGopher(
 	modelConfigParser *ModelConfigParser,
 	modelConfigUpdater *ModelConfigUpdater,
 	casperDataStore *casper.CasperDataStore,
+	hfDownloadConfig *download.Config,
+	kubeClient kubernetes.Interface,
 	concurrency int,
 	multipartConcurrency int,
 	downloadRetry int,
@@ -70,6 +78,10 @@ func NewGopher(
 		return nil, fmt.Errorf("casper data store cannot be nil")
 	}
 
+	if hfDownloadConfig == nil {
+		return nil, fmt.Errorf("hugging face download config cannot be nil")
+	}
+
 	return &Gopher{
 		modelConfigParser:    modelConfigParser,
 		modelConfigUpdater:   modelConfigUpdater,
@@ -78,6 +90,8 @@ func NewGopher(
 		multipartConcurrency: multipartConcurrency,
 		modelRootDir:         modelRootDir,
 		casperDataStore:      casperDataStore,
+		hfDownloadConfig:     hfDownloadConfig,
+		kubeClient:           kubeClient,
 		gopherChan:           gopherChan,
 		nodeLabeler:          nodeLabeler,
 		metrics:              metrics,
@@ -245,6 +259,14 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			_ = s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel)
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping download for model %s", modelInfo)
+		case storage.StorageTypeHuggingFace:
+			s.logger.Infof("Starting Hugging Face download for model %s", modelInfo)
+
+			// Handle Hugging Face model download
+			if err := s.processHuggingFaceModel(task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
+				// Error is already logged and metrics recorded in the method
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown storage type %s", storageType)
 		}
@@ -321,6 +343,50 @@ func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 	} else {
 		s.logger.Infof("Successfully marked model %s as Failed on node", modelInfo)
 	}
+}
+
+// getHuggingFaceToken retrieves authentication token for Hugging Face models.
+// It attempts to get the token from either a Kubernetes secret or direct parameters.
+func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, modelInfo string) string {
+	var hfToken string
+	var namespace string
+
+	// Get namespace depending on model type
+	if task.BaseModel != nil {
+		namespace = task.BaseModel.Namespace
+	} else if task.ClusterBaseModel != nil {
+		namespace = "" // ClusterBaseModels use the default namespace for secrets
+	}
+
+	// Try to get token from storage key first (Kubernetes secret)
+	if baseModelSpec.Storage.StorageKey != nil && *baseModelSpec.Storage.StorageKey != "" {
+		// Get the token from the referenced Kubernetes secret
+		if s.kubeClient != nil {
+			s.logger.Infof("Fetching Hugging Face token from secret %s for model %s", *baseModelSpec.Storage.StorageKey, modelInfo)
+
+			secret, err := s.kubeClient.CoreV1().Secrets(namespace).Get(context.Background(), *baseModelSpec.Storage.StorageKey, metav1.GetOptions{})
+			if err != nil {
+				s.logger.Warnf("Failed to retrieve secret %s for Hugging Face token: %v", *baseModelSpec.Storage.StorageKey, err)
+			} else if tokenBytes, exists := secret.Data["token"]; exists {
+				hfToken = string(tokenBytes)
+				s.logger.Infof("Successfully retrieved Hugging Face token from secret %s", *baseModelSpec.Storage.StorageKey)
+			} else {
+				s.logger.Warnf("Secret %s does not contain 'token' key", *baseModelSpec.Storage.StorageKey)
+			}
+		} else {
+			s.logger.Warnf("Cannot fetch token: Kubernetes client not initialized")
+		}
+	}
+
+	// Fallback to parameters if token not found in secret or no secret provided
+	if hfToken == "" && baseModelSpec.Storage.Parameters != nil {
+		if token, exists := (*baseModelSpec.Storage.Parameters)["token"]; exists {
+			hfToken = token
+			s.logger.Infof("Using token from Parameters for model %s", modelInfo)
+		}
+	}
+
+	return hfToken
 }
 
 func getDestPath(baseModel *v1beta1.BaseModelSpec, modelRootDir string) string {
@@ -469,4 +535,78 @@ func (s *Gopher) verifyDownloadedFiles(uris []casper.ObjectURI, destPath string)
 
 func (s *Gopher) deleteModel(destPath string) error {
 	return os.RemoveAll(destPath)
+}
+
+// processHuggingFaceModel handles downloading models from Hugging Face Hub.
+// It extracts model information from the URI, configures the download agent with proper authentication,
+// performs the download, and updates model configuration.
+func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+	modelInfo, modelType, namespace, name string) error {
+	// Parse the Hugging Face URI to get modelID and branch
+	hfComponents, err := storage.ParseHuggingFaceStorageURI(*baseModelSpec.Storage.StorageUri)
+	if err != nil {
+		s.logger.Errorf("Failed to parse Hugging Face URI for model %s: %v", modelInfo, err)
+		s.metrics.RecordFailedDownload(modelType, namespace, name, "invalid_hf_uri")
+		s.markModelOnNodeFailed(task)
+		return err
+	}
+
+	// Create destination path
+	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
+
+	// Get Hugging Face token from storage key or parameters
+	hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
+
+	// Configure Hugging Face download config with model-specific options
+	hfConfig := *s.hfDownloadConfig // Create a copy of the base config with default values
+	
+	// Only override model-specific values, preserving global defaults
+	hfConfig.ModelName = hfComponents.ModelID
+	hfConfig.Branch = hfComponents.Branch
+	hfConfig.LocalPath = destPath
+	hfConfig.Token = hfToken
+	
+	s.logger.Infof("Using Hugging Face config values: connections=%d, maxRetries=%d, retryInterval=%ds", 
+		hfConfig.NumConnections, hfConfig.MaxRetries, hfConfig.RetryInternalInSeconds)
+
+	// Create and start Hugging Face download agent
+	hfAgent, err := download.NewHFDownloadAgent(&hfConfig)
+	if err != nil {
+		s.logger.Errorf("Failed to create Hugging Face download agent for model %s: %v", modelInfo, err)
+		s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_agent_creation_error")
+		s.markModelOnNodeFailed(task)
+		return err
+	}
+
+	// Perform download with retries
+	err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
+		downloadErr := hfAgent.Start()
+		if downloadErr != nil {
+			s.logger.Errorf("Failed to download Hugging Face model %s (attempt %d/%d): %v",
+				modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
+		}
+		return downloadErr
+	})
+
+	if err != nil {
+		s.logger.Errorf("All Hugging Face download attempts failed for model %s: %v", modelInfo, err)
+		s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
+		s.markModelOnNodeFailed(task)
+		return err
+	}
+
+	// Parse model config and update ConfigMap
+	var baseModel *v1beta1.BaseModel
+	var clusterBaseModel *v1beta1.ClusterBaseModel
+
+	if task.BaseModel != nil {
+		baseModel = task.BaseModel
+		s.logger.Debugf("Using BaseModel %s/%s for config parsing", baseModel.Namespace, baseModel.Name)
+	} else if task.ClusterBaseModel != nil {
+		clusterBaseModel = task.ClusterBaseModel
+		s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
+	}
+
+	_ = s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel)
+	return nil
 }

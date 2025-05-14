@@ -42,7 +42,15 @@ func NewHFDownloadAgent(config *Config) (*HFDownloadAgent, error) {
 	return &HFDownloadAgent{
 		logger: config.Logger,
 		Config: config,
-		Client: http.Client{},
+		Client: http.Client{
+			Timeout: 10 * time.Minute,
+			Transport: &http.Transport{
+				DisableKeepAlives:   false,
+				MaxIdleConns:        200,
+				MaxIdleConnsPerHost: 200,
+				MaxConnsPerHost:     200,
+			},
+		},
 	}, nil
 }
 

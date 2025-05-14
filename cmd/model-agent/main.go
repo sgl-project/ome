@@ -14,6 +14,7 @@ import (
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
@@ -258,11 +259,30 @@ func initializeComponents(
 		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
 	}
 
+	// Create default Hugging Face download config
+	hfDownloadConfig, err := download.NewConfig(
+		download.WithLogger(logging.ForZap(zapLogger)),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create HuggingFace download config: %w", err)
+	}
+	
+	// Set up configuration values that will be used as defaults
+	// These will be copied for each model's specific config
+	hfDownloadConfig.MaxRetries = cfg.downloadRetry
+	hfDownloadConfig.NumConnections = cfg.concurrency
+	hfDownloadConfig.RetryInternalInSeconds = 10 // Retry after 10 seconds
+	
+	logger.Infof("Configured Hugging Face downloads with max retries: %d, connections: %d", 
+		hfDownloadConfig.MaxRetries, hfDownloadConfig.NumConnections)
+
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
 		modelConfigUpdater,
 		casperDS, // Pass the casper data store directly
+		hfDownloadConfig,
+		kubeClient, // Pass the Kubernetes client for secret access
 		cfg.concurrency,
 		cfg.multipartConcurrency,
 		cfg.downloadRetry,
