@@ -206,7 +206,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				return err
 			}
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-				downloadErr := s.downloadModel(casperUri, destPath, task.TensorRTLLMShapeFilter, task)
+				downloadErr := s.downloadModel(casperUri, destPath, task)
 				if downloadErr != nil {
 					s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
 						modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
@@ -356,7 +356,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*casper.ObjectURI, erro
 
 }
 
-func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilter *TensorRTLLMShapeFilter, task *GopherTask) error {
+func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *GopherTask) error {
 	startTime := time.Now()
 	defer func() {
 		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
@@ -375,12 +375,12 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 	s.logger.Infof("Done with list all %d objects in model bucket folder", len(objects))
 
 	// Shape filtering for TensorRTLLM
-	if shapeFilter != nil && shapeFilter.IsTensorrtLLMModel && shapeFilter.ModelType == string(constants.ServingBaseModel) {
-		s.logger.Infof("TensorRTLLM Serving model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", shapeFilter.ShapeAlias)
+	if task.TensorRTLLMShapeFilter != nil && task.TensorRTLLMShapeFilter.IsTensorrtLLMModel && task.TensorRTLLMShapeFilter.ModelType == string(constants.ServingBaseModel) {
+		s.logger.Infof("TensorRTLLM Serving model detected. Start filtering model files that doesn't belong to the node shape %s in model bucket folder", task.TensorRTLLMShapeFilter.ShapeAlias)
 		shapeFilteredObjects := make([]objectstorage.ObjectSummary, 0)
 		for _, object := range objects {
 			if object.Name != nil {
-				if strings.Contains(*object.Name, fmt.Sprintf("/%s/", shapeFilter.ShapeAlias)) {
+				if strings.Contains(*object.Name, fmt.Sprintf("/%s/", task.TensorRTLLMShapeFilter.ShapeAlias)) {
 					shapeFilteredObjects = append(shapeFilteredObjects, object)
 				}
 			}
@@ -388,9 +388,9 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, shapeFilt
 		objects = shapeFilteredObjects
 
 		if len(objects) == 0 {
-			return fmt.Errorf("no suitable objects found for shape %s", shapeFilter.ShapeAlias)
+			return fmt.Errorf("no suitable objects found for shape %s", task.TensorRTLLMShapeFilter.ShapeAlias)
 		}
-		s.logger.Infof("Found %d objects applicable for shape %s", len(objects), shapeFilter.ShapeAlias)
+		s.logger.Infof("Found %d objects applicable for shape %s", len(objects), task.TensorRTLLMShapeFilter.ShapeAlias)
 	}
 
 	if len(objects) == 0 {
