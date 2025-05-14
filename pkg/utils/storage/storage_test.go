@@ -275,6 +275,16 @@ func TestGetStorageType(t *testing.T) {
 			want: StorageTypeVendor,
 		},
 		{
+			name: "hugging face storage",
+			uri:  "hf://meta-llama/Llama-3-70B-Instruct",
+			want: StorageTypeHuggingFace,
+		},
+		{
+			name: "hugging face storage with branch",
+			uri:  "hf://meta-llama/Llama-3-70B-Instruct@experimental",
+			want: StorageTypeHuggingFace,
+		},
+		{
 			name:        "unknown storage type",
 			uri:         "unknown://something",
 			wantErr:     true,
@@ -321,6 +331,21 @@ func TestValidateStorageURI(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid vendor uri",
+			uri:     "vendor://openai/models/gpt-4",
+			wantErr: false,
+		},
+		{
+			name:    "valid hugging face uri - with model ID only",
+			uri:     "hf://meta-llama/Llama-3-70B-Instruct",
+			wantErr: false,
+		},
+		{
+			name:    "valid hugging face uri - with model ID and branch",
+			uri:     "hf://meta-llama/Llama-3-70B-Instruct@experimental",
+			wantErr: false,
+		},
+		{
 			name:    "invalid oci uri",
 			uri:     "oci://invalid",
 			wantErr: true,
@@ -333,6 +358,11 @@ func TestValidateStorageURI(t *testing.T) {
 		{
 			name:    "invalid pvc uri - empty subpath",
 			uri:     "pvc://my-pvc/",
+			wantErr: true,
+		},
+		{
+			name:    "invalid hugging face uri",
+			uri:     "hf://",
 			wantErr: true,
 		},
 		{
@@ -502,6 +532,138 @@ func TestValidateVendorStorageURI(t *testing.T) {
 	}
 }
 
+func TestParseHuggingFaceStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		want        *HuggingFaceStorageComponents
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid uri with model ID only",
+			uri:  "hf://meta-llama/Llama-3-70B-Instruct",
+			want: &HuggingFaceStorageComponents{
+				ModelID: "meta-llama/Llama-3-70B-Instruct",
+				Branch:  "main", // Default branch
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with model ID and branch",
+			uri:  "hf://meta-llama/Llama-3-70B-Instruct@alternative",
+			want: &HuggingFaceStorageComponents{
+				ModelID: "meta-llama/Llama-3-70B-Instruct",
+				Branch:  "alternative",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with organization and model name",
+			uri:  "hf://mistralai/Mixtral-8x7B-Instruct-v0.1",
+			want: &HuggingFaceStorageComponents{
+				ModelID: "mistralai/Mixtral-8x7B-Instruct-v0.1",
+				Branch:  "main", // Default branch
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with special characters",
+			uri:  "hf://user-name/model-version_3.1@dev-branch",
+			want: &HuggingFaceStorageComponents{
+				ModelID: "user-name/model-version_3.1",
+				Branch:  "dev-branch",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "missing hf prefix",
+			uri:         "meta-llama/Llama-3-70B-Instruct",
+			wantErr:     true,
+			errContains: "missing hf:// prefix",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing hf:// prefix",
+		},
+		{
+			name:        "only prefix",
+			uri:         "hf://",
+			wantErr:     true,
+			errContains: "missing model ID",
+		},
+		{
+			name:        "empty model ID",
+			uri:         "hf://@main",
+			wantErr:     true,
+			errContains: "model ID cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseHuggingFaceStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidateHuggingFaceStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid uri with model ID only",
+			uri:     "hf://meta-llama/Llama-3-70B-Instruct",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri with model ID and branch",
+			uri:     "hf://meta-llama/Llama-3-70B-Instruct@alternative",
+			wantErr: false,
+		},
+		{
+			name:        "invalid uri",
+			uri:         "invalid://uri",
+			wantErr:     true,
+			errContains: "missing hf:// prefix",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing hf:// prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHuggingFaceStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestNewObjectURI(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -510,6 +672,34 @@ func TestNewObjectURI(t *testing.T) {
 		wantErr     bool
 		errContains string
 	}{
+		// Hugging Face URIs
+		{
+			name: "valid hugging face uri with model ID only",
+			uri:  "hf://meta-llama/Llama-3-70B-Instruct",
+			expect: &casper.ObjectURI{
+				Namespace:  "huggingface",
+				BucketName: "meta-llama/Llama-3-70B-Instruct",
+				Prefix:     "main", // Default branch when not specified
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid hugging face uri with model ID and branch",
+			uri:  "hf://meta-llama/Llama-3-70B-Instruct@experimental",
+			expect: &casper.ObjectURI{
+				Namespace:  "huggingface",
+				BucketName: "meta-llama/Llama-3-70B-Instruct",
+				Prefix:     "experimental", // Specified branch
+			},
+			wantErr: false,
+		},
+		{
+			name:        "invalid hugging face uri - empty model ID",
+			uri:         "hf://@branch",
+			wantErr:     true,
+			errContains: "model ID cannot be empty",
+		},
+		// OCI URIs
 		{
 			name:    "valid n/namespace/b/bucket/o/prefix",
 			uri:     "oci://n/myns/b/mybucket/o/myprefix",
@@ -550,7 +740,7 @@ func TestNewObjectURI(t *testing.T) {
 			name:        "missing oci scheme",
 			uri:         "n/myns/b/mybucket/o/myprefix",
 			wantErr:     true,
-			errContains: "must start with 'oci://'",
+			errContains: "unknown storage type",
 		},
 		{
 			name:        "malformed n/namespace/b/bucket/o (too short)",
@@ -574,7 +764,7 @@ func TestNewObjectURI(t *testing.T) {
 			name:        "empty string",
 			uri:         "",
 			wantErr:     true,
-			errContains: "must start with 'oci://'",
+			errContains: "unknown storage type",
 		},
 		{
 			name:        "oci:// only",

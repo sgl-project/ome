@@ -14,6 +14,8 @@ const (
 	PVCStoragePrefix = "pvc://"
 	// VendorStoragePrefix is the prefix for vendor storage URIs
 	VendorStoragePrefix = "vendor://"
+	// HuggingFaceStoragePrefix is the prefix for Hugging Face model storage URIs
+	HuggingFaceStoragePrefix = "hf://"
 )
 
 // StorageType is a string enum for storage type
@@ -26,6 +28,8 @@ const (
 	StorageTypeOCI StorageType = "OCI"
 	// StorageTypeVendor is the value for Vendor storage
 	StorageTypeVendor StorageType = "VENDOR"
+	// StorageTypeHuggingFace is the value for Hugging Face model storage
+	StorageTypeHuggingFace StorageType = "HUGGINGFACE"
 )
 
 // OCIStorageComponents represents the components of an OCI storage URI
@@ -47,6 +51,12 @@ type VendorStorageComponents struct {
 	VendorName   string
 	ResourceType string
 	ResourcePath string
+}
+
+// HuggingFaceStorageComponents represents the components of a Hugging Face model URI
+type HuggingFaceStorageComponents struct {
+	ModelID string
+	Branch  string
 }
 
 // ParseOCIStorageURI parses an OCI storage URI and returns its components
@@ -142,6 +152,46 @@ func ValidateVendorStorageURI(uri string) error {
 	return err
 }
 
+// ParseHuggingFaceStorageURI parses a Hugging Face model URI and returns its components
+// Format: hf://{model-id}[@{branch}]
+func ParseHuggingFaceStorageURI(uri string) (*HuggingFaceStorageComponents, error) {
+	if !strings.HasPrefix(uri, HuggingFaceStoragePrefix) {
+		return nil, fmt.Errorf("invalid Hugging Face storage URI format: missing %s prefix", HuggingFaceStoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, HuggingFaceStoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid Hugging Face storage URI format: missing model ID")
+	}
+
+	// Split into model ID and branch
+	var modelID, branch string
+	if strings.Contains(path, "@") {
+		parts := strings.SplitN(path, "@", 2)
+		modelID = parts[0]
+		branch = parts[1]
+	} else {
+		modelID = path
+		branch = "main" // Default to 'main' branch if not specified
+	}
+
+	if modelID == "" {
+		return nil, fmt.Errorf("invalid Hugging Face storage URI format: model ID cannot be empty")
+	}
+
+	return &HuggingFaceStorageComponents{
+		ModelID: modelID,
+		Branch:  branch,
+	}, nil
+}
+
+// ValidateHuggingFaceStorageURI validates if the given URI matches Hugging Face model storage format
+func ValidateHuggingFaceStorageURI(uri string) error {
+	_, err := ParseHuggingFaceStorageURI(uri)
+	return err
+}
+
 // GetStorageType determines the type of storage URI
 func GetStorageType(uri string) (StorageType, error) {
 	switch {
@@ -151,6 +201,8 @@ func GetStorageType(uri string) (StorageType, error) {
 		return StorageTypePVC, nil
 	case strings.HasPrefix(uri, VendorStoragePrefix):
 		return StorageTypeVendor, nil
+	case strings.HasPrefix(uri, HuggingFaceStoragePrefix):
+		return StorageTypeHuggingFace, nil
 	default:
 		return "", fmt.Errorf("unknown storage type for URI: %s", uri)
 	}
@@ -170,6 +222,8 @@ func ValidateStorageURI(uri string) error {
 		return ValidatePVCStorageURI(uri)
 	case StorageTypeVendor:
 		return ValidateVendorStorageURI(uri)
+	case StorageTypeHuggingFace:
+		return ValidateHuggingFaceStorageURI(uri)
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)
 	}
@@ -179,9 +233,46 @@ func ValidateStorageURI(uri string) error {
 // Example URI formats:
 // - oci://namespace@region/bucket/prefix
 // - oci://n/namespace/b/bucket/o/prefix
+// - hf://model-id[@branch]
+// NewObjectURI creates a new ObjectURI from a storage URI string
 func NewObjectURI(uriStr string) (*casper.ObjectURI, error) {
-	if !strings.HasPrefix(uriStr, "oci://") {
-		return nil, fmt.Errorf("URI must start with 'oci://'")
+	storageType, err := GetStorageType(uriStr)
+	if err != nil {
+		return nil, err
+	}
+
+	switch storageType {
+	case StorageTypeOCI:
+		return parseOCIObjectURI(uriStr)
+	case StorageTypeHuggingFace:
+		return parseHuggingFaceObjectURI(uriStr)
+	default:
+		return nil, fmt.Errorf("unsupported storage type for object URI: %s", storageType)
+	}
+}
+
+// parseHuggingFaceObjectURI parses a Hugging Face URI into an ObjectURI
+func parseHuggingFaceObjectURI(uriStr string) (*casper.ObjectURI, error) {
+	hfComponents, err := ParseHuggingFaceStorageURI(uriStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// For Hugging Face models:
+	// - Use BucketName field to store the model ID
+	// - Use Prefix field to store the branch
+	// - Use Namespace to identify this as a Hugging Face resource
+	return &casper.ObjectURI{
+		Namespace:  "huggingface", // Identifies this as a Hugging Face model
+		BucketName: hfComponents.ModelID,
+		Prefix:     hfComponents.Branch,
+	}, nil
+}
+
+// parseOCIObjectURI parses an OCI URI string into an ObjectURI
+func parseOCIObjectURI(uriStr string) (*casper.ObjectURI, error) {
+	if !strings.HasPrefix(uriStr, OCIStoragePrefix) {
+		return nil, fmt.Errorf("URI must start with '%s'", OCIStoragePrefix)
 	}
 
 	// Remove the scheme
