@@ -40,12 +40,15 @@ llama-3-3-70b-instruct:
 
 llama-3-3-70b-instruct-ft:
   enabled: false
+  lifecyclePhase: "ACTIVE"
 
 llama-3-1-70b-instruct-ft:
   enabled: false
+  lifecyclePhase: "ACTIVE"
 
 llama-3-70b-instruct-ft:
   enabled: false
+  lifecyclePhase: "ACTIVE"
 
 llama-3-3-70b-instruct-fp8-dynamic:
   enabled: false
