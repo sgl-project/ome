@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -34,6 +35,8 @@ type GopherTask struct {
 }
 
 type Gopher struct {
+	modelConfigParser    *ModelConfigParser
+	modelConfigUpdater   *ModelConfigUpdater
 	downloadRetry        int
 	concurrency          int
 	multipartConcurrency int
@@ -43,6 +46,7 @@ type Gopher struct {
 	nodeLabeler          *NodeLabeler
 	metrics              *Metrics
 	logger               *zap.SugaredLogger
+	configMapMutex       sync.Mutex // Mutex to coordinate ConfigMap access between nodeLabeler and modelConfigUpdater
 }
 
 const (
@@ -50,6 +54,8 @@ const (
 )
 
 func NewGopher(
+	modelConfigParser *ModelConfigParser,
+	modelConfigUpdater *ModelConfigUpdater,
 	casperDataStore *casper.CasperDataStore,
 	concurrency int,
 	multipartConcurrency int,
@@ -65,6 +71,8 @@ func NewGopher(
 	}
 
 	return &Gopher{
+		modelConfigParser:    modelConfigParser,
+		modelConfigUpdater:   modelConfigUpdater,
 		downloadRetry:        downloadRetry,
 		concurrency:          concurrency,
 		multipartConcurrency: multipartConcurrency,
@@ -106,6 +114,44 @@ func (s *Gopher) runWorker() {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+}
+
+// safeNodeLabelerProcessOp executes the NodeLabeler's ProcessOp method with mutex protection
+// to ensure thread-safe ConfigMap updates
+func (s *Gopher) safeNodeLabelerProcessOp(op *NodeLabelOp) error {
+	s.configMapMutex.Lock()
+	defer s.configMapMutex.Unlock()
+
+	return s.nodeLabeler.ProcessOp(op)
+}
+
+// safeParseAndUpdateModelConfig executes the ModelConfigParser's ParseAndUpdateModelConfig method with mutex protection
+// to ensure thread-safe ConfigMap updates
+func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) error {
+	s.configMapMutex.Lock()
+	defer s.configMapMutex.Unlock()
+
+	// First parse the configuration without updating the ConfigMap
+	// This call will return model metadata
+	metadata, err := s.modelConfigParser.ParseModelConfig(modelPath, baseModel, clusterBaseModel)
+	if err != nil {
+		return err
+	}
+
+	// If valid metadata was found, update the ConfigMap while still holding the lock
+	if metadata != nil {
+		op := &ModelConfigOp{
+			ModelMetadata:    *metadata,
+			BaseModel:        baseModel,
+			ClusterBaseModel: clusterBaseModel,
+		}
+
+		// Update the ConfigMap with model configuration
+		// Since we're holding the lock, we can call the UpdateModelConfig method directly
+		return s.modelConfigUpdater.UpdateModelConfig(op)
+	}
+
+	return nil
 }
 
 func (s *Gopher) processTask(task *GopherTask) error {
@@ -180,6 +226,23 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.markModelOnNodeFailed(task)
 				return err
 			}
+			// Parse model config and update ConfigMap
+			// We can pass either BaseModel or ClusterBaseModel based on the task's model type
+			var baseModel *v1beta1.BaseModel
+			var clusterBaseModel *v1beta1.ClusterBaseModel
+
+			// Check the actual model type from the task
+			if task.BaseModel != nil {
+				baseModel = task.BaseModel
+				s.logger.Debugf("Using BaseModel %s/%s for config parsing", baseModel.Namespace, baseModel.Name)
+			} else if task.ClusterBaseModel != nil {
+				clusterBaseModel = task.ClusterBaseModel
+				s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
+			} else {
+				s.logger.Warnf("No model object found in task, skipping config parsing")
+			}
+
+			_ = s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel)
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping download for model %s", modelInfo)
 		default:
@@ -205,7 +268,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			ClusterBaseModel: task.ClusterBaseModel,
 		}
 
-		err = s.nodeLabeler.processOp(nodeLabelOp)
+		err = s.safeNodeLabelerProcessOp(nodeLabelOp)
 		if err != nil {
 			s.logger.Errorf("Failed to mark model %s as Ready: %v", modelInfo, err)
 			return err
@@ -252,7 +315,7 @@ func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 		ClusterBaseModel: task.ClusterBaseModel,
 	}
 
-	err := s.nodeLabeler.processOp(nodeLabelOp)
+	err := s.safeNodeLabelerProcessOp(nodeLabelOp)
 	if err != nil {
 		s.logger.Errorf("Failed to mark model %s as Failed on node: %v", modelInfo, err)
 	} else {

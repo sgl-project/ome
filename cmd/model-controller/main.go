@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	modelcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/model"
 	"github.com/spf13/cobra"
@@ -79,9 +81,9 @@ func runCommand(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	inclusterKubeConfig := getKubeConfig()
-	kubeClient := createKubeClient(inclusterKubeConfig)
-	omev1beta1ClientSet := createOmeClient(inclusterKubeConfig)
+	cfg := ctrl.GetConfigOrDie()
+	kubeClient := createKubeClient(cfg)
+	omev1beta1ClientSet := createOmeClient(cfg)
 
 	if !checkCRDExists(omev1beta1ClientSet, logger) {
 		logger.Info("CRD doesn't exist. Exiting")
@@ -217,15 +219,6 @@ func initializeLogger() (*Logger, error) {
 	}
 	return zapLogger.Sugar(), nil
 }
-
-func createKubeClient(kubeConfig *rest.Config) *kubernetes.Clientset {
-	return kubernetes.NewForConfigOrDie(kubeConfig)
-}
-
-func createOmeClient(kubeConfig *rest.Config) *omev1beta1client.Clientset {
-	return omev1beta1client.NewForConfigOrDie(kubeConfig)
-}
-
 func getKubeConfig() *rest.Config {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -245,4 +238,14 @@ func checkCRDExists(client omev1beta1client.Interface, logger *Logger) bool {
 		return false
 	}
 	return true
+}
+
+// createKubeClient creates a Kubernetes client from the provided config
+func createKubeClient(kubeConfig *rest.Config) *kubernetes.Clientset {
+	return kubernetes.NewForConfigOrDie(kubeConfig)
+}
+
+// createOmeClient creates an OME client from the provided config
+func createOmeClient(kubeConfig *rest.Config) *omev1beta1client.Clientset {
+	return omev1beta1client.NewForConfigOrDie(kubeConfig)
 }

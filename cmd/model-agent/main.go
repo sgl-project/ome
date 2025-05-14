@@ -193,6 +193,7 @@ func setupInformers(omeClient *omev1beta1client.Clientset) (omev1beta1informers.
 // initializeComponents creates and initializes all the model agent components
 func initializeComponents(
 	kubeClient *kubernetes.Clientset,
+	omeClient *omev1beta1client.Clientset,
 	omeInformerFactory omev1beta1informers.SharedInformerFactory,
 	metrics *modelagent.Metrics,
 	gopherTaskChan chan *modelagent.GopherTask,
@@ -234,6 +235,12 @@ func initializeComponents(
 		return nil, nil, fmt.Errorf("failed to create casper data store: %w", err)
 	}
 
+	// Create a ModelConfigParser instance
+	modelConfigParser := modelagent.NewModelConfigParser(omeClient, logger)
+
+	// Create a ModelConfigUpdater instance
+	modelConfigUpdater := modelagent.NewModelConfigUpdater(cfg.nodeName, cfg.namespace, kubeClient, logger)
+
 	// Create a Scout instance
 	baseModelInformer := omeInformerFactory.Ome().V1beta1().BaseModels()
 	clusterBaseModelInformer := omeInformerFactory.Ome().V1beta1().ClusterBaseModels()
@@ -253,6 +260,8 @@ func initializeComponents(
 
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
+		modelConfigParser,
+		modelConfigUpdater,
 		casperDS, // Pass the casper data store directly
 		cfg.concurrency,
 		cfg.multipartConcurrency,
@@ -313,6 +322,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 	// Initialize components
 	scout, gopher, err := initializeComponents(
 		kubeClient,
+		omeClient,
 		omeInformerFactory,
 		metrics,
 		gopherTaskChan,

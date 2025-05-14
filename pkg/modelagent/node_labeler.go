@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -20,14 +19,38 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// ModelStateOnNode represents the model state in legacy format
+// Maintained for backward compatibility with existing codepaths
 type ModelStateOnNode string
 
+// Model state constants (legacy format)
 const (
-	Ready    ModelStateOnNode = "Ready"
+	// Ready indicates the model is ready to use
+	Ready ModelStateOnNode = "Ready"
+	// Updating indicates the model is being downloaded or updated
 	Updating ModelStateOnNode = "Updating"
-	Failed   ModelStateOnNode = "Failed"
-	Deleted  ModelStateOnNode = "Deleted"
+	// Failed indicates the model failed to download or initialize
+	Failed ModelStateOnNode = "Failed"
+	// Deleted indicates the model was marked for deletion
+	Deleted ModelStateOnNode = "Deleted"
 )
+
+// convertModelStateToStatus converts a legacy ModelStateOnNode to the new ModelStatus format
+// This is necessary for compatibility during the transition period
+func convertModelStateToStatus(state ModelStateOnNode) ModelStatus {
+	switch state {
+	case Ready:
+		return ModelStatusReady
+	case Updating:
+		return ModelStatusUpdating
+	case Failed:
+		return ModelStatusFailed
+	case Deleted:
+		return ModelStatusDeleted
+	default:
+		return ModelStatusReady // Default to Ready for unknown states
+	}
+}
 
 type NodeLabelOp struct {
 	ModelStateOnNode ModelStateOnNode
@@ -36,7 +59,6 @@ type NodeLabelOp struct {
 }
 
 type NodeLabeler struct {
-	mu         sync.Mutex
 	opRetry    int
 	kubeClient *kubernetes.Clientset
 	nodeName   string
@@ -60,15 +82,18 @@ func NewNodeLabeler(nodeName string, namespace string, kubeClient *kubernetes.Cl
 	}
 }
 
+// LabelNode applies model state changes to both node labels and ConfigMap
+// Note: This method still uses retries for handling node label updates,
+// but ConfigMap updates are now coordinated by Gopher's mutex
 func (n *NodeLabeler) LabelNode(op *NodeLabelOp) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	return utils.Retry(n.opRetry, 100*time.Millisecond, func() error {
-		return n.processOp(op)
+		return n.ProcessOp(op)
 	})
 }
 
-func (n *NodeLabeler) processOp(op *NodeLabelOp) error {
+// ProcessOp applies model state changes both to the node labels and to the ConfigMap
+// This method is exported so that it can be called from Gopher with mutex protection
+func (n *NodeLabeler) ProcessOp(op *NodeLabelOp) error {
 	modelInfo := getModelOpInfo(op)
 
 	n.logger.Infof("Processing %s operation for %s in state: %s", op.ModelStateOnNode, modelInfo, op.ModelStateOnNode)
@@ -204,35 +229,64 @@ func (n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
 }
 
 func (n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *NodeLabelOp, needCreate bool) error {
-	var key, modelInfo string
+	// Get the model name and namespace based on the model type
+	var modelName, namespace, modelInfo string
 	if op.BaseModel != nil {
-		key = fmt.Sprintf("%s_%s", op.BaseModel.Namespace, op.BaseModel.Name)
-		modelInfo = fmt.Sprintf("BaseModel %s/%s", op.BaseModel.Namespace, op.BaseModel.Name)
-		n.logger.Debugf("Using key '%s' for %s", key, modelInfo)
+		modelName = op.BaseModel.Name
+		namespace = op.BaseModel.Namespace
+		modelInfo = fmt.Sprintf("BaseModel %s/%s", namespace, modelName)
 	} else {
-		key = op.ClusterBaseModel.Name
-		modelInfo = fmt.Sprintf("ClusterBaseModel %s", op.ClusterBaseModel.Name)
-		n.logger.Debugf("Using key '%s' for %s", key, modelInfo)
+		modelName = op.ClusterBaseModel.Name
+		namespace = ""
+		modelInfo = fmt.Sprintf("ClusterBaseModel %s", modelName)
 	}
+
+	// Get the unique key for this model
+	key := GetModelKey(namespace, modelName)
+	n.logger.Debugf("Using key '%s' for %s", key, modelInfo)
 
 	if configMap.Data == nil {
 		n.logger.Debugf("ConfigMap Data is nil, initializing it for %s", modelInfo)
 		configMap.Data = make(map[string]string)
 	}
 
-	switch op.ModelStateOnNode {
-	case Ready:
-		n.logger.Debugf("Setting ConfigMap data[%s] = Ready for %s", key, modelInfo)
-		configMap.Data[key] = string(Ready)
-	case Updating:
-		n.logger.Debugf("Setting ConfigMap data[%s] = Updating for %s", key, modelInfo)
-		configMap.Data[key] = string(Updating)
-	case Failed:
-		n.logger.Debugf("Setting ConfigMap data[%s] = Failed for %s", key, modelInfo)
-		configMap.Data[key] = string(Failed)
-	case Deleted:
+	// Check if there's already an entry for this model
+	var modelEntry ModelEntry
+	if existingData, exists := configMap.Data[key]; exists {
+		// If entry exists, try to unmarshal it
+		if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
+			// If it's not in our format yet, create a new entry with just the status
+			modelEntry = ModelEntry{
+				Name:   modelName,
+				Status: convertModelStateToStatus(op.ModelStateOnNode),
+				Config: nil,
+			}
+		} else {
+			// Update just the status, preserving the config
+			modelEntry.Status = convertModelStateToStatus(op.ModelStateOnNode)
+		}
+	} else {
+		// No existing entry, create a new one
+		modelEntry = ModelEntry{
+			Name:   modelName,
+			Status: convertModelStateToStatus(op.ModelStateOnNode),
+			Config: nil,
+		}
+	}
+
+	// For 'Deleted' status, we might want to entirely remove the entry
+	if op.ModelStateOnNode == Deleted {
 		n.logger.Debugf("Deleting ConfigMap data[%s] for %s", key, modelInfo)
 		delete(configMap.Data, key)
+	} else {
+		// Marshal the model entry to JSON
+		entryJSON, err := json.Marshal(modelEntry)
+		if err != nil {
+			n.logger.Errorf("Failed to marshal model entry for %s: %v", modelInfo, err)
+			return err
+		}
+		n.logger.Debugf("Setting ConfigMap data[%s] to %s for %s", key, string(entryJSON), modelInfo)
+		configMap.Data[key] = string(entryJSON)
 	}
 
 	if needCreate {

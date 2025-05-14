@@ -135,7 +135,23 @@ func (c *ModelController) handleModelStatus(obj interface{}) {
 	}
 
 	nodeName := configMap.Name
-	for modelNsName, state := range configMap.Data {
+	for modelNsName, data := range configMap.Data {
+		c.logger.Infof("Processing ConfigMap data for model key %s", modelNsName)
+		// Parse the ModelEntry from the ConfigMap data
+		modelEntry, err := parseModelEntry(data)
+		if err != nil {
+			c.logger.Errorf("Failed to parse model entry for %s: %v", modelNsName, err)
+			continue
+		}
+
+		// Get the status from the ModelEntry
+		state := string(modelEntry.Status)
+		if modelEntry.Config != nil {
+			c.logger.Infof("Processing model %s with status %s and configuration data", modelNsName, state)
+		} else {
+			c.logger.Infof("Processing model %s with status %s (no configuration data)", modelNsName, state)
+		}
+
 		var isClusterBaseModel bool = true
 		var nsName string
 		var modelName string
@@ -144,6 +160,7 @@ func (c *ModelController) handleModelStatus(obj interface{}) {
 			splits := strings.Split(modelNsName, "_")
 			if len(splits) < 2 {
 				c.logger.Errorf("Failed to parse the name and namespace of the model: %s", modelNsName)
+				continue
 			}
 			nsName = splits[0]
 			modelName = splits[1]
@@ -153,14 +170,14 @@ func (c *ModelController) handleModelStatus(obj interface{}) {
 
 		if isClusterBaseModel {
 			err := utils.Retry(3, 100*time.Millisecond, func() error {
-				return c.updateClusterBaseModelState(modelName, nodeName, state)
+				return c.updateClusterBaseModelState(modelName, nodeName, state, modelEntry.Config)
 			})
 			if err != nil {
 				c.logger.Errorf("Failed to update the state of the clusterBaseModel: %s, error: %s", modelName, err.Error())
 			}
 		} else {
 			err := utils.Retry(3, 100*time.Millisecond, func() error {
-				return c.updateBaseModelState(modelName, nsName, nodeName, state)
+				return c.updateBaseModelState(modelName, nsName, nodeName, state, modelEntry.Config)
 			})
 			if err != nil {
 				c.logger.Errorf("Failed to update the state of the BaseModel %s in namespace %s, error: %s", modelName, nsName, err.Error())
@@ -177,6 +194,10 @@ func (c *ModelController) handleModelStatusDelete(obj interface{}) {
 	configMap, ok := obj.(*corev1.ConfigMap)
 	if !ok {
 		c.logger.Errorf("Failed to convert %v to ConfigMap", obj)
+		return
+	}
+
+	if _, ok := configMap.ObjectMeta.Labels[constants.ModelStatusConfigMapLabel]; !ok {
 		return
 	}
 
@@ -197,16 +218,17 @@ func (c *ModelController) handleModelStatusDelete(obj interface{}) {
 			modelName = modelNsName
 		}
 
+		// For deletion, we don't need to pass config as it's not relevant
 		if isClusterBaseModel {
 			err := utils.Retry(3, 100*time.Millisecond, func() error {
-				return c.updateClusterBaseModelState(modelName, nodeName, string(modelagent.Deleted))
+				return c.updateClusterBaseModelState(modelName, nodeName, string(modelagent.Deleted), nil)
 			})
 			if err != nil {
 				c.logger.Errorf("Failed to update the state of the clusterBaseModel: %s, error: %s", modelName, err.Error())
 			}
 		} else {
 			err := utils.Retry(3, 100*time.Millisecond, func() error {
-				return c.updateBaseModelState(modelName, nsName, nodeName, string(modelagent.Deleted))
+				return c.updateBaseModelState(modelName, nsName, nodeName, string(modelagent.Deleted), nil)
 			})
 			if err != nil {
 				c.logger.Errorf("Failed to update the state of the BaseModel %s in namespace %s, error: %s", modelName, nsName, err.Error())
@@ -239,7 +261,7 @@ func (c *ModelController) handleNodeDelete(obj interface{}) {
 	}
 }
 
-func (c *ModelController) updateClusterBaseModelState(name, nodeName, state string) error {
+func (c *ModelController) updateClusterBaseModelState(name, nodeName, state string, config *modelagent.ModelConfig) error {
 	queriedModel, err := c.omeClient.OmeV1beta1().ClusterBaseModels().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -284,6 +306,48 @@ func (c *ModelController) updateClusterBaseModelState(name, nodeName, state stri
 		model.Status.State = v1beta1.LifeCycleStateInTransit
 	}
 
+	// If we have configuration data, update the model spec
+	if config != nil {
+		c.logger.Debugf("Updating ClusterBaseModel %s with configuration data", name)
+		updateModelWithConfig(model, config)
+
+		// Update the spec first if we changed it
+		_, err = c.omeClient.OmeV1beta1().ClusterBaseModels().Update(context.TODO(), model, metav1.UpdateOptions{})
+		if err != nil {
+			c.logger.Warnf("Failed to update spec for ClusterBaseModel %s: %v", name, err)
+			// Continue with status update even if spec update fails
+			// Get the latest version again
+			model, err = c.omeClient.OmeV1beta1().ClusterBaseModels().Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			// Reapply the status changes
+			model.Status.NodesReady = removeFromSlice(model.Status.NodesReady, nodeName)
+			model.Status.NodesFailed = removeFromSlice(model.Status.NodesFailed, nodeName)
+
+			if state == string(modelagent.Ready) {
+				nodesReady := addToSlice(model.Status.NodesReady, nodeName)
+				slices.Sort(nodesReady)
+				model.Status.NodesReady = nodesReady
+			}
+
+			if state == string(modelagent.Failed) {
+				nodesFailed := addToSlice(model.Status.NodesFailed, nodeName)
+				slices.Sort(nodesFailed)
+				model.Status.NodesFailed = nodesFailed
+			}
+
+			if len(model.Status.NodesReady) > 0 {
+				model.Status.State = v1beta1.LifeCycleStateReady
+			} else if len(model.Status.NodesReady) == 0 && len(model.Status.NodesFailed) > 0 {
+				model.Status.State = v1beta1.LifeCycleStateFailed
+			} else {
+				model.Status.State = v1beta1.LifeCycleStateInTransit
+			}
+		}
+	}
+
+	// Update the status
 	_, err = c.omeClient.OmeV1beta1().ClusterBaseModels().UpdateStatus(context.TODO(), model, metav1.UpdateOptions{})
 	if err != nil {
 		return err
@@ -292,7 +356,7 @@ func (c *ModelController) updateClusterBaseModelState(name, nodeName, state stri
 	return nil
 }
 
-func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state string) error {
+func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state string, config *modelagent.ModelConfig) error {
 	queriedModel, err := c.omeClient.OmeV1beta1().BaseModels(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -337,6 +401,48 @@ func (c *ModelController) updateBaseModelState(name, namespace, nodeName, state 
 		model.Status.State = v1beta1.LifeCycleStateInTransit
 	}
 
+	// If we have configuration data, update the model spec
+	if config != nil {
+		c.logger.Debugf("Updating BaseModel %s/%s with configuration data", namespace, name)
+		updateModelWithConfig(model, config)
+
+		// Update the spec first if we changed it
+		_, err = c.omeClient.OmeV1beta1().BaseModels(namespace).Update(context.TODO(), model, metav1.UpdateOptions{})
+		if err != nil {
+			c.logger.Warnf("Failed to update spec for BaseModel %s/%s: %v", namespace, name, err)
+			// Continue with status update even if spec update fails
+			// Get the latest version again
+			model, err = c.omeClient.OmeV1beta1().BaseModels(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			// Reapply the status changes
+			model.Status.NodesReady = removeFromSlice(model.Status.NodesReady, nodeName)
+			model.Status.NodesFailed = removeFromSlice(model.Status.NodesFailed, nodeName)
+
+			if state == string(modelagent.Ready) {
+				nodesReady := addToSlice(model.Status.NodesReady, nodeName)
+				slices.Sort(nodesReady)
+				model.Status.NodesReady = nodesReady
+			}
+
+			if state == string(modelagent.Failed) {
+				nodesFailed := addToSlice(model.Status.NodesFailed, nodeName)
+				slices.Sort(nodesFailed)
+				model.Status.NodesFailed = nodesFailed
+			}
+
+			if len(model.Status.NodesReady) > 0 {
+				model.Status.State = v1beta1.LifeCycleStateReady
+			} else if len(model.Status.NodesReady) == 0 && len(model.Status.NodesFailed) > 0 {
+				model.Status.State = v1beta1.LifeCycleStateFailed
+			} else {
+				model.Status.State = v1beta1.LifeCycleStateInTransit
+			}
+		}
+	}
+
+	// Update the status
 	_, err = c.omeClient.OmeV1beta1().BaseModels(namespace).UpdateStatus(context.TODO(), model, metav1.UpdateOptions{})
 	if err != nil {
 		return err
