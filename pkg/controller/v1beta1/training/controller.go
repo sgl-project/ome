@@ -72,8 +72,8 @@ const (
 // +kubebuilder:rbac:groups=ome.io,resources=finetunedweights;finetunedweights/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var trainJob v1beta1.TrainingJob
-	if err := r.Client.Get(ctx, req.NamespacedName, &trainJob); err != nil {
+	trainJob := &v1beta1.TrainingJob{}
+	if err := r.Client.Get(ctx, req.NamespacedName, trainJob); err != nil {
 		if apierr.IsNotFound(err) {
 			r.Log.Error(err, "TrainingJob not found", "namespace", req.NamespacedName, "name", trainJob.Name)
 			return ctrl.Result{}, nil
@@ -108,14 +108,14 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: utils.GetFineTunedModelName(trainJob.Name)}, finetuneWeights); err != nil {
 		if apierr.IsNotFound(err) {
 			// Finetune weights not found, create a new one
-			finetuneWeights = r.createFinetuneWeights(&trainJob, *configMap, trainingRuntime)
+			finetuneWeights = r.createFinetuneWeights(trainJob, *configMap, trainingRuntime)
 			if err = r.Client.Create(ctx, finetuneWeights); err != nil {
 				if apierr.IsAlreadyExists(err) {
 					// Requeue it when model already exists
 					return ctrl.Result{}, nil
 				} else {
 					r.Log.Error(err, "Failed to create Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
-					updateCreatedCondition(&trainJob, CreateFinetuneWeightsFailed)
+					updateCreatedCondition(trainJob, CreateFinetuneWeightsFailed)
 					return ctrl.Result{}, err
 				}
 			} else {
@@ -131,7 +131,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	if isTrainJobFinished(&trainJob) {
+	if isTrainJobFinished(trainJob) {
 		r.Log.Info("TrainJob has finished, updating FineTuneWeights", "namespace", req.NamespacedName, "name", trainJob.Name, "FineTuneWeights", finetuneWeights)
 		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobFailed) {
 			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateFailed)
@@ -147,12 +147,12 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	if result, err := r.reconcilePVPVC(&trainJob, baseModel.Spec); err != nil {
+	if result, err := r.reconcilePVPVC(trainJob, baseModel.Spec); err != nil {
 		r.Log.Error(err, "Error reconciling PV/PVC for train job", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return result, err
 	}
 
-	if err := r.prepareJobAnnotations(&trainJob, baseModel, trainingRuntime); err != nil {
+	if err := r.prepareJobAnnotations(trainJob, baseModel, trainingRuntime); err != nil {
 		r.Log.Error(err, "Error preparing training job annotations", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return ctrl.Result{}, nil
 	}
@@ -163,16 +163,16 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
 	}
 
-	opState, err := r.reconcileObjects(ctx, runtime, &trainJob, req, baseModel.Spec.Vendor)
+	opState, err := r.reconcileObjects(ctx, runtime, trainJob, req, baseModel.Spec.Vendor)
 
 	originStatus := trainJob.Status.DeepCopy()
-	updateSuspendedCondition(&trainJob)
-	updateCreatedCondition(&trainJob, opState)
-	if terminalCondErr := updateTerminalCondition(ctx, runtime, &trainJob); terminalCondErr != nil {
+	updateSuspendedCondition(trainJob)
+	updateCreatedCondition(trainJob, opState)
+	if terminalCondErr := updateTerminalCondition(ctx, runtime, trainJob); terminalCondErr != nil {
 		return ctrl.Result{}, errors.Join(err, terminalCondErr)
 	}
 	if !equality.Semantic.DeepEqual(&trainJob, originStatus) {
-		return ctrl.Result{}, errors.Join(err, r.Client.Status().Update(ctx, &trainJob))
+		return ctrl.Result{}, errors.Join(err, r.Client.Status().Update(ctx, trainJob))
 	}
 
 	return ctrl.Result{}, nil
