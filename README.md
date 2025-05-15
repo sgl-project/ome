@@ -13,7 +13,7 @@
 <h3 align="center">Open Model Engine</h3>
 
   <p align="center">
-This Project Provides AI/ML Workload Management on Kubernetes
+Enterprise-Grade AI/ML Workload Management Platform on Kubernetes
     <br />
     <a href="https://PENDING"><strong>Explore the docs »</strong></a>
     <br />
@@ -21,39 +21,78 @@ This Project Provides AI/ML Workload Management on Kubernetes
 </div>
 
 
-OME is a standard operator for managing the lifecycle of LLM models,
-serving, training, and dedicated AI clusters in a Kubernetes cluster.
-It is designed to be a generic operator
-that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes cluster running on OCI.
+OME is a comprehensive operator for managing the lifecycle of Large Language Models (LLMs) and other AI workloads in Kubernetes environments. It orchestrates model serving, training, benchmarking, and dedicated AI clusters with enterprise-grade resource management.
 
 ## Architecture
-<p align="center"><img src="site/static/images/architecture.drawio.svg" alt="Logo" width="" height=""></p>
+<p align="center"><img src="site/static/images/architecture.drawio.svg" alt="Architecture Diagram" width="" height=""></p>
 
-1. **Compute Layer**: Includes OC Cluster Network, GPU, and compute images that will be used to launch individual nodes forming a larger cluster.
-2. **Kubernetes Cluster**: Sits on top of compute nodes to manage workload and scheduling. This is fully managed by OKE.
-3. **Network Layer**: Pods, the smallest unit in Kubernetes, have their own networking requirements and use CNI (Container Network Interface) to communicate with each other. RDMA capability requires additional CNI for GPUs to communicate directly.
-4. **Application Layer**:
-    - **Monitoring Components**: Responsible for surfacing all GPU and network device statuses through Kubernetes APIs.
-    - **OME**: An in-house operator that orchestrates model serving and training, with assistance from the monitoring stack to efficiently schedule workloads and auto-recover from failures. Additionally, OME allows users to run HPO and evaluation.
-        - **Training**: Supports common training frameworks such as Accelerate, DeepSpeed, PyTorch, TensorFlow, Cohere's TFew, and MPI.
-        - **Serving**: Focuses predominantly on LLMs such as vLLM, Cohere, TGI, NIM, but also supports Triton, covering all potential model formats such as ONNX.
-        - **Alfred**: A butler across all workloads that allows optimal scheduling, node patching and repairing, and GPU management such as MIG configuration.
-    - **Gang Scheduler**: Uses tools like Volcano for resource quota and scheduling training workloads.
-    - **Logging Component**: Runs on every node to collect logs and emit them to Lumberjack, typically done via Fluent Bit.
+### Infrastructure Layers
 
-## Features
+1. **Hardware Layer**: Built on OCI infrastructure with high-performance RDMA networks, GPUs, CPUs, and NVMe storage.
 
-- 💰 **Autoscaling**: Support modern serverless workload with Autoscaling including Scale to Zero.
+2. **Kubernetes Layer**: Leverages OCI Kubernetes Engine (OKE) for container orchestration with hardware-level optimizations.
 
-- 🔒 **Security**: Supports mTLS and RBAC for secure communication between components and the server *by default*.
+3. **OME Core Components**: Provides specialized Kubernetes operators for managing AI/ML workflows:
 
-- ✅ **Advanced Deployments**: Advanced deployments with canary rollout, blue-green deployment, and A/B testing.
+   - **Model Management**: Manages model lifecycle, from import to versioning, with support for various model formats and architectures including large-scale models (LLaMA, Mistral, Mixtral, etc.)
+   
+   - **Inference Services**: Deploys models as inference services with flexible scaling options, from serverless to dedicated resources
+   
+   - **Training System**: Orchestrates distributed training jobs with support for popular frameworks
+   
+   - **Resource Management**: Controls GPU allocation through Capacity Reservations and Dedicated AI Clusters with cache-aware resource allocation
 
-- 📊 **Metrics and Logging**: OME supports standard metrics and logging for efficient monitoring and debugging.
+   - **Performance Analysis**: Provides benchmarking tools for model evaluation and optimization
 
-- 🌐 **Multi-Node Model Serving and Training**: Supports multi-node model serving and multi-node model training leveraging Volcano for gang scheduling.
+### Runtime Support
 
-- 🛠️ **Resource Management**: Supports dedicated resource reservation and resource sharing.
+- **Serving Runtimes**: Integrates with popular inference engines including vLLM, SGLang, TGI, NIM, Triton, and more
+   - **Intelligent Runtime Selection**: Automatically selects the optimal runtime based on model architecture, model type, format, quantization, and parameter size
+
+- **Training Frameworks**: Supports Accelerate, DeepSpeed, PyTorch, TensorFlow, and MPI-based systems 
+
+- **Deployment Patterns**:
+   - **PD Deployment**: Prefill-Decode disaggregated serving for efficient token generation
+   - **Multi-Node Serving**: Distributed inference across multiple nodes
+   - **Serverless**: On-demand scaling with zero idle resources
+   - **Multi-Node Training**: Distributed training with gang scheduling
+   - **Cache-Aware Load Balancing**: Intelligent routing to optimize model cache utilization
+
+## Key Features
+
+- 🚀 **Model Management**: Comprehensive model registry with support for different formats, architectures, and model types, including advanced multi-expert models like LLaMA4 Maverick (402B parameters). Supports both OCI Object Storage and Hugging Face Hub as model sources.
+
+- 🔀 **Inference Graphs**: Create complex inference workflows with routing patterns (sequence, splitter, ensemble, switch) for chaining models together.
+
+- 🔌 **Flexible Deployment Options**: From serverless to dedicated clusters with fine-grained resource control.
+
+- 💰 **Advanced Autoscaling**: Support for serverless workloads with scale-to-zero capabilities and KEDA integration.
+
+- 🔒 **Enterprise Security**: Built-in mTLS, RBAC, and compartment isolation for secure multi-tenant deployments.
+
+- 🌐 **Distributed Computing**: First-class support for multi-node model serving and distributed training.
+
+- 📏 **Resource Management**: Capacity reservation system for dedicated resource allocation and efficient resource sharing.
+
+- 📊 **Benchmarking**: Built-in performance testing for model evaluation and comparison.
+
+- 💾 **Optimized Storage**: Efficient model storage and loading with distributed model caching leveraging high-performance NVMe storage for optimal performance.
+
+## Core Components
+
+- **Model System**: Manages base models and fine-tuned weights with rich metadata
+
+- **Inference Service**: Deploys models with customizable configurations and auto-scaling
+
+- **Serving Runtime**: Integrates various serving technologies (vLLM, TGI, Cohere, TensorRT-LLM, etc.)
+
+- **Training Job**: Orchestrates model training with framework-specific optimizations
+
+- **Benchmark Job**: Evaluates model performance with standardized metrics
+
+- **Capacity Reservation**: Allocates and manages compute resources
+
+- **Dedicated AI Cluster**: Creates isolated environments for specialized workloads
 
 ## Documentation
 

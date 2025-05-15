@@ -559,14 +559,14 @@ func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1
 
 	// Configure Hugging Face download config with model-specific options
 	hfConfig := *s.hfDownloadConfig // Create a copy of the base config with default values
-	
+
 	// Only override model-specific values, preserving global defaults
 	hfConfig.ModelName = hfComponents.ModelID
 	hfConfig.Branch = hfComponents.Branch
 	hfConfig.LocalPath = destPath
 	hfConfig.Token = hfToken
-	
-	s.logger.Infof("Using Hugging Face config values: connections=%d, maxRetries=%d, retryInterval=%ds", 
+
+	s.logger.Infof("Using Hugging Face config values: connections=%d, maxRetries=%d, retryInterval=%ds",
 		hfConfig.NumConnections, hfConfig.MaxRetries, hfConfig.RetryInternalInSeconds)
 
 	// Create and start Hugging Face download agent

@@ -1,4 +1,5 @@
-@startuml
+@startuml ServingRuntime
+
 package "Serving Runtime" {
 
   object ClusterServingRuntime {
@@ -14,31 +15,21 @@ package "Serving Runtime" {
   object ServingRuntimeSpec {
     + SupportedModelFormat[] supportedModels
     + bool disabled
-    + InferenceServiceProtocol[] protocolVersions
-    + ServingRuntimePodSpec servingRuntimePodSpec
+    + string[] protocolVersions
+    + PodSpec podSpec
     + string httpDataEndpoint
     + uint16 replicas
     + BuiltInAdapter builtInAdapter
     + string compartmentID
+    + ResourceRequirements resourceRequirements
+    + ModelScheduler modelScheduler
+    + AccumulateSteps accumulateSteps
+    + bool keepAlive
+    + bool optimizeForInference
+    + string[] tags
   }
 
-  enum InferenceServiceProtocol {
-    + openInference-v1
-    + openInference-v2
-    + openAI
-    + cohere
-  }
-
-  object SupportedModelFormat {
-    + string name
-    + string version
-    + string modelArchitecture
-    + string modelType
-    + bool autoSelect
-    + int32 priority
-  }
-
-  object ServingRuntimePodSpec {
+  object PodSpec {
     + Container[] containers
     + Volume[] volumes
     + NodeSelector nodeSelector
@@ -47,12 +38,44 @@ package "Serving Runtime" {
     + Labels labels
     + Annotations annotations
     + ImagePullSecrets[] imagePullSecrets
+    + ServiceAccountName serviceAccountName
+  }
+
+  object SupportedModelFormat {
+    + string name
+    + string version
+    + string modelArchitecture
+    + string framework
+    + string[] modelTypes
+    + bool autoSelect
+    + int32 priority
+    + string quantization
+    + string[] modelCapabilities
   }
 
   object BuiltInAdapter {
     + ServerType serverType
     + int modelLoadingTimeoutMillis
     + EnvVar[] env
+    + json serverConfig
+  }
+
+  object ResourceRequirements {
+    + ResourceList requests
+    + ResourceList limits
+  }
+
+  object ModelScheduler {
+    + string type
+    + int defaultBatchSize
+    + int maxBatchSize
+    + int batchingWindow
+  }
+
+  object AccumulateSteps {
+    + bool enabled
+    + int numSteps
+    + int sequenceLength
   }
 
   enum ServerType {
@@ -61,11 +84,15 @@ package "Serving Runtime" {
     + tgi
     + cohere
     + nim
+    + llama_cpp
+    + tensorrt_llm
   }
 
   object ServingRuntimeStatus {
     + string status
     + LifecycleState state
+    + Condition[] conditions
+    + Time lastUpdateTime 
   }
 
   enum LifecycleState {
@@ -74,14 +101,16 @@ package "Serving Runtime" {
     + Failed
   }
 
-  ClusterServingRuntime --> ServingRuntimeSpec
-  ServingRuntime --> ServingRuntimeSpec
-  ClusterServingRuntime --> ServingRuntimeStatus
-  ServingRuntime --> ServingRuntimeStatus
-  ServingRuntimeSpec --> InferenceServiceProtocol
+  ClusterServingRuntime --|> ServingRuntimeSpec
+  ServingRuntime --|> ServingRuntimeSpec
+  ClusterServingRuntime --|> ServingRuntimeStatus
+  ServingRuntime --|> ServingRuntimeStatus
   ServingRuntimeSpec --> SupportedModelFormat
-  ServingRuntimeSpec --> ServingRuntimePodSpec
+  ServingRuntimeSpec --> PodSpec
   ServingRuntimeSpec --> BuiltInAdapter
+  ServingRuntimeSpec --> ResourceRequirements
+  ServingRuntimeSpec --> ModelScheduler
+  ServingRuntimeSpec --> AccumulateSteps
   BuiltInAdapter --> ServerType
   ServingRuntimeStatus --> LifecycleState
 }

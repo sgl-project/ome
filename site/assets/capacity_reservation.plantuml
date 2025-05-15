@@ -1,0 +1,97 @@
+@startuml CapacityReservation
+
+package "Capacity Reservation" {
+  object CapacityReservation {
+    + CapacityReservationSpec spec
+    + CapacityReservationStatus status
+  }
+  
+  object ClusterCapacityReservation {
+    + CapacityReservationSpec spec
+    + CapacityReservationStatus status
+  }
+
+  object CapacityReservationSpec {
+    + ResourceGroup[] resourceGroups
+    + string cohort
+    + ClusterQueuePreemption preemptionRule
+    + string compartmentID
+    + string priorityClassName
+    + bool allowBorrowing
+  }
+
+  enum CapacityReservationLifecycleState {
+    + Active
+    + Creating
+    + Deleting
+    + Failed
+    + Updating
+  }
+
+  enum CapacityReservationConditionType {
+    + Ready
+    + ResourcesSufficient
+    + ResourcesProvisioned
+    + DACAssociationsHealthy
+    + WorkloadsHealthy
+  }
+
+  object CapacityReservationStatus {
+    + FlavorUsage[] capacity
+    + FlavorUsage[] allocatable
+    + AssociationUsage[] associationUsages
+    + CapacityReservationCondition[] conditions
+    + CapacityReservationLifecycleState capacityReservationLifecycleState
+    + string lifecycleDetail
+  }
+
+  object AssociationUsage {
+    + string name
+    + FlavorUsage[] usage
+  }
+
+  object FlavorUsage {
+    + string name
+    + ResourceList resources
+    + ResourceList borrowed
+  }
+
+  object CapacityReservationCondition {
+    + CapacityReservationConditionType type
+    + ConditionStatus status
+    + Time lastTransitionTime
+    + string reason
+    + string message
+  }
+
+  object ResourceGroup {
+    + CoveredResource[] coveredResources
+    + ResourceFlavorReference[] flavors
+  }
+
+  object CoveredResource {
+    + string name
+  }
+
+  object ResourceFlavorReference {
+    + string name
+    + int quota
+  }
+
+  CapacityReservation --|> CapacityReservationSpec
+  CapacityReservation --|> CapacityReservationStatus
+  ClusterCapacityReservation --|> CapacityReservationSpec
+  ClusterCapacityReservation --|> CapacityReservationStatus
+  
+  CapacityReservationSpec --> ResourceGroup
+  CapacityReservationStatus --> FlavorUsage
+  CapacityReservationStatus --> AssociationUsage
+  CapacityReservationStatus --> CapacityReservationCondition
+  CapacityReservationStatus --> CapacityReservationLifecycleState
+  CapacityReservationCondition --> CapacityReservationConditionType
+  AssociationUsage --> FlavorUsage
+  ResourceGroup --> CoveredResource
+  ResourceGroup --> ResourceFlavorReference
+}
+
+@enduml

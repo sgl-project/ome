@@ -266,14 +266,14 @@ func initializeComponents(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create HuggingFace download config: %w", err)
 	}
-	
+
 	// Set up configuration values that will be used as defaults
 	// These will be copied for each model's specific config
 	hfDownloadConfig.MaxRetries = cfg.downloadRetry
 	hfDownloadConfig.NumConnections = cfg.concurrency
 	hfDownloadConfig.RetryInternalInSeconds = 10 // Retry after 10 seconds
-	
-	logger.Infof("Configured Hugging Face downloads with max retries: %d, connections: %d", 
+
+	logger.Infof("Configured Hugging Face downloads with max retries: %d, connections: %d",
 		hfDownloadConfig.MaxRetries, hfDownloadConfig.NumConnections)
 
 	// Create a Gopher instance for downloading models

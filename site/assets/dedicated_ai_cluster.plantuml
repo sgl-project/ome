@@ -1,0 +1,63 @@
+@startuml DedicatedAICluster
+
+package "Dedicated AI Cluster" {
+  object DedicatedAICluster {
+    + DedicatedAIClusterSpec spec
+    + DedicatedAIClusterStatus status
+  }
+
+  object DedicatedAIClusterProfile {
+    + DedicatedAIClusterProfileSpec spec
+    + DedicatedAIClusterProfileStatus status
+  }
+
+  object DedicatedAIClusterSpec {
+    + string profile
+    + int count
+    + ResourceRequirements resources
+    + Affinity affinity
+    + Toleration[] tolerations
+    + map<string,string> nodeSelector
+    + string priorityClassName
+    + string compartmentID
+    + string capacityReservationId
+  }
+
+  object DedicatedAIClusterProfileSpec {
+    + bool disabled
+    + int count
+    + ResourceRequirements resources
+    + Affinity affinity
+    + Toleration[] tolerations
+    + map<string,string> nodeSelector
+    + string priorityClassName
+  }
+
+  enum DacLifecycleState {
+    + ACTIVE
+    + CREATING
+    + DELETING
+    + FAILED
+    + UPDATING
+  }
+
+  object DedicatedAIClusterStatus {
+    + int availableGpu
+    + int allocatedGpu
+    + DacLifecycleState dacLifecycleState
+    + Condition[] conditions
+    + string lifecycleDetail
+  }
+
+  object DedicatedAIClusterProfileStatus {
+  }
+
+  DedicatedAICluster --|> DedicatedAIClusterSpec
+  DedicatedAICluster --|> DedicatedAIClusterStatus
+  DedicatedAIClusterProfile --|> DedicatedAIClusterProfileSpec
+  DedicatedAIClusterProfile --|> DedicatedAIClusterProfileStatus
+  DedicatedAIClusterStatus --> DacLifecycleState
+  DedicatedAIClusterSpec ..> DedicatedAIClusterProfile : references
+}
+
+@enduml
