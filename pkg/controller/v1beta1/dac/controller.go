@@ -126,7 +126,7 @@ func (r *DedicatedAIClusterReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Determine if reconciling with Kueue by checking both if the Volcano queue is present and if the enableKueue flag is set as true
-	isVolcanoQueuePresent, err := utils.IsVolcanoQueuePresent(r.Client, req.NamespacedName.Name)
+	isVolcanoQueuePresent, err := utils.IsVolcanoQueuePresent(r.Client, r.ClientConfig, req.NamespacedName.Name)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to get volcano queue")
 	}

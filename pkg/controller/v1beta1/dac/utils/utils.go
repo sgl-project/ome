@@ -15,6 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
+	"k8s.io/client-go/rest"
 )
 
 func GetDedicatedAIClusterConfigMap(client client.Client) (*corev1.ConfigMap, error) {
@@ -43,9 +45,16 @@ func GetPointerOfIntOrString(val int) *intstr.IntOrString {
 	}
 }
 
-func IsVolcanoQueuePresent(client client.Client, queueName string) (bool, error) {
+func IsVolcanoQueuePresent(client client.Client, clientConfig *rest.Config, queueName string) (bool, error) {
+	isVolcanoQueueCrdPresent, err := generalutils.IsCrdAvailable(clientConfig, schedulingv1beta1.SchemeGroupVersion.String(), constants.VolcanoQueueKind)
+	if err != nil {
+		return false, err
+	}
+	if !isVolcanoQueueCrdPresent {
+		return false, nil
+	}
 	volcanoQueue := &schedulingv1beta1.Queue{}
-	err := client.Get(context.TODO(), types.NamespacedName{Name: queueName}, volcanoQueue)
+	err = client.Get(context.TODO(), types.NamespacedName{Name: queueName}, volcanoQueue)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
