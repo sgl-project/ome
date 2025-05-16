@@ -4,8 +4,6 @@ kind: InferenceService
 metadata:
   name: phi-3-vision-128k-instruct
   namespace: phi-3-vision-128k-instruct
-  annotations:
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.phi_3_vision_128k_instruct.annotations }}

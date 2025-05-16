@@ -1,6 +1,6 @@
 {{- if .Values.content_moderator_dedicated.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: dedicated-content-moderator
   namespace: dedicated-content-moderator

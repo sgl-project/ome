@@ -4,8 +4,6 @@ kind: InferenceService
 metadata:
   name: llama-3-2-90b-vision-instruct-fp8-dynamic
   namespace: llama-3-2-90b-vision-instruct-fp8-dynamic
-  annotations:
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.annotations }}

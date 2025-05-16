@@ -4,8 +4,6 @@ kind: InferenceService
 metadata:
   name: llama-3-2-11b-vision-instruct
   namespace: llama-3-2-11b-vision-instruct
-  annotations:
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.llama_3_2_11b_vision_instruct.annotations }}

@@ -1,6 +1,6 @@
 {{- if .Values.embed_multilingual_image_03.enabled }}
 apiVersion: ome.io/v1beta1
-kind: "InferenceService"
+kind: InferenceService
 metadata:
   name: embed-multilingual-image-03
   namespace: embed-multilingual-image-03

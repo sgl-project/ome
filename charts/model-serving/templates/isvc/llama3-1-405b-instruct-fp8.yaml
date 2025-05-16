@@ -10,7 +10,6 @@ metadata:
     {{- else }}
     ome.io/deploymentMode: "MultiNodeRayVLLM"
     {{- end }}
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     model:

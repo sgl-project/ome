@@ -4,8 +4,6 @@ kind: InferenceService
 metadata:
   name: e5-mistral-7b-instruct
   namespace: e5-mistral-7b-instruct
-  annotations:
-    chainsaw.k8s-integration.oracle.com/inject: "enabled"
 spec:
   predictor:
     {{- with .Values.e5_mistral_7b_instruct.annotations }}
