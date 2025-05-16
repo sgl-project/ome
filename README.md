@@ -35,6 +35,7 @@ OME is a comprehensive operator for managing the lifecycle of Large Language Mod
 3. **OME Core Components**: Provides specialized Kubernetes operators for managing AI/ML workflows:
 
    - **Model Management**: Manages model lifecycle, from import to versioning, with support for various model formats and architectures including large-scale models (LLaMA, Mistral, Mixtral, etc.)
+     - **Dynamic Model Parsing**: Automatically analyzes model files to extract architecture, parameter count, and capabilities directly from safetensors files
    
    - **Inference Services**: Deploys models as inference services with flexible scaling options, from serverless to dedicated resources
    
@@ -48,6 +49,7 @@ OME is a comprehensive operator for managing the lifecycle of Large Language Mod
 
 - **Serving Runtimes**: Integrates with popular inference engines including vLLM, SGLang, TGI, NIM, Triton, and more
    - **Intelligent Runtime Selection**: Automatically selects the optimal runtime based on model architecture, model type, format, quantization, and parameter size
+   - **Advanced Model Parsing**: Built-in support for parsing configurations from popular model families including LLaMA, Mistral, Mixtral, DeepSeek, Phi, and Qwen
 
 - **Training Frameworks**: Supports Accelerate, DeepSpeed, PyTorch, TensorFlow, and MPI-based systems 
 
@@ -60,7 +62,7 @@ OME is a comprehensive operator for managing the lifecycle of Large Language Mod
 
 ## Key Features
 
-- 🚀 **Model Management**: Comprehensive model registry with support for different formats, architectures, and model types, including advanced multi-expert models like LLaMA4 Maverick (402B parameters). Supports both OCI Object Storage and Hugging Face Hub as model sources.
+- 🚀 **Model Management**: Comprehensive model registry with support for different formats, architectures, and model types. Supports both OCI Object Storage and Hugging Face Hub as model sources. Features sophisticated model file parsing to automatically determine model architecture, size, and capabilities.
 
 - 🔀 **Inference Graphs**: Create complex inference workflows with routing patterns (sequence, splitter, ensemble, switch) for chaining models together.
 
