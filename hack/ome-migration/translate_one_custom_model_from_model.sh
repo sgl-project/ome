@@ -68,6 +68,15 @@ convert_model_to_finetunedweight() {
     fi
   done
 
+  # If strategy is still empty, and vendor is "meta", default strategy to "lora"
+  if [[ -z "$strategy" ]]; then
+    if [[ "$vendor" == "meta" ]]; then
+      strategy="lora"
+      hyperparameters["strategy"]="lora"
+      log "No strategy/trainingConfigType set in hyperparameters. Defaulting strategy to 'lora' for vendor 'meta'"
+    fi
+  fi
+
   # Convert storage URL
   local namespace=$(echo "$storage_url" | sed -E 's|os://([^/]+)/.*|\1|')
   local bucket=$(echo "$storage_url" | sed -E 's|os://[^/]+/([^/]+)/.*|\1|')
@@ -174,7 +183,7 @@ main() {
   # Set REGION_CODE and ENV env variable to update generated yaml saved folder path
   local region_code="${REGION_CODE:=ord}"
   local env="${ENV:=dev}"
-  log "Target env: $env, target region: $region_code"
+  #log "Target env: $env, target region: $region_code"
 
   local target="custom-model"
   local dir="./$env-$region_code-$target/$name"
