@@ -12,11 +12,11 @@ import (
 	schedulingv1beta1 "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	generalutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func GetDedicatedAIClusterConfigMap(client client.Client) (*corev1.ConfigMap, error) {
