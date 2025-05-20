@@ -84,7 +84,7 @@ func createDeployment(
 				ObjectMeta: podMetadata,
 				Spec: corev1.PodSpec{
 					Affinity:                      affinity,
-					SchedulerName:                 constants.CustomSchedulerName,
+					SchedulerName:                 reservationWorkloadConfig.SchedulerName,
 					TerminationGracePeriodSeconds: &constants.DACReservationJobTerminationGracePeriodSeconds,
 					Containers: []corev1.Container{
 						{

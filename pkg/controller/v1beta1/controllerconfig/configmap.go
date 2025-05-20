@@ -137,6 +137,7 @@ type CapacityReservationReconcilePolicyConfig struct {
 type DacReservationWorkloadConfig struct {
 	Image                             string `json:"image"`
 	CreationFailedTimeThresholdSecond int    `json:"creationFailedTimeThresholdSecond"`
+	SchedulerName                     string `json:"schedulerName"`
 }
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {

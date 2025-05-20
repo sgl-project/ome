@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"fmt"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac/utils"
 	"github.com/stretchr/testify/assert"
@@ -28,16 +30,18 @@ func TestDeploymentReconciler(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	// Create ConfigMap for tests
+	rawReservationJob := []byte(`{
+		"image": "%s",
+		"creationFailedTimeThresholdSecond": %d,
+		"schedulerName": "%s"
+	}`)
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      constants.DedicatedAIClusterConfigMapName,
 			Namespace: constants.OMENamespace,
 		},
 		Data: map[string]string{
-			"dacReservationJob": `{
-                "image": TestImage,
-                "creationFailedTimeThresholdSecond": TestCreationFailedTimeThresholdSecond
-            }`,
+			"reservationJob": fmt.Sprintf(string(rawReservationJob), TestImage, TestCreationFailedTimeThresholdSecond, constants.CustomSchedulerName),
 		},
 	}
 
@@ -207,6 +211,7 @@ func TestDeploymentReconciler(t *testing.T) {
 				assert.Equal(t, tt.expectedDeployment.Spec.Replicas, createdDeployment.Spec.Replicas)
 				assert.Equal(t, tt.expectedDeployment.Spec.Template.Spec.Containers[0].Resources,
 					createdDeployment.Spec.Template.Spec.Containers[0].Resources)
+				assert.Equal(t, constants.CustomSchedulerName, createdDeployment.Spec.Template.Spec.SchedulerName)
 
 				// Verify labels
 				assert.Equal(t, tt.namespace, createdDeployment.Labels[constants.KueueQueueLabelKey])

@@ -129,6 +129,7 @@ data:
     {
       "image": "{{ .Values.ome.dac.image }}:{{ .Values.ome.dac.tag }}",
       "creationFailedTimeThresholdSecond" : 60
+      "schedulerName" : "{{ .Values.ome.dac.schedulerName }}"
     }
   dacReconcilePolicy: |-
     {

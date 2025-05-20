@@ -83,6 +83,7 @@ ome:
     reconcileWithKueue: true
     image: us-chicago-1.ocir.io/axoxdievda5j/genai-dac-dummy-image
     tag: v1.0-58
+    schedulerName: genai-kube-scheduler
   omeAgent:
     image: ap-osaka-1.ocir.io/idqj093njucb/genai-ome-agent
     tag: *defaultVersion
