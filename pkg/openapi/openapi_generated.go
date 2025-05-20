@@ -341,34 +341,34 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 					},
 					"modelType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "DEPRECATED: This field is deprecated and will be removed in future releases.",
+							Description: "ModelType defines the architecture family of the model (e.g., \"bert\", \"gpt2\", \"llama\"). This value typically corresponds to the \"model_type\" field in a Hugging Face model's config.json. It is used to identify the transformer architecture and inform runtime selection and tokenizer behavior.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"modelFramework": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ModelFramework of the model, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
+							Description: "ModelFramework specifies the underlying framework used by the model, such as \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", or \"TensorRTLLM\". This value helps determine the appropriate runtime for model serving.",
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"),
 						},
 					},
 					"modelArchitecture": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
+							Description: "ModelArchitecture specifies the concrete model implementation or head, such as \"LlamaForCausalLM\", \"GemmaForCausalLM\", or \"MixtralForCausalLM\". This is often derived from the \"architectures\" field in Hugging Face config.json.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"quantization": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
+							Description: "Quantization defines the quantization scheme applied to the model weights, such as \"fp8\", \"fbgemm_fp8\", or \"int4\". This influences runtime compatibility and performance.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"modelParameterSize": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ModelParameterSize is the size of the model parameters, e.g., \"175B\"",
+							Description: "ModelParameterSize indicates the total number of parameters in the model, expressed in human-readable form such as \"7B\", \"13B\", or \"175B\". This can be used for scheduling or runtime selection.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -396,12 +396,6 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 					"modelConfiguration": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Configuration of the model, stored as generic JSON for flexibility.",
-							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
-						},
-					},
-					"tensorRTLLMConfiguration": {
-						SchemaProps: spec.SchemaProps{
-							Description: "TensorRT-LLM specific configuration, stored as generic JSON for flexibility.",
 							Ref:         ref("k8s.io/apimachinery/pkg/runtime.RawExtension"),
 						},
 					},
@@ -471,19 +465,6 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 							Format:      "int32",
 						},
 					},
-					"deprecationTime": {
-						SchemaProps: spec.SchemaProps{
-							Description: "DeprecationTime is the time the model was deprecated",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
-						},
-					},
-					"isLongTermSupported": {
-						SchemaProps: spec.SchemaProps{
-							Description: "LongTermSupported indicates if the model is long term supported",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
 					"additionalMetadata": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Additional metadata for the model",
@@ -505,7 +486,7 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -5468,7 +5449,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 				Properties: map[string]spec.Schema{
 					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name of the library in which the model is stored, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
+							Description: "Name of the library in which the model is stored, e.g., \"ONNXRuntime\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -10327,21 +10308,21 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 				Properties: map[string]spec.Schema{
 					"path": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
+							Description: "Path is the absolute path where the model will be downloaded and stored on the node.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"schemaPath": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model schema file in the storage.",
+							Description: "SchemaPath is the path to the model schema or configuration file within the storage system. This can be used to validate the model or customize how it's loaded.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"parameters": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Parameters to override the default storage credentials and config.",
+							Description: "Parameters contain key-value pairs to override default storage credentials or configuration. These values are typically used to configure access to object storage or mount options.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -10357,14 +10338,14 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 					},
 					"key": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The Storage Key in the secret for this model.",
+							Description: "StorageKey is the name of the key in a Kubernetes Secret used to authenticate access to the model storage. This key will be used to fetch credentials during model download or access.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"storageUri": {
 						SchemaProps: spec.SchemaProps{
-							Description: "The path to the model object in storage. Supported storage types: - OCI object storage (e.g., oci://n/{namespace}/b/{bucket}/o/{object_path}) - PVC storage (e.g., pvc://{pvc-name}/{sub-path}) - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})",
+							Description: "StorageUri specifies the source URI of the model in a supported storage backend. Supported formats: - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path} - Persistent Volume:    pvc://{pvc-name}/{sub-path} - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path} This field is required.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -10376,7 +10357,7 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "NodeSelector is a selector which must be true for the model to fit on a node. Selector which must match a node's labels for the model to be downloaded on that node.",
+							Description: "NodeSelector defines a set of key-value label pairs that must be present on a node for the model to be scheduled and downloaded onto that node.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -10392,7 +10373,7 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 					},
 					"nodeAffinity": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Describes node affinity rules for the model download.",
+							Description: "NodeAffinity describes the node affinity rules that further constrain which nodes are eligible to download and store this model, based on advanced scheduling policies.",
 							Ref:         ref("k8s.io/api/core/v1.NodeAffinity"),
 						},
 					},

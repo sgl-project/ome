@@ -69,15 +69,10 @@ spec:
                 type: object
               compartmentID:
                 type: string
-              deprecationTime:
-                format: date-time
-                type: string
               disabled:
                 type: boolean
               displayName:
                 type: string
-              isLongTermSupported:
-                type: boolean
               maxTokens:
                 format: int32
                 type: integer
@@ -246,9 +241,6 @@ spec:
                 required:
                 - storageUri
                 type: object
-              tensorRTLLMConfiguration:
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
               vendor:
                 type: string
               version:

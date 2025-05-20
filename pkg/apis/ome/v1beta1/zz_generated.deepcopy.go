@@ -163,7 +163,6 @@ func (in *BaseModelSpec) DeepCopyInto(out *BaseModelSpec) {
 		copy(*out, *in)
 	}
 	in.ModelConfiguration.DeepCopyInto(&out.ModelConfiguration)
-	in.TensorRTLLMConfiguration.DeepCopyInto(&out.TensorRTLLMConfiguration)
 	if in.Storage != nil {
 		in, out := &in.Storage, &out.Storage
 		*out = new(StorageSpec)
@@ -178,12 +177,6 @@ func (in *BaseModelSpec) DeepCopyInto(out *BaseModelSpec) {
 	if in.MaxTokens != nil {
 		in, out := &in.MaxTokens, &out.MaxTokens
 		*out = new(int32)
-		**out = **in
-	}
-	in.DeprecationTime.DeepCopyInto(&out.DeprecationTime)
-	if in.IsLongTermSupported != nil {
-		in, out := &in.IsLongTermSupported, &out.IsLongTermSupported
-		*out = new(bool)
 		**out = **in
 	}
 	if in.AdditionalMetadata != nil {

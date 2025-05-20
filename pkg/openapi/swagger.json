@@ -129,10 +129,6 @@
           "description": "CompartmentID is the compartment ID of the model",
           "type": "string"
         },
-        "deprecationTime": {
-          "description": "DeprecationTime is the time the model was deprecated",
-          "$ref": "#/definitions/v1.Time"
-        },
         "disabled": {
           "description": "Whether the model is enabled or not",
           "type": "boolean"
@@ -141,17 +137,13 @@
           "description": "DisplayName is the user-friendly name of the model",
           "type": "string"
         },
-        "isLongTermSupported": {
-          "description": "LongTermSupported indicates if the model is long term supported",
-          "type": "boolean"
-        },
         "maxTokens": {
           "description": "MaxTokens is the maximum number of tokens that can be processed by the model",
           "type": "integer",
           "format": "int32"
         },
         "modelArchitecture": {
-          "description": "ModelArchitecture of the model, e.g., \"LlamaForCausalLM\", \"GemmaForCausalLM\", \"MixtralForCausalLM\"",
+          "description": "ModelArchitecture specifies the concrete model implementation or head, such as \"LlamaForCausalLM\", \"GemmaForCausalLM\", or \"MixtralForCausalLM\". This is often derived from the \"architectures\" field in Hugging Face config.json.",
           "type": "string"
         },
         "modelCapabilities": {
@@ -172,19 +164,19 @@
           "$ref": "#/definitions/v1beta1.ModelFormat"
         },
         "modelFramework": {
-          "description": "ModelFramework of the model, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
+          "description": "ModelFramework specifies the underlying framework used by the model, such as \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", or \"TensorRTLLM\". This value helps determine the appropriate runtime for model serving.",
           "$ref": "#/definitions/v1beta1.ModelFrameworkSpec"
         },
         "modelParameterSize": {
-          "description": "ModelParameterSize is the size of the model parameters, e.g., \"175B\"",
+          "description": "ModelParameterSize indicates the total number of parameters in the model, expressed in human-readable form such as \"7B\", \"13B\", or \"175B\". This can be used for scheduling or runtime selection.",
           "type": "string"
         },
         "modelType": {
-          "description": "DEPRECATED: This field is deprecated and will be removed in future releases.",
+          "description": "ModelType defines the architecture family of the model (e.g., \"bert\", \"gpt2\", \"llama\"). This value typically corresponds to the \"model_type\" field in a Hugging Face model's config.json. It is used to identify the transformer architecture and inform runtime selection and tokenizer behavior.",
           "type": "string"
         },
         "quantization": {
-          "description": "Quantization of the model, e.g., \"fp8\", \"fbgemm_fp8\", \"int4\"",
+          "description": "Quantization defines the quantization scheme applied to the model weights, such as \"fp8\", \"fbgemm_fp8\", or \"int4\". This influences runtime compatibility and performance.",
           "type": "string"
         },
         "servingMode": {
@@ -198,10 +190,6 @@
         "storage": {
           "description": "Storage configuration for the model",
           "$ref": "#/definitions/v1beta1.StorageSpec"
-        },
-        "tensorRTLLMConfiguration": {
-          "description": "TensorRT-LLM specific configuration, stored as generic JSON for flexibility.",
-          "$ref": "#/definitions/k8s.io.apimachinery.pkg.runtime.RawExtension"
         },
         "vendor": {
           "description": "Vendor of the model, e.g., \"NVIDIA\", \"Meta\", \"HuggingFace\"",
@@ -3048,7 +3036,7 @@
       "type": "object",
       "properties": {
         "name": {
-          "description": "Name of the library in which the model is stored, e.g., \"ONNX\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
+          "description": "Name of the library in which the model is stored, e.g., \"ONNXRuntime\", \"TensorFlow\", \"PyTorch\", \"Transformer\", \"TensorRTLLM\"",
           "type": "string",
           "default": ""
         },
@@ -5789,15 +5777,15 @@
       ],
       "properties": {
         "key": {
-          "description": "The Storage Key in the secret for this model.",
+          "description": "StorageKey is the name of the key in a Kubernetes Secret used to authenticate access to the model storage. This key will be used to fetch credentials during model download or access.",
           "type": "string"
         },
         "nodeAffinity": {
-          "description": "Describes node affinity rules for the model download.",
+          "description": "NodeAffinity describes the node affinity rules that further constrain which nodes are eligible to download and store this model, based on advanced scheduling policies.",
           "$ref": "#/definitions/v1.NodeAffinity"
         },
         "nodeSelector": {
-          "description": "NodeSelector is a selector which must be true for the model to fit on a node. Selector which must match a node's labels for the model to be downloaded on that node.",
+          "description": "NodeSelector defines a set of key-value label pairs that must be present on a node for the model to be scheduled and downloaded onto that node.",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -5806,7 +5794,7 @@
           "x-kubernetes-map-type": "atomic"
         },
         "parameters": {
-          "description": "Parameters to override the default storage credentials and config.",
+          "description": "Parameters contain key-value pairs to override default storage credentials or configuration. These values are typically used to configure access to object storage or mount options.",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -5814,15 +5802,15 @@
           }
         },
         "path": {
-          "description": "The path to the model where it will be downloaded. Default is /mnt/models/vendor/model-name",
+          "description": "Path is the absolute path where the model will be downloaded and stored on the node.",
           "type": "string"
         },
         "schemaPath": {
-          "description": "The path to the model schema file in the storage.",
+          "description": "SchemaPath is the path to the model schema or configuration file within the storage system. This can be used to validate the model or customize how it's loaded.",
           "type": "string"
         },
         "storageUri": {
-          "description": "The path to the model object in storage. Supported storage types: - OCI object storage (e.g., oci://n/{namespace}/b/{bucket}/o/{object_path}) - PVC storage (e.g., pvc://{pvc-name}/{sub-path}) - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})",
+          "description": "StorageUri specifies the source URI of the model in a supported storage backend. Supported formats: - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path} - Persistent Volume:    pvc://{pvc-name}/{sub-path} - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path} This field is required.",
           "type": "string"
         }
       }

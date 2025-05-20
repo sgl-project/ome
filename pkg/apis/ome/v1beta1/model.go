@@ -18,7 +18,7 @@ type ModelFormat struct {
 }
 
 type ModelFrameworkSpec struct {
-	// Name of the library in which the model is stored, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
+	// Name of the library in which the model is stored, e.g., "ONNXRuntime", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
 	// +required
 	Name string `json:"name"`
 	// Version of the library.
@@ -29,32 +29,42 @@ type ModelFrameworkSpec struct {
 }
 
 type StorageSpec struct {
-	// The path to the model where it will be downloaded.
-	// Default is /mnt/models/vendor/model-name
+	// Path is the absolute path where the model will be downloaded and stored on the node.
 	// +optional
 	Path *string `json:"path,omitempty"`
-	// The path to the model schema file in the storage.
+
+	// SchemaPath is the path to the model schema or configuration file within the storage system.
+	// This can be used to validate the model or customize how it's loaded.
 	// +optional
 	SchemaPath *string `json:"schemaPath,omitempty"`
-	// Parameters to override the default storage credentials and config.
+
+	// Parameters contain key-value pairs to override default storage credentials or configuration.
+	// These values are typically used to configure access to object storage or mount options.
 	// +optional
 	Parameters *map[string]string `json:"parameters,omitempty"`
-	// The Storage Key in the secret for this model.
+
+	// StorageKey is the name of the key in a Kubernetes Secret used to authenticate access to the model storage.
+	// This key will be used to fetch credentials during model download or access.
 	// +optional
 	StorageKey *string `json:"key,omitempty"`
-	// The path to the model object in storage.
-	// Supported storage types:
-	// - OCI object storage (e.g., oci://n/{namespace}/b/{bucket}/o/{object_path})
-	// - PVC storage (e.g., pvc://{pvc-name}/{sub-path})
-	// - Vendor storage (e.g., vendor://{vendor-name}/{resource-type}/{resource-path})
+
+	// StorageUri specifies the source URI of the model in a supported storage backend.
+	// Supported formats:
+	// - OCI Object Storage:   oci://n/{namespace}/b/{bucket}/o/{object_path}
+	// - Persistent Volume:    pvc://{pvc-name}/{sub-path}
+	// - Vendor-specific:      vendor://{vendor-name}/{resource-type}/{resource-path}
+	// This field is required.
 	// +required
 	StorageUri *string `json:"storageUri,omitempty"`
-	// NodeSelector is a selector which must be true for the model to fit on a node.
-	// Selector which must match a node's labels for the model to be downloaded on that node.
+
+	// NodeSelector defines a set of key-value label pairs that must be present on a node
+	// for the model to be scheduled and downloaded onto that node.
 	// +optional
 	// +mapType=atomic
 	NodeSelector map[string]string `json:"nodeSelector,omitempty" protobuf:"bytes,7,rep,name=nodeSelector"`
-	// Describes node affinity rules for the model download.
+
+	// NodeAffinity describes the node affinity rules that further constrain which nodes
+	// are eligible to download and store this model, based on advanced scheduling policies.
 	// +optional
 	NodeAffinity *v1.NodeAffinity `json:"nodeAffinity,omitempty" protobuf:"bytes,1,opt,name=nodeAffinity"`
 }
@@ -64,24 +74,32 @@ type BaseModelSpec struct {
 	// +optional
 	ModelFormat ModelFormat `json:"modelFormat"`
 
-	// +optional
-	// DEPRECATED: This field is deprecated and will be removed in future releases.
+	// ModelType defines the architecture family of the model (e.g., "bert", "gpt2", "llama").
+	// This value typically corresponds to the "model_type" field in a Hugging Face model's config.json.
+	// It is used to identify the transformer architecture and inform runtime selection and tokenizer behavior.
 	// +optional
 	ModelType *string `json:"modelType,omitempty"`
 
-	// ModelFramework of the model, e.g., "ONNX", "TensorFlow", "PyTorch", "Transformer", "TensorRTLLM"
+	// ModelFramework specifies the underlying framework used by the model,
+	// such as "ONNX", "TensorFlow", "PyTorch", "Transformer", or "TensorRTLLM".
+	// This value helps determine the appropriate runtime for model serving.
 	// +optional
 	ModelFramework *ModelFrameworkSpec `json:"modelFramework,omitempty"`
 
-	// ModelArchitecture of the model, e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MixtralForCausalLM"
+	// ModelArchitecture specifies the concrete model implementation or head,
+	// such as "LlamaForCausalLM", "GemmaForCausalLM", or "MixtralForCausalLM".
+	// This is often derived from the "architectures" field in Hugging Face config.json.
 	// +optional
 	ModelArchitecture *string `json:"modelArchitecture,omitempty"`
 
-	// Quantization of the model, e.g., "fp8", "fbgemm_fp8", "int4"
+	// Quantization defines the quantization scheme applied to the model weights,
+	// such as "fp8", "fbgemm_fp8", or "int4". This influences runtime compatibility and performance.
 	// +optional
 	Quantization *ModelQuantization `json:"quantization,omitempty"`
 
-	// ModelParameterSize is the size of the model parameters, e.g., "175B"
+	// ModelParameterSize indicates the total number of parameters in the model,
+	// expressed in human-readable form such as "7B", "13B", or "175B".
+	// This can be used for scheduling or runtime selection.
 	// +optional
 	ModelParameterSize *string `json:"modelParameterSize,omitempty"`
 
@@ -93,10 +111,6 @@ type BaseModelSpec struct {
 	// Configuration of the model, stored as generic JSON for flexibility.
 	// +optional
 	ModelConfiguration runtime.RawExtension `json:"modelConfiguration,omitempty"`
-
-	// TensorRT-LLM specific configuration, stored as generic JSON for flexibility.
-	// +optional
-	TensorRTLLMConfiguration runtime.RawExtension `json:"tensorRTLLMConfiguration,omitempty"`
 
 	// Storage configuration for the model
 	// +required
@@ -112,14 +126,6 @@ type BaseModelSpec struct {
 	// +optional
 	// MaxTokens is the maximum number of tokens that can be processed by the model
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
-
-	// DeprecationTime is the time the model was deprecated
-	// +optional
-	DeprecationTime metav1.Time `json:"deprecationTime,omitempty"`
-
-	// LongTermSupported indicates if the model is long term supported
-	// +optional
-	IsLongTermSupported *bool `json:"isLongTermSupported,omitempty"`
 
 	// Additional metadata for the model
 	// +optional
