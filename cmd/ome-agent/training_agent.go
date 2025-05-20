@@ -114,10 +114,6 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 	inputCasperConfig.Name = training_agent.InputCasperConfigName
 	inputCasperConfig.AuthType = &authType
 
-	compartmentId := v.GetString("compartment_id")
-	inputCasperConfig.CompartmentId = &compartmentId
-	inputCasperConfig.OboToken = v.GetString("obo_token")
-
 	return CasperConfigWrapper{
 		CasperConfig: inputCasperConfig,
 	}

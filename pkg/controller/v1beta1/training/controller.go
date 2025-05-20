@@ -363,7 +363,7 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 
 	if trainJob.Spec.Datasets.Parameters != nil {
 		params := *trainJob.Spec.Datasets.Parameters
-		if obo_token, ok := params["obo_token"]; ok {
+		if obo_token, ok := params[constants.OboTokenConfigKey]; ok {
 			trainJob.Spec.Annotations[constants.OboTokenConfigKey] = obo_token
 		}
 	}

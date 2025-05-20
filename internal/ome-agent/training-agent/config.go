@@ -33,7 +33,7 @@ type Config struct {
 	CohereFineTuneDetails         *CohereFineTuneDetails `mapstructure:"cohere_ft"`
 	PeftFineTuneDetails           *PeftFineTuneDetails   `mapstructure:"peft_ft"`
 
-	InputObjectStorageDataStore  *casper.CasperDataStore `validate:"required"`
+	InputObjectStorageDataStore  *casper.CasperDataStore `mapstructure:"input_object_store" validate:"required"`
 	OutputObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
 }
 
