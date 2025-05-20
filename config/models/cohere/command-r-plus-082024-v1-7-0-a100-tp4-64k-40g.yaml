@@ -1,3 +1,4 @@
+apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
   name: command-r-plus-082024-v1-7-0-a100-tp4-64k-40g

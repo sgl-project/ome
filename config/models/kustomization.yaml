@@ -47,8 +47,8 @@ resources:
   - cohere/embed-multilingual-image-v3-0.yaml
   - cohere/embed-multilingual-light-image-v3-0.yaml
   - cohere/embed-v4.yaml
-  - cohere/rerank-english-v3-0.yaml
-  - cohere/rerank-multilingual-v3-0.yaml
+  - cohere/rerank-english-03.yaml
+  - cohere/rerank-multilingual-03.yaml
   - cohere/rerank-v3-5.yaml
   - meta/Llama-3.1-70B-Instruct.yaml
   - meta/Llama-3.1-405B-Instruct-FP8.yaml
