@@ -68,7 +68,7 @@ func (p *OpenAIProject) Create(ctx context.Context) error {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
 	}
 
-	resp, err := openaiClient.Projects.Create(ctx, openaisdk.ProjectCreateRequest{Name: p.Resource.Spec.Name})
+	resp, err := openaiClient.Projects.Create(ctx, openaisdk.ProjectCreateRequest{Name: p.Resource.Spec.Name, Geography: p.Resource.Spec.Config["geography"]})
 	if err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}

@@ -112,6 +112,9 @@ func (r *Project) UnmarshalJSON(data []byte) (err error) {
 type ProjectCreateRequest struct {
 	// The friendly name of the project
 	Name string `json:"name"`
+
+	// The geography of the project
+	Geography string `json:"geography,omitempty"`
 }
 
 // ProjectUpdateRequest is the request struct for updating a project
