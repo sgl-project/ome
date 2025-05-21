@@ -103,7 +103,7 @@ func ExtractObjectFileNameFromObjectStorageUri(uri string) string {
 		return uri
 	}
 
-	values := strings.Split(uri, "/")
+	values := strings.Split(uri, "/o/")
 	return values[len(values)-1]
 }
 
@@ -113,8 +113,9 @@ func ExtractBucketNameFromObjectStorageUri(uri string) string {
 		return uri
 	}
 
-	values := strings.Split(uri, "/")
-	return values[len(values)-3]
+	valuesWithoutObjectName := strings.Split(uri, "/o/")[0]
+	bucketNames := strings.Split(valuesWithoutObjectName, "/b/")
+	return bucketNames[len(bucketNames)-1]
 }
 
 // ExtractNamespaceFromObjectStorageUri Get the object namespace name from object storage uri.
@@ -123,8 +124,10 @@ func ExtractNamespaceFromObjectStorageUri(uri string) string {
 		return uri
 	}
 
-	values := strings.Split(uri, "/")
-	return values[len(values)-5]
+	valuesWithoutObjectName := strings.Split(uri, "/o/")[0]
+	valuesWithoutBucketName := strings.Split(valuesWithoutObjectName, "/b/")[0]
+	namespaceNames := strings.Split(valuesWithoutBucketName, "/n/")
+	return namespaceNames[len(namespaceNames)-1]
 }
 
 // GetFineTunedModelName Get the ft model name from training job name.
