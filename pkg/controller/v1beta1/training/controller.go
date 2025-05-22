@@ -419,7 +419,7 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	objectName := utils.ExtractObjectFileNameFromObjectStorageUri(*trainJob.Spec.Datasets.StorageUri)
 	trainJob.Spec.Annotations[constants.TrainingDataFileNameConfigKey] = objectName
 
-	baseModelName := utils.ExtractObjectFileNameFromObjectStorageUri(*baseModel.Spec.Storage.StorageUri)
+	baseModelName := utils.ExtractModelNameFromObjectStorageUri(*baseModel.Spec.Storage.StorageUri)
 	trainJob.Spec.Annotations[constants.ModelNameConfigKey] = baseModelName
 
 	if trainingSidecarRuntimeType == "peft" {

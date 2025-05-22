@@ -97,6 +97,16 @@ func GetTensorParallelSize(baseModel *v1beta1.ClusterBaseModel) (string, error) 
 	return "0", nil
 }
 
+// ExtractModelNameFromObjectStorageUri Get the model name from object storage uri.
+func ExtractModelNameFromObjectStorageUri(uri string) string {
+	if !strings.Contains(uri, "/") {
+		return uri
+	}
+
+	modelName := strings.Split(uri, "/")
+	return modelName[len(modelName)-1]
+}
+
 // ExtractObjectFileNameFromObjectStorageUri Get the object file name from object storage uri.
 func ExtractObjectFileNameFromObjectStorageUri(uri string) string {
 	if !strings.Contains(uri, "/") {

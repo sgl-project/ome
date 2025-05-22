@@ -2,6 +2,28 @@ package utils
 
 import "testing"
 
+func TestExtractModelNameFromObjectStorageUriWithSubpath(t *testing.T) {
+	uri := "oci://n/idlsnvn0f2is/b/model-store/o/meta/llama-3-3-70b-instruct"
+
+	wanted := "llama-3-3-70b-instruct"
+	actual := ExtractModelNameFromObjectStorageUri(uri)
+
+	if actual != wanted {
+		t.Errorf("wanted %s, got %s", wanted, actual)
+	}
+}
+
+func TestExtractModelNameFromObjectStorageUri(t *testing.T) {
+	uri := "oci://n/idlsnvn0f2is/b/model-store/o/llama-3-3-70b-instruct"
+
+	wanted := "llama-3-3-70b-instruct"
+	actual := ExtractModelNameFromObjectStorageUri(uri)
+
+	if actual != wanted {
+		t.Errorf("wanted %s, got %s", wanted, actual)
+	}
+}
+
 func TestExtractObjectFileNameFromObjectStorageUri(t *testing.T) {
 	uri := "oci://n/idqj093njucb/b/beiwen-test/o/sales_pitch_generation_train.jsonl"
 
