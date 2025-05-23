@@ -1,0 +1,85 @@
+@startuml BenchmarkJob
+
+package "Benchmark Job" {
+  object BenchmarkJob {
+    + BenchmarkJobSpec spec
+    + BenchmarkJobStatus status
+  }
+
+  object BenchmarkJobSpec {
+    + HuggingFaceSecretReference huggingFaceSecretReference
+    + EndpointSpec endpoint
+    + ServiceMetadata serviceMetadata
+    + string task
+    + string[] trafficScenarios
+    + int[] numConcurrency
+    + int maxTimePerIteration
+    + int maxRequestsPerIteration
+    + map<string,string> additionalRequestParams
+    + StorageSpec dataset
+    + StorageSpec outputLocation
+    + string resultFolderName
+    + PodOverride podOverride
+  }
+
+  object HuggingFaceSecretReference {
+    + string name
+  }
+
+  object EndpointSpec {
+    + InferenceServiceReference inferenceService
+    + Endpoint endpoint
+  }
+
+  object InferenceServiceReference {
+    + string name
+    + string namespace
+  }
+
+  object Endpoint {
+    + string url
+    + string apiFormat
+    + string modelName
+  }
+
+  object ServiceMetadata {
+    + string engine
+    + string engineVersion
+    + string gpuType
+    + int gpuCount
+    + map<string,string> additionalMetadata
+  }
+
+  object PodOverride {
+    + string image
+    + EnvVar[] env
+    + EnvFromSource[] envFrom
+    + VolumeMount[] volumeMounts
+    + ResourceRequirements resources
+    + Toleration[] tolerations
+    + map<string,string> nodeSelector
+    + Affinity affinity
+    + Volume[] volumes
+  }
+
+  object BenchmarkJobStatus {
+    + string state
+    + Time startTime
+    + Time completionTime
+    + Time lastReconcileTime
+    + string failureMessage
+    + string details
+  }
+
+  BenchmarkJob --|> BenchmarkJobSpec
+  BenchmarkJob --|> BenchmarkJobStatus
+  BenchmarkJobSpec --> HuggingFaceSecretReference
+  BenchmarkJobSpec --> EndpointSpec
+  BenchmarkJobSpec --> ServiceMetadata
+  BenchmarkJobSpec --> StorageSpec
+  BenchmarkJobSpec --> PodOverride
+  EndpointSpec --> InferenceServiceReference
+  EndpointSpec --> Endpoint
+}
+
+@enduml
