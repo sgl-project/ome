@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	apierr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
@@ -108,8 +110,16 @@ func (r *TrainingRuntime) buildObjects(
 		Name: trainJob.Namespace,
 	})
 	if err == nil && dedicatedAiClusterResource != nil {
-		if dedicatedAiClusterResource.Spec.Affinity != nil {
-			podAffinity = dedicatedAiClusterResource.Spec.Affinity.DeepCopy()
+		profile := &omev1beta1.DedicatedAIClusterProfile{}
+		if err = r.client.Get(ctx, types.NamespacedName{Name: dedicatedAiClusterResource.Spec.Profile}, profile); err != nil {
+			if apierr.IsNotFound(err) {
+				log.Error(err, "Non-blocking error: DAC profile not found in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
+			}
+			log.Error(err, "Non-blocking error: failed to get DAC profile in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
+		}
+
+		if profile.Spec.Affinity != nil {
+			podAffinity = profile.Spec.Affinity.DeepCopy()
 		}
 	}
 
