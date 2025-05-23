@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferenceservice-config
+  namespace: ome
+data:
+  ingress: |-
+    {
+        "ingressGateway" : "knative-serving/knative-ingress-gateway",
+        "ingressService" : "istio-ingressgateway.istio-system.svc.cluster.local",
+        "localGateway" : "knative-serving/knative-local-gateway",
+        "localGatewayService" : "knative-local-gateway.istio-system.svc.cluster.local",
+        "ingressDomain"  : "svc.cluster.local",
+        "ingressClassName" : "istio",
+        "domainTemplate": "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+        "urlScheme": "http",
+        "disableIstioVirtualHost": false,
+        "disableIngressCreation": false
+    }
+
+  deploy: |-
+    {
+      "defaultDeploymentMode": "RawDeployment"
+    }
+
+  metricsAggregator: |-
+    {
+      "enableMetricAggregation": "false",
+      "enablePrometheusScraping" : "false"
+    }
+
+  modelInit: |-
+    {
+        "image" : "ord.ocir.io/idqj093njucb/ome/ome-agent:v1.1-177-2-g029e07e-dirty",
+        "memoryRequest": "320Gi",
+        "memoryLimit": "320Gi",
+        "cpuRequest": "15",
+        "cpuLimit": "15",
+        "compartmentId": "ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq",
+        "authType" : "InstancePrincipal",
+        "vaultId": "ocid1.vault.oc1.eu-frankfurt-1.ens4gnknaaec4.abtheljrqneswo524ce3ytfqv3wqdjz4yi2drovyjnuo5lghz2fr76a7l7lq",
+        "region": "eu-frankfurt-1"
+    }
+
+  multinodeProber: |-
+    {
+      "image" : "ord.ocir.io/idqj093njucb/ome/multinode-prober:v1.0-84-3-g5dff59e",
+      "memoryRequest": "100Mi",
+      "memoryLimit": "100Mi",
+      "cpuRequest": "100m",
+      "cpuLimit": "100m",
+      "startupFailureThreshold": 150,
+      "startupPeriodSeconds": 30,
+      "startupTimeoutSeconds": 60,
+      "startupInitialDelaySeconds": 200,
+      "unavailableThresholdSeconds": 1800
+    }
+
+  kedaConfig: |-
+    {
+      "enableKeda" : true,
+      "promServerAddress": "http://prometheus-operated.monitoring.svc.cluster.local:9090",
+      "customPromQuery": "",
+      "scalingThreshold": "10",
+      "scalingOperator": "GreaterThanOrEqual"
+    }

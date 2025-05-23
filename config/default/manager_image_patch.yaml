@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-controller-manager
+  namespace: ome
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          image: ord.ocir.io/idqj093njucb/ome/manager:v1.1-527-2-gfc80c0b3-dirty

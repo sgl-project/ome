@@ -1,0 +1,58 @@
+{
+	"realm" : {
+	  "alternativeIaasDomainNames" : [ "oracleiaas.com" ],
+	  "alternativePublicDnsNames" : [ "oraclecloud.com" ],
+	  "iaasDomainName" : "oracleiaas.com",
+	  "name" : "oc1",
+	  "attributes" : {
+		"firstRegion" : "us-phoenix-1",
+		"market" : {
+		  "name" : "commercial",
+		  "mode" : "COMMERCIAL"
+		},
+		"isDisconnected" : false,
+		"isTest" : false
+	  }
+	},
+	"region" : {
+	  "adIdCodePrefix" : "ia",
+	  "airportCode" : "IAD",
+	  "alternativeIaasDomainNames" : [ "us-ashburn-1.oracleiaas.com" ],
+	  "alternativeOciIaasDomainNames" : [ "us-ashburn-1.oci.oracleiaas.com" ],
+	  "alternativeOciPublicDomainNames" : [ "us-ashburn-1.oci.oraclecloud.com" ],
+	  "alternativePublicDomainNames" : [ "us-ashburn-1.oraclecloud.com" ],
+	  "displayName" : "US East (Ashburn)",
+	  "geoRegion" : "NORTH_AMERICA_REGION",
+	  "iaasDomainName" : "us-ashburn-1.oracleiaas.com",
+	  "internalName" : "us-ashburn-1",
+	  "legacyDataCenterRegion" : "US001",
+	  "name" : "iad",
+	  "ociIaasDomainName" : "us-ashburn-1.oci.oracleiaas.com",
+	  "ociPublicDomainName" : "us-ashburn-1.oci.oraclecloud.com",
+	  "publicDomainName" : "us-ashburn-1.oraclecloud.com",
+	  "publicRegionName" : "us-ashburn-1",
+	  "realmName" : "oc1"
+	},
+	"availabilityDomains" : [ {
+	  "adNumberName" : "ad1",
+	  "idCode" : "ia-1",
+	  "name" : "iad-ad-1",
+	  "publicRegionName" : "us-ashburn-1",
+	  "realmName" : "oc1",
+	  "substrateDomainName" : "ad1.us-ashburn-1"
+	}, {
+	  "adNumberName" : "ad2",
+	  "idCode" : "ia-2",
+	  "name" : "iad-ad-2",
+	  "publicRegionName" : "us-ashburn-1",
+	  "realmName" : "oc1",
+	  "substrateDomainName" : "ad2.us-ashburn-1"
+	}, {
+	  "adNumberName" : "ad3",
+	  "idCode" : "ia-3",
+	  "name" : "iad-ad-3",
+	  "publicRegionName" : "us-ashburn-1",
+	  "realmName" : "oc1",
+	  "substrateDomainName" : "ad3.us-ashburn-1"
+	} ]
+}

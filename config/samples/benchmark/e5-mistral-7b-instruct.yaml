@@ -1,0 +1,88 @@
+apiVersion: ome.io/v1beta1
+kind: BenchmarkJob
+metadata:
+  name: e5-mistral-7b-instruct-benchmark
+  namespace: e5-mistral-7b-instruct
+spec:
+  podOverride:
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+  endpoint:
+    inferenceService:
+      name: e5-mistral-7b-instruct
+      namespace: e5-mistral-7b-instruct
+  task: text-to-embeddings
+  trafficScenarios:
+    - "E(128)"
+    - "E(512)"
+    - "E(1024)"
+    - "E(2048)"
+    - "E(4096)"
+    - "E(32000)"
+  maxTimePerIteration: 15
+  maxRequestsPerIteration: 15000
+  serviceMetadata:
+    engine: "SGLang"
+    version: "v0.4.0.post1"
+    gpuType: "H100"
+    gpuCount: 1
+  outputLocation:
+    # this is using oci object storage
+    storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/e5-mistral-7b-instruct-benchmark"
+    parameters:
+      auth: "instance_principal"
+      region: "eu-frankfurt-1"
+    # this is using pvc, assuming pvc has already been created, uncomment below pv and pvc section
+#    storageUri: "pvc://e5-mistral-7b-instruct-benchmark-pvc/benchmark-result"
+
+---
+# uncomment below to create isvc, namespace if needed
+#apiVersion: v1
+#kind: Namespace
+#metadata:
+#  name: e5-mistral-7b-instruct
+#---
+#apiVersion: ome.io/v1beta1
+#kind: InferenceService
+#metadata:
+#  name: e5-mistral-7b-instruct
+#  namespace: e5-mistral-7b-instruct
+#spec:
+#  predictor:
+#    model:
+#      baseModel: e5-mistral-7b-instruct
+#      protocolVersion: openAI
+#    minReplicas: 1
+#    maxReplicas: 1
+---
+#apiVersion: v1
+#kind: PersistentVolume
+#metadata:
+#  name: e5-mistral-7b-instruct-benchmark-pv
+#spec:
+#  capacity:
+#    storage: 200Gi
+#  nfs:
+#    server: 10.0.2.68
+#    path: /oke_fss
+#  accessModes:
+#    - ReadWriteMany
+#  persistentVolumeReclaimPolicy: Retain
+#  storageClassName: benchmark-results-fss
+#  mountOptions:
+#    - nosuid
+#  volumeMode: Filesystem
+---
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: e5-mistral-7b-instruct-benchmark-pvc
+#  namespace: e5-mistral-7b-instruct
+#spec:
+#  accessModes:
+#    - ReadWriteMany
+#  resources:
+#    requests:
+#      storage: 200Gi
+#  volumeName: e5-mistral-7b-instruct-benchmark-pv
+#  storageClassName: benchmark-results-fss
+#  volumeMode: Filesystem

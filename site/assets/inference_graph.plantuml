@@ -1,0 +1,70 @@
+@startuml InferenceGraph
+
+package "Inference Graph" {
+  object InferenceGraph {
+    + InferenceGraphSpec spec
+    + InferenceGraphStatus status
+  }
+
+  object InferenceGraphSpec {
+    + map<string,InferenceRouter> nodes
+    + ResourceRequirements resources
+    + Affinity affinity
+    + int64 timeoutSeconds
+    + int32 minReplicas
+    + int32 maxReplicas
+    + int32 scaleTarget
+    + ScaleMetric scaleMetric
+    + Toleration[] tolerations
+    + map<string,string> nodeSelector
+    + string nodeName
+    + string serviceAccountName
+  }
+
+  enum InferenceRouterType {
+    + Sequence
+    + Splitter
+    + Ensemble
+    + Switch
+  }
+
+  object InferenceRouter {
+    + InferenceRouterType routerType
+    + InferenceStep[] steps
+  }
+
+  object InferenceTarget {
+    + string nodeName
+    + string serviceName
+    + string serviceUrl
+  }
+
+  enum InferenceStepDependencyType {
+    + Soft
+    + Hard
+  }
+
+  object InferenceStep {
+    + string name
+    + InferenceTarget
+    + string data
+    + int64 weight
+    + string condition
+    + InferenceStepDependencyType dependency
+  }
+
+  object InferenceGraphStatus {
+    + Status
+    + URL url
+  }
+
+  InferenceGraph --|> InferenceGraphSpec
+  InferenceGraph --|> InferenceGraphStatus
+  InferenceGraphSpec --> InferenceRouter
+  InferenceRouter --> InferenceRouterType
+  InferenceRouter --> InferenceStep
+  InferenceStep --|> InferenceTarget
+  InferenceStep --> InferenceStepDependencyType
+}
+
+@enduml

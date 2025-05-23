@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferenceservice-config
+  namespace: ome
+data:
+  multinodeProber: |-
+    {
+        "image" : "{{.Values.ome.multinodeProber.image}}:{{.Values.ome.multinodeProber.tag}}",
+        "memoryRequest": "{{.Values.ome.multinodeProber.memoryRequest}}",
+        "memoryLimit": "{{.Values.ome.multinodeProber.memoryLimit}}",
+        "cpuRequest": "{{.Values.ome.multinodeProber.cpuRequest}}",
+        "cpuLimit": "{{.Values.ome.multinodeProber.cpuLimit}}",
+        "startupFailureThreshold": {{.Values.ome.multinodeProber.startupFailureThreshold}},
+        "startupPeriodSeconds": {{.Values.ome.multinodeProber.startupPeriodSeconds}},
+        "startupTimeoutSeconds": {{.Values.ome.multinodeProber.startupTimeoutSeconds}},
+        "startupInitialDelaySeconds": {{.Values.ome.multinodeProber.startupInitialDelaySeconds}},
+        "unavailableThresholdSeconds": {{ .Values.ome.multinodeProber.unavailableThresholdSeconds }}
+    }
+  ingress: |-
+    {
+        "ingressGateway" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gateway }}",
+        "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
+        "localGateway" : "{{ .Values.ome.controller.ingressGateway.localGateway.gateway }}",
+        "localGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
+        "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
+        "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
+        "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
+        "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
+        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }}
+    }
+
+  deploy: |-
+    {
+      "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"
+    }
+
+  metricsAggregator: |-
+    {
+      "enableMetricAggregation": "{{ .Values.ome.metricsaggregator.enableMetricAggregation }}",
+      "enablePrometheusScraping" : "{{ .Values.ome.metricsaggregator.enablePrometheusScraping }}"
+    }
+  modelInit: |-
+    {
+        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "memoryRequest": "{{ .Values.ome.omeAgent.modelInit.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.modelInit.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.modelInit.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.modelInit.cpuLimit }}",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
+    }
+  servingSidecar: |-
+    {
+        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "memoryRequest": "2Gi",
+        "memoryLimit": "4Gi",
+        "cpuRequest": "1",
+        "cpuLimit": "2",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
+    }
+  fineTunedAdapter: |-
+    {
+        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "memoryRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryRequest }}",
+        "memoryLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryLimit }}",
+        "cpuRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuRequest }}",
+        "cpuLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuLimit }}",
+        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+        "authType" : "{{ .Values.ome.omeAgent.authType }}",
+        "region": "{{ .Values.ome.omeAgent.region }}"
+    }
+  trainingSidecar: |-
+    {
+      "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+      "region" : "{{ .Values.trainingSidecar.region }}",
+      "namespace": "{{ .Values.trainingSidecar.namespace }}",
+      "fineTunedModelBucket": "{{ .Values.trainingSidecar.fineTunedModelBucket }}",
+      "trainingMetricsBucket": "{{ .Values.trainingSidecar.trainingMetricsBucket }}",
+      "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: benchmarkjob-config
+  namespace: ome
+data:
+  benchmarkjob: |
+    {
+      "podConfig": {
+        "image": "{{ .Values.ome.benchmarkJob.image }}:{{ .Values.ome.benchmarkJob.tag }}",
+        "cpuRequest": "{{ .Values.ome.benchmarkJob.cpuRequest }}",
+        "memoryRequest": "{{ .Values.ome.benchmarkJob.memoryRequest }}",
+        "cpuLimit": "{{ .Values.ome.benchmarkJob.cpuLimit }}",
+        "memoryLimit": "{{ .Values.ome.benchmarkJob.memoryLimit }}"
+      }
+    }

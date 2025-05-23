@@ -1,0 +1,31 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deepseek-v3
+spec:
+  vendor: deepseek-ai
+  disabled: false
+  version: "1.0.0"
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.33.1"
+  modelArchitecture: DeepseekV3ForCausalLM
+  modelParameterSize: 685B
+  maxTokens: 163840
+  modelCapabilities:
+    - "TEXT_GENERATION"
+  storage:
+    storageUri: oci://n/idqj093njucb/b/model-store/o/deepseek-ai/deepseek-v3
+    path: /raid/models/deepseek-ai/deepseek-v3
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                  - BM.GPU.H100.8

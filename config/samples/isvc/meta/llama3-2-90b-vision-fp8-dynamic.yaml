@@ -1,0 +1,17 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-2-90b-fp8-dynamic
+  namespace: llama-3-2-90b-fp8-dynamic
+spec:
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  model:
+    name: llama-3-2-90b-fp8-dynamic
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-2-90b-fp8-dynamic

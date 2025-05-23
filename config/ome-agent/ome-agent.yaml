@@ -1,0 +1,59 @@
+auth_type: &default_auth_type "UserPrincipal"
+profile: "DEFAULT"
+region: "us-ashburn-1"
+
+# HuggingFace Hub Configuration (using hub module compatible fields)
+hf_token: ""
+cache_dir: "/tmp/.cache/huggingface"
+endpoint: "https://huggingface.co"
+max_retries: 5
+retry_interval: "10s"
+max_workers: 8
+chunk_size: 10485760  # 10MB
+enable_detailed_logs: true
+disable_progress_bars: false
+enable_symlinks: true
+
+# Model Download Configuration
+model_name: "meta-llama/Llama-3.2-1B"
+local_path: "/opt/ml/model"
+revision: "main"  # renamed from 'branch' to 'revision' to match hub module
+repo_type: "model"
+
+# Legacy fields (kept for other agents)
+model_store_directory: "/opt/ml/model"
+skip_sha: false
+retry_internal_in_seconds: 10
+num_connections: 100
+
+download_size_limit_gb: 650
+enable_size_limit_check: true
+
+source:
+  bucket_name: "source-bucket"
+  prefix: "models/example-model/"
+  region: "us-ashburn-1"
+  namespace: "example-namespace"
+
+target:
+  bucket_name: "target-bucket"
+  prefix: "models/example-model/"
+  region: "us-ashburn-1"
+  namespace: "example-namespace"
+
+model_framework: tensorrtllm
+tensorrtllm_version: "v0.11.0"
+node_shape_alias: ""
+num_of_gpu: 1
+disable_model_decryption: false
+
+compartment_id: "ocid1.compartment.oc1..example"
+vault_id: "ocid1.vault.oc1.us-ashburn-1.example"
+key_name: "example-key"
+secret_name: "example-secret"
+model_type: "Serving"
+
+# Configs for serving sidecar
+fine_tuned_weight_info_file_path: "/mnt/ft-model-info.json"
+unzipped_fine_tuned_weight_directory: "/mnt/unzipped-ft-models"
+zipped_fine_tuned_weight_directory: "/mnt/zipped-ft-models"

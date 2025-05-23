@@ -1,0 +1,66 @@
+{
+    "name": "sgl-ome",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "devuser",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                // Go development
+                "golang.go",
+                "premparihar.gotestexplorer",
+                "766b.go-outliner",
+                "enkia.tokyo-night",
+                
+                // Python development
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                
+                // Kubernetes
+                "ms-kubernetes-tools.vscode-kubernetes-tools",
+                
+                // General development
+                "streetsidesoftware.code-spell-checker",
+                "eamodio.gitlens",
+                "ms-azuretools.vscode-docker",
+                "yzhang.markdown-all-in-one",
+                "redhat.vscode-yaml",
+                "visualstudioexptteam.vscodeintellicode"
+            ],
+            "settings": {
+                "go.useLanguageServer": true,
+                "go.toolsManagement.autoUpdate": true,
+                "go.testOnSave": false,
+                "go.lintTool": "golangci-lint",
+                "go.formatTool": "goimports",
+                "[go]": {
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": "explicit"
+                    }
+                },
+                "python.linting.enabled": true,
+                "python.linting.pylintEnabled": true,
+                "python.formatting.provider": "black",
+                "python.formatting.blackPath": "/usr/local/bin/black",
+                "editor.formatOnSave": true,
+                "files.trimTrailingWhitespace": true
+            }
+        }
+    },
+    "runArgs": [
+        "--cap-add=SYS_PTRACE",
+        "--security-opt", "seccomp=unconfined"
+    ],
+    "mounts": [
+        "source=${localEnv:HOME}/.kube,target=/home/devuser/.kube,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.ssh,target=/home/devuser/.ssh,type=bind,consistency=cached"
+    ],
+    "forwardPorts": [],
+    "postCreateCommand": "go mod download",
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+}

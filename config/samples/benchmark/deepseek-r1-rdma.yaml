@@ -1,0 +1,48 @@
+apiVersion: ome.io/v1beta1
+kind: BenchmarkJob
+metadata:
+  name: deepseek-r1-rdma-benchmark
+  namespace: deepseek-r1
+spec:
+  podOverride:
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+  endpoint:
+    inferenceService:
+      name: deepseek-r1
+      namespace: deepseek-r1
+  task: text-to-text
+  trafficScenarios:
+    - "N(480,240)/(300,150)"
+    - "D(100,100)"
+    - "D(100,1000)"
+    - "D(2000,200)"
+    - "D(7800,200)"
+    - "D(16000,200)"
+    - "D(32000,200)"
+    - "D(128000,200)"
+    - "D(1000,4000)"
+  numConcurrency:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    - 32
+    - 64
+    - 128
+    - 256
+  maxTimePerIteration: 30
+  maxRequestsPerIteration: 300
+  serviceMetadata:
+    engine: "SGLang"
+    version: "v0.4.2.post1.35b88e65-cu121"
+    gpuType: "H100"
+    gpuCount: 16
+  outputLocation:
+    # NOTE: `deepseek-r1-benchmark` is the prefix of the object storage, so please
+    # change it to avoid override when you start a new benchmark
+    storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/deepseek-r1-benchmark"
+    parameters:
+      auth: "instance_principal"
+      region: "eu-frankfurt-1"
+  # IMPORTANT: Please remove --enable-reasoning --reasoning-parser DeepSeek-R1 from servingRuntime

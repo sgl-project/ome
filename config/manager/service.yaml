@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: ome-controller-manager
+    controller-tools.k8s.io: "1.0"
+    istio-injection: disabled
+  name: ome
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ome-controller-manager-service
+  namespace: ome
+  labels:
+    control-plane: ome-controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    control-plane: ome-controller-manager
+    controller-tools.k8s.io: "1.0"
+  ports:
+  - port: 8443
+    targetPort: https
+    protocol: TCP
