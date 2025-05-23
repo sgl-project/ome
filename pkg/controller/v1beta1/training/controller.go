@@ -6,6 +6,10 @@ import (
 	"errors"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	corev1 "k8s.io/api/core/v1"
+
 	v1 "k8s.io/api/core/v1"
 
 	trainjobpv "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/pv"
@@ -104,6 +108,35 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
+	var affinity *corev1.Affinity
+	// Set node affinity from DAC if necessary
+	dedicatedAiClusterResource, err := utils.GetDedicatedAIClusterResource(r.Client, &corev1.ObjectReference{
+		Name: trainJob.Namespace,
+	})
+	if err == nil && dedicatedAiClusterResource != nil {
+		profile := &omev1beta1.DedicatedAIClusterProfile{}
+		if err = r.Client.Get(context.TODO(), types.NamespacedName{Name: dedicatedAiClusterResource.Spec.Profile}, profile); err != nil {
+			if apierr.IsNotFound(err) {
+				r.Log.Error(err, "Error: DAC profile not found in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
+				return ctrl.Result{}, nil
+			}
+			r.Log.Error(err, "Error: failed to get DAC profile in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
+			return ctrl.Result{}, nil
+		}
+
+		if profile.Spec.Affinity != nil {
+			affinity = profile.Spec.Affinity.DeepCopy()
+		}
+	} else {
+		r.Log.Error(err, "Error: Failed to get DAC", "DAC name", trainJob.Namespace)
+		return ctrl.Result{}, nil
+	}
+
+	if affinity == nil {
+		r.Log.Error(err, "Error: Affinity is nil, re-queueing", "DAC name", trainJob.Namespace)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	finetuneWeights := &v1beta1.FineTunedWeight{}
 	if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: utils.GetFineTunedModelName(trainJob.Name)}, finetuneWeights); err != nil {
 		if apierr.IsNotFound(err) {
@@ -163,7 +196,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("%w, %s", errorUnsupportedRuntime, runtimeRefGK)
 	}
 
-	opState, err := r.reconcileObjects(ctx, runtime, trainJob, req, baseModel.Spec.Vendor)
+	opState, err := r.reconcileObjects(ctx, runtime, trainJob, req, baseModel.Spec.Vendor, affinity)
 
 	originStatus := trainJob.Status.DeepCopy()
 	updateSuspendedCondition(trainJob)
@@ -178,8 +211,8 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime trainingruntimes.Runtime, trainJob *v1beta1.TrainingJob, req ctrl.Request, vendor *string) (ObjectOperationState, error) {
-	objs, err := runtime.NewObjects(ctx, trainJob, vendor)
+func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime trainingruntimes.Runtime, trainJob *v1beta1.TrainingJob, req ctrl.Request, vendor *string, affinity *corev1.Affinity) (ObjectOperationState, error) {
+	objs, err := runtime.NewObjects(ctx, trainJob, vendor, affinity)
 	if err != nil {
 		return BuildObjectFailed, err
 	}

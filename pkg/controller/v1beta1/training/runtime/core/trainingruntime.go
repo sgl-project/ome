@@ -5,11 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	apierr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -64,17 +60,17 @@ func NewTrainingRuntime(ctx context.Context, c client.Client, indexer client.Fie
 	return trainingRuntimeFactory, nil
 }
 
-func (r *TrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string) ([]client.Object, error) {
+func (r *TrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string, affinity *corev1.Affinity) ([]client.Object, error) {
 	var trainingRuntime omev1beta1.TrainingRuntime
 	err := r.client.Get(ctx, client.ObjectKey{Namespace: trainJob.Namespace, Name: trainJob.Spec.RuntimeRef.Name}, &trainingRuntime)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errorNotFoundSpecifiedTrainingRuntime, err)
 	}
-	return r.buildObjects(ctx, trainJob, trainingRuntime.Spec.Template, trainingRuntime.Spec.MLPolicy, trainingRuntime.Spec.PodGroupPolicy, vendor)
+	return r.buildObjects(ctx, trainJob, trainingRuntime.Spec.Template, trainingRuntime.Spec.MLPolicy, trainingRuntime.Spec.PodGroupPolicy, vendor, affinity)
 }
 
 func (r *TrainingRuntime) buildObjects(
-	ctx context.Context, trainJob *omev1beta1.TrainingJob, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec, mlPolicy *omev1beta1.MLPolicy, podGroupPolicy *omev1beta1.PodGroupPolicy, vendor *string) ([]client.Object, error) {
+	ctx context.Context, trainJob *omev1beta1.TrainingJob, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec, mlPolicy *omev1beta1.MLPolicy, podGroupPolicy *omev1beta1.PodGroupPolicy, vendor *string, affinity *corev1.Affinity) ([]client.Object, error) {
 	propagationLabels := jobSetTemplateSpec.Labels
 	if propagationLabels == nil && trainJob.Spec.Labels != nil {
 		propagationLabels = make(map[string]string, len(trainJob.Spec.Labels))
@@ -104,29 +100,11 @@ func (r *TrainingRuntime) buildObjects(
 	}
 
 	var trainingPodVolumes = r.getPodVolumes(trainJob, vendor)
-	var podAffinity *corev1.Affinity
-	// Set node affinity from DAC if necessary
-	dedicatedAiClusterResource, err := utils.GetDedicatedAIClusterResource(r.client, &corev1.ObjectReference{
-		Name: trainJob.Namespace,
-	})
-	if err == nil && dedicatedAiClusterResource != nil {
-		profile := &omev1beta1.DedicatedAIClusterProfile{}
-		if err = r.client.Get(ctx, types.NamespacedName{Name: dedicatedAiClusterResource.Spec.Profile}, profile); err != nil {
-			if apierr.IsNotFound(err) {
-				log.Error(err, "Non-blocking error: DAC profile not found in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
-			}
-			log.Error(err, "Non-blocking error: failed to get DAC profile in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
-		}
 
-		if profile.Spec.Affinity != nil {
-			podAffinity = profile.Spec.Affinity.DeepCopy()
-		}
-	}
-
-	log.Info("Pod spec override", "podVolumes", trainingPodVolumes, "affinity", podAffinity)
+	log.Info("Pod spec override", "podVolumes", trainingPodVolumes, "affinity", affinity)
 
 	opts = append(opts, runtime.WithVolumes(trainingPodVolumes))
-	opts = append(opts, runtime.WithAffinity(podAffinity))
+	opts = append(opts, runtime.WithAffinity(affinity))
 
 	info := runtime.NewInfo(opts...)
 

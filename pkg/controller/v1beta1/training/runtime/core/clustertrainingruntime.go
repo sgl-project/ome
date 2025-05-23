@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+
 	omev1beta1 "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,12 +37,12 @@ func NewClusterTrainingRuntime(context.Context, client.Client, client.FieldIndex
 	}, nil
 }
 
-func (r *ClusterTrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string) ([]client.Object, error) {
+func (r *ClusterTrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.TrainingJob, vendor *string, affinity *corev1.Affinity) ([]client.Object, error) {
 	clTrainingRuntime := &omev1beta1.ClusterTrainingRuntime{}
-	if err := r.client.Get(ctx, client.ObjectKey{Name: trainJob.Spec.RuntimeRef.Name}, clTrainingRuntime); err != nil {
+	if err := r.client.Get(context.TODO(), client.ObjectKey{Name: trainJob.Spec.RuntimeRef.Name}, clTrainingRuntime); err != nil {
 		return nil, fmt.Errorf("%w: %w", errorNotFoundSpecifiedClusterTrainingRuntime, err)
 	}
-	return r.buildObjects(ctx, trainJob, clTrainingRuntime.Spec.Template, clTrainingRuntime.Spec.MLPolicy, clTrainingRuntime.Spec.PodGroupPolicy, vendor)
+	return r.buildObjects(ctx, trainJob, clTrainingRuntime.Spec.Template, clTrainingRuntime.Spec.MLPolicy, clTrainingRuntime.Spec.PodGroupPolicy, vendor, affinity)
 }
 
 func (r *ClusterTrainingRuntime) TerminalCondition(ctx context.Context, trainJob *omev1beta1.TrainingJob) (*metav1.Condition, error) {

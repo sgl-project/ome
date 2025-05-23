@@ -508,7 +508,8 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				t.Fatal(err)
 			}
 			vendor := "meta"
-			objs, err := trainingRuntime.NewObjects(ctx, tc.trainJob, &vendor)
+			var affinity *corev1.Affinity
+			objs, err := trainingRuntime.NewObjects(ctx, tc.trainJob, &vendor, affinity)
 			if diff := cmp.Diff(tc.wantError, err, cmpopts.EquateErrors()); len(diff) != 0 {
 				t.Errorf("Unexpected error (-want,+got):\n%s", diff)
 			}
