@@ -13,7 +13,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
@@ -248,29 +248,30 @@ func initializeComponents(
 		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
 	}
 
-	// Create default Hugging Face download config
-	hfDownloadConfig, err := download.NewConfig(
-		download.WithLogger(logging.ForZap(zapLogger)),
+	// Create default Hugging Face hub config
+	hfHubConfig, err := hub.NewHubConfig(
+		hub.WithLogger(logging.ForZap(zapLogger)),
+		hub.WithViper(v),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create HuggingFace download config: %w", err)
+		return nil, nil, fmt.Errorf("failed to create HuggingFace hub config: %w", err)
 	}
 
-	// Set up configuration values that will be used as defaults
-	// These will be copied for each model's specific config
-	hfDownloadConfig.MaxRetries = cfg.downloadRetry
-	hfDownloadConfig.NumConnections = cfg.concurrency
-	hfDownloadConfig.RetryInternalInSeconds = 10 // Retry after 10 seconds
+	// Create hub client
+	hfHubClient, err := hub.NewHubClient(hfHubConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create HuggingFace hub client: %w", err)
+	}
 
-	logger.Infof("Configured Hugging Face downloads with max retries: %d, connections: %d",
-		hfDownloadConfig.MaxRetries, hfDownloadConfig.NumConnections)
+	logger.Infof("Configured Hugging Face hub client with max retries: %d, max workers: %d",
+		hfHubConfig.MaxRetries, hfHubConfig.MaxWorkers)
 
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
 		modelConfigUpdater,
 		casperDS, // Pass the casper data store directly
-		hfDownloadConfig,
+		hfHubClient,
 		kubeClient, // Pass the Kubernetes client for secret access
 		cfg.concurrency,
 		cfg.multipartConcurrency,

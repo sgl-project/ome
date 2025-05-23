@@ -143,9 +143,9 @@ encryption:
 		content = `
 debug: true
 # Mock HF download agent config
-hf_endpoint: https://huggingface.co
-model_id: gpt2
-output_dir: /tmp/models
+endpoint: https://huggingface.co
+model_name: gpt2
+local_path: /tmp/models
 `
 	case "replica":
 		content = `
@@ -216,9 +216,9 @@ output_file: %s/output.bin
 		content = fmt.Sprintf(`
 debug: true
 # Detailed mock HF download agent config
-hf_endpoint: https://huggingface.co
-model_id: gpt2
-output_dir: %s
+endpoint: https://huggingface.co
+model_name: gpt2
+local_path: %s
 revision: main
 use_auth: false
 `, mockDataDir)

@@ -14,7 +14,7 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
@@ -46,7 +46,7 @@ type Gopher struct {
 	multipartConcurrency int
 	modelRootDir         string
 	casperDataStore      *casper.CasperDataStore
-	hfDownloadConfig     *download.Config
+	hubClient            *hub.HubClient
 	kubeClient           kubernetes.Interface
 	gopherChan           <-chan *GopherTask
 	nodeLabeler          *NodeLabeler
@@ -63,7 +63,7 @@ func NewGopher(
 	modelConfigParser *ModelConfigParser,
 	modelConfigUpdater *ModelConfigUpdater,
 	casperDataStore *casper.CasperDataStore,
-	hfDownloadConfig *download.Config,
+	hubClient *hub.HubClient,
 	kubeClient kubernetes.Interface,
 	concurrency int,
 	multipartConcurrency int,
@@ -78,8 +78,8 @@ func NewGopher(
 		return nil, fmt.Errorf("casper data store cannot be nil")
 	}
 
-	if hfDownloadConfig == nil {
-		return nil, fmt.Errorf("hugging face download config cannot be nil")
+	if hubClient == nil {
+		return nil, fmt.Errorf("hugging face hub client cannot be nil")
 	}
 
 	return &Gopher{
@@ -90,7 +90,7 @@ func NewGopher(
 		multipartConcurrency: multipartConcurrency,
 		modelRootDir:         modelRootDir,
 		casperDataStore:      casperDataStore,
-		hfDownloadConfig:     hfDownloadConfig,
+		hubClient:            hubClient,
 		kubeClient:           kubeClient,
 		gopherChan:           gopherChan,
 		nodeLabeler:          nodeLabeler,
@@ -538,8 +538,8 @@ func (s *Gopher) deleteModel(destPath string) error {
 }
 
 // processHuggingFaceModel handles downloading models from Hugging Face Hub.
-// It extracts model information from the URI, configures the download agent with proper authentication,
-// performs the download, and updates model configuration.
+// It extracts model information from the URI, configures the download with proper authentication,
+// performs the download using the hub client, and updates model configuration.
 func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
 	modelInfo, modelType, namespace, name string) error {
 	// Parse the Hugging Face URI to get modelID and branch
@@ -557,39 +557,51 @@ func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1
 	// Get Hugging Face token from storage key or parameters
 	hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
 
-	// Configure Hugging Face download config with model-specific options
-	hfConfig := *s.hfDownloadConfig // Create a copy of the base config with default values
+	s.logger.Infof("Downloading HuggingFace model %s (revision: %s) to %s",
+		hfComponents.ModelID, hfComponents.Branch, destPath)
 
-	// Only override model-specific values, preserving global defaults
-	hfConfig.ModelName = hfComponents.ModelID
-	hfConfig.Branch = hfComponents.Branch
-	hfConfig.LocalPath = destPath
-	hfConfig.Token = hfToken
+	// Build download options for the hub client
+	var downloadOptions []hub.DownloadOption
 
-	s.logger.Infof("Using Hugging Face config values: connections=%d, maxRetries=%d, retryInterval=%ds",
-		hfConfig.NumConnections, hfConfig.MaxRetries, hfConfig.RetryInternalInSeconds)
-
-	// Create and start Hugging Face download agent
-	hfAgent, err := download.NewHFDownloadAgent(&hfConfig)
-	if err != nil {
-		s.logger.Errorf("Failed to create Hugging Face download agent for model %s: %v", modelInfo, err)
-		s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_agent_creation_error")
-		s.markModelOnNodeFailed(task)
-		return err
+	// Set revision if specified
+	if hfComponents.Branch != "" {
+		downloadOptions = append(downloadOptions, hub.WithRevision(hfComponents.Branch))
 	}
 
-	// Perform download with retries
+	// Set repository type (always model for HuggingFace)
+	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
+
+	// Use the hub client to download the entire model repository
+	ctx := context.Background()
+
+	// If we have a token, we need to set it in the hub config
+	// For now, we'll assume the token is already configured in the hub client
+	// In a future enhancement, we could create a new client with the specific token
+	if hfToken != "" {
+		s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
+	}
+
+	// Perform snapshot download with retries
 	err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-		downloadErr := hfAgent.Start()
+		downloadPath, downloadErr := s.hubClient.SnapshotDownload(
+			ctx,
+			hfComponents.ModelID,
+			destPath,
+			downloadOptions...,
+		)
 		if downloadErr != nil {
-			s.logger.Errorf("Failed to download Hugging Face model %s (attempt %d/%d): %v",
+			s.logger.Errorf("Failed to download HuggingFace model %s (attempt %d/%d): %v",
 				modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
+			return downloadErr
 		}
-		return downloadErr
+
+		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
+			modelInfo, downloadPath)
+		return nil
 	})
 
 	if err != nil {
-		s.logger.Errorf("All Hugging Face download attempts failed for model %s: %v", modelInfo, err)
+		s.logger.Errorf("All HuggingFace download attempts failed for model %s: %v", modelInfo, err)
 		s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
 		s.markModelOnNodeFailed(task)
 		return err

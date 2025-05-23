@@ -289,6 +289,9 @@ func (c *HubConfig) ToDownloadConfig() *DownloadConfig {
 		EtagTimeout: c.EtagTimeout,
 		Headers:     BuildHeaders(c.Token, c.UserAgent, nil),
 		MaxWorkers:  c.MaxWorkers,
+		// Set sensible defaults for common fields
+		Revision: "main",        // Default git branch
+		RepoType: RepoTypeModel, // Most common repository type
 	}
 }
 

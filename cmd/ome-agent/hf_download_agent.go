@@ -1,17 +1,29 @@
 package main
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
+	"context"
+	"fmt"
+
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
+// hfDownloadAgentParams represents the parameters for dependency injection
+type hfDownloadAgentParams struct {
+	fx.In
+	Logger logging.Interface `name:"another_log"`
+}
+
 // HFDownloadAgent implements the AgentModule interface for HuggingFace download agent
 type HFDownloadAgent struct {
-	agent *download.HFDownloadAgent
+	hubClient *hub.HubClient
+	viper     *viper.Viper
+	logger    logging.Interface
 }
 
 // Name returns the name of the agent
@@ -26,7 +38,7 @@ func (h *HFDownloadAgent) ShortDescription() string {
 
 // LongDescription returns a detailed description of the agent
 func (h *HFDownloadAgent) LongDescription() string {
-	return "OME Agent HuggingFace Download Agent is dedicated for downloading any model from HF."
+	return "OME Agent HuggingFace Download Agent downloads models from HuggingFace Hub using the comprehensive hub client with enterprise features like progress tracking, resume capability, and concurrent downloads."
 }
 
 // ConfigureCommand configures the agent command
@@ -43,14 +55,66 @@ func (h *HFDownloadAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		download.Module,
-		fx.Populate(&h.agent),
+		logging.ModuleNamed("hub_logger"),
+		hub.Module, // Hub module handles all configuration via viper
+		fx.Invoke(func(params hfDownloadAgentParams, hubClient *hub.HubClient, v *viper.Viper) {
+			h.hubClient = hubClient
+			h.viper = v
+			h.logger = params.Logger
+		}),
 	}
 }
 
 // Start starts the agent
 func (h *HFDownloadAgent) Start() error {
-	return h.agent.Start()
+
+	// Get configuration values directly from viper (no validation here - let hub handle it)
+	modelName := h.viper.GetString("model_name")
+	localPath := h.viper.GetString("local_path")
+	revision := h.viper.GetString("revision")
+	repoType := h.viper.GetString("repo_type")
+
+	ctx := context.Background()
+
+	// Log the download operation
+	if h.logger != nil {
+		h.logger.Infof("🤗 Starting HuggingFace model download")
+		h.logger.Infof("   Model: %s", modelName)
+		h.logger.Infof("   Revision: %s (defaults to 'main' if empty)", revision)
+		h.logger.Infof("   Target: %s", localPath)
+		h.logger.Infof("   Repository Type: %s (defaults to 'model' if empty)", repoType)
+	}
+
+	// Build download options - let hub module handle defaults and validation
+	var opts []hub.DownloadOption
+	if revision != "" {
+		opts = append(opts, hub.WithRevision(revision))
+	}
+	if repoType != "" {
+		opts = append(opts, hub.WithRepoType(repoType))
+	}
+
+	// Perform snapshot download using the hub client
+	downloadPath, err := h.hubClient.SnapshotDownload(
+		ctx,
+		modelName,
+		localPath,
+		opts...,
+	)
+
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Errorf("Failed to download model %s: %v", modelName, err)
+		}
+		return fmt.Errorf("model download failed: %w", err)
+	}
+
+	if h.logger != nil {
+		h.logger.Infof("Successfully downloaded model %s", modelName)
+		h.logger.Infof("Downloaded to: %s", downloadPath)
+	}
+
+	return nil
 }
 
 // NewHFDownloadAgent creates a new HuggingFace download agent
