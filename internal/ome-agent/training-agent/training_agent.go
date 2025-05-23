@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	casper "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"

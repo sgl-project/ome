@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -20,8 +19,8 @@ type Secret struct {
 }
 
 // NewSecret initializes a new Secret instance with the provided configuration and environment.
-func NewSecret(config *Config, e *env.Environment) (*Secret, error) {
-	configProvider, err := getConfigProvider(config, e)
+func NewSecret(config *Config) (*Secret, error) {
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config provider: %w", err)
 	}
@@ -39,9 +38,8 @@ func NewSecret(config *Config, e *env.Environment) (*Secret, error) {
 }
 
 // getConfigProvider sets up the configuration provider for OCI authentication.
-func getConfigProvider(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *Config) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{

@@ -3,7 +3,6 @@ package secret_in_vault
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/vault"
@@ -17,9 +16,8 @@ func NewVaultClient(configProvider common.ConfigurationProvider) (*vault.VaultsC
 	return &vaultClient, nil
 }
 
-func getConfigProvider(config *SecretInVaultConfig, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *SecretInVaultConfig) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{

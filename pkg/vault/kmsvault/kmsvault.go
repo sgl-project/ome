@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -19,8 +18,8 @@ type KMSVault struct {
 }
 
 // NewKMSVault initializes a new KMSVault instance with the provided configuration and environment.
-func NewKMSVault(config *Config, e *env.Environment) (*KMSVault, error) {
-	configProvider, err := getConfigProvider(config, e)
+func NewKMSVault(config *Config) (*KMSVault, error) {
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %w", err)
 	}
@@ -38,9 +37,8 @@ func NewKMSVault(config *Config, e *env.Environment) (*KMSVault, error) {
 }
 
 // getConfigProvider builds the configuration provider for OCI authentication.
-func getConfigProvider(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *Config) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{

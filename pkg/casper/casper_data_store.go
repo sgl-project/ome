@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -71,7 +70,7 @@ func DefaultDownloadOptions() DownloadOptions {
 
 // NewCasperDataStore initializes a CasperDataStore using the given configuration and environment.
 // It validates the config, creates an OCI config provider, and initializes the Object Storage client.
-func NewCasperDataStore(config *Config, e *env.Environment) (*CasperDataStore, error) {
+func NewCasperDataStore(config *Config) (*CasperDataStore, error) {
 	if config == nil {
 		return nil, fmt.Errorf("casper config is nil")
 	}
@@ -79,7 +78,7 @@ func NewCasperDataStore(config *Config, e *env.Environment) (*CasperDataStore, e
 		return nil, fmt.Errorf("casper config is invalid: %+v", err)
 	}
 
-	configProvider, err := getConfigProvider(config, e)
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %+v", err)
 	}

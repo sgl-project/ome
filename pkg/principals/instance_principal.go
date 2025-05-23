@@ -2,27 +2,26 @@ package principals
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 )
 
 // InstancePrincipalConfig encapsulates configuration for constructing
 // instance principal authentication provider.
 //
-// Zero value is ready to use.
+// Zero value is ready to use - SDK will auto-detect everything from IMDS.
 type InstancePrincipalConfig struct {
-	AuthClientRegionUrl *EnvVar `mapstructure:"auth_client_region_url"`
+	// Optional region override - if not set, SDK auto-detects from IMDS
+	Region string `mapstructure:"region"`
+
+	// Optional auth endpoint override - for special cases like gov clouds
+	AuthEndpointOverride string `mapstructure:"auth_endpoint_override"`
 }
 
 // Validate validates the config.
 func (c *InstancePrincipalConfig) Validate() error {
-	if err := c.AuthClientRegionUrl.Validate(); err != nil {
-		return fmt.Errorf("invalid auth_client_region_url: %w", err)
-	}
-
+	// No validation needed - all fields are optional
 	return nil
 }
 
@@ -36,8 +35,17 @@ func DefaultInstancePrincipalConfig() InstancePrincipalConfig {
 
 // Build builds instance principal configuration provider from c.
 func (c *InstancePrincipalConfig) Build(opts Opts) (common.ConfigurationProvider, error) {
-	if err := c.AuthClientRegionUrl.SetenvOrDefault(EnvOciSdkAuthClientRegionUrl, opts, DefaultAuthClientRegionURLOverlay); err != nil {
-		return nil, err
+	// Set optional overrides if provided
+	if c.Region != "" {
+		if err := os.Setenv("OCI_REGION", c.Region); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_REGION")
+		}
+	}
+
+	if c.AuthEndpointOverride != "" {
+		if err := os.Setenv("OCI_SDK_AUTH_CLIENT_REGION_URL", c.AuthEndpointOverride); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_SDK_AUTH_CLIENT_REGION_URL")
+		}
 	}
 
 	result, err := opts.factory().NewInstancePrincipal()
@@ -45,10 +53,7 @@ func (c *InstancePrincipalConfig) Build(opts Opts) (common.ConfigurationProvider
 		return nil, fmt.Errorf("creating instance principal: %v", err)
 	}
 
-	opts.Log.
-		WithField("resolved tenancyId", env.TryResolve(opts.Env, vars.TenancyId.String())).
-		WithField("resolved compartmentId", env.TryResolve(opts.Env, vars.InstanceCompartmentId.String())).
-		Info("Initialized instance principal configuration provider")
+	opts.Log.Info("Initialized instance principal configuration provider")
 
 	return result, nil
 }

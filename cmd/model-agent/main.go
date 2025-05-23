@@ -13,7 +13,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/download"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
@@ -203,15 +202,6 @@ func initializeComponents(
 	// Create node labeler for labeling the node based on model status
 	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry, logger)
 
-	// Create an environment instance directly using Viper
-	environment, err := env.FromResolver(
-		env.WithResolverDefaults(),
-		env.WithResolverFromViper(v, ""),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create environment: %w", err)
-	}
-
 	// Set up an authentication type from Viper
 	authType := principals.AuthenticationType(v.GetString("download-auth-type"))
 
@@ -221,7 +211,6 @@ func initializeComponents(
 	// Create Casper config with a proper logger adapter
 	casperConfig, err := casper.NewConfig(
 		casper.WithAnotherLog(logging.ForZap(zapLogger)),
-		casper.WithEnv(environment),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create casper config: %w", err)
@@ -231,7 +220,7 @@ func initializeComponents(
 	casperConfig.AuthType = &authType
 
 	// Create CasperDataStore
-	casperDS, err := casper.NewCasperDataStore(casperConfig, environment)
+	casperDS, err := casper.NewCasperDataStore(casperConfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create casper data store: %w", err)
 	}

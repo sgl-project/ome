@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
@@ -70,13 +69,6 @@ func WithLogger(logger logging.Interface) Option {
 		}
 
 		c.Logger = logger
-		return nil
-	}
-}
-
-// WithEnv attempts to resolve the configuration using Environment module.
-func WithEnv(env *env.Environment) Option {
-	return func(c *Config) error {
 		return nil
 	}
 }

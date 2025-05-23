@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
+	omesecrets "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	omesecrets "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 	"github.com/oracle/oci-go-sdk/v65/secrets"
 )
 
@@ -17,7 +17,7 @@ type SecretRetriever struct {
 	Config        *SecretRetrievalConfig
 }
 
-func NewSecretRetriever(config *SecretRetrievalConfig, e *env.Environment) (*SecretRetriever, error) {
+func NewSecretRetriever(config *SecretRetrievalConfig) (*SecretRetriever, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config is nil")
 	}
@@ -25,7 +25,7 @@ func NewSecretRetriever(config *SecretRetrievalConfig, e *env.Environment) (*Sec
 		return nil, fmt.Errorf("invalid config: %v", err)
 	}
 
-	configProvider, err := getConfigProvider(config, e)
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %v", err)
 	}

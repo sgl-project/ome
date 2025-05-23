@@ -3,16 +3,14 @@ package secret_in_vault
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )
 
-func ProvideSecretInVaultConfig(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretInVaultConfig, error) {
+func ProvideSecretInVaultConfig(v *viper.Viper, logger logging.Interface) (*SecretInVaultConfig, error) {
 	secretInVaultConfig, err := NewSecretInVaultConfig(
 		WithViper(v),
-		WithEnv(e),
 		WithAnotherLog(logger),
 	)
 	if err != nil {
@@ -21,13 +19,13 @@ func ProvideSecretInVaultConfig(v *viper.Viper, e *env.Environment, logger loggi
 	return secretInVaultConfig, nil
 }
 
-func ProvideSecretInVault(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretInVault, error) {
-	secretInVaultConfig, err := ProvideSecretInVaultConfig(v, e, logger)
+func ProvideSecretInVault(v *viper.Viper, logger logging.Interface) (*SecretInVault, error) {
+	secretInVaultConfig, err := ProvideSecretInVaultConfig(v, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing SecretInVaultConfig: %+v", err)
 	}
 
-	secretInVault, err := NewSecretInVault(secretInVaultConfig, e)
+	secretInVault, err := NewSecretInVault(secretInVaultConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing SecretInVault: %+v", err)
 	}
@@ -56,13 +54,13 @@ type appParamsWithConfigs struct {
 	Configs []*SecretInVaultConfig `group:"secretInVaultConfigs"`
 }
 
-func ProvideListOfSecretInVaultWithAppParams(e *env.Environment, params appParamsWithConfigs) ([]*SecretInVault, error) {
+func ProvideListOfSecretInVaultWithAppParams(params appParamsWithConfigs) ([]*SecretInVault, error) {
 	secretInVaultList := make([]*SecretInVault, 0)
 	for _, config := range params.Configs {
 		if config == nil {
 			continue
 		}
-		secretInVault, err := NewSecretInVault(config, e)
+		secretInVault, err := NewSecretInVault(config)
 		if err != nil {
 			return secretInVaultList, fmt.Errorf("error initializing a list of SecretInVault using Config: %+v: %+v", config, err)
 		}

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
@@ -215,21 +214,6 @@ func WithProgressBars(enabled bool) HubOption {
 func WithSSLVerification(enabled bool) HubOption {
 	return func(c *HubConfig) error {
 		c.VerifySSL = enabled
-		return nil
-	}
-}
-
-// WithEnv attempts to resolve the configuration using Environment module
-func WithEnv(env *env.Environment) HubOption {
-	return func(c *HubConfig) error {
-		// Apply environment variables if they exist using the OS package directly
-		// since the env.Environment is for Oracle-specific configuration
-		if token := GetHfToken(); token != "" {
-			c.Token = token
-		}
-		if IsOfflineMode() {
-			c.EnableOfflineMode = true
-		}
 		return nil
 	}
 }

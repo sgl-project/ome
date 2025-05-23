@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -227,7 +226,7 @@ func TestGetConfigProvider(t *testing.T) {
 	tests := []struct {
 		name                 string
 		config               *Config
-		mockBuildFunc        func(t *testing.T, config *Config, env *env.Environment) (common.ConfigurationProvider, error)
+		mockBuildFunc        func(t *testing.T, config *Config) (common.ConfigurationProvider, error)
 		expectError          bool
 		errorContains        string
 		expectedConfigProvFn func(t *testing.T, provider common.ConfigurationProvider)
@@ -241,7 +240,7 @@ func TestGetConfigProvider(t *testing.T) {
 					return &a
 				}(),
 			},
-			mockBuildFunc: func(t *testing.T, config *Config, env *env.Environment) (common.ConfigurationProvider, error) {
+			mockBuildFunc: func(t *testing.T, config *Config) (common.ConfigurationProvider, error) {
 				// Verify config was passed correctly
 				assert.Equal(t, principals.AuthenticationType("InstancePrincipal"), *config.AuthType)
 
@@ -265,7 +264,7 @@ func TestGetConfigProvider(t *testing.T) {
 					return &a
 				}(),
 			},
-			mockBuildFunc: func(t *testing.T, config *Config, env *env.Environment) (common.ConfigurationProvider, error) {
+			mockBuildFunc: func(t *testing.T, config *Config) (common.ConfigurationProvider, error) {
 				return nil, errors.New("build error")
 			},
 			expectError:   true,
@@ -275,17 +274,15 @@ func TestGetConfigProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock environment
-			mockEnv := &env.Environment{}
 
 			// Create a test function that mimics getConfigProvider
-			testGetConfigProvider := func(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+			testGetConfigProvider := func(config *Config) (common.ConfigurationProvider, error) {
 				// Instead of using the principals package directly, use our mock function
-				return tt.mockBuildFunc(t, config, e)
+				return tt.mockBuildFunc(t, config)
 			}
 
 			// Call our test function
-			configProvider, err := testGetConfigProvider(tt.config, mockEnv)
+			configProvider, err := testGetConfigProvider(tt.config)
 
 			// Assertions
 			if tt.expectError {
@@ -307,8 +304,6 @@ func TestGetConfigProvider(t *testing.T) {
 
 // Integration test using mocks for both functions
 func TestCasperClientIntegration(t *testing.T) {
-	// Create a mock environment
-	mockEnv := &env.Environment{}
 
 	// Create a mock logger
 	mockLogger := new(MockLogger)
@@ -326,11 +321,10 @@ func TestCasperClientIntegration(t *testing.T) {
 	mockProvider := new(MockConfigurationProvider)
 
 	// Create a mock for the getConfigProvider function
-	mockGetConfigProvider := func(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+	mockGetConfigProvider := func(config *Config) (common.ConfigurationProvider, error) {
 		// Verify config was passed correctly
 		assert.Equal(t, mockLogger, config.AnotherLogger)
 		assert.Equal(t, authType, *config.AuthType)
-		assert.Equal(t, mockEnv, e)
 
 		return mockProvider, nil
 	}
@@ -348,7 +342,7 @@ func TestCasperClientIntegration(t *testing.T) {
 	// Test the integrated flow
 	client, err := func() (*objectstorage.ObjectStorageClient, error) {
 		// This simulates the code that would use both functions together
-		provider, err := mockGetConfigProvider(config, mockEnv)
+		provider, err := mockGetConfigProvider(config)
 		if err != nil {
 			return nil, err
 		}

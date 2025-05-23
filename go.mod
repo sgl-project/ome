@@ -19,7 +19,6 @@ require (
 	github.com/kedacore/keda/v2 v2.12.1
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
-	github.com/oracle/oci-go-sdk v24.3.0+incompatible
 	github.com/oracle/oci-go-sdk/v65 v65.71.0
 	github.com/otiai10/copy v1.14.0
 	github.com/pkg/errors v0.9.1

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -188,7 +187,7 @@ func WithPatterns(allowPatterns, ignorePatterns []string) DownloadOption {
 
 // Module provides the fx module for dependency injection
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params HubClientParams) (*HubClient, error) {
+	func(v *viper.Viper, params HubClientParams) (*HubClient, error) {
 		// Use the provided logger or fall back to AnotherLogger
 		var logger logging.Interface
 		if params.Logger != nil {
@@ -199,7 +198,6 @@ var Module = fx.Provide(
 
 		config, err := NewHubConfig(
 			WithViper(v),
-			WithEnv(e),
 			WithLogger(logger),
 		)
 		if err != nil {
@@ -207,18 +205,4 @@ var Module = fx.Provide(
 		}
 
 		return NewHubClient(config)
-	})
-
-// Provides a standalone HubConfig for cases where only configuration is needed
-var ConfigModule = fx.Provide(
-	func(v *viper.Viper, e *env.Environment) (*HubConfig, error) {
-		config, err := NewHubConfig(
-			WithViper(v),
-			WithEnv(e),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("error creating hub config: %+v", err)
-		}
-
-		return config, nil
 	})

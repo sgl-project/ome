@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -369,29 +368,6 @@ func TestWithViper(t *testing.T) {
 	}
 }
 
-// TestWithEnv tests the WithEnv option
-func TestWithEnv(t *testing.T) {
-	// Create a mock Environment
-	mockEnv := &env.Environment{}
-
-	// Create a config to apply the option to
-	c := &Config{}
-
-	// Apply the WithEnv option
-	option := WithEnv(mockEnv)
-	err := option(c)
-
-	// Currently WithEnv is a placeholder that does nothing, so no error should occur
-	assert.NoError(t, err)
-
-	// Create an explicit test case to document future expectations
-	t.Run("WithEnv is currently a placeholder", func(t *testing.T) {
-		// Since this is a placeholder, we're just documenting that it should be
-		// updated once real functionality is added
-		assert.NoError(t, err, "WithEnv should not return an error even as a placeholder")
-	})
-}
-
 // TestWithAnotherLog tests the WithAnotherLog option
 func TestWithAnotherLog(t *testing.T) {
 	tests := []struct {
@@ -521,13 +497,9 @@ func TestConfigIntegration(t *testing.T) {
 	v.Set(OboTokenViperKeyName, "")
 	v.Set(AuthTypeViperKeyName, "InstancePrincipal")
 
-	// Create a mock environment
-	mockEnv := &env.Environment{}
-
 	// Create config with all options
 	c, err := NewConfig(
 		WithViper(v),
-		WithEnv(mockEnv),
 		WithAnotherLog(mockLogger),
 	)
 

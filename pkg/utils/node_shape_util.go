@@ -3,7 +3,7 @@ package utils
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/imds"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/imds"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 

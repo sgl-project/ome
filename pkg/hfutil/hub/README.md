@@ -44,7 +44,6 @@ go.uber.org/fx  // Dependency injection support
 
 // Internal dependencies
 bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging
-bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env
 bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils
 ```
 

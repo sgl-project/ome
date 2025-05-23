@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
+	vaultUtils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/vault"
 )
@@ -19,8 +18,8 @@ type VaultClient struct {
 }
 
 // NewVaultClient initializes a new VaultClient with the provided configuration and environment.
-func NewVaultClient(config *Config, e *env.Environment) (*VaultClient, error) {
-	configProvider, err := getConfigProvider(config, e)
+func NewVaultClient(config *Config) (*VaultClient, error) {
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config provider: %w", err)
 	}
@@ -37,9 +36,8 @@ func NewVaultClient(config *Config, e *env.Environment) (*VaultClient, error) {
 }
 
 // getConfigProvider builds the configuration provider for OCI authentication.
-func getConfigProvider(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *Config) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{
@@ -62,11 +60,11 @@ func newOCIVaultClient(configProvider common.ConfigurationProvider) (*vault.Vaul
 }
 
 // CreateSecretInVault creates a new secret in the specified vault using the provided secret configuration and plaintext.
-func (v *VaultClient) CreateSecretInVault(secretConfig secrets.SecretConfig, secretPlainText string) (*vault.CreateSecretResponse, error) {
+func (v *VaultClient) CreateSecretInVault(secretConfig vaultUtils.SecretConfig, secretPlainText string) (*vault.CreateSecretResponse, error) {
 	v.logger.Infof("Creating secret %s in vault %s", *secretConfig.SecretName, *secretConfig.VaultId)
 
 	// Encode the plaintext secret content to Base64
-	base64Content := secrets.B64Encode(secretPlainText)
+	base64Content := vaultUtils.B64Encode(secretPlainText)
 
 	createSecretDetails := vault.CreateSecretDetails{
 		CompartmentId: secretConfig.CompartmentId,

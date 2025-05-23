@@ -13,7 +13,6 @@ const (
 	UserPrincipal       AuthenticationType = "UserPrincipal"
 	InstancePrincipal   AuthenticationType = "InstancePrincipal"
 	ResourcePrincipal   AuthenticationType = "ResourcePrincipal"
-	ServicePrincipal    AuthenticationType = "ServicePrincipal"
 	OkeWorkloadIdentity AuthenticationType = "OkeWorkloadIdentity"
 )
 

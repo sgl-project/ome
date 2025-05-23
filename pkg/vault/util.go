@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
 )
 
 func B64Encode(data string) string {
@@ -36,7 +34,7 @@ func ResolveVaultPrefix(vaultId string) string {
 }
 
 func CFBEncrypt(text string, key string) (string, error) {
-	decodedKey := secrets.B64Decode(key)
+	decodedKey := B64Decode(key)
 
 	block, err := aes.NewCipher([]byte(decodedKey))
 	if err != nil {
@@ -57,7 +55,7 @@ func CFBEncrypt(text string, key string) (string, error) {
 }
 
 func CFBDecrypt(text string, key string) (string, error) {
-	decodedKey := secrets.B64Decode(key)
+	decodedKey := B64Decode(key)
 	ciphertext, _ := base64.URLEncoding.DecodeString(text)
 
 	block, err := aes.NewCipher([]byte(decodedKey))
@@ -82,7 +80,7 @@ func CFBDecrypt(text string, key string) (string, error) {
 }
 
 func GCMEncrypt(text string, key string) (string, error) {
-	decodedKey := secrets.B64Decode(key)
+	decodedKey := B64Decode(key)
 
 	block, err := aes.NewCipher([]byte(decodedKey))
 	if err != nil {
@@ -106,7 +104,7 @@ func GCMEncrypt(text string, key string) (string, error) {
 }
 
 func GCMDecrypt(text string, key string) (string, error) {
-	decodedKey := secrets.B64Decode(key)
+	decodedKey := B64Decode(key)
 	cipherText := []byte(text)
 
 	block, err := aes.NewCipher([]byte(decodedKey))
@@ -126,7 +124,7 @@ func GCMDecrypt(text string, key string) (string, error) {
 }
 
 func GCMEncryptWithoutCopy(text []byte, key string) ([]byte, error) {
-	decodedKey := secrets.B64Decode(key)
+	decodedKey := B64Decode(key)
 
 	block, err := aes.NewCipher([]byte(decodedKey))
 	if err != nil {
@@ -150,7 +148,7 @@ func GCMEncryptWithoutCopy(text []byte, key string) ([]byte, error) {
 }
 
 func GCMDecryptWithoutCopy(cipherText []byte, key string) ([]byte, error) {
-	decodedKey := secrets.B64Decode(key)
+	decodedKey := B64Decode(key)
 
 	block, err := aes.NewCipher([]byte(decodedKey))
 	if err != nil {

@@ -6,7 +6,6 @@ import (
 	"go.uber.org/fx"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
@@ -41,7 +40,6 @@ func (h *HFDownloadAgent) ConfigureCommand(cmd *cobra.Command) {
 // FxModules returns the fx modules needed by this agent
 func (h *HFDownloadAgent) FxModules() []fx.Option {
 	return []fx.Option{
-		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),

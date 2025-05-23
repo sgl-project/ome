@@ -3,7 +3,6 @@ package kmscrypto
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsvault"
 	"github.com/spf13/viper"
@@ -18,7 +17,7 @@ type kmsCryptoParams struct {
 }
 
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params kmsCryptoParams) (*KmsCrypto, error) {
+	func(v *viper.Viper, params kmsCryptoParams) (*KmsCrypto, error) {
 		config, err := NewConfig(
 			WithViper(v, params.AnotherLogger),
 			WithAppParams(params),
@@ -27,5 +26,5 @@ var Module = fx.Provide(
 		if err != nil {
 			return nil, fmt.Errorf("error creating kms crypto config: %+v", err)
 		}
-		return NewKmsCrypto(config, e)
+		return NewKmsCrypto(config)
 	})

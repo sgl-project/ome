@@ -3,7 +3,6 @@ package kmsvault
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/go-playground/validator/v10"
@@ -58,13 +57,6 @@ func WithViper(v *viper.Viper) Option {
 		if err := v.Unmarshal(c); err != nil {
 			return fmt.Errorf("error unmarshalling viper configuration: %w", err)
 		}
-		return nil
-	}
-}
-
-// WithEnv sets the environment to use for the configuration.
-func WithEnv(env *env.Environment) Option {
-	return func(c *Config) error {
 		return nil
 	}
 }

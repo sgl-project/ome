@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -224,16 +223,6 @@ func TestWithLogger(t *testing.T) {
 	config, err := NewHubConfig(WithLogger(mockLogger))
 	require.NoError(t, err)
 	assert.Equal(t, mockLogger, config.Logger)
-}
-
-func TestWithEnv(t *testing.T) {
-	// This test would require mocking the env package
-	// For now, test that it doesn't error
-	mockEnv := &env.Environment{}
-
-	config, err := NewHubConfig(WithEnv(mockEnv))
-	require.NoError(t, err)
-	assert.NotNil(t, config)
 }
 
 func TestWithViper(t *testing.T) {

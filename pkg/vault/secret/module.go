@@ -3,7 +3,6 @@ package ocisecret
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -16,7 +15,7 @@ type appParams struct {
 }
 
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params appParams) (*Secret, error) {
+	func(v *viper.Viper, params appParams) (*Secret, error) {
 		config, err := NewConfig(
 			WithViper(v, params.AnotherLogger),
 			WithParams(params),
@@ -25,5 +24,5 @@ var Module = fx.Provide(
 		if err != nil {
 			return nil, fmt.Errorf("error creating secret config: %+v", err)
 		}
-		return NewSecret(config, e)
+		return NewSecret(config)
 	})

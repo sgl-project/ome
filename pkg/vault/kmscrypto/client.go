@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault"
@@ -20,8 +19,8 @@ type KmsCrypto struct {
 }
 
 // NewKmsCrypto initializes a new KmsCrypto instance with the given configuration and environment.
-func NewKmsCrypto(config *Config, e *env.Environment) (*KmsCrypto, error) {
-	configProvider, err := getConfigProvider(config, e)
+func NewKmsCrypto(config *Config) (*KmsCrypto, error) {
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %w", err)
 	}
@@ -39,9 +38,8 @@ func NewKmsCrypto(config *Config, e *env.Environment) (*KmsCrypto, error) {
 }
 
 // getConfigProvider sets up the configuration provider based on the given environment and configuration.
-func getConfigProvider(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *Config) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{

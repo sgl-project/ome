@@ -7,7 +7,6 @@ import (
 	finetunedadapter "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/fine-tuned-adapter"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
@@ -42,7 +41,6 @@ func (m *FineTunedAdapterAgent) ConfigureCommand(cmd *cobra.Command) {
 // FxModules returns the fx modules needed by this agent
 func (m *FineTunedAdapterAgent) FxModules() []fx.Option {
 	return []fx.Option{
-		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),

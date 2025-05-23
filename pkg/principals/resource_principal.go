@@ -2,50 +2,72 @@ package principals
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 )
 
 // ResourcePrincipalConfig encapsulates configuration for constructing
 // resource principal authentication provider.
 //
-// Zero value is ready to use.
+// Zero value is ready to use - SDK expects container runtime to set required env vars.
 type ResourcePrincipalConfig struct {
-	Version             *EnvVar `mapstructure:"version"`
-	RPTEndpoint         *EnvVar `mapstructure:"rpt_endpoint"`
-	RPTPath             *EnvVar `mapstructure:"rpt_path"`
-	RPSTEndpoint        *EnvVar `mapstructure:"rpst_endpoint"`
-	AuthClientRegionURL *EnvVar `mapstructure:"auth_client_region_url"`
+	// Optional region override
+	Region string `mapstructure:"region"`
+
+	// Optional version override (defaults to "1.1" if not set by container runtime)
+	Version string `mapstructure:"version"`
+
+	// Optional endpoint overrides - usually not needed
+	RPTEndpoint          string `mapstructure:"rpt_endpoint"`
+	RPTPath              string `mapstructure:"rpt_path"`
+	RPSTEndpoint         string `mapstructure:"rpst_endpoint"`
+	AuthEndpointOverride string `mapstructure:"auth_endpoint_override"`
 }
 
 // Validate validates r.
 func (r ResourcePrincipalConfig) Validate() error {
-	for name, envVar := range r.allEnvVars() {
-		if err := envVar.Validate(); err != nil {
-			return fmt.Errorf("invalid %s: %w", name, err)
-		}
-	}
-
+	// No validation needed - all fields are optional
 	return nil
-}
-
-func (r ResourcePrincipalConfig) allEnvVars() map[string]*EnvVar {
-	return map[string]*EnvVar{
-		"version":                    r.Version,
-		"rpt_endpoint":               r.RPTEndpoint,
-		"rpt_path":                   r.RPTPath,
-		"rpst_endpoint":              r.RPSTEndpoint,
-		"sdk_auth_client_region_url": r.AuthClientRegionURL,
-	}
 }
 
 // Build builds a configuration provider from r.
 func (r ResourcePrincipalConfig) Build(opts Opts) (common.ConfigurationProvider, error) {
-	if err := r.setEnvVars(opts); err != nil {
-		return nil, err
+	// Set optional overrides if provided
+	if r.Region != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_REGION", r.Region); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_REGION")
+		}
+	}
+
+	if r.Version != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_VERSION", r.Version); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_VERSION")
+		}
+	}
+
+	if r.RPTEndpoint != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_RPT_ENDPOINT", r.RPTEndpoint); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_RPT_ENDPOINT")
+		}
+	}
+
+	if r.RPTPath != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_RPT_PATH", r.RPTPath); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_RPT_PATH")
+		}
+	}
+
+	if r.RPSTEndpoint != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_RPST_ENDPOINT", r.RPSTEndpoint); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_RPST_ENDPOINT")
+		}
+	}
+
+	if r.AuthEndpointOverride != "" {
+		if err := os.Setenv("OCI_SDK_AUTH_CLIENT_REGION_URL", r.AuthEndpointOverride); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_SDK_AUTH_CLIENT_REGION_URL")
+		}
 	}
 
 	resourcePrincipalConfig, err := opts.factory().NewResourcePrincipal()
@@ -53,39 +75,13 @@ func (r ResourcePrincipalConfig) Build(opts Opts) (common.ConfigurationProvider,
 		return nil, fmt.Errorf("couldn't get resource principal config provider: %v", err)
 	}
 
-	opts.Log.WithField("resourcePrincipalConfig", resourcePrincipalConfig).
-		WithField("tenancyId", env.TryResolve(opts.Env, vars.TenancyId.String())).
-		WithField("resourceCompartmentId", env.TryResolve(opts.Env, vars.ResourceCompartmentId.String())).
-		Info("Initialized resource principal configuration provider")
+	opts.Log.Info("Initialized resource principal configuration provider")
 
 	return resourcePrincipalConfig, nil
 }
 
-func (r ResourcePrincipalConfig) setEnvVars(opts Opts) error {
-	if err := r.AuthClientRegionURL.SetenvOrDefault(EnvOciSdkAuthClientRegionUrl, opts, DefaultAuthClientRegionURLOverlay); err != nil {
-		return err
-	}
-	if err := r.Version.SetenvOrDefault(EnvResourcePrincipalVersion, opts, DefaultResourcePrincipalVersion11); err != nil {
-		return err
-	}
-	if err := r.RPTEndpoint.SetenvOrDefault(EnvResourcePrincipalRPTEndpoint, opts, DefaultResourcePrincipalRPTEndpoint); err != nil {
-		return err
-	}
-	if err := r.RPTPath.SetenvOrDefault(EnvResourcePrincipalRPTPath, opts, DefaultResourcePrincipalRPTPath); err != nil {
-		return err
-	}
-	if err := r.RPSTEndpoint.SetenvOrDefault(EnvResourcePrincipalRPSTEndpoint, opts, DefaultResourcePrincipalRPSTEndpoint); err != nil {
-		return err
-	}
-
-	// TODO(achebatu): unset these env variables to what they were after construction
-	return nil
-}
-
 // DefaultResourcePrincipalConfig provides default configuration
 // for resource principal authentication.
-//
-// Applies to overlay enclave only.
 func DefaultResourcePrincipalConfig() ResourcePrincipalConfig {
 	return ResourcePrincipalConfig{}
 }

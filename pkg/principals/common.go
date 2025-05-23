@@ -1,7 +1,6 @@
 package principals
 
 import (
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
@@ -11,9 +10,6 @@ type Opts struct {
 	//
 	// If not set, defaults to defaultFactory that uses oci-go-sdk common & auth packages.
 	Factory Factory
-
-	// Env represents the environment current process in.
-	Env env.Interface
 
 	// Log is the logger.
 	Log logging.Interface

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -36,8 +35,8 @@ type DefinedTags struct {
 }
 
 // NewKmsMgm initializes a new KmsMgm instance with the given configuration and environment.
-func NewKmsMgm(config *Config, e *env.Environment) (*KmsMgm, error) {
-	configProvider, err := getConfigProvider(config, e)
+func NewKmsMgm(config *Config) (*KmsMgm, error) {
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %w", err)
 	}
@@ -55,9 +54,8 @@ func NewKmsMgm(config *Config, e *env.Environment) (*KmsMgm, error) {
 }
 
 // getConfigProvider builds the configuration provider for OCI authentication.
-func getConfigProvider(config *Config, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *Config) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{

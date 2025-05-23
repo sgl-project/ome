@@ -3,7 +3,6 @@ package oci_vault
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -16,15 +15,14 @@ type vaultParams struct {
 }
 
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params vaultParams) (*VaultClient, error) {
+	func(v *viper.Viper, params vaultParams) (*VaultClient, error) {
 		config, err := NewSecretInVaultConfig(
 			WithViper(v),
-			WithEnv(e),
 			WithAnotherLog(params.AnotherLogger),
 			WithAppParams(params),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error creating secret in vault agent config: %+v", err)
 		}
-		return NewVaultClient(config, e)
+		return NewVaultClient(config)
 	})

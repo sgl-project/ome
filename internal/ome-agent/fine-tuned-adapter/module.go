@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -18,10 +17,9 @@ type fineTunedAdapterParams struct {
 }
 
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params fineTunedAdapterParams) (*FineTunedAdapter, error) {
+	func(v *viper.Viper, params fineTunedAdapterParams) (*FineTunedAdapter, error) {
 		config, err := NewFineTunedAdapterConfig(
 			WithViper(v),
-			WithEnv(e),
 			WithAnotherLog(params.AnotherLogger),
 			WithAppParams(params),
 		)

@@ -3,16 +3,14 @@ package secret_retrieval
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )
 
-func ProvideSecretRetrievalConfig(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretRetrievalConfig, error) {
+func ProvideSecretRetrievalConfig(v *viper.Viper, logger logging.Interface) (*SecretRetrievalConfig, error) {
 	secretRetrievalConfig, err := NewSecretRetrievalConfig(
 		WithViper(v),
-		WithEnv(e),
 		WithAnotherLog(logger),
 	)
 	if err != nil {
@@ -21,13 +19,13 @@ func ProvideSecretRetrievalConfig(v *viper.Viper, e *env.Environment, logger log
 	return secretRetrievalConfig, nil
 }
 
-func ProvideSecretRetrieval(v *viper.Viper, e *env.Environment, logger logging.Interface) (*SecretRetriever, error) {
-	secretRetrievalConfig, err := ProvideSecretRetrievalConfig(v, e, logger)
+func ProvideSecretRetrieval(v *viper.Viper, logger logging.Interface) (*SecretRetriever, error) {
+	secretRetrievalConfig, err := ProvideSecretRetrievalConfig(v, logger)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing SecretRetrievalConfig: %+v", err)
 	}
 
-	secretRetrieval, err := NewSecretRetriever(secretRetrievalConfig, e)
+	secretRetrieval, err := NewSecretRetriever(secretRetrievalConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing SecretRetriever: %+v", err)
 	}
@@ -56,13 +54,13 @@ type appParams struct {
 	Configs []*SecretRetrievalConfig `group:"secretRetrievalConfigs"`
 }
 
-func ProvideListOfSecretRetrievalWithAppParams(e *env.Environment, params appParams) ([]*SecretRetriever, error) {
+func ProvideListOfSecretRetrievalWithAppParams(params appParams) ([]*SecretRetriever, error) {
 	secretRetrievalList := make([]*SecretRetriever, 0)
 	for _, config := range params.Configs {
 		if config == nil {
 			continue
 		}
-		secretRetrieval, err := NewSecretRetriever(config, e)
+		secretRetrieval, err := NewSecretRetriever(config)
 		if err != nil {
 			return secretRetrievalList, fmt.Errorf("error initializing a list of SecretRetriever using Config: %+v: %+v", config, err)
 		}

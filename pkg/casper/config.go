@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/go-playground/validator/v10"
@@ -74,15 +73,6 @@ func WithViper(v *viper.Viper) Option {
 		if err := v.UnmarshalKey(AuthTypeViperKeyName, &c.AuthType); err != nil {
 			return fmt.Errorf("error occurred when unmarshalling auth_type: %+v", err)
 		}
-		return nil
-	}
-}
-
-// WithEnv returns an Option that allows populating the Config from environment variables.
-// Currently a placeholder that returns no error.
-func WithEnv(env *env.Environment) Option {
-	return func(c *Config) error {
-		// Placeholder for future env-based config resolution
 		return nil
 	}
 }

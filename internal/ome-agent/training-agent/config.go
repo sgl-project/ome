@@ -7,7 +7,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
@@ -83,13 +82,6 @@ func WithAppParams(params trainingAgentParams) Option {
 func WithAnotherLog(logger logging.Interface) Option {
 	return func(c *Config) error {
 		c.AnotherLogger = logger
-		return nil
-	}
-}
-
-// WithEnv sets the environment for the configuration.
-func WithEnv(env *env.Environment) Option {
-	return func(c *Config) error {
 		return nil
 	}
 }

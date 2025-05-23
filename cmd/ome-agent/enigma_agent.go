@@ -6,7 +6,6 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/enigma"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
@@ -51,7 +50,6 @@ func (e *EnigmaAgent) FxModules() []fx.Option {
 		kmsmgm.Module,
 		ocisecret.Module,
 		ocivault.Module,
-		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),

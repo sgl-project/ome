@@ -7,10 +7,9 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	training_agent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/training-agent"
+	trainingAgent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/training-agent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 )
@@ -25,7 +24,7 @@ const (
 
 // TrainingAgent implements the AgentModule interface for training agent
 type TrainingAgent struct {
-	agent *training_agent.TrainingAgent
+	agent *trainingAgent.TrainingAgent
 }
 
 // Name returns the name of the agent
@@ -54,13 +53,12 @@ func (t *TrainingAgent) ConfigureCommand(cmd *cobra.Command) {
 // FxModules returns the fx modules needed by this agent
 func (t *TrainingAgent) FxModules() []fx.Option {
 	return []fx.Option{
-		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
 		AuthTypeProvider(),
 		CasperDataStoreListProvider(),
-		training_agent.Module,
+		trainingAgent.Module,
 		fx.Populate(&t.agent),
 	}
 }
@@ -111,7 +109,7 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 		panic(fmt.Errorf("error occurred when unmarshalling key input_object_store: %+v", err))
 	}
 	inputCasperConfig.AnotherLogger = logger
-	inputCasperConfig.Name = training_agent.InputCasperConfigName
+	inputCasperConfig.Name = trainingAgent.InputCasperConfigName
 	inputCasperConfig.AuthType = &authType
 
 	return CasperConfigWrapper{
@@ -122,7 +120,7 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 func provideOutputCasperConfig(logger logging.Interface, authType principals.AuthenticationType) CasperConfigWrapper {
 	outputCasperConfig := &casper.Config{
 		AnotherLogger: logger,
-		Name:          training_agent.OutputCasperConfigName,
+		Name:          trainingAgent.OutputCasperConfigName,
 		AuthType:      &authType,
 	}
 	return CasperConfigWrapper{

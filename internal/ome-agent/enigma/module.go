@@ -3,7 +3,6 @@ package enigma
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmscrypto"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault/kmsmgm"
@@ -22,7 +21,7 @@ type enigmaParams struct {
 }
 
 var Module = fx.Provide(
-	func(v *viper.Viper, e *env.Environment, params enigmaParams) (*Enigma, error) {
+	func(v *viper.Viper, params enigmaParams) (*Enigma, error) {
 		config, err := NewConfig(
 			WithViper(v, params.AnotherLogger),
 			WithAppParams(params),

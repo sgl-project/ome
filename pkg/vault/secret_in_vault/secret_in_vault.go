@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/secrets"
+	util "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/vault"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/vault"
 )
@@ -17,7 +16,7 @@ type SecretInVault struct {
 	VaultClient *vault.VaultsClient
 }
 
-func NewSecretInVault(config *SecretInVaultConfig, e *env.Environment) (*SecretInVault, error) {
+func NewSecretInVault(config *SecretInVaultConfig) (*SecretInVault, error) {
 	if config == nil {
 		return nil, fmt.Errorf("SecretInVaultConfig is nil")
 	}
@@ -25,7 +24,7 @@ func NewSecretInVault(config *SecretInVaultConfig, e *env.Environment) (*SecretI
 		return nil, fmt.Errorf("SecretInVaultConfig is invalid: %+v", err)
 	}
 
-	configProvider, err := getConfigProvider(config, e)
+	configProvider, err := getConfigProvider(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config provider: %+v", err)
 	}
@@ -41,12 +40,12 @@ func NewSecretInVault(config *SecretInVaultConfig, e *env.Environment) (*SecretI
 	}, nil
 }
 
-func (siv *SecretInVault) CreateSecretInVault(secretConfig secrets.SecretConfig, secretPlainText string) (*vault.CreateSecretResponse, error) {
+func (siv *SecretInVault) CreateSecretInVault(secretConfig util.SecretConfig, secretPlainText string) (*vault.CreateSecretResponse, error) {
 	createSecretDetails := vault.CreateSecretDetails{
 		CompartmentId: secretConfig.CompartmentId,
 		SecretName:    secretConfig.SecretName,
 		SecretContent: vault.Base64SecretContentDetails{
-			Content: common.String(secrets.B64Encode(secretPlainText)),
+			Content: common.String(util.B64Encode(secretPlainText)),
 		},
 		VaultId:     secretConfig.VaultId,
 		Description: common.String(fmt.Sprintf("DEK for the model %s", *secretConfig.SecretName)),

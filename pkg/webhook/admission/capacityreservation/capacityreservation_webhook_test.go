@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 )
 
@@ -42,10 +41,6 @@ func TestCapacityReservationValidation(t *testing.T) {
 		Client:  fakeClient,
 		Decoder: decoder,
 	}
-
-	// Set up test tenancy ID
-	os.Setenv(vars.TenancyId.Name(), "test-tenancy")
-	defer os.Unsetenv(vars.TenancyId.Name())
 
 	// Create test cases
 	tests := []struct {

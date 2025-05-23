@@ -3,7 +3,6 @@ package secret_retrieval
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -22,9 +21,8 @@ func NewSecretClient(configProvider common.ConfigurationProvider, config *Secret
 	return &secretsClient, nil
 }
 
-func getConfigProvider(config *SecretRetrievalConfig, e *env.Environment) (common.ConfigurationProvider, error) {
+func getConfigProvider(config *SecretRetrievalConfig) (common.ConfigurationProvider, error) {
 	principalOpts := principals.Opts{
-		Env: e,
 		Log: config.AnotherLogger,
 	}
 	principalConfig := principals.Config{

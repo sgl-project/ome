@@ -2,38 +2,41 @@ package principals
 
 import (
 	"fmt"
+	"os"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env/vars"
 	"github.com/oracle/oci-go-sdk/v65/common"
 )
 
+// OkeWorkloadIdentityConfig encapsulates configuration for OKE workload identity
+//
+// Zero value is ready to use - SDK handles this automatically.
 type OkeWorkloadIdentityConfig struct {
-	Version  *EnvVar `mapstructure:"version"` // Both 1.1 and 2.2 works
-	RPRegion *EnvVar `mapstructure:"region"`
+	// Optional version override (defaults to "1.1" if not set)
+	Version string `mapstructure:"version"`
+
+	// Optional region override
+	Region string `mapstructure:"region"`
 }
 
 // Validate validates r.
 func (r OkeWorkloadIdentityConfig) Validate() error {
-	for name, envVar := range r.allEnvVars() {
-		if err := envVar.Validate(); err != nil {
-			return fmt.Errorf("invalid %s: %w", name, err)
-		}
-	}
+	// No validation needed - all fields are optional
 	return nil
-}
-
-func (r OkeWorkloadIdentityConfig) allEnvVars() map[string]*EnvVar {
-	return map[string]*EnvVar{
-		"version": r.Version,
-		"region":  r.RPRegion,
-	}
 }
 
 // Build builds a configuration provider from r.
 func (r OkeWorkloadIdentityConfig) Build(opts Opts) (common.ConfigurationProvider, error) {
-	if err := r.setEnvVars(opts); err != nil {
-		return nil, err
+	// Set optional overrides if provided
+	if r.Region != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_REGION", r.Region); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_REGION")
+		}
+	}
+
+	if r.Version != "" {
+		if err := os.Setenv("OCI_RESOURCE_PRINCIPAL_VERSION", r.Version); err != nil {
+			opts.Log.WithError(err).Warn("Failed to set OCI_RESOURCE_PRINCIPAL_VERSION")
+		}
 	}
 
 	okeWorkloadIdentityConfig, err := opts.factory().NewOkeWorkloadIdentity()
@@ -41,26 +44,12 @@ func (r OkeWorkloadIdentityConfig) Build(opts Opts) (common.ConfigurationProvide
 		return nil, fmt.Errorf("couldn't get oke workload identity config provider: %v", err)
 	}
 
-	opts.Log.WithField("okeWorkloadIdentityConfig", okeWorkloadIdentityConfig).
-		WithField("tenancyId", env.TryResolve(opts.Env, vars.TenancyId.String())).
-		WithField("resourceCompartmentId", env.TryResolve(opts.Env, vars.ResourceCompartmentId.String())).
-		Info("Initialized OKE workload identity configuration provider")
+	opts.Log.Info("Initialized OKE workload identity configuration provider")
 
 	return okeWorkloadIdentityConfig, nil
 }
 
-func (r OkeWorkloadIdentityConfig) setEnvVars(opts Opts) error {
-	if err := r.RPRegion.SetenvOrDefault(EnvResourcePrincipalRegion, opts, DefaultRegion); err != nil {
-		return err
-	}
-	if err := r.Version.SetenvOrDefault(EnvResourcePrincipalVersion, opts, DefaultResourcePrincipalVersion11); err != nil {
-		return err
-	}
-
-	// TODO(achebatu): unset these env variables to what they were after construction
-	return nil
-}
-
+// DefaultOkeWorkloadIdentityConfig provides default configuration for OKE workload identity.
 func DefaultOkeWorkloadIdentityConfig() OkeWorkloadIdentityConfig {
 	return OkeWorkloadIdentityConfig{}
 }

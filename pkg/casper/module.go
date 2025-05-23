@@ -3,7 +3,6 @@ package casper
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -15,12 +14,12 @@ import (
 // Returns:
 //   - a pointer to CasperDataStore if initialization is successful
 //   - an error if configuration loading or initialization fails
-func ProvideCasperDataStore(v *viper.Viper, e *env.Environment, logger logging.Interface) (*CasperDataStore, error) {
-	config, err := NewConfig(WithViper(v), WithEnv(e), WithAnotherLog(logger))
+func ProvideCasperDataStore(v *viper.Viper, logger logging.Interface) (*CasperDataStore, error) {
+	config, err := NewConfig(WithViper(v), WithAnotherLog(logger))
 	if err != nil {
 		return nil, fmt.Errorf("error reading download agent config: %w", err)
 	}
-	return NewCasperDataStore(config, e)
+	return NewCasperDataStore(config)
 }
 
 // CasperDataStoreModule is an fx module that provides a singleton CasperDataStore.
@@ -55,14 +54,14 @@ type appParams struct {
 // Returns:
 //   - a list of initialized CasperDataStore pointers
 //   - an error if any store fails to initialize (but partial list is returned)
-func ProvideListOfCasperDataStoreWithAppParams(e *env.Environment, params appParams) ([]*CasperDataStore, error) {
+func ProvideListOfCasperDataStoreWithAppParams(params appParams) ([]*CasperDataStore, error) {
 	casperDataStoreList := make([]*CasperDataStore, 0)
 	for _, config := range params.Configs {
 		// Skip nil configs to avoid panics
 		if config == nil {
 			continue
 		}
-		casperDataStore, err := NewCasperDataStore(config, e)
+		casperDataStore, err := NewCasperDataStore(config)
 		if err != nil {
 			return casperDataStoreList, fmt.Errorf(
 				"error initializing CasperDataStore using CasperConfig %+v: %+v", config, err,

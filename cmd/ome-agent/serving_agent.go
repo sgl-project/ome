@@ -7,7 +7,6 @@ import (
 	servingAgent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/serving-agent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/env"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 )
 
@@ -42,7 +41,6 @@ func (s *ServingAgent) ConfigureCommand(cmd *cobra.Command) {
 // FxModules returns the fx modules needed by this agent
 func (s *ServingAgent) FxModules() []fx.Option {
 	return []fx.Option{
-		env.Module,
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
