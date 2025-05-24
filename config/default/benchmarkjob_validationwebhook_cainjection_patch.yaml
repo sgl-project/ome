@@ -1,0 +1,8 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: benchmarkjob.ome.io
+  annotations:
+    cert-manager.io/inject-ca-from: $(omeNamespace)/serving-cert
+webhooks:
+  - name: benchmarkjob.ome-webhook-server.validator

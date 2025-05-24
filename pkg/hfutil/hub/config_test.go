@@ -334,6 +334,61 @@ func TestToDownloadConfig(t *testing.T) {
 	assert.Equal(t, 5*time.Second, downloadConfig.EtagTimeout)
 	assert.Equal(t, 4, downloadConfig.MaxWorkers)
 	assert.NotNil(t, downloadConfig.Headers)
+
+	// Test the new default values we added
+	assert.Equal(t, "main", downloadConfig.Revision, "Revision should default to 'main'")
+	assert.Equal(t, RepoTypeModel, downloadConfig.RepoType, "RepoType should default to 'model'")
+}
+
+func TestToDownloadConfigDefaults(t *testing.T) {
+	tests := []struct {
+		name         string
+		hubConfig    *HubConfig
+		expectedRev  string
+		expectedType string
+	}{
+		{
+			name: "minimal config - should get defaults",
+			hubConfig: &HubConfig{
+				Token:    "test",
+				CacheDir: "/cache",
+				Endpoint: "https://test.com",
+			},
+			expectedRev:  "main",
+			expectedType: RepoTypeModel,
+		},
+		{
+			name:         "empty config - should get defaults",
+			hubConfig:    &HubConfig{},
+			expectedRev:  "main",
+			expectedType: RepoTypeModel,
+		},
+		{
+			name: "config with other fields - should still get defaults",
+			hubConfig: &HubConfig{
+				Token:      "token",
+				UserAgent:  "CustomAgent/1.0",
+				MaxWorkers: 16,
+				ChunkSize:  50 * 1024 * 1024,
+			},
+			expectedRev:  "main",
+			expectedType: RepoTypeModel,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			downloadConfig := tt.hubConfig.ToDownloadConfig()
+
+			assert.Equal(t, tt.expectedRev, downloadConfig.Revision,
+				"Revision should always default to 'main'")
+			assert.Equal(t, tt.expectedType, downloadConfig.RepoType,
+				"RepoType should always default to RepoTypeModel")
+
+			// Verify other essential fields are also properly set
+			assert.NotNil(t, downloadConfig.Headers, "Headers should be initialized")
+		})
+	}
 }
 
 func TestApplyOptions(t *testing.T) {
@@ -420,6 +475,20 @@ func BenchmarkValidateConfig(b *testing.B) {
 		err := config.ValidateConfig()
 		if err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkToDownloadConfig(b *testing.B) {
+	config := defaultHubConfig()
+	config.Token = "benchmark_token"
+	config.UserAgent = "BenchmarkAgent/1.0"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		downloadConfig := config.ToDownloadConfig()
+		if downloadConfig == nil {
+			b.Fatal("ToDownloadConfig returned nil")
 		}
 	}
 }

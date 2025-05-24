@@ -1,0 +1,100 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    control-plane: ome-controller-manager
+    controller-tools.k8s.io: "1.0"
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  replicas: {{ .Values.ome.controller.replicaCount }}
+  selector:
+    matchLabels:
+      control-plane: ome-controller-manager
+      controller-tools.k8s.io: "1.0"
+  template:
+    metadata:
+      labels:
+        control-plane: ome-controller-manager
+        controller-tools.k8s.io: "1.0"
+        logging-forward: enabled
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '8080'
+    spec:
+      serviceAccountName: ome-controller-manager
+      {{- with .Values.ome.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ome.controller.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ome.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.ome.controller.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - command:
+        - /manager
+        image: "{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}"
+        imagePullPolicy: IfNotPresent
+        name: manager
+        args:
+        - "--metrics-bind-address=:8080"
+        - "--leader-elect"
+        - "--webhook"
+        - "--zap-encoder=console"
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: SECRET_NAME
+            value: ome-webhook-server-cert
+        livenessProbe:
+          failureThreshold: 5
+          initialDelaySeconds: 10
+          httpGet:
+            path: /healthz
+            port: 8081
+          timeoutSeconds: 5
+        readinessProbe:
+          initialDelaySeconds: 10
+          failureThreshold: 10
+          periodSeconds: 5
+          httpGet:
+            path: /readyz
+            port: 8081
+          timeoutSeconds: 5
+        resources:
+{{- if .Values.ome.controller.resources }}
+{{ toYaml .Values.ome.controller.resources | trim | indent 12 }}
+{{- end }}
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: ome-webhook-server-cert

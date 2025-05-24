@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ome-model-agent-daemonset
+  namespace: ome
+spec:
+  template:
+    spec:
+      containers:
+        - name: model-agent
+          image: ord.ocir.io/idqj093njucb/ome/model-agent:v1.1-460-1-g4de3cc11

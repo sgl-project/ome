@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ome-model-agent-daemonset
+  namespace: {{ .Release.Namespace }}
+spec:
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels: 
+      app.kubernetes.io/component: "ome-model-agent-daemonset"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: "ome-model-agent-daemonset"
+        logging-forward: enabled
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.modelAgent.health.port }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      priorityClassName: {{ .Values.modelAgent.priorityClassName }}
+      serviceAccountName: {{ .Values.modelAgent.serviceAccountName }}
+      affinity:
+        {{- toYaml .Values.modelAgent.affinity | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.modelAgent.nodeSelector | nindent 8 }}
+      volumes:
+        - name: host-models
+          hostPath:
+            path: {{ .Values.modelAgent.hostPath }}
+            type: Directory
+      containers:
+      - name: model-agent
+        image: "{{ .Values.modelAgent.image.repository }}:{{ .Values.modelAgent.image.tag }}"
+        imagePullPolicy: {{ .Values.modelAgent.image.pullPolicy }}
+        ports:
+        - name: metrics
+          containerPort: {{ .Values.modelAgent.health.port }}
+          protocol: TCP
+        args:
+        - --models-root-dir
+        - {{ .Values.modelAgent.hostPath }}
+        - --num-download-worker
+        - '2'
+        env:
+        - name: REGION
+          value: {{ .Values.ome.ociETC.region }}
+        - name: REALM
+          value: {{ .Values.ome.ociETC.realm }}
+        - name: COMPARTMENTID
+          value: {{ .Values.ome.ociETC.serviceCompartmentId }}
+        - name: COMPARTMENT_ID
+          value: {{ .Values.ome.ociETC.serviceCompartmentId }}
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: host-models
+          readOnly: false
+          mountPath: {{ .Values.modelAgent.hostPath }}
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: {{ .Values.modelAgent.health.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ .Values.modelAgent.health.port }}
+          initialDelaySeconds: 5
+        {{- if .Values.modelAgent.resources }}
+        resources:
+          {{- toYaml .Values.modelAgent.resources | nindent 10 }}
+        {{- end }}   
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists  
+          effect: NoSchedule

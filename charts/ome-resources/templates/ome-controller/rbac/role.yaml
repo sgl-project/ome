@@ -1,0 +1,261 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ome-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - events
+  - persistentvolumeclaims
+  - persistentvolumes
+  - pods
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs/finalizers
+  - jobs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - keda.sh
+  resources:
+  - scaledobjects
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - keda.sh
+  resources:
+  - scaledobjects/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - leaderworkerset.x-k8s.io
+  resources:
+  - leaderworkersets
+  - leaderworkersets/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - leaderworkerset.x-k8s.io
+  resources:
+  - leaderworkersets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - sidecars
+  - virtualservices
+  - virtualservices/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - virtualservices/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ome.io
+  resources:
+  - basemodels
+  - basemodels/finalizers
+  - benchmarkjobs
+  - clusterbasemodels
+  - clusterservingruntimes
+  - clusterservingruntimes/finalizers
+  - finetunedweights
+  - finetunedweights/finalizers
+  - inferenceservices
+  - inferenceservices/finalizers
+  - servingruntimes
+  - servingruntimes/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ome.io
+  resources:
+  - basemodels/status
+  - benchmarkjobs/finalizers
+  - benchmarkjobs/status
+  - clusterbasemodels/status
+  - clusterservingruntimes/status
+  - finetunedweights/status
+  - inferenceservices/status
+  - servingruntimes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ray.io
+  resources:
+  - rayclusters
+  - rayclusters/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ray.io
+  resources:
+  - rayclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - serving.knative.dev
+  resources:
+  - services
+  - services/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.knative.dev
+  resources:
+  - services/status
+  verbs:
+  - get
+  - patch
+  - update

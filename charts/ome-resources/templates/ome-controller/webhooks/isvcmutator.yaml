@@ -1,0 +1,57 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: inferenceservice.ome.io
+  annotations:
+    cert-manager.io/inject-ca-from: ome/serving-cert
+webhooks:
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: ome-webhook-server-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-ome-io-v1beta1-inferenceservice
+    failurePolicy: Fail
+    name: inferenceservice.ome-webhook-server.defaulter
+    sideEffects: None
+    admissionReviewVersions: ["v1beta1"]
+    rules:
+      - apiGroups:
+          - ome.io
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - inferenceservices
+  - clientConfig:
+      caBundle: Cg==
+      service:
+        name: ome-webhook-server-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-pods
+    failurePolicy: Fail
+    name: inferenceservice.ome-webhook-server.pod-mutator
+    sideEffects: None
+    reinvocationPolicy: IfNeeded
+    admissionReviewVersions: ["v1beta1"]
+    namespaceSelector:
+      matchExpressions:
+        - key: control-plane
+          operator: DoesNotExist
+    objectSelector:
+      matchExpressions:
+        - key: ome.io/inferenceservice
+          operator: Exists
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods

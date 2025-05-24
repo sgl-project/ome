@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: deepseek-v3
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-v3
+  namespace: deepseek-v3
+  annotations:
+    ome.io/deploymentMode: "MultiNodeRayVLLM"
+spec:
+  predictor:
+    model:
+      baseModel: deepseek-v3
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

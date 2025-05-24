@@ -1,0 +1,12 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mixtral-8x7b-instruct-v0-1-chat
+  namespace: mixtral-8x7b-instruct-v0-1-chat
+spec:
+  predictor:
+    model:
+      baseModel: mixtral-8x7b-instruct-v0-1-chat
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

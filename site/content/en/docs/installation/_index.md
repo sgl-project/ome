@@ -107,7 +107,7 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack
 ### 6. Clone OME repository
 
 The Go tools require that you clone the repository to the
-`src/github.com/sgl-project/sgl-ome` directory in your
+`src/bitbucket.oci.oraclecorp.com/genaicore/ome` directory in your
 [`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
 
 To check out this repository:

@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-3-70b-instruct-fp8-dynamic
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-3-70b-instruct-fp8-dynamic
+  namespace: llama-3-3-70b-instruct-fp8-dynamic
+  annotations:
+    ome.io/service-type: "LoadBalancer"
+spec:
+  predictor:
+    model:
+      baseModel: llama-3-3-70b-instruct-fp8-dynamic
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1
