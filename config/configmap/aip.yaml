@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiplatform-config
+  namespace: ome
+data:
+  aiplatform-config: |
+    {
+      "secretConfig": {
+        "writeToCommonNamespace": true,
+        "namespace": "ome",
+        "secretName": "ome-openai-secrets"
+      }
+    }

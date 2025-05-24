@@ -1,0 +1,60 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: deberta-v3-base-prompt-injection-v2
+spec:
+  annotations:
+    prometheus.io/port: '8080'
+    prometheus.io/scrape: 'true'
+  labels:
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
+  tolerations:
+    - effect: NoSchedule
+      key: nvidia.com/gpu
+      operator: Exists
+  supportedModelFormats:
+    - autoSelect: true
+      modelArchitecture: DebertaV2ForSequenceClassification
+      modelFormat:
+        name: onnx
+        version: "1"
+      modelFramework:
+        name: transformer
+        version: "1"
+  containers:
+    - name: ome-container
+      image: {{ .Values.deberta_v3_base_prompt_injection_v2.image.repository }}:{{ .Values.deberta_v3_base_prompt_injection_v2.image.tag }}
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: 16
+          memory: 60Gi
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

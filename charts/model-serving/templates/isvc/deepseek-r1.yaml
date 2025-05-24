@@ -1,0 +1,38 @@
+{{- if .Values.deepseek_r1.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-r1
+  namespace: deepseek-r1
+  annotations:
+    {{- if and .Values.deepseek_r1.singleNode }}
+    ome.io/deploymentMode: "RawDeployment"
+    {{- else }}
+    ome.io/deploymentMode: "MultiNode"
+    {{- end }}
+spec:
+  predictor:
+    model:
+      {{- if and .Values.deepseek_r1.enableH200 (not .Values.deepseek_r1.enableH100) }}
+      runtime: srt-deepseek-r1
+      {{- else }}
+      runtime: srt-multi-node-deepseek-r1-rdma
+      {{- end }}
+      baseModel: deepseek-r1
+      protocolVersion: openAI
+    minReplicas: {{ .Values.deepseek_r1.minReplicas}}
+    maxReplicas: {{ .Values.deepseek_r1.maxReplicas}}
+    {{- with .Values.deepseek_r1.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.deepseek_r1.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: deepseek-r1
+
+{{- end }}

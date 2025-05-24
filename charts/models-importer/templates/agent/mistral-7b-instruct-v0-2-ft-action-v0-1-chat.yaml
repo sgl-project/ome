@@ -1,0 +1,69 @@
+{{- if index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: mistral-7b-instruct-v0-2-ft-action-v0-1-chat
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "vllm-mistral-7b-instruct"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: olm.mistral-7b-instruct-v0.2-ft-action-v0.1
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "osBucket" }}/o/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "osPrefixOverride" }}"
+    path: /mnt/data/models/olm/action-mistral-7b-v0.2-finetuned-model-v0.1
+  vendor: olm
+  version: "0.1"
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.36.2"
+  modelArchitecture: MistralForCausalLM
+  modelParameterSize: 7B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 32768
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: SMALL_GENERIC_V2
+          quotaUnit: 1
+          default: true
+    internalName: "action-mistral-7b-v0.2-finetuned-model-v0.1"
+    type: "Serving"
+  modelConfiguration:
+    {
+      "_name_or_path": "./workspace/Mistral-7B-Instruct-v0.2-dequantized",
+      "architectures": [
+        "MistralForCausalLM"
+      ],
+      "attention_dropout": 0.0,
+      "bos_token_id": 1,
+      "eos_token_id": 2,
+      "hidden_act": "silu",
+      "hidden_size": 4096,
+      "initializer_range": 0.02,
+      "intermediate_size": 14336,
+      "max_position_embeddings": 32768,
+      "model_type": "mistral",
+      "num_attention_heads": 32,
+      "num_hidden_layers": 32,
+      "num_key_value_heads": 8,
+      "rms_norm_eps": 1e-05,
+      "rope_theta": 1000000.0,
+      "sliding_window": null,
+      "tie_word_embeddings": false,
+      "torch_dtype": "bfloat16",
+      "transformers_version": "4.36.2",
+      "use_cache": true,
+      "vocab_size": 32000
+    }
+{{- end }}

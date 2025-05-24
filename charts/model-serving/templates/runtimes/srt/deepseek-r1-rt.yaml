@@ -1,0 +1,123 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-deepseek-r1
+spec:
+  disabled: {{ not .Values.deepseek_r1.enableH200 }}
+  {{- if or .Values.commonAnnotations .Values.deepseek_r1.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.deepseek_r1.annotations }}
+    {{ toYaml .Values.deepseek_r1.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.deepseek_r1.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.deepseek_r1.labels }}
+    {{ toYaml .Values.deepseek_r1.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.deepseek_r1.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.deepseek_r1.tolerations }}
+    {{ toYaml .Values.deepseek_r1.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                  - BM.GPU.H200.8
+  modelSizeRange:
+    min: 650B
+    max: 700B
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+        version: "1"
+      version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.46.3"
+      modelArchitecture: DeepseekV3ForCausalLM
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.deepseek_r1.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.deepseek_r1.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --enable-metrics \
+          --model-path="$MODEL_PATH" \
+          --tp 8 \
+          --trust-remote-code \
+          --enable-torch-compile \
+          --torch-compile-max-bs 1 \
+          --reasoning-parser deepseek-r1
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
+        limits:
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

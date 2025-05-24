@@ -1,0 +1,59 @@
+{{- if index .Values "content_moderator" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gais-contentmoderate
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "gais-contentmoderate"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{.Values.content_moderator.isExperimental}}"
+    models.ome.io/internal: "{{ .Values.content_moderator.isInternal }}"
+    models.ome.io/lifecycle-phase: "{{ .Values.content_moderator.lifecyclePhase }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: content-moderator
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ .Values.content_moderator.osBucket }}/o/{{ .Values.content_moderator.vendor }}/{{ .Values.content_moderator.osPrefixOverride }}"
+    path: /mnt/data/models/olm/content_moderator
+  vendor: {{ .Values.content_moderator.vendor }}
+  version: "1.0.0"
+  modelFormat:
+    name: onnx
+    version: "1"
+  modelFramework:
+    name: onnxruntime
+    version: "1"
+  modelArchitecture: BertForSequenceClassification
+  modelParameterSize: 110M
+  modelCapabilities:
+    - "CONTENT_MODERATION"
+    - "TEXT_CLASSIFICATION"
+  maxTokens: 512
+  modelConfiguration:
+    {
+      "architectures": [
+        "BertForMaskedLM"
+      ],
+      "attention_probs_dropout_prob": 0.1,
+      "gradient_checkpointing": false,
+      "hidden_act": "gelu",
+      "hidden_dropout_prob": 0.1,
+      "hidden_size": 768,
+      "initializer_range": 0.02,
+      "intermediate_size": 3072,
+      "layer_norm_eps": 1e-12,
+      "max_position_embeddings": 512,
+      "model_type": "bert",
+      "num_attention_heads": 12,
+      "num_hidden_layers": 12,
+      "pad_token_id": 0,
+      "position_embedding_type": "absolute",
+      "transformers_version": "4.6.0.dev0",
+      "type_vocab_size": 2,
+      "use_cache": true,
+      "vocab_size": 30522
+    }
+{{- end }}

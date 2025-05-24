@@ -1,0 +1,39 @@
+{{- if .Values.llama_3_2_11b_vision_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-2-11b-vision-instruct
+  namespace: llama-3-2-11b-vision-instruct
+spec:
+  predictor:
+    {{- with .Values.llama_3_2_11b_vision_instruct.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      baseModel: llama-3-2-11b-vision-instruct
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_3_2_11b_vision_instruct.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_2_11b_vision_instruct.maxReplicas}}
+    {{- with .Values.llama_3_2_11b_vision_instruct.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_11b_vision_instruct.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_11b_vision_instruct.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_11b_vision_instruct.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_11b_vision_instruct.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-2-11b-vision-instruct
+
+{{- end }}

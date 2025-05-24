@@ -1,0 +1,110 @@
+auth_type: &default_auth_type "UserPrincipal"
+profile: "DEFAULT"
+region: "us-chicago-1"
+
+# HuggingFace Hub Configuration (using hub module compatible fields)
+hf_token: "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"
+cache_dir: "/Users/simolin/.cache/huggingface"
+endpoint: "https://huggingface.co"
+max_retries: 5
+retry_interval: "10s"
+max_workers: 8
+chunk_size: 10485760  # 10MB
+enable_detailed_logs: true
+disable_progress_bars: false
+enable_symlinks: true
+
+# Model Download Configuration
+model_name: "meta-llama/Llama-3.2-1B"
+local_path: "/Users/simolin/mnt/llama/Llama-3.2-1B"
+revision: "main"  # renamed from 'branch' to 'revision' to match hub module
+repo_type: "model"
+
+# Legacy fields (kept for other agents)
+model_store_directory: "/opt/ml/model"
+skip_sha: false
+retry_internal_in_seconds: 10
+num_connections: 100
+
+download_size_limit_gb: 650
+enable_size_limit_check: true
+
+source:
+  bucket_name: "partner-models"
+  prefix: "cohere/command-r-v1.6-16k/"
+  region: "us-chicago-1"
+  namespace: "idqj093njucb"
+
+target:
+  bucket_name: "simolin-test-bucket"
+  prefix: "cohere/command-r-v1.6-16k/"
+  region: "eu-frankfurt-1"
+  namespace: "idqj093njucb"
+
+model_framework: tensorrtllm
+tensorrtllm_version: "v0.11.0"
+node_shape_alias: ""
+num_of_gpu: 1
+disable_model_decryption: false
+
+compartment_id: "ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva"
+vault_id: "ocid1.vault.oc1.us-chicago-1.ijsr6afaaagp2.abxxeljtatzowkwlt2iu42ndlmnmd4d4nausgoubu7uq7iro553xdj5b6weq"
+key_name: "command_r"
+secret_name: "command_r-dek"
+model_type: "Serving"
+
+# Configs for serving sidecar
+fine_tuned_weight_info_file_path: "/mnt/ft-model-info.json"
+unzipped_fine_tuned_weight_directory: "/mnt/unzipped-ft-models"
+zipped_fine_tuned_weight_directory: "/mnt/zipped-ft-models"
+
+# Configs for training agent
+runtime: "cohere" #cohere, cohere-commandr, peft
+training_name: "amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"
+model_directory: "/mnt/cohere/amaaaaaalqj567aahdgokyhrpfmgd374so3n54necmdq7iyod2aye3yfv2yq"
+input_object_store:
+  enable_obo_token: false
+  obo_token: ""
+training_data:
+  bucket_name: ""
+  namespace: ""
+  object_name: ""
+model:
+  bucket_name: "fine-tuned-model-weights"
+  namespace: ""
+  object_name: ""
+training_metrics:
+  bucket_name: "model-training-metrics"
+  namespace: ""
+  object_name: ""
+training_data_directory: ""
+cohere_ft:
+  name:                       ""
+  size:                       "6b"
+  strategy:                   "tfew"
+  serving_strategy:           ""
+  train_epochs:               3
+  learning_rate:              0.001
+  train_batch_size:           32
+  early_stopping_patience:    5
+  early_stopping_threshold:   0.001
+  log_train_status_every_steps: 0
+  n_last_layers:              0
+  tensor_parallel_size:       0
+  base_model:                 ""
+  lora_config:
+    rank: 0
+    alpha: 0
+peft_ft:
+  model_name: "Llama-2-70b-chat-hf"
+  train_dataset_file: "training_data.jsonl"
+  num_train_epochs: 3
+  learning_rate: 0.002
+  train_batch_size: 8
+  early_stopping_patience: 15
+  early_stopping_threshold: 0.0001
+  log_model_metrics_interval_in_steps: 10
+  peft_type: "lora"
+  lora_r: 8
+  lora_alpha: 8
+  lora_dropout: 0.1

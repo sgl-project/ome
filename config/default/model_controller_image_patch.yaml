@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ome-model-controller
+  namespace: ome
+spec:
+  template:
+    spec:
+      containers:
+        - name: model-controller
+          image: ord.ocir.io/idqj093njucb/ome/model-controller:v1.1-400-2-g09ee238f-dirty

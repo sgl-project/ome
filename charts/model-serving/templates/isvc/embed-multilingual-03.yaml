@@ -1,0 +1,20 @@
+{{- if .Values.embed_multilingual_03.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: embed-multilingual-03
+  namespace: embed-multilingual-03
+spec:
+  predictor:
+    model:
+      runtime: cohere-embed-v3
+      baseModel: embed-multilingual-03
+      protocolVersion: cohere
+    minReplicas: {{ .Values.embed_multilingual_03.minReplicas}}
+    maxReplicas: {{ .Values.embed_multilingual_03.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: embed-multilingual-03
+{{- end }}

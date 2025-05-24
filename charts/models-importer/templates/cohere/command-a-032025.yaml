@@ -1,0 +1,48 @@
+{{- if index .Values "command-a-032025" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-a-032025
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "command-a-032025" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "command-a-032025" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "command-a-032025" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "cohere-command-a-vllm"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "command-a-032025" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "command-a-032025" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "command-a-032025" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "command_3"
+    ome.io/base-model-decryption-secret-name: "command_3-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command-a-03-2025
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command-a-032025" "osBucket" }}/o/{{ index .Values "command-a-032025" "vendor" }}/{{ index .Values "command-a-032025" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/command-a-032025
+  vendor: {{ index .Values "command-a-032025" "vendor" }}
+  version: "1.0"
+  # keep trt structure for now
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 111B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 256000
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_COHERE_V3
+          quotaUnit: 1
+          default: true
+    internalName: "command-a-032025"
+    type: "Serving"
+{{- end }}

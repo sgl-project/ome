@@ -1,0 +1,40 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterTrainingRuntime
+metadata:
+  name: llama-3-1-70b-instruct-ft
+spec:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    ome.io/training-runtime-type: peft
+  labels:
+    logging-forward: enabled
+  mlPolicy:
+    numNodes: 1
+    torch:
+      numProcPerNode: auto
+      elasticPolicy:
+        maxRestarts: 3
+        minNodes: 1
+        maxNodes: 1
+  template:
+    spec:
+      replicatedJobs:
+        - name: "trainer-node"
+          replicas: 1
+          template:
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: "trainer"
+                      image: "{{ .Values.peft_ft.llama_3_1_70b_instruct_ft.image.repository }}:{{ .Values.peft_ft.llama_3_1_70b_instruct_ft.image.tag }}"
+                      imagePullPolicy: Always
+                      resources:
+                        limits:
+                          nvidia.com/gpu: '8'
+                        requests:
+                          cpu: '16'
+                          memory: 500G
+                          nvidia.com/gpu: '8'

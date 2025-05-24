@@ -1,0 +1,129 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-phi-3-vision-128k-instruct
+spec:
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.phi_3_vision_128k_instruct.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.phi_3_vision_128k_instruct.annotations }}
+    {{ toYaml .Values.phi_3_vision_128k_instruct.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.phi_3_vision_128k_instruct.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.phi_3_vision_128k_instruct.labels }}
+    {{ toYaml .Values.phi_3_vision_128k_instruct.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.phi_3_vision_128k_instruct.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.phi_3_vision_128k_instruct.tolerations }}
+    {{ toYaml .Values.phi_3_vision_128k_instruct.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  {{ with .Values.phi_3_vision_128k_instruct }}
+  affinity: {{ .affinity | toYaml | nindent 6 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.38.1"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: Phi3VForCausalLM
+      autoSelect: true
+      priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.41.2"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: Phi3VForCausalLM
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  modelSizeRange:
+    min: 3B
+    max: 6B
+  containers:
+    - name: ome-container
+      image: {{ .Values.phi_3_vision_128k_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.phi_3_vision_128k_instruct.image.tag | default .Values.vllm.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.vllm.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{ .Values.vllm.port }} \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --model="$MODEL_PATH" \
+          --max-log-len=0 \
+          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --tensor-parallel-size=1 \
+          --trust-remote-code \
+          --max-num-seqs=16 \
+          --enable-chunked-prefill \
+          --disable-sliding-window
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

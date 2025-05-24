@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ome-webhook-server-service
+  namespace: ome
+spec:
+  ports:
+    - port: 443
+      targetPort: webhook-server
+  selector:
+    control-plane: ome-controller-manager

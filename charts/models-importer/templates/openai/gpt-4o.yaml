@@ -1,0 +1,34 @@
+{{- if index .Values "gpt-4o" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gpt-4o
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "gpt-4o" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "gpt-4o" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "gpt-4o" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: openai.gpt-4o
+  storage:
+    storageUri: "vendor://openai/models/{{ index .Values "gpt-4o" "osPrefixOverride" }}"
+  vendor: {{ index .Values "gpt-4o" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 1.8T
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 128000
+
+{{- end }}

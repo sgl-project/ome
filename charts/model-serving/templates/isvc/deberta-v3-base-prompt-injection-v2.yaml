@@ -1,0 +1,19 @@
+{{- if .Values.deberta_v3_base_prompt_injection_v2.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deberta-v3-base-prompt-injection-v2
+  namespace: deberta-v3-base-prompt-injection-v2
+spec:
+  predictor:
+    model:
+      runtime: deberta-v3-base-prompt-injection-v2
+      baseModel: deberta-v3-base-prompt-injection-v2
+    minReplicas: {{ .Values.deberta_v3_base_prompt_injection_v2.minReplicas}}
+    maxReplicas: {{ .Values.deberta_v3_base_prompt_injection_v2.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: deberta-v3-base-prompt-injection-v2
+{{- end }}

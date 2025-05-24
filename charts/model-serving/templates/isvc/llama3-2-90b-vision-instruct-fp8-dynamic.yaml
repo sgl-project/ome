@@ -1,0 +1,42 @@
+{{- if .Values.llama_3_2_90b_vision_fp8_dynamic.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-2-90b-vision-instruct-fp8-dynamic
+  namespace: llama-3-2-90b-vision-instruct-fp8-dynamic
+spec:
+  predictor:
+    {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      baseModel: llama-3-2-90b-vision-instruct-fp8-dynamic
+      protocolVersion: openAI
+      {{ if .Values.llama_3_2_90b_vision_fp8_dynamic.runtime }}
+      runtime: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.runtime }}
+      {{ end }}
+    minReplicas: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.maxReplicas}}
+    {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_2_90b_vision_fp8_dynamic.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-2-90b-vision-instruct-fp8-dynamic
+
+{{- end }}

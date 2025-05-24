@@ -1,0 +1,39 @@
+{{- if .Values.phi_3_vision_128k_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: phi-3-vision-128k-instruct
+  namespace: phi-3-vision-128k-instruct
+spec:
+  predictor:
+    {{- with .Values.phi_3_vision_128k_instruct.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      baseModel: phi-3-vision-128k-instruct
+      protocolVersion: openAI
+    minReplicas: {{ .Values.phi_3_vision_128k_instruct.minReplicas}}
+    maxReplicas: {{ .Values.phi_3_vision_128k_instruct.maxReplicas}}
+    {{- with .Values.phi_3_vision_128k_instruct.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.phi_3_vision_128k_instruct.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.phi_3_vision_128k_instruct.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.phi_3_vision_128k_instruct.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.phi_3_vision_128k_instruct.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: phi-3-vision-128k-instruct
+
+{{- end }}

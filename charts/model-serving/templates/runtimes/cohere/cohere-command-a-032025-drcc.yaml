@@ -1,0 +1,73 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: cohere-command-a-vllm-drcc
+spec:
+  {{- with .Values.cohere.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.cohere.commonLabels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.commonTolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  supportedModelFormats:
+    - autoSelect: true
+      modelArchitecture: CohereForCausalLM
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      version: "1.0"
+  modelSizeRange:
+    min: 100B
+    max: 120B
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                  - BM.GPU.B4.8
+                  - BM.GPU4.8
+  schedulerName: {{ .Values.commonSchedulerName }}
+  volumes:
+    - name: shared-memory
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+    - name: model-empty-dir
+      emptyDir:
+        medium: Memory
+  containers:
+    - name: ome-container
+      image: "{{ .Values.cohere.commandAImage.repository }}:{{ .Values.cohere.commandAImage.tag }}"
+      ports:
+        - containerPort: 8080
+          name: http1
+      resources:
+        limits:
+          nvidia.com/gpu: "4"
+        requests:
+          cpu: 16
+          memory: 120Gi
+          nvidia.com/gpu: "4"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: shared-memory
+        - mountPath: /opt/ml/model
+          name: model-empty-dir
+      readinessProbe:
+        {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
+      livenessProbe:
+        {{- toYaml .Values.cohere.livenessProbe | nindent 8 }}
+      startupProbe:
+        {{- toYaml .Values.cohere.startupProbe | nindent 8 }}

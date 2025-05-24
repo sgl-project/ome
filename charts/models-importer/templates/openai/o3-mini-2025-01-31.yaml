@@ -1,0 +1,34 @@
+{{- if index .Values "o3-mini-2025-01-31" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: o3-mini-2025-01-31
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "o3-mini-2025-01-31" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "o3-mini-2025-01-31" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "o3-mini-2025-01-31" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: openai.o3-mini-2025-01-31
+  storage:
+    storageUri: "vendor://openai/models/{{ index .Values "o3-mini-2025-01-31" "osPrefixOverride" }}"
+  vendor: {{ index .Values "o3-mini-2025-01-31" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 200B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 200000
+
+{{- end }}

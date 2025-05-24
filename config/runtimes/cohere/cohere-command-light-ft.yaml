@@ -1,0 +1,42 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterTrainingRuntime
+metadata:
+  name: cohere-command-light-ft
+spec:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    ome.io/training-runtime-type: cohere
+  labels:
+    logging-forward: enabled
+  mlPolicy:
+    numNodes: 1
+    torch:
+      numProcPerNode: auto
+      elasticPolicy:
+        maxRestarts: 3
+        minNodes: 1
+        maxNodes: 1
+  template:
+    spec:
+      replicatedJobs:
+        - name: "trainer-node"
+          replicas: 1
+          template:
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: "trainer"
+                      image: us-chicago-1.ocir.io/idqj093njucb/cohere-fax:v0.22.5
+                      imagePullPolicy: Always
+                      command:
+                        - train
+                      resources:
+                        limits:
+                          nvidia.com/gpu: '4'
+                        requests:
+                          cpu: '16'
+                          memory: 320G
+                          nvidia.com/gpu: '4'

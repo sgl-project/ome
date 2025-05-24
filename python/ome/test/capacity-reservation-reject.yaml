@@ -1,0 +1,17 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterCapacityReservation
+metadata:
+  name: "test-reservation-large"
+spec:
+  compartmentID: comp1234
+  resourceGroups:
+  - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+    flavors:
+    - name: "bm-gpu-a100-v2-8"
+      resources:
+      - name: "nvidia.com/gpu"
+        nominalQuota: 1000  # Very large number to trigger insufficient resources
+      - name: "cpu"
+        nominalQuota: 1000
+      - name: "memory"
+        nominalQuota: 1000Gi

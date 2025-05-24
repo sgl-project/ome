@@ -1,0 +1,110 @@
+[project]
+name = "ome"
+version = "0.2.1"
+description = "OME Python SDK"
+authors = [
+    { name = "Simo Lin", email = "simo.lin@oracle.com" },
+    { name = "Chang Su", email = "chang.s.su@oracle.com" },
+    { name = "Arthur Cheng", email = "arthur.cheng@oracle.com" },
+    { name = "Beiwen Guo", email = "beiwen.guo@oracle.com" },
+    { name = "Chengjie Yao", email = "chengjie.yao@oracle.com" },
+    { name = "David Nahm", email = "david.nahm@oracle.com" },
+    { name = "Feng Gao", email = "feng.fg.gao@oracle.com" },
+    { name = "Frank Zhou", email = "haoran.zhou@oracle.com" },
+    { name = "Varun Shenoy", email = "varun.vinayak.shenoy@oracle.com" },
+    { name = "Weiwei Zheng", email = "weiwei.z.zheng@oracle.com" },
+    { name = "Yifeng Liu", email = "yifeng.liu@oracle.com" },
+]
+requires-python = ">=3.9,<3.13"
+readme = "README.md"
+dependencies = [
+    "kubernetes>=23.3.0",
+    "urllib3>=1.25.3,<3.0.0",
+    "python-dateutil>= 2.8.2",
+    "pydantic>=2.5.0,<3 ; python_version == '3.12'",
+    "pydantic>1.0,<3 ; python_version >= '3.9' and python_version < '3.12'",
+    "typing-extensions>= 4.7.1",
+    "pyyaml>=6.0.0,<7",
+    "pydantic>=2.10.6",
+    "psutil>=7.0.0",
+    "tabulate>=0.9.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>= 7.2.1",
+    "pytest-cov>= 2.8.1",
+    "flake8>= 4.0.0",
+    "types-python-dateutil>= 2.8.19.14",
+    "mypy>= 1.5",
+    "ruff>=0.5.6,<0.6",
+    "isort>=5.13.2,<6",
+    "black>=24.8.0,<25",
+    "pre-commit>=3.8.0,<4",
+]
+
+[tool.uv]
+
+[[tool.uv.index]]
+name = "oci-pypi"
+url = "https://artifactory.oci.oraclecorp.com/api/pypi/global-release-pypi/simple"
+default = true
+
+[tool.hatch.build.targets.sdist]
+include = ["ome"]
+
+[tool.hatch.build.targets.wheel]
+include = ["ome"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.poetry-version-plugin]
+source = "file"
+file_path = "../VERSION"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+extend-exclude = [
+]
+
+[tool.ruff.lint]
+select = [
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # flake8-bugbear
+  "B",
+  # flake8-simplify
+  "SIM",
+  "G",
+]
+ignore = [
+  # star imports
+  "F405", "F403",
+  # lambda expression assignment
+  "E731",
+  # Loop control variable not used within loop body
+  "B007",
+  # logging statement uses f-string
+  "G004",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+exclude = '\.venv|build|dist'
+
+[tool.isort]
+profile = "black"
+sections = [
+  "FUTURE",
+  "LOCUST",
+  "STDLIB",
+  "THIRDPARTY",
+  "FIRSTPARTY",
+  "LOCALFOLDER",
+]

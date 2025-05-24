@@ -1,0 +1,39 @@
+{{ if .Values.e5_mistral_7b_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: e5-mistral-7b-instruct
+  namespace: e5-mistral-7b-instruct
+spec:
+  predictor:
+    {{- with .Values.e5_mistral_7b_instruct.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      baseModel: e5-mistral-7b-instruct
+      protocolVersion: openAI
+    minReplicas: {{ .Values.e5_mistral_7b_instruct.minReplicas}}
+    maxReplicas: {{ .Values.e5_mistral_7b_instruct.maxReplicas}}
+    {{- with .Values.e5_mistral_7b_instruct.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.e5_mistral_7b_instruct.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.e5_mistral_7b_instruct.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.e5_mistral_7b_instruct.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.e5_mistral_7b_instruct.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e5-mistral-7b-instruct
+
+{{- end }}

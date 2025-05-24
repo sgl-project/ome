@@ -1,0 +1,47 @@
+{{- if index .Values "cohere-command-r-plus-082024-v1-6-128k" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-r-plus-082024-v1-6-128k
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "cohere-command-r-v3"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "command_r"
+    ome.io/base-model-decryption-secret-name: "command_r-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command-r-plus-08-2024
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "osBucket" }}/o/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}/{{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/command-r-plus-082024-v1.6-128k
+  vendor: {{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}
+  version: "1.6"
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.11.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.11.0'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 50.6B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 4096
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_COHERE_V2_2
+          quotaUnit: 1
+          default: true
+    internalName: "command-r-plus-082024-v1.6-128k"
+    type: "Serving"
+{{- end }}

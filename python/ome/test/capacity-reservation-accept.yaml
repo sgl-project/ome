@@ -1,0 +1,17 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterCapacityReservation
+metadata:
+  name: "test-reservation-small"
+spec:
+  compartmentID: comp1234
+  resourceGroups:
+  - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+    flavors:
+    - name: "bm-gpu-a100-v2-8"
+      resources:
+      - name: "nvidia.com/gpu"
+        nominalQuota: 2  # Small number that should be available
+      - name: "cpu"
+        nominalQuota: 4
+      - name: "memory"
+        nominalQuota: 16Gi

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-r-082024-v1-7-tp1-128k
+---
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-r-082024-v1-7-tp1-128k
+  namespace: command-r-082024-v1-7-tp1-128k
+spec:
+  predictor:
+    model:
+      runtime: cohere-command-r-small-vnext
+      baseModel: command-r-082024-v1-7-tp1-128k
+      protocolVersion: cohere
+    minReplicas: 1
+    maxReplicas: 1

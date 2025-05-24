@@ -1,0 +1,39 @@
+{{- if .Values.llama_3_3_70b_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-3-70b-instruct
+  namespace: llama-3-3-70b-instruct
+spec:
+  predictor:
+    {{- with .Values.llama_3_3_70b_instruct.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      baseModel: llama-3-3-70b-instruct
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_3_3_70b_instruct.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_3_70b_instruct.maxReplicas}}
+    {{- with .Values.llama_3_3_70b_instruct.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_3_70b_instruct.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_3_70b_instruct.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_3_70b_instruct.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_3_70b_instruct.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-3-70b-instruct
+
+{{- end }}

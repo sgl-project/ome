@@ -1,0 +1,141 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-llama-3-2-11b-vision-instruct
+spec:
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.llama_3_2_11b_vision_instruct.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_2_11b_vision_instruct.annotations }}
+    {{ toYaml .Values.llama_3_2_11b_vision_instruct.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.llama_3_2_11b_vision_instruct.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_2_11b_vision_instruct.labels }}
+    {{ toYaml .Values.llama_3_2_11b_vision_instruct.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.llama_3_2_11b_vision_instruct.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_2_11b_vision_instruct.tolerations }}
+    {{ toYaml .Values.llama_3_2_11b_vision_instruct.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  {{ with .Values.llama_3_2_11b_vision_instruct }}
+  affinity: {{ .affinity | toYaml | nindent 6 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.45.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: MllamaForConditionalGeneration
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
+    - modelFramework:
+        name: transformers
+        version: "4.50.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: MllamaForConditionalGeneration
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
+  modelSizeRange:
+    min: 10B
+    max: 12B
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.llama_3_2_11b_vision_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_2_11b_vision_instruct.image.tag | default .Values.vllm.latestImage.tag }}
+      ports:
+        - containerPort: {{ .Values.vllm.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '120'
+      args:
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{ .Values.vllm.port }} \
+          --model="$MODEL_PATH" \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --max-log-len=0 \
+          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --tensor-parallel-size=1 \
+          --max-num-seqs=32 \
+          --enforce-eager \
+          --preemption-mode=swap \
+          --limit-mm-per-prompt=image=1 \
+          --max-model-len=131072 \
+          --gpu-memory-utilization=0.99 \
+          --enable-auto-tool-choice \
+          --tool-call-parser=llama3_json \
+          --chat-template=./examples/tool_chat_template_llama3.2_json.jinja
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

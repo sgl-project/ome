@@ -1,0 +1,47 @@
+{{- if index .Values "cohere-embed-english-light-v3-0" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: embed-english-light-03
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "cohere-embed-english-light-v3-0" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "cohere-embed-english-light-v3-0" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "cohere-embed-english-light-v3-0" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "cohere-embed-v3"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "cohere-embed-english-light-v3-0" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "cohere-embed-english-light-v3-0" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "cohere-embed-english-light-v3-0" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "embed"
+    ome.io/base-model-decryption-secret-name: "embed-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.embed-english-light-v3.0
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-embed-english-light-v3-0" "osBucket" }}/o/{{ index .Values "cohere-embed-english-light-v3-0" "vendor" }}/{{ index .Values "cohere-embed-english-light-v3-0" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/embed-english-light-03
+  vendor: {{ index .Values "cohere-embed-english-light-v3-0" "vendor" }}
+  version: "3.0"
+  modelFormat:
+    name: onnx
+    version: '1'
+  modelFramework:
+    name: onnxruntime
+    version: '1'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 33M
+  modelCapabilities:
+    - "TEXT_EMBEDDINGS"
+  maxTokens: 4096
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: EMBED_COHERE
+          quotaUnit: 1
+          default: true
+    internalName: "embed-english-light-03"
+    type: "Serving"
+{{- end }}

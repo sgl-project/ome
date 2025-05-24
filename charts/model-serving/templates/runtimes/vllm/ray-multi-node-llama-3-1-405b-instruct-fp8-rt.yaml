@@ -1,0 +1,118 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-ray-multi-node-llama-3-1-405b-instruct-fp8
+spec:
+  disabled: false
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.linkerdAnnotations }}
+    {{ toYaml .Values.linkerdAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.llama_3_1_405b_instruct.annotations }}
+    {{ toYaml .Values.llama_3_1_405b_instruct.annotations | nindent 4 }}
+    {{- end }}
+    ome.io/deploymentMode: MultiNodeRayVLLM
+  labels:
+    logging-forward: enabled
+    {{- if .Values.llama_3_1_405b_instruct.labels }}
+    {{ toYaml .Values.llama_3_1_405b_instruct.labels | nindent 6 }}
+    {{- end }}
+  {{- if or .Values.commonTolerations .Values.llama_3_1_405b_instruct.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_1_405b_instruct.tolerations }}
+    {{ toYaml .Values.llama_3_1_405b_instruct.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{ with .Values.llama_3_1_405b_instruct }}
+  affinity: {{ .affinity | toYaml | nindent 6 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.43.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: false
+      priority: 1
+      version: "1.0.0"
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+    - emptyDir: { }
+      name: log-volume
+  protocolVersions:
+    - openAI
+  modelSizeRange:
+    min: 400B
+    max: 420B
+  pipelineParallelism: true
+  containers:
+    - name: ome-container
+      image: {{ .Values.llama_3_1_405b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag | default .Values.vllm.commonImage.tag }}
+      env:
+        - name: VLLM_PORT
+          value: "9000"
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          ulimit -n 65536;
+          eval "$KUBERAY_GEN_RAY_START_CMD" &
+          (
+            while ! ray status | grep -q '0.0/16.0 GPU'; do
+              echo 'Waiting for GPUs to be available...';
+              sleep 2;
+            done;
+            python3 -m vllm.entrypoints.openai.api_server \
+              --port={{ .Values.vllm.port }} \
+              --model="$MODEL_PATH" \
+              --max-log-len=0 \
+              --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+              --served-model-name={{ .Values.vllm.serveModelName }} \
+              --tensor-parallel-size=8 \
+              --pipeline-parallel-size=2 \
+              --enable-chunked-prefill
+          ) &
+          wait
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /tmp/ray
+          name: log-volume
+      resources:
+        requests:
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
+        limits:
+          cpu: 128
+          memory: 216Gi
+          nvidia.com/gpu: 8
+
+      livenessProbe:
+        exec:
+          command:
+            - sh
+            - '-c'
+            - echo success
+        initialDelaySeconds: 10
+        periodSeconds: 10
+      readinessProbe:
+        exec:
+          command:
+            - sh
+            - '-c'
+            - echo success
+        initialDelaySeconds: 10
+        periodSeconds: 10

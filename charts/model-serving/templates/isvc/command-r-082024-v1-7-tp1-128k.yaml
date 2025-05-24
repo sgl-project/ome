@@ -1,0 +1,20 @@
+{{- if .Values.command_r_082024_v1_7_tp1_128k.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-r-082024-v1-7-tp1-128k
+  namespace: command-r-082024-v1-7-tp1-128k
+spec:
+  predictor:
+    model:
+      runtime: cohere-command-r-small-vnext
+      baseModel: command-r-082024-v1-7-tp1-128k
+      protocolVersion: cohere
+    minReplicas: {{ .Values.command_r_082024_v1_7_tp1_128k.minReplicas}}
+    maxReplicas: {{ .Values.command_r_082024_v1_7_tp1_128k.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-r-082024-v1-7-tp1-128k
+{{- end }}

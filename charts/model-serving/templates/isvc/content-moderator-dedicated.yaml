@@ -1,0 +1,19 @@
+{{- if .Values.content_moderator_dedicated.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: dedicated-content-moderator
+  namespace: dedicated-content-moderator
+spec:
+  predictor:
+    model:
+      runtime: gais-contentmoderate
+      baseModel: gais-contentmoderate
+    minReplicas: {{ .Values.content_moderator_dedicated.minReplicas}}
+    maxReplicas: {{ .Values.content_moderator_dedicated.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dedicated-content-moderator
+{{- end }}

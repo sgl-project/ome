@@ -1,0 +1,40 @@
+{{- if .Values.llama_3_1_405b_instruct.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-1-405b-instruct-fp8
+  namespace: llama-3-1-405b-instruct-fp8
+  annotations:
+    {{- if and .Values.llama_3_1_405b_instruct.singleNode }}
+    ome.io/deploymentMode: "RawDeployment"
+    {{- else }}
+    ome.io/deploymentMode: "MultiNodeRayVLLM"
+    {{- end }}
+spec:
+  predictor:
+    model:
+      {{- if and .Values.llama_3_1_405b_instruct.enableRDMA (not .Values.llama_3_1_405b_instruct.singleNode) }}
+      runtime: vllm-ray-multi-node-llama-3-1-405b-rdma
+      {{- else if and .Values.llama_3_1_405b_instruct.singleNode (not .Values.llama_3_1_405b_instruct.enableRDMA) }}
+      runtime: vllm-llama-3-1-405b-instruct-fp8
+      {{- else }}
+      runtime: vllm-ray-multi-node-llama-3-1-405b
+      {{- end }}
+      baseModel: llama-3-1-405b-instruct-fp8
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_3_1_405b_instruct.minReplicas}}
+    maxReplicas: {{ .Values.llama_3_1_405b_instruct.maxReplicas}}
+    {{- with .Values.llama_3_1_405b_instruct.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.llama_3_1_405b_instruct.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-3-1-405b-instruct-fp8
+
+{{- end }}

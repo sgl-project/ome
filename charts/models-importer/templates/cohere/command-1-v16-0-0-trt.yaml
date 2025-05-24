@@ -1,0 +1,48 @@
+{{- if index .Values "cohere-command-1-v16-0-0-trt" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-52b-v16-0-trt-gen
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "cohere-command-1-trt"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "cohere-command-1-v16-0-0-trt" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "cohere-command-1-v16-0-0-trt" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "cohere-command-1-v16-0-0-trt" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "command_52b"
+    ome.io/base-model-decryption-secret-name: "command_52b-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command.trt
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-1-v16-0-0-trt" "osBucket" }}/o/{{ index .Values "cohere-command-1-v16-0-0-trt" "vendor" }}/{{ index .Values "cohere-command-1-v16-0-0-trt" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/command_52b_v16.0.0_xznlji4x_pref_fp16_trt
+  vendor: {{ index .Values "cohere-command-1-v16-0-0-trt" "vendor" }}
+  version: "16.0"
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelArchitecture: Cohere
+  modelParameterSize: 70B
+  modelCapabilities:
+    - "TEXT_GENERATION"
+  maxTokens: 4096
+  additionalMetadata:
+    {{/* this model will use large_cohere in ord, large_cohere_v2 in other regions*/}}
+    {{- $cfg := index .Values "cohere-command-1-v16-0-0-trt" "compatibleDACShapes" -}}
+    {{- if $cfg }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: {{ $cfg }}
+          quotaUnit: 1
+          default: true
+    {{ end }}
+    internalName: "command_52b_v16.0.0_xznlji4x_pref_fp16_trt"
+    type: "Serving"
+{{- end }}

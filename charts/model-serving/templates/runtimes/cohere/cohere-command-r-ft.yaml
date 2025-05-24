@@ -1,0 +1,48 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterTrainingRuntime
+metadata:
+  name: cohere-command-r-ft
+spec:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    ome.io/training-runtime-type: cohere-commandr
+  labels:
+    logging-forward: enabled
+  mlPolicy:
+    numNodes: 1
+    torch:
+      numProcPerNode: auto
+      elasticPolicy:
+        maxRestarts: 3
+        minNodes: 1
+        maxNodes: 1
+  template:
+    spec:
+      replicatedJobs:
+        - name: "trainer-node"
+          replicas: 1
+          template:
+            spec:
+              template:
+                spec:
+                  volumes:
+                    - emptyDir:
+                        medium: Memory
+                        sizeLimit: 1Gi
+                      name: shared-memory
+                  containers:
+                    - name: "trainer"
+                      image: "{{ .Values.cohere.commandRFtImage.repository }}:{{ .Values.cohere.commandRFtImage.tag }}"
+                      imagePullPolicy: Always
+                      volumeMounts:
+                        - mountPath: /dev/shm
+                          name: shared-memory
+                      resources:
+                        limits:
+                          nvidia.com/gpu: '8'
+                        requests:
+                          cpu: '16'
+                          memory: 320G
+                          nvidia.com/gpu: '8'

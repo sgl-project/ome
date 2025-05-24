@@ -1,0 +1,414 @@
+compartmentID: ocid1.compartment.oc1..aaaaaaaazq
+osnamespace: mynamespace
+
+cohere-command-1-6b-v14-2-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-6b-v15-6-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-52b-v14-2-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-52b-v15-6-gen:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+command2-35b-v19-0-0-float32-v1-2-16k-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+command2-35b-v20-1-0-float32-v1-7-16k-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-1-405b-instruct-fp8:
+  enabled: false
+  singleNode: true
+  lifecyclePhase: "ACTIVE"
+
+llama-3-1-70b-instruct:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-3-70b-instruct:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-3-70b-instruct-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-1-70b-instruct-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-70b-instruct-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-3-70b-instruct-fp8-dynamic:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-2-90b-vision-instruct-fp8-dynamic:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-2-11b-vision-instruct:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-70b-instruct:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+llama-4-scout-17b-16e-instruct:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-4-maverick-17b-128e-instruct-fp8:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mixtral-8x7b-instruct-v0-1-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+e5-mistral-7b-instruct:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+deberta-v3-base-prompt-injection-v2:
+  enabled: false
+
+content_moderator:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gliner-large-v2-1:
+  enabled: false
+
+mistral-7b-instruct-v0-2-ft-action-v0-0-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mistral-7b-instruct-v0-2-ft-action-v0-1-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mistral-7b-instruct-v0-2-ft-thought-v0-0-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+mistral-7b-instruct-v0-2-ft-thought-v0-1-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+phi-3-vision-128k-instruct-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+phi-3-vision-128k-instruct-ft-v1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2sql-m1-base-7b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2rqs-7b-v3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2rqs-7b-v4:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+nl2sql-m1-premium-70b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+llama-3-2-11b-vision-ft-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+command-a-032025:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+command-a-032025-drcc:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-082024-v1-6-tp4-128k:
+  enabled: false 
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-v1-2-16k-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-v1-3-16k-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-v1-6-16k-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-082024-v1-7-tp1-128k:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-bs128-16k-chat:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-embed-english-light-v2-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-english-light-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-english-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-multilingual-light-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-multilingual-v3-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-embed-english-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-english-light-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-multilingual-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-multilingual-light-image-v3-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-embed-v4-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-plus-v1-2-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-plus-v1-6-chat:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-plus-082024-v1-6-128k:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-082024-v1-7-tp1-16k:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-6b-v14-2-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-6b-v15-6-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-52b-v14-2-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-52b-v15-6-0:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-command-1-52b-v16-0-0:
+  enabled: false
+  lifecyclePhase: "BASEMODEL_LIFE_CYCLE_PHASE_DEPRECATED"
+
+cohere-command-1-v15-6-0-trt:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-v15-6-1-trt:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-1-v16-0-0-trt:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "LARGE_COHERE_V2"
+
+cohere-rerank-english-03:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-rerank-multilingual-03:
+  enabled: false
+  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
+
+cohere-rerank:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-rerank-v3-5:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+deepseek-r1:
+  enabled: false
+  singleNode: false
+  lifecyclePhase: "ACTIVE"
+  commitHash: "5dde110d1a9ee857b90a6710b7138f9130ce6fa0"
+
+deepseek-v3:
+  enabled: false
+  singleNode: false
+  lifecyclePhase: "ACTIVE"
+  commitHash: "1d044fd82b15f1cedb197a288e50cc96a2c27205"
+
+gpt-4o:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-2024-08-06:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-2024-11-20:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-2024-07-18:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-search-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-search-preview-2025-03-11:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-search-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-search-preview-2025-03-11:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4-1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4-1-2025-04-14:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4-1-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4-1-mini-2025-04-14:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4-1-nano:
+  enaled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4-1-nano-2025-04-14:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o1-2024-12-17:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o3-2025-04-16: 
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o3-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o3-mini-2025-01-31:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o4-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+o4-mini-2025-04-16:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-2-0-flash-lite:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-2-0-flash:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-0404:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-mini-0404:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-mini:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-fast:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+grok-3-mini-fast:
+  enabled: false
+  lifecyclePhase: "ACTIVE"

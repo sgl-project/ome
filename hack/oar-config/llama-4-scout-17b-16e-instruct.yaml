@@ -1,0 +1,21 @@
+# DO NOT EDIT, UPDATE, OR APPLY this file to upstream cluster unless you have consulted with Simo Lin
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+    ome.io/service-type: "LoadBalancer"
+    ome.io/load-balancer-ip: "147.154.132.151"
+  name: llama-4-scout-17b-16e-instruct
+  namespace: aor-evaluator-ns
+spec:
+  predictor:
+    maxReplicas: 1
+    minReplicas: 1
+    model:
+      baseModel: llama-4-scout-17b-16e-instruct
+      name: ''
+      protocolVersion: openAI
+      resources: {}
+      runtime: vllm-llama-4-scout-17b-16e-instruct
+    workerSpec: {}

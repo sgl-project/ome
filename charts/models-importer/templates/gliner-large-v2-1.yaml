@@ -1,0 +1,57 @@
+{{- if index .Values "gliner-large-v2-1" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gliner-large-v2-1
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "gliner-large-v2-1"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "gliner-large-v2-1" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "gliner-large-v2-1" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "gliner-large-v2-1" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: urchade.gliner-large-v2-1
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "gliner-large-v2-1" "osBucket" }}/o/{{ index .Values "gliner-large-v2-1" "vendor" }}/{{ index .Values "gliner-large-v2-1" "osPrefixOverride" }}"
+    path: /mnt/data/models/urchade/gliner-large-v2-1
+  vendor: {{ index .Values "gliner-large-v2-1" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: pytorch
+    version: "1"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelParameterSize: 459M
+  modelCapabilities:
+    - "PII_PROTECTION"
+    - "TOKEN_CLASSIFICATION"
+  maxTokens: 384
+  modelConfiguration:
+    {
+      "size_sup": -1,
+      "max_types": 25,
+      "shuffle_types": true,
+      "random_drop": true,
+      "max_neg_type_ratio": 1,
+      "max_len": 384,
+      "lr_encoder": "1e-5",
+      "lr_others": "5e-5",
+      "num_steps": 30000,
+      "warmup_ratio": 3000,
+      "train_batch_size": 8,
+      "eval_every": 5000,
+      "max_width": 12,
+      "model_name": "microsoft/deberta-v3-large",
+      "fine_tune": true,
+      "subtoken_pooling": "first",
+      "hidden_size": 512,
+      "span_mode": "markerV0",
+      "dropout": 0.4,
+      "name": "correct"
+    }
+  {{- end }}

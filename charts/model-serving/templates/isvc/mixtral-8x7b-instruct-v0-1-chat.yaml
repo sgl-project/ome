@@ -1,0 +1,39 @@
+{{ if .Values.mixtral_8x7b_instruct_v0_1_chat.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mixtral-8x7b-instruct-v0-1-chat
+  namespace: mixtral-8x7b-instruct-v0-1-chat
+spec:
+  predictor:
+    {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.annotations }}
+    annotations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    model:
+      baseModel: mixtral-8x7b-instruct-v0-1-chat
+      protocolVersion: openAI
+    minReplicas: {{ .Values.mixtral_8x7b_instruct_v0_1_chat.minReplicas}}
+    maxReplicas: {{ .Values.mixtral_8x7b_instruct_v0_1_chat.maxReplicas}}
+    {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.affinity }}
+    affinity: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.tolerations }}
+    tolerations: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.topologySpreadConstraints }}
+    topologySpreadConstraints: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.volumes }}
+    volumes: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.mixtral_8x7b_instruct_v0_1_chat.scaleMetric }}
+    scaleMetric: {{ toYaml . | nindent 6 }}
+    {{- end }}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mixtral-8x7b-instruct-v0-1-chat
+
+{{- end }}

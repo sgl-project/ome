@@ -1,0 +1,75 @@
+{{- if index .Values "nl2sql-m1-premium-70b" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: nl2sql-m1-premium-70b
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "nl2sql-m1-premium-70b" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "nl2sql-m1-premium-70b" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "nl2sql-m1-premium-70b" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "vllm-nl2rqs-70b"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "nl2sql-m1-premium-70b" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "nl2sql-m1-premium-70b" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "nl2sql-m1-premium-70b" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: olm.nl2sql-m1-premium-70b
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2sql-m1-premium-70b" "osBucket" }}/o/{{ index .Values "nl2sql-m1-premium-70b" "vendor" }}/{{ index .Values "nl2sql-m1-premium-70b" "osPrefixOverride" }}"
+    path: /mnt/data/models/olm/nl2sql-m1-premium-70b
+  vendor: olm
+  version: "1.0"
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.40.1"
+  modelArchitecture: LlamaForCausalLM
+  modelParameterSize: 70B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 8192
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC_V2
+          quotaUnit: 1
+          default: true
+    internalName: "nl2sql-m1-premium-70b"
+    type: "Serving"
+  modelConfiguration:
+    {
+      "_name_or_path": "/mnt/shared-physical-ad1/gtangari/code_assist/models_hf/hub/models--meta-llama--Meta-Llama-3-70B-Instruct/snapshots/7129260dd854a80eb10ace5f61c20324b472b31c",
+      "architectures": [
+        "LlamaForCausalLM"
+      ],
+      "attention_bias": false,
+      "attention_dropout": 0.0,
+      "bos_token_id": 128000,
+      "eos_token_id": 128009,
+      "hidden_act": "silu",
+      "hidden_size": 8192,
+      "initializer_range": 0.02,
+      "intermediate_size": 28672,
+      "max_position_embeddings": 8192,
+      "model_type": "llama",
+      "num_attention_heads": 64,
+      "num_hidden_layers": 80,
+      "num_key_value_heads": 8,
+      "pretraining_tp": 1,
+      "rms_norm_eps": 1e-05,
+      "rope_scaling": null,
+      "rope_theta": 500000.0,
+      "tie_word_embeddings": false,
+      "torch_dtype": "bfloat16",
+      "transformers_version": "4.40.1",
+      "use_cache": false,
+      "vocab_size": 128256
+    }
+
+{{- end }}

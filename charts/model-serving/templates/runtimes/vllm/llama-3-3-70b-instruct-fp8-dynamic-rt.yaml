@@ -1,0 +1,124 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: vllm-llama-3-3-70b-instruct-fp8-dynamic
+spec:
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.llama_3_3_70b_instruct_fp8_dynamic.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_3_70b_instruct_fp8_dynamic.annotations }}
+    {{ toYaml .Values.llama_3_3_70b_instruct_fp8_dynamic.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.llama_3_3_70b_instruct_fp8_dynamic.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_3_70b_instruct_fp8_dynamic.labels }}
+    {{ toYaml .Values.llama_3_3_70b_instruct_fp8_dynamic.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.llama_3_3_70b_instruct_fp8_dynamic.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_3_70b_instruct_fp8_dynamic.tolerations }}
+    {{ toYaml .Values.llama_3_3_70b_instruct_fp8_dynamic.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  {{ with .Values.llama_3_3_70b_instruct_fp8_dynamic }}
+  affinity: {{ .affinity | toYaml | nindent 6 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.47.1"
+      quantization: compressed-tensors
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
+  modelSizeRange:
+    min: 60B
+    max: 75B
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.llama_3_3_70b_instruct_fp8_dynamic.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_3_70b_instruct_fp8_dynamic.image.tag | default .Values.vllm.latestImage.tag }}
+      ports:
+        - containerPort: {{ .Values.vllm.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m vllm.entrypoints.openai.api_server \
+          --port={{ .Values.vllm.port }} \
+          --model="$MODEL_PATH" \
+          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
+          --max-log-len=0 \
+          --served-model-name={{ .Values.vllm.serveModelName }} \
+          --tensor-parallel-size=2 \
+          --max-model-len=131072 \
+          --gpu-memory-utilization=0.9 \
+          --enable-chunked-prefill \
+          --enable-auto-tool-choice \
+          --tool-call-parser=llama3_json \
+          --chat-template=./examples/tool_chat_template_llama3.1_json.jinja
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 2
+        limits:
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 2
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

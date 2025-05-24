@@ -1,0 +1,103 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: cohere-command-1-trt
+spec:
+  disabled: false
+  annotations:
+    prometheus.io/port: '8081'
+    prometheus.io/scrape: 'true'
+    ome.io/disable-blocklist: 'true'
+    ome.io/inject-model-init: 'true'
+  labels:
+    logging-forward: enabled
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+  supportedModelFormats:
+    - autoSelect: true
+      modelArchitecture: Cohere
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      version: "15.6"
+    - autoSelect: true
+      modelArchitecture: Cohere
+      version: "16.0"
+      modelFormat:
+        name: tensorrtllm
+        version: 'v0.8.0'
+      modelFramework:
+        name: tensorrtllm
+        version: 'v0.8.0'
+  modelSizeRange:
+    min: 65B
+    max: 75B
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                  - BM.GPU.B4.8
+                  - BM.GPU4.8
+                  - BM.GPU.A100-v2.8
+  protocolVersions:
+    - cohere
+  volumes:
+    - name: shared-memory
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+    - name: model-empty-dir
+      emptyDir:
+        medium: Memory
+  containers:
+    - name: ome-container
+      image: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all:v0.5.0-ms-1345
+      ports:
+        - containerPort: 8080
+          name: http1
+      resources:
+        limits:
+          nvidia.com/gpu: "4"
+        requests:
+          cpu: 16
+          memory: 120Gi
+          nvidia.com/gpu: "4"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: shared-memory
+        - mountPath: /opt/ml/model
+          name: model-empty-dir
+      readinessProbe:
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 10
+        timeoutSeconds: 20
+      livenessProbe:
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 10
+        timeoutSeconds: 20
+      startupProbe:
+        httpGet:
+          path: /ping
+          port: 8080
+        failureThreshold: 100
+        successThreshold: 1
+        periodSeconds: 3
+        initialDelaySeconds: 60
+        timeoutSeconds: 5

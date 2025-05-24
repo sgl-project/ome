@@ -1,0 +1,79 @@
+{{- if index .Values "deberta-v3-base-prompt-injection-v2" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deberta-v3-base-prompt-injection-v2
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: "deberta-v3-base-prompt-injection-v2"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "deberta-v3-base-prompt-injection-v2" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "deberta-v3-base-prompt-injection-v2" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "deberta-v3-base-prompt-injection-v2" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: protectai.deberta-v3-base-prompt-injection-v2
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "deberta-v3-base-prompt-injection-v2" "osBucket" }}/o/{{ index .Values "deberta-v3-base-prompt-injection-v2" "vendor" }}/{{ index .Values "deberta-v3-base-prompt-injection-v2" "osPrefixOverride" }}"
+    path: /mnt/data/models/protectai/deberta-v3-base-prompt-injection-v2
+  vendor: {{ index .Values "deberta-v3-base-prompt-injection-v2" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: onnx
+    version: "1"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: DebertaV2ForSequenceClassification
+  modelParameterSize: 184M
+  modelCapabilities:
+    - "PROMPT_INJECTION_PROTECTION"
+    - "TEXT_CLASSIFICATION"
+  maxTokens: 512
+  modelConfiguration:
+    {
+      "_name_or_path": "microsoft/deberta-v3-base",
+      "architectures": [
+        "DebertaV2ForSequenceClassification"
+      ],
+      "attention_probs_dropout_prob": 0.1,
+      "hidden_act": "gelu",
+      "hidden_dropout_prob": 0.1,
+      "hidden_size": 768,
+      "id2label": {
+        "0": "SAFE",
+        "1": "INJECTION"
+      },
+      "initializer_range": 0.02,
+      "intermediate_size": 3072,
+      "label2id": {
+        "INJECTION": 1,
+        "SAFE": 0
+      },
+      "layer_norm_eps": 1e-07,
+      "max_position_embeddings": 512,
+      "max_relative_positions": -1,
+      "model_type": "deberta-v2",
+      "norm_rel_ebd": "layer_norm",
+      "num_attention_heads": 12,
+      "num_hidden_layers": 12,
+      "pad_token_id": 0,
+      "pooler_dropout": 0,
+      "pooler_hidden_act": "gelu",
+      "pooler_hidden_size": 768,
+      "pos_att_type": [
+        "p2c",
+        "c2p"
+      ],
+      "position_biased_input": false,
+      "position_buckets": 256,
+      "relative_attention": true,
+      "share_att_key": true,
+      "torch_dtype": "float32",
+      "transformers_version": "4.39.3",
+      "type_vocab_size": 0,
+      "vocab_size": 128100
+    }
+{{- end }}

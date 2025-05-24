@@ -1,0 +1,47 @@
+{{- if index .Values "cohere-rerank-v3-5" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: rerank-v3-5
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "cohere-rerank-v3-5" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "cohere-rerank-v3-5" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "cohere-rerank-v3-5" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "cohere-rerank-v3-5"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "cohere-rerank-v3-5" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "cohere-rerank-v3-5" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "cohere-rerank-v3-5" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "rerank"
+    ome.io/base-model-decryption-secret-name: "rerank-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.rerank-v3.5
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-rerank-v3-5" "osBucket" }}/o/{{ index .Values "cohere-rerank-v3-5" "vendor" }}/{{ index .Values "cohere-rerank-v3-5" "osPrefixOverride" }}"
+    path: /mnt/data/models/cohere/rerank-v3-5
+  vendor: {{ index .Values "cohere-rerank-v3-5" "vendor" }}
+  version: "3.5"
+  modelFormat:
+    name: python
+    version: '3.5'
+  modelFramework:
+    name: python
+    version: '3.5'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 33M
+  modelCapabilities:
+    - "TEXT_RERANK"
+  maxTokens: 4096
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: RERANK_COHERE
+          quotaUnit: 1
+          default: true
+    internalName: "rerank-v3-5-02042025"
+    type: "Serving"
+{{- end }}

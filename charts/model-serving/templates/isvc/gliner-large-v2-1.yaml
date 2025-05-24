@@ -1,0 +1,19 @@
+{{- if .Values.gliner_large_v2_1.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gliner-large-v2-1
+  namespace: gliner-large-v2-1
+spec:
+  predictor:
+    model:
+      runtime: gliner-large-v2-1
+      baseModel: gliner-large-v2-1
+    minReplicas: {{ .Values.gliner_large_v2_1.minReplicas}}
+    maxReplicas: {{ .Values.gliner_large_v2_1.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gliner-large-v2-1
+{{- end }}

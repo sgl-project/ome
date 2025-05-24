@@ -1,0 +1,117 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-llama-3-2-3b-instruct
+spec:
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.llama_3_2_3b_instruct.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_2_3b_instruct.annotations }}
+    {{ toYaml .Values.llama_3_2_3b_instruct.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.llama_3_2_3b_instruct.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_2_3b_instruct.labels }}
+    {{ toYaml .Values.llama_3_2_3b_instruct.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.llama_3_2_3b_instruct.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.llama_3_2_3b_instruct.tolerations }}
+    {{ toYaml .Values.llama_3_2_3b_instruct.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+  {{ with .Values.llama_3_2_3b_instruct }}
+  affinity: {{ .affinity | toYaml | nindent 6 }}
+  {{ end }}
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.45.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: false
+      priority: 1
+  modelSizeRange:
+    min: 2B
+    max: 4B
+  protocolVersions:
+    - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+    - name: ome-container
+      image: {{ .Values.llama_3_2_3b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_2_3b_instruct.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --enable-metrics \
+          --log-requests \
+          --model-path="$MODEL_PATH" \
+          --tp 1 \
+          --mem-frac=0.9
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
