@@ -70,7 +70,7 @@ func TestExtractPureObjectName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractPureObjectName(tt.input)
+			result := ObjectBaseName(tt.input)
 			assert.Equal(t, tt.expectedOutput, result)
 		})
 	}
@@ -141,7 +141,7 @@ func TestExtractNonPrefixObjectName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractNonPrefixObjectName(tt.objectPath, tt.prefix)
+			result := TrimObjectPrefix(tt.objectPath, tt.prefix)
 			assert.Equal(t, tt.expectedOutput, result)
 		})
 	}
@@ -361,7 +361,7 @@ func TestCopyByFilePathConcurrent(t *testing.T) {
 	}
 }
 
-// TestExtractPureObjectNameBenchmark benchmarks the ExtractPureObjectName function
+// TestExtractPureObjectNameBenchmark benchmarks the ObjectBaseName function
 func BenchmarkExtractPureObjectName(b *testing.B) {
 	paths := []string{
 		"simple.txt",
@@ -373,12 +373,12 @@ func BenchmarkExtractPureObjectName(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, path := range paths {
-			ExtractPureObjectName(path)
+			ObjectBaseName(path)
 		}
 	}
 }
 
-// TestExtractNonPrefixObjectNameBenchmark benchmarks the ExtractNonPrefixObjectName function
+// TestExtractNonPrefixObjectNameBenchmark benchmarks the TrimObjectPrefix function
 func BenchmarkExtractNonPrefixObjectName(b *testing.B) {
 	testCases := []struct {
 		path   string
@@ -393,7 +393,7 @@ func BenchmarkExtractNonPrefixObjectName(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, tc := range testCases {
-			ExtractNonPrefixObjectName(tc.path, tc.prefix)
+			TrimObjectPrefix(tc.path, tc.prefix)
 		}
 	}
 }

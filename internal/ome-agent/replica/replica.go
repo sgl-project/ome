@@ -141,12 +141,9 @@ func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.Obj
 
 func (r *ReplicaAgent) downloadObject(srcObj casper.ObjectURI, obj *objectstorage.ObjectSummary) error {
 	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	downloadOpts := casper.DownloadOptions{
-		ChunkSizeInMB: DefaultDownloadChunkSizeInMB,
-		Threads:       DefaultDownloadThreads,
-		StripPrefix:   false,
-	}
-	err := r.Config.ObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath, downloadOpts)
+	err := r.Config.ObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
+		casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		casper.WithThreads(DefaultDownloadThreads))
 	if err != nil {
 		r.logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
 		return err

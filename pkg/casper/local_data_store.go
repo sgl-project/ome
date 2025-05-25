@@ -30,9 +30,10 @@ func (lds *LocalDataStore) createWorkingDirectory() error {
 // Parameters:
 //   - source: ObjectURI that includes the object (file) name to be copied
 //   - target: the directory path where the file should be copied to
+//   - opts: functional options (ignored for local data store)
 //
 // Returns an error if directory creation or file copy fails.
-func (lds *LocalDataStore) Download(source ObjectURI, target string) error {
+func (lds *LocalDataStore) Download(source ObjectURI, target string, opts ...DownloadOption) error {
 	err := os.MkdirAll(target, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create target directory %s: %s", target, err.Error())

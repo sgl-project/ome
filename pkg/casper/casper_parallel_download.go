@@ -54,11 +54,13 @@ type DownloadedFile struct {
 	Err            error
 }
 
-//func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, excludeBucketPath bool, chunkSizeInMB int, downloadThreads int) error {
-
 // MultipartDownload used to download big file, or the download will timeout
-func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, opts DownloadOptions) error {
-	downloadOpts := applyDownloadDefaults(&opts)
+func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, opts ...DownloadOption) error {
+	downloadOpts, err := applyDownloadOptions(opts...)
+	if err != nil {
+		return fmt.Errorf("failed to apply download options: %w", err)
+	}
+
 	if source.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
@@ -90,7 +92,7 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, o
 
 	objectSize := int(*objectSummary.Size)
 	partSize := downloadOpts.ChunkSizeInMB * 1024 * 1024
-	if opts.ChunkSizeInMB <= 0 {
+	if downloadOpts.ChunkSizeInMB <= 0 {
 		partSize = 4 * 1024 * 1024 // Default to 4MB chunks if not set
 		cds.logger.Warnf("ChunkSizeInMB was not set or <= 0 for %s, defaulting to 4MB chunks", source.ObjectName)
 	}
@@ -113,8 +115,10 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, o
 
 	// Compute the relative local file path by removing the first two path segments (vendor/model)
 	var targetFilePath string
-	if downloadOpts.StripPrefix {
-		targetFilePath = filepath.Join(target, ExtractPureObjectName(source.ObjectName))
+	if downloadOpts.UseBaseNameOnly {
+		targetFilePath = filepath.Join(target, ObjectBaseName(source.ObjectName))
+	} else if downloadOpts.StripPrefix {
+		targetFilePath = filepath.Join(target, TrimObjectPrefix(source.ObjectName, downloadOpts.PrefixToStrip))
 	} else if downloadOpts.JoinWithTailOverlap {
 		targetFilePath = JoinWithTailOverlap(target, source.ObjectName)
 	} else {

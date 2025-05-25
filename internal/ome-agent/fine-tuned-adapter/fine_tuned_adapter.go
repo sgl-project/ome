@@ -50,7 +50,7 @@ func (m *FineTunedAdapter) Start() error {
 		return err
 	}
 
-	fineTunedWeightPath := filepath.Join(m.Config.ZippedFineTunedWeightDirectory, casper.ExtractPureObjectName(m.Config.FineTunedWeightURI.ObjectName))
+	fineTunedWeightPath := filepath.Join(m.Config.ZippedFineTunedWeightDirectory, casper.ObjectBaseName(m.Config.FineTunedWeightURI.ObjectName))
 	m.logger.Infof("Finished downloading the fine-tuned weight %s", m.Config.FineTunedWeightURI.ObjectName)
 
 	// 2. Unzip the fine-tuned weight to the required path
