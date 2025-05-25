@@ -130,7 +130,7 @@ func (s *ServingSidecar) applyFinetunedModelChanges() {
 			}
 			s.logger.Infof("Model '%s' downloaded\n", uri.ObjectName)
 
-			zippedFtModelPath := filepath.Join(zippedFtModelDir, casper.ExtractPureObjectName(uri.ObjectName))
+			zippedFtModelPath := filepath.Join(zippedFtModelDir, casper.ObjectBaseName(uri.ObjectName))
 
 			// Unzip the downloaded model
 			err = zipper.Unzip(zippedFtModelPath, unzippedFtModelDir)

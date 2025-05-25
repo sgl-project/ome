@@ -41,7 +41,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	jobsetv1alpha2 "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	schedulerpluginsv1alpha1 "sigs.k8s.io/scheduler-plugins/apis/scheduling/v1alpha1"
@@ -84,7 +83,6 @@ func init() {
 	utilruntime.Must(schedulerpluginsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kueuev1beta1.AddToScheme(scheme))
-	utilruntime.Must(jobsetv1alpha2.AddToScheme(scheme))
 }
 
 // Options defines the program-configurable options that may be passed on the command line.
@@ -273,11 +271,6 @@ func main() {
 
 		setupLog.Info("Registering InferenceService webhook to the webhook server")
 		hookServer.Register("/mutate-pods", &webhook.Admission{
-			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
-		})
-
-		setupLog.Info("Registering TrainingJob webhook to the webhook server")
-		hookServer.Register("/mutate-training-pods", &webhook.Admission{
 			Handler: &pod.Mutator{Client: mgr.GetClient(), Clientset: clientSet, Decoder: admission.NewDecoder(mgr.GetScheme())},
 		})
 

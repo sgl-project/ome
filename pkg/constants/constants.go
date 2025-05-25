@@ -5,9 +5,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"time"
-
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
 
@@ -15,7 +12,6 @@ import (
 
 	"knative.dev/pkg/network"
 
-	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -41,62 +37,28 @@ var (
 	AIPlatformConfigMapName = "aiplatform-config"
 )
 
-// InferenceGraph Constants
-const (
-	RouterHeadersPropagateEnvVar = "PROPAGATE_HEADERS"
-	RouterReadinessEndpoint      = "/readyz"
-	RouterPort                   = 8080
-)
-
 // InferenceService Constants
 var (
-	InferenceServiceName                = "inferenceservice"
-	InferenceServiceAPIName             = "inferenceservices"
-	InferenceServicePodLabelKey         = OMEAPIGroupName + "/" + InferenceServiceName
-	InferenceServiceConfigMapName       = "inferenceservice-config"
-	DedicatedAIClusterConfigMapName     = "dedicatedaicluster-config"
-	CapacityReservationConfigMapName    = "capacityreservation-config"
-	DedicatedAiClusterFinalizer         = "dedicatedaiclusters.ome.io/finalizer"
-	ClusterCapacityReservationFinalizer = "clustercapacityreservations.ome.io/finalizer"
+	InferenceServiceName             = "inferenceservice"
+	InferenceServiceAPIName          = "inferenceservices"
+	InferenceServicePodLabelKey      = OMEAPIGroupName + "/" + InferenceServiceName
+	InferenceServiceConfigMapName    = "inferenceservice-config"
+	DedicatedAIClusterConfigMapName  = "dedicatedaicluster-config"
+	CapacityReservationConfigMapName = "capacityreservation-config"
 )
 
 // OME Agent Constants
 var (
-	AgentName                           = "ome-agent"
-	AgentAppName                        = "OME_AGENT"
-	AgentModelNameEnvVarKey             = AgentAppName + "_" + "MODEL_NAME"
-	AgentModelStoreDirectoryEnvVarKey   = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
-	AgentModelFrameworkEnvVarKey        = AgentAppName + "_" + "MODEL_FRAMEWORK"
-	AgentTensorRTLLMVersionsEnvVarKey   = AgentAppName + "_" + "TENSORRTLLM_VERSION"
-	AgentModelFrameworkVersionEnvVarKey = AgentAppName + "_" + "MODEL_FRAMEWORK_VERSION"
-	AgentBaseModelTypeEnvVarKey         = AgentAppName + "_" + "MODEL_TYPE"
+	AgentName                         = "ome-agent"
+	AgentAppName                      = "OME_AGENT"
+	AgentModelNameEnvVarKey           = AgentAppName + "_" + "MODEL_NAME"
+	AgentModelStoreDirectoryEnvVarKey = AgentAppName + "_" + "MODEL_STORE_DIRECTORY"
+	AgentModelFrameworkEnvVarKey      = AgentAppName + "_" + "MODEL_FRAMEWORK"
+	AgentTensorRTLLMVersionsEnvVarKey = AgentAppName + "_" + "TENSORRTLLM_VERSION"
+	AgentBaseModelTypeEnvVarKey       = AgentAppName + "_" + "MODEL_TYPE"
 
 	// General Configuration
-	AgentLocalPathEnvVarKey      = AgentAppName + "_" + "LOCAL_PATH"
-	AgentHFTokenEnvVarKey        = AgentAppName + "_" + "HF_TOKEN"
-	AgentSkipSHAEnvVarKey        = AgentAppName + "_" + "SKIP_SHA"
-	AgentMaxRetriesEnvVarKey     = AgentAppName + "_" + "MAX_RETRIES"
-	AgentRetryIntervalEnvVarKey  = AgentAppName + "_" + "RETRY_INTERVAL_IN_SECONDS"
-	AgentNumConnectionsEnvVarKey = AgentAppName + "_" + "NUM_CONNECTIONS"
-
-	// Size Limit Configuration
-	AgentDownloadSizeLimitEnvVarKey    = AgentAppName + "_" + "DOWNLOAD_SIZE_LIMIT_GB"
-	AgentEnableSizeLimitCheckEnvVarKey = AgentAppName + "_" + "ENABLE_SIZE_LIMIT_CHECK"
-
-	// Source Configuration
-	AgentSourceBucketNameEnvVarKey = AgentAppName + "_" + "SOURCE_BUCKET_NAME"
-	AgentSourcePrefixEnvVarKey     = AgentAppName + "_" + "SOURCE_PREFIX"
-	AgentSourceRegionEnvVarKey     = AgentAppName + "_" + "SOURCE_REGION"
-	AgentSourceNamespaceEnvVarKey  = AgentAppName + "_" + "SOURCE_NAMESPACE"
-
-	// Target Configuration
-	AgentTargetBucketNameEnvVarKey = AgentAppName + "_" + "TARGET_BUCKET_NAME"
-	AgentTargetPrefixEnvVarKey     = AgentAppName + "_" + "TARGET_PREFIX"
-	AgentTargetRegionEnvVarKey     = AgentAppName + "_" + "TARGET_REGION"
-	AgentTargetNamespaceEnvVarKey  = AgentAppName + "_" + "TARGET_NAMESPACE"
-
-	// Model Configuration
-	AgentNodeShapeAliasEnvVarKey         = AgentAppName + "_" + "NODE_SHAPE_ALIAS"
+	AgentLocalPathEnvVarKey              = AgentAppName + "_" + "LOCAL_PATH"
 	AgentNumOfGPUEnvVarKey               = AgentAppName + "_" + "NUM_OF_GPU"
 	AgentDisableModelDecryptionEnvVarKey = AgentAppName + "_" + "DISABLE_MODEL_DECRYPTION"
 	AgentModelBucketNameEnvVarKey        = AgentAppName + "_" + "MODEL_BUCKET_NAME"
@@ -148,7 +110,6 @@ var (
 	SetPrometheusAnnotation                  = OMEAPIGroupName + "/enable-prometheus-scraping"
 	DedicatedAICluster                       = OMEAPIGroupName + "/dedicated-ai-cluster"
 	VolcanoQueue                             = OMEAPIGroupName + "/volcano-queue"
-	Scheduler                                = OMEAPIGroupName + "/scheduler"
 	BlockListDisableInjection                = OMEAPIGroupName + "/disable-blocklist"
 	ModelInitInjectionKey                    = OMEAPIGroupName + "/inject-model-init"
 	FineTunedAdapterInjectionKey             = OMEAPIGroupName + "/inject-fine-tuned-adapter"
@@ -175,25 +136,18 @@ var (
 
 // InferenceService Annotations for model encryption and decryption
 var (
-	BaseModelDecryptionKeyName       = OMEAPIGroupName + "/base-model-decryption-key-name"
-	BaseModelDecryptionVaultID       = OMEAPIGroupName + "/base-model-decryption-vault-id"
-	BaseModelDecryptionSecretName    = OMEAPIGroupName + "/base-model-decryption-secret-name"
-	BaseModelDecryptionCompartmentID = OMEAPIGroupName + "/base-model-decryption-compartment-id"
-	EncryptionAuthType               = OMEAPIGroupName + "/base-model-decryption-auth-type"
-	DisableModelDecryption           = OMEAPIGroupName + "/disable-model-decryption"
+	BaseModelDecryptionKeyName    = OMEAPIGroupName + "/base-model-decryption-key-name"
+	BaseModelDecryptionSecretName = OMEAPIGroupName + "/base-model-decryption-secret-name"
+	DisableModelDecryption        = OMEAPIGroupName + "/disable-model-decryption"
 )
 
 // Label Constants
 var (
-	RayClusterLabel                       = "ray.io/cluster"
 	RayScheduler                          = "ray.io/scheduler-name"
 	RayPrioriyClass                       = "ray.io/priority-class-name"
-	RayClusterStartTime                   = "raycluster/start-time"
 	RayClusterUnavailableSince            = "raycluster/unavailable-since"
 	VolcanoQueueName                      = "volcano.sh/queue-name"
 	VolcanoScheduler                      = "volcano"
-	VolcanoPreemptable                    = "volcano.sh/preemptable"
-	CompartmentIDLabelKey                 = "oci.oraclecloud.com/compartment"
 	InferenceServiceBaseModelNameLabelKey = "base-model-name"
 	InferenceServiceBaseModelSizeLabelKey = "base-model-size"
 	BaseModelTypeLabelKey                 = "base-model-type"
@@ -206,57 +160,23 @@ var (
 
 // PrioriryClass
 var (
-	DedicatedAiClusterReservationPriorityClass = "volcano-reservation-low-priority"
-	DedicatedAiClusterPreemptionPriorityClass  = "volcano-scheduling-high-priority"
+	DedicatedAiClusterPreemptionPriorityClass = "volcano-scheduling-high-priority"
 
-	DedicatedAiClusterReservationWorkloadPriorityClass = "kueue-scheduling-low-priority"
-	DedicatedAiClusterPreemptionWorkloadPriorityClass  = "kueue-scheduling-high-priority"
-)
-
-// Capacity Reservation
-var (
-	// DedicatedServingCohort represents the cohort name for dedicated serving.
-	// Currently hardcoded, but we plan to introduce additional cohorts (e.g., on-demand-serving cohort) in the future for more flexibility in the system.
-	DedicatedServingCohort = "dedicated-serving"
-	// DefaultPreemptionConfig defines the preemption rules for the cluster.
-	// Currently hardcoded as all clusterQueues in the cluster have the same priority and follow the same preemption rules based on the capacity reservation design.
-	// Future changes may introduce more granular preemption configurations as needed.
-	DefaultPreemptionConfig = kueuev1beta1.ClusterQueuePreemption{
-		// Disables ReclaimWithinCohort and BorrowWithinCohort by default.
-		// All rules must be included. Otherwise, any missing rules will be automatically filled in, triggering a reconciler update.
-		BorrowWithinCohort: &kueuev1beta1.BorrowWithinCohort{
-			Policy: kueuev1beta1.BorrowWithinCohortPolicyNever,
-		},
-		ReclaimWithinCohort: kueuev1beta1.PreemptionPolicyNever,
-		WithinClusterQueue:  kueuev1beta1.PreemptionPolicyLowerPriority,
-	}
-	DefaultQueueingStrategy  = kueuev1beta1.BestEffortFIFO
-	DefaultStopPolicy        = kueuev1beta1.None
-	DefaultFlavorFungibility = kueuev1beta1.FlavorFungibility{
-		WhenCanBorrow:  kueuev1beta1.Borrow,
-		WhenCanPreempt: kueuev1beta1.TryNextFlavor,
-	}
+	DedicatedAiClusterPreemptionWorkloadPriorityClass = "kueue-scheduling-high-priority"
 )
 
 // InferenceService Internal Annotations
 var (
 	InferenceServiceInternalAnnotationsPrefix        = "internal." + OMEAPIGroupName
 	StorageInitializerSourceUriInternalAnnotationKey = InferenceServiceInternalAnnotationsPrefix + "/storage-initializer-sourceuri"
-	StorageSpecAnnotationKey                         = InferenceServiceInternalAnnotationsPrefix + "/storage-spec"
-	StorageSpecParamAnnotationKey                    = InferenceServiceInternalAnnotationsPrefix + "/storage-spec-param"
-	StorageSpecKeyAnnotationKey                      = InferenceServiceInternalAnnotationsPrefix + "/storage-spec-key"
 	LoggerInternalAnnotationKey                      = InferenceServiceInternalAnnotationsPrefix + "/logger"
 	LoggerSinkUrlInternalAnnotationKey               = InferenceServiceInternalAnnotationsPrefix + "/logger-sink-url"
 	LoggerModeInternalAnnotationKey                  = InferenceServiceInternalAnnotationsPrefix + "/logger-mode"
 	BatcherInternalAnnotationKey                     = InferenceServiceInternalAnnotationsPrefix + "/batcher"
-	BatcherMaxBatchSizeInternalAnnotationKey         = InferenceServiceInternalAnnotationsPrefix + "/batcher-max-batchsize"
-	BatcherMaxLatencyInternalAnnotationKey           = InferenceServiceInternalAnnotationsPrefix + "/batcher-max-latency"
 	AgentShouldInjectAnnotationKey                   = InferenceServiceInternalAnnotationsPrefix + "/agent"
 	AgentModelConfigVolumeNameAnnotationKey          = InferenceServiceInternalAnnotationsPrefix + "/configVolumeName"
 	AgentModelConfigMountPathAnnotationKey           = InferenceServiceInternalAnnotationsPrefix + "/configMountPath"
 	AgentModelDirAnnotationKey                       = InferenceServiceInternalAnnotationsPrefix + "/modelDir"
-	PredictorHostAnnotationKey                       = InferenceServiceInternalAnnotationsPrefix + "/predictor-host"
-	PredictorProtocolAnnotationKey                   = InferenceServiceInternalAnnotationsPrefix + "/predictor-protocol"
 )
 
 // ome networking constants
@@ -267,32 +187,18 @@ const (
 )
 
 // StorageSpec Constants
-var (
-	DefaultStorageSpecSecret     = "storage-config"
-	DefaultStorageSpecSecretPath = "/mnt/storage-secret" // #nosec G101
-)
+var ()
 
 // Controller Constants
 var (
-	ControllerLabelName             = OMEName + "-controller-manager"
-	DefaultIstioSidecarUID          = int64(1337)
-	DefaultMinReplicas              = 1
-	IstioInitContainerName          = "istio-init"
-	IstioInterceptModeRedirect      = "REDIRECT"
-	IstioInterceptionModeAnnotation = "sidecar.istio.io/interceptionMode"
-	IstioSidecarUIDAnnotationKey    = OMEAPIGroupName + "/storage-initializer-uid"
-	IstioSidecarStatusAnnotation    = "sidecar.istio.io/status"
-	IstioSidecarInjectionLabel      = "sidecar.istio.io/inject"
+	DefaultMinReplicas = 1
+
+	IstioSidecarInjectionLabel = "sidecar.istio.io/inject"
 )
 
 type AutoscalerClassType string
 type AutoscalerMetricsType string
 type AutoScalerKPAMetricsType string
-
-var (
-	AutoScalerKPAMetricsRPS         AutoScalerKPAMetricsType = "rps"
-	AutoScalerKPAMetricsConcurrency AutoScalerKPAMetricsType = "concurrency"
-)
 
 // Autoscaler Default Class
 var (
@@ -338,12 +244,6 @@ var AutoscalerAllowedMetricsList = []AutoscalerMetricsType{
 	AutoScalerMetricsMemory,
 }
 
-// Autoscaler KPA Metrics Allowed List
-var AutoScalerKPAMetricsAllowedList = []AutoScalerKPAMetricsType{
-	AutoScalerKPAMetricsConcurrency,
-	AutoScalerKPAMetricsRPS,
-}
-
 // Autoscaler Default Metrics Value
 var (
 	DefaultCPUUtilization int32 = 80
@@ -351,37 +251,24 @@ var (
 
 // Webhook Constants
 var (
-	PodMutatorWebhookName               = OMEName + "-pod-mutator-webhook"
-	ServingRuntimeValidatorWebhookName  = OMEName + "-servingRuntime-validator-webhook"
-	BenchmarkJobValidatorWebhookName    = OMEName + "-benchmark-job-validator-webhook"
-	TrainingRuntimeValidatorWebhookName = OMEName + "-training-runtime-validator-webhook"
+	PodMutatorWebhookName              = OMEName + "-pod-mutator-webhook"
+	ServingRuntimeValidatorWebhookName = OMEName + "-servingRuntime-validator-webhook"
+	BenchmarkJobValidatorWebhookName   = OMEName + "-benchmark-job-validator-webhook"
 )
 
 // GPU/CPU resource constants
 const (
 	NvidiaGPUResourceType = "nvidia.com/gpu"
-	CPUResourceType       = "cpu"
-	MemoryResourceType    = "memory"
-)
-
-// Custom scheduler constants
-const (
-	CustomSchedulerName = "genai-kube-scheduler"
 )
 
 // InferenceService Environment Variables
 const (
-	CustomSpecStorageUriEnvVarKey                     = "STORAGE_URI"
-	CustomSpecProtocolEnvVarKey                       = "PROTOCOL"
-	CustomSpecMultiModelServerEnvVarKey               = "MULTI_MODEL_SERVER"
 	ContainerPrometheusMetricsPortEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PORT"
 	ContainerPrometheusMetricsPathEnvVarKey           = "CONTAINER_PROMETHEUS_METRICS_PATH"
 	QueueProxyAggregatePrometheusMetricsPortEnvVarKey = "AGGREGATE_PROMETHEUS_METRICS_PORT"
 
-	// Cohere specific
 	TFewWeightPathEnvVarKey = "TFEW_PATH"
 
-	// Llama specific
 	ModelPathEnvVarKey       = "MODEL_PATH"
 	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
 )
@@ -409,19 +296,11 @@ const (
 	Predictor InferenceServiceComponent = "predictor"
 )
 
-// InferenceService verb enums
-const (
-	Predict InferenceServiceVerb = "predict"
-	Explain InferenceServiceVerb = "explain"
-)
-
 // InferenceService protocol enums
 const (
 	OpenAIProtocol          InferenceServiceProtocol = "openAI"
-	CohereProtocol          InferenceServiceProtocol = "cohere"
 	OpenInferenceProtocolV1 InferenceServiceProtocol = "openInference-v1"
 	OpenInferenceProtocolV2 InferenceServiceProtocol = "openInference-v2"
-	ProtocolUnknown         InferenceServiceProtocol = ""
 )
 
 // InferenceService Endpoint Ports
@@ -437,20 +316,17 @@ const (
 // Labels to put on kservice
 const (
 	KServiceComponentLabel = "component"
-	KServiceModelLabel     = "model"
 	KServiceEndpointLabel  = "endpoint"
 )
 
 // Labels for TrainedModel
 const (
-	ParentInferenceServiceLabel = "inferenceservice"
-	InferenceServiceLabel       = "ome.io/inferenceservice"
+	InferenceServiceLabel = "ome.io/inferenceservice"
 )
 
 // InferenceService default/canary constants
 const (
 	InferenceServiceDefault = "default"
-	InferenceServiceCanary  = "canary"
 )
 
 // DAC/InferenceService/TrainingJob container names
@@ -463,17 +339,6 @@ const (
 	FineTunedAdapterContainerName   = "fine-tuned-adapter"
 	ServingSidecarContainerName     = "serving-sidecar"
 	MultiNodeProberContainerPort    = 8080
-	DACMainTaskName                 = "reservation"
-
-	// TransformerContainerName transformer container name in collocation
-	TransformerContainerName = "transformer-container"
-)
-
-// DAC related variables
-var (
-	DACReservationJobTerminationGracePeriodSeconds = int64(5)
-	DACLastUpdateTimeAnnotationKey                 = "last-update-time"
-	DACCapacityReservedLabelKey                    = "capacity-reserved"
 )
 
 // Model Agents Constants
@@ -499,7 +364,6 @@ const (
 	FineTunedWeightDownloadMountPath          = "/mnt/finetuned/download"
 	CohereTFewFineTunedWeightVolumeMountPath  = "/opt/ml/tfew"
 	CohereTFewFineTunedWeightDefaultPath      = "/opt/ml/tfew/fastertransformer/1"
-	FineTunedWeightInfoFilePath               = "/mnt/ft-model-info.json"
 	BaseModelVolumeMountSubPath               = "base"
 	FineTunedWeightDownloadVolumeMountSubPath = "download"
 	FineTunedWeightVolumeMountSubPath         = "finetuned"
@@ -572,41 +436,6 @@ const (
 	DefaultNSKnativeServing = "knative-serving"
 )
 
-// built-in runtime servers
-const (
-	TGIServer    = "tgi"
-	TritonServer = "triton"
-	VLLMServer   = "vllm"
-)
-
-const (
-	ModelClassLabel = "modelClass"
-	ServiceEnvelope = "serviceEnvelope"
-)
-
-// torchserve service envelope label allowed values
-const (
-	ServiceEnvelopeOME   = "ome"
-	ServiceEnvelopeOMEV2 = "omev2"
-)
-
-// supported model type
-const (
-	SupportedModelHuggingFace = "huggingface"
-	SupportedModelTriton      = "triton"
-)
-
-type ProtocolVersion int
-
-const (
-	_ ProtocolVersion = iota
-	V1
-	V2
-	GRPCV1
-	GRPCV2
-	Unknown
-)
-
 // revision label
 const (
 	RevisionLabel         = "serving.knative.dev/revision"
@@ -630,12 +459,6 @@ const (
 	KEDAScaledObjectKind    = "ScaledObject"
 	VolcanoJobKind          = "Job"
 	LWSKind                 = "LeaderWorkerSet"
-	KueueClusterQueueKind   = "ClusterQueue"
-	KueueLocalQueueKind     = "LocalQueue"
-	KueueCohortKind         = "Cohort"
-	KueueResourceFlavorKind = "ResourceFlavor"
-	KueueWorkloadKind       = "Workload"
-	TrainingJobKind         = "TrainingJob"
 )
 
 // Volcano Job Labels
@@ -645,10 +468,9 @@ const (
 
 // Kueue related Labels
 const (
-	KueueQueueLabelKey                     = "kueue.x-k8s.io/queue-name"
-	KueueWorkloadPriorityClassLabelKey     = "kueue.x-k8s.io/priority-class"
-	KueueWorkloadNamespaceSelectorLabelKey = "kueue-job"
-	KueueEnabledLabelKey                   = "kueue-enabled"
+	KueueQueueLabelKey                 = "kueue.x-k8s.io/queue-name"
+	KueueWorkloadPriorityClassLabelKey = "kueue.x-k8s.io/priority-class"
+	KueueEnabledLabelKey               = "kueue-enabled"
 )
 
 // Model Agent & Model Controller
@@ -657,250 +479,40 @@ var (
 	ModelsLabelPrefix         = "models.ome/"
 	TargetInstanceShapes      = "models.ome.io/target-instance-shapes"
 	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
-	ObjectStorageUrlPrefix    = "oci://"
 )
 
 type TrainingStrategy string
 
 const (
-	TFewTrainingStrategy    TrainingStrategy = "tfew"
-	VanillaTrainingStrategy TrainingStrategy = "vanilla"
-	LoraTrainingStrategy    TrainingStrategy = "lora"
+	TFewTrainingStrategy TrainingStrategy = "tfew"
+	LoraTrainingStrategy TrainingStrategy = "lora"
 )
 
 type ServingStrategy string
 
-const (
-	VanillaServingStrategy ServingStrategy = "vanilla" // Fine-tuned weights are merged back into the model and served in same way as baseline model
-	LoraServingStrategy    ServingStrategy = "lora"    // Stacked multi lora serving
-)
-
 // Default training job constants
 const (
-	TrainingJobName                     = "trainingjob"
-	TrainingSidecarContainerName        = "training-sidecar"
-	TrainingSidecarConfigMapKeyName     = "trainingSidecar"
-	MergedModelWeightZippedFileSuffix   = "-merged-weight"
-	DefaultTrainingZippedModelDirectory = "/mnt/ft/output"
-	TrainingJobNamePrefix               = "ft-"
+	TrainingJobName                   = "trainingjob"
+	MergedModelWeightZippedFileSuffix = "-merged-weight"
 )
 
 type TrainingSidecarRuntime string
 
-const (
-	PeftTrainingSidecar           TrainingSidecarRuntime = "peft"
-	CohereCommand1TrainingSidecar TrainingSidecarRuntime = "cohere"
-	CohereCommandRTrainingSidecar TrainingSidecarRuntime = "cohere-commandr"
-)
-
 type TrainingRuntimeType string
-
-const (
-	PeftTrainingRuntime            TrainingRuntimeType = "peft"
-	CohereCommand1TrainingRuntime  TrainingRuntimeType = "cohere"
-	CohereCommandRTrainingTraining TrainingRuntimeType = "cohere-commandr"
-)
 
 // Training sidecar env variable key names and config key names
 
 var (
-	TrainingSidecarInjectionKey      = OMEAPIGroupName + "/inject-training-sidecar"
-	TrainingJobPodLabelKey           = OMEAPIGroupName + "/" + TrainingJobName
-	TrainingRuntimeTypeAnnotationKey = OMEAPIGroupName + "/training-runtime-type"
+	TrainingJobPodLabelKey = OMEAPIGroupName + "/" + TrainingJobName
 )
 
 var (
-	CompartmentEnvVarKey              = AgentAppName + "_" + "COMPARTMENT_ID"
-	NamespaceEnvVarKey                = AgentAppName + "_" + "NAMESPACE"
-	OboTokenEnvVarKey                 = AgentAppName + "_" + "INPUT_OBJECT_STORE_OBO_TOKEN"
-	OboTokenConfigKey                 = "obo_token"
-	EnableOboTokenEnvVarKey           = AgentAppName + "_" + "INPUT_OBJECT_STORE_ENABLE_OBO_TOKEN"
-	BucketNameEnvVarKey               = AgentAppName + "_" + "BUCKET_NAME"
-	TrainingDataBucketNameEnvVarKey   = AgentAppName + "_" + "TRAINING_DATA_BUCKET_NAME"
-	TrainingDataBucketConfigKey       = "training_data_bucket_config_key"
-	TrainingDataNamespaceEnvVarKey    = AgentAppName + "_" + "TRAINING_DATA_NAMESPACE"
-	TrainingDataNamespaceConfigKey    = "training_data_namespace_config_key"
-	TrainingDataFileNameEnvVarKey     = AgentAppName + "_" + "TRAINING_DATA_OBJECT_NAME"
-	TrainingDataFileNameConfigKey     = "trainingDataFileName"
-	TrainingMetricsBucketEnvVarKey    = AgentAppName + "_" + "TRAINING_METRICS_BUCKET_NAME"
-	TrainingMetricsNamespaceEnvVarKey = AgentAppName + "_" + "TRAINING_METRICS_NAMESPACE"
-	TrainingMetricsObjectEnvVarKey    = AgentAppName + "_" + "TRAINING_METRICS_OBJECT_NAME"
-	BatchSizeConfigKey                = "trainingBatchSize"
-	EarlyStoppingPatienceConfigKey    = "earlyStoppingPatience"
-	EarlyStoppingThresholdConfigKey   = "earlyStoppingThreshold"
-	EpochsConfigKey                   = "totalTrainingEpochs"
-	LearningRateConfigKey             = "learningRate"
-	TrainingConfigTypeConfigKey       = "strategy"
-	ModelDirectoryEnvVarKey           = AgentAppName + "_" + "MODEL_DIRECTORY"
-	ZippedModelPathEnvVarKey          = "ZIPPED_MODEL_PATH"
-	ZippedMergedModelPathEnvVarKey    = AgentAppName + "_" + "ZIPPED_MERGED_MODEL_PATH"
-	LoraTrainingConfig                = "lora"
-	RuntimeEnvVarKey                  = AgentAppName + "_" + "RUNTIME"
-	LoraConfigRankConfigKey           = "loraR"
-	ModelVendorConfigKey              = "vendor"
-	TrainingNameEnvVarKey             = AgentAppName + "_" + "TRAINING_NAME"
-	TrainingDataDirectoryEnvVarKey    = AgentAppName + "_" + "TRAINING_DATA_DIRECTORY"
-
-	/*
-	 * Constants specific to cohere training sidecar
-	 */
-	CohereLogTrainStatusEveryStepEnvVarKey = AgentAppName + "_" + "COHERE_FT_LOG_TRAIN_STATUS_EVERY_STEPS"
-	LogTrainStatusEveryStepConfigKey       = "logModelMetricsIntervalInSteps"
-	CohereNLastLayersEnvVarKey             = AgentAppName + "_" + "COHERE_FT_N_LAST_LAYERS"
-	NLastLayersConfigKey                   = "nLastLayers"
-	ModelSizeEnvVarKey                     = AgentAppName + "_" + "COHERE_FT_SIZE"
-	ModelSizeConfigKey                     = "modelSize"
-	StrategyEnvVarKey                      = AgentAppName + "_" + "COHERE_FT_STRATEGY"
-	StrategyConfigKey                      = "strategy"
-	CohereTrainingSidecarNameEnvVarKey     = AgentAppName + "_" + "COHERE_FT_NAME"
-	CohereLearningRateEnvVarKey            = AgentAppName + "_" + "COHERE_FT_LEARNING_RATE"
-	CohereBatchSizeEnvVarKey               = AgentAppName + "_" + "COHERE_FT_TRAIN_BATCH_SIZE"
-	CohereEarlyStoppingPatienceEnvVarKey   = AgentAppName + "_" + "COHERE_FT_EARLY_STOPPING_PATIENCE"
-	CohereEarlyStoppingThresholdEnvVarKey  = AgentAppName + "_" + "COHERE_FT_EARLY_STOPPING_THRESHOLD"
-	CohereModelNameEnvVarKey               = AgentAppName + "_" + "COHERE_FT_BASE_MODEL"
-	CohereLoraConfigAlphaEnvVarKey         = AgentAppName + "_" + "COHERE_FT_LORA_CONFIG_ALPHA"
-	CohereEpochsEnvVarKey                  = AgentAppName + "_" + "COHERE_FT_TRAIN_EPOCHS"
-
-	/*
-	 * Constants specific to cohere command R training sidecar
-	 */
-	CohereTensorParallelEnvVarKey = AgentAppName + "_" + "COHERE_FT_TENSOR_PARALLEL_SIZE"
-	TensorParallelConfigKey       = "tensor_parallel"
-	BaseModelEnvVarKey            = AgentAppName + "_" + "BASE_MODEL"
-	BaseModelConfigKey            = "base_model"
-	ServingStrategyEnvVarKey      = AgentAppName + "_" + "COHERE_FT_SERVING_STRATEGY"
-
-	/*
-	 *Constants specific to peft training sidecar
-	 */
-
-	PeftEpochsEnvVarKey                = AgentAppName + "_" + "PEFT_FT_NUM_TRAIN_EPOCHS"
-	PeftBatchSizeEnvVarKey             = AgentAppName + "_" + "PEFT_FT_TRAIN_BATCH_SIZE"
-	PeftEarlyStoppingPatienceEnvVarKey = AgentAppName + "_" + "PEFT_FT_EARLY_STOPPING_PATIENCE"
-
-	PeftEarlyStoppingThresholdEnvVarKey = AgentAppName + "_" + "PEFT_FT_EARLY_STOPPING_THRESHOLD"
-	PeftTrainingDataSetFileEnvVarKey    = AgentAppName + "_" + "PEFT_FT_TRAIN_DATASET_FILE"
-	PeftLoraREnvVarKey                  = AgentAppName + "_" + "PEFT_FT_LORA_R"
-	LogMetricsIntervalInStepsEnvVarKey  = AgentAppName + "_" + "PEFT_FT_LOG_MODEL_METRICS_INTERNAL_IN_STEPS"
-	CohereLoraConfigRankEnvVarKey       = AgentAppName + "_" + "COHERE_FT_LORA_CONFIG_RANK"
-	PeftLoraConfigAlphaEnvVarKey        = AgentAppName + "_" + "PEFT_FT_LORA_ALPHA"
-	PeftLearningRateEnvVarKey           = AgentAppName + "_" + "PEFT_FT_LEARNING_RATE"
-
-	LoraAlphaConfigKey     = "loraAlpha"
-	LoraDropoutEnvVarKey   = AgentAppName + "_" + "PEFT_FT_LORA_DROPOUT"
-	LoraDropoutConfigKey   = "loraDropout"
-	PeftModelNameEnvVarKey = AgentAppName + "_" + "PEFT_FT_MODEL_NAME"
-	ModelNameConfigKey     = "modelName"
-	PeftTypeEnvVarKey      = AgentAppName + "_" + "PEFT_FT_PEFT_TYPE"
-)
-
-// Training pod volume name constants
-const (
-	ModelStorePVCSourceName = "model-storage"
-	ModelEmptyDirName       = "model"
-	DataEmptyDirName        = "data"
-)
-
-// common used constants
-const (
-	RegionFileVolumeName = "region"
-	ADFileVolumeName     = "etc-avalability-domain"
-	RealmFileVolumeName  = "etc-identity-realm"
-
-	RegionFileVolumeMountPath = "/etc/region"
-	ADFileVolumeMountPath     = "/etc/availability-domain"
-	RealmFileVolumeMountPath  = "/etc/identity-realm"
-)
-
-// training Constants
-const (
-	ModelDirectoryPrefix                 = "/mnt/data/models"
-	ModelStorePVCMountPath               = "/mnt/models"
-	TrainingDataEmptyDirMountPath        = "/mnt/data"
-	PeftTrainingOutputModelDirectoryName = "output"
-	PeftTrainingMergedModelWeightSuffix  = "-merged-weight"
-	PeftFineTunedWeightsDirectory        = "fine-tuned-weights"
-	PeftMergedWeightsDirectory           = "base-peft-merged"
-	TrainingPathPrefixEnvVarKey          = "PATH_PREFIX"
-	TrainingBaselineModelEnvVarKey       = "BASELINE_MODEL"
-)
-
-// Cohere training constants
-const (
-	CohereTrainingRuntimePrefix                             = "cohere-finetuning"
-	CohereStorePathPrefix                                   = "/mnt/cohere/"
-	CohereTrainingInitModelEmptyDirMountPathFastTransformer = "/model/fastertransformer"
-	CohereTrainingLargeGpuRequest                           = "8"
-	CohereCommandRFTMergedModelWeightSuffix                 = "-merged-weight"
-	CohereCommandRV1Version                                 = "v19-0-0"
-	CohereCommandRV2Version                                 = "v20-1-0"
-	CommandRBaseModelV1                                     = "command_r"
-	CommandRBaseModelV2                                     = "command_r_v2"
-	CohereCommandRLoraTrainingModelDirectory                = "output"
-	CohereTrainingPathPrefixEnvVarKey                       = "PATH_PREFIX"
-	CohereTrainingBaselineModelEnvVarKey                    = "BASELINE_MODEL"
-	CohereMultiLoraBaseModelNameKeyword                     = "multi_lora"
-	CohereCommandRFTRuntimePrefix                           = "cohere-commandr"
-	CohereCommandRMergedWeightsDirectory                    = "model/tensorrt_llm"
-	CohereCommandRTFewFTWeightsDirectory                    = "output/tfew_weights"
-	CohereCommandRLoraFineTunedWeightsDirectory             = "output/"
-	CohereTrainingConfigPbtxt                               = "config.pbtxt"
-)
-
-const (
-
-	// DefaultJobReplicas is the default value for the ReplicatedJob replicas.
-	DefaultJobReplicas = 1
-
-	// JobSetKind is the Kind name for the JobSet.
-	JobSetKind string = "JobSet"
-
-	// JobTrainerNode is the Job name for the trainer node.
-	JobTrainerNode string = "trainer-node"
-
-	// JobTrainerInitContainer is the init-container name for the trainer node job.
-	JobTrainerInitContainer string = "training-init-container"
-
-	// ContainerTrainer is the container name for the trainer.
-	ContainerTrainer string = "trainer"
-
-	// ContainerTrainerPort is the default port for the trainer nodes communication.
-	ContainerTrainerPort int32 = 29500
-
-	// JobInitializer is the Job name for the initializer.
-	JobInitializer string = "initializer"
-
-	// ContainerModelInitializer is the container name for the model initializer.
-	ContainerModelInitializer string = "model-initializer"
-
-	// ContainerDatasetInitializer is the container name for the dataset initializer.
-	ContainerDatasetInitializer string = "dataset-initializer"
-
-	// PodGroupKind is the Kind name for the PodGroup.
-	PodGroupKind string = "PodGroup"
-
-	// Distributed envs for torchrun.
-	// Ref: https://github.com/pytorch/pytorch/blob/3a0d0885171376ed610c8175a19ba40411fc6f3f/torch/distributed/argparse_util.py#L45
-	// TorchEnvNumNodes is the env name for the number of training nodes.
-	TorchEnvNumNodes string = "PET_NNODES"
-
-	// TorchEnvNumProcPerNode is the env name for the number of procs per node (e.g. number of GPUs per Pod).
-	TorchEnvNumProcPerNode string = "PET_NPROC_PER_NODE"
-
-	// TorchEnvNodeRank is the env name for the node RANK
-	TorchEnvNodeRank string = "PET_NODE_RANK"
-
-	// TorchEnvMasterAddr is the env name for the master node address.
-	TorchEnvMasterAddr string = "PET_MASTER_ADDR"
-
-	// TorchEnvMasterPort is the env name for the master node port.
-	TorchEnvMasterPort string = "PET_MASTER_PORT"
+	StrategyConfigKey = "strategy"
 )
 
 // FineTunedWeight related constants
 const (
 	FineTunedWeightMergedWeightsConfigKey = "merged_weights"
-	StackedServingConfigKey               = "stacked_serving"
 )
 
 type ModelVendor string
@@ -912,36 +524,14 @@ const (
 )
 
 var (
-	// JobCompletionIndexFieldPath is the field path for the Job completion index annotation.
-	JobCompletionIndexFieldPath string = fmt.Sprintf("metadata.annotations['%s']", batchv1.JobCompletionIndexAnnotation)
-)
-
-// constants related to training endpoint call
-const (
-	TrainingEndpoint = "http://localhost:5000"
-	Timeout          = 15 * time.Minute
-	RetryInterval    = 1 * time.Minute
-)
-
-// constants for training data error handling (error from training container)
-const (
-	CohereFaxFTDataErrorMessagePrefix      = "please check dataset"
-	CohereCommandRFTDataErrorMessagePrefix = "Exception during dataset conversion"
-	PeftDataErrorMessagePrefix             = "Data error"
-	TerminationLogPath                     = "/dev/termination-log"
+// JobCompletionIndexFieldPath is the field path for the Job completion index annotation.
 )
 
 // BaseModelType enum
 type BaseModelType string
 
 const (
-	ServingBaseModel    BaseModelType = "Serving"
-	FinetuningBaseModel BaseModelType = "Finetuning"
-)
-
-// Constants for aiplatform
-const (
-	ProjectFinalizerName = "project.ome.io.finalizers"
+	ServingBaseModel BaseModelType = "Serving"
 )
 
 func (c CheckResultType) String() string {
@@ -1041,34 +631,4 @@ func optional(regexp string) string {
 
 func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
-}
-
-func GetPvName(trainjobName string, trainjobNamespace string, baseModelName string) string {
-	var maxSubLen = 16
-	if len(trainjobNamespace) > maxSubLen {
-		trainjobNamespace = trainjobNamespace[len(trainjobNamespace)-maxSubLen:]
-	}
-	if len(trainjobName) > maxSubLen {
-		trainjobName = trainjobName[len(trainjobName)-maxSubLen:]
-	}
-
-	if len(baseModelName) > maxSubLen {
-		baseModelName = baseModelName[len(baseModelName)-maxSubLen:]
-	}
-	return fmt.Sprintf("pv-%s-%s-%s", trainjobNamespace, baseModelName, trainjobName)
-}
-
-func GetPvcName(trainjobName string, trainjobNamespace string, baseModelName string) string {
-	var maxSubLen = 25
-	if len(trainjobNamespace) > maxSubLen {
-		trainjobNamespace = trainjobNamespace[len(trainjobNamespace)-maxSubLen:]
-	}
-	if len(trainjobName) > maxSubLen {
-		trainjobName = trainjobName[len(trainjobName)-maxSubLen:]
-	}
-
-	if len(baseModelName) > maxSubLen {
-		baseModelName = baseModelName[len(baseModelName)-maxSubLen:]
-	}
-	return fmt.Sprintf("pvc-%s-%s-%s", trainjobNamespace, baseModelName, trainjobName)
 }

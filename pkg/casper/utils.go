@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-// ExtractPureObjectName returns only the file name from a given object path.
+// ObjectBaseName returns only the file name from a given object path.
 // For example, given "bucket/folder/file.txt", it returns "file.txt".
 // If the input path does not contain "/", the original string is returned.
-func ExtractPureObjectName(objectPath string) string {
+func ObjectBaseName(objectPath string) string {
 	if !strings.Contains(objectPath, "/") {
 		return objectPath
 	}
@@ -20,11 +20,11 @@ func ExtractPureObjectName(objectPath string) string {
 	return values[len(values)-1] // Return the last segment (file name)
 }
 
-// ExtractNonPrefixObjectName removes a given prefix from the object path if it exists.
+// TrimObjectPrefix removes a given prefix from the object path if it exists.
 // For example, given objectPath "bucket/folder/file.txt" and prefix "bucket/",
 // it returns "folder/file.txt".
 // If the prefix is empty or objectPath has no "/", the original string is returned.
-func ExtractNonPrefixObjectName(objectPath string, prefix string) string {
+func TrimObjectPrefix(objectPath string, prefix string) string {
 	if !strings.Contains(objectPath, "/") || len(prefix) == 0 {
 		return objectPath
 	}

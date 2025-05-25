@@ -12,16 +12,22 @@ type ObjectURI struct {
 
 // DataStore defines a common interface for reading and writing data to/from a storage backend.
 // Implementations may include local file systems, OCI Object Storage, S3, etc.
+// All download methods now use functional options for flexible configuration.
 type DataStore interface {
 	// Download retrieves the object specified by `source` and writes it into the local `target` directory.
+	// Uses functional options for configuration.
+	//
+	// Example usage:
+	//   err := store.Download(source, target, WithThreads(10), WithChunkSize(16))
 	//
 	// Parameters:
 	//   - source: the object to be downloaded, including bucket and object name
 	//   - target: the local path where the object should be placed
+	//   - opts: functional options to configure download behavior
 	//
 	// Returns:
 	//   - error: non-nil if the operation fails
-	Download(source ObjectURI, target string) error
+	Download(source ObjectURI, target string, opts ...DownloadOption) error
 
 	// Upload reads the file at `source` path and stores it as `target` object in the data store.
 	//
