@@ -3,6 +3,7 @@ module github.com/sgl-project/sgl-ome
 go 1.23.3
 
 require (
+	bitbucket.oci.oraclecorp.com/genaicore/ome v0.0.0-20250525181706-2d440cc96389
 	cloud.google.com/go/billing v1.20.4
 	cloud.google.com/go/iam v1.5.2
 	cloud.google.com/go/resourcemanager v1.10.6

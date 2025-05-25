@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -463,14 +464,6 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *Gop
 		return fmt.Errorf("no objects found under namespace %s, bucket %s, object prefix %s", uri.Namespace, uri.BucketName, uri.Prefix)
 	}
 
-	downloadOpts := casper.DownloadOptions{
-		Threads:             s.multipartConcurrency,
-		ChunkSizeInMB:       BigFileSizeInMB,
-		SizeThresholdInMB:   BigFileSizeInMB,
-		DisableOverride:     true,
-		JoinWithTailOverlap: true,
-	}
-
 	var objectUris []casper.ObjectURI
 	for _, obj := range objects {
 		if obj.Name == nil {
@@ -484,7 +477,12 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *Gop
 		})
 	}
 
-	errs := s.casperDataStore.BulkDownload(objectUris, destPath, downloadOpts, s.concurrency)
+	errs := s.casperDataStore.BulkDownload(objectUris, destPath, s.concurrency,
+		casper.WithThreads(s.multipartConcurrency),
+		casper.WithChunkSize(BigFileSizeInMB),
+		casper.WithSizeThreshold(BigFileSizeInMB),
+		casper.WithOverrideEnabled(false),
+		casper.WithStripPrefix(uri.Prefix))
 	if errs != nil {
 		return fmt.Errorf("failed to download objects: %v", errs)
 	}
@@ -515,7 +513,7 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *Gop
 func (s *Gopher) verifyDownloadedFiles(uris []casper.ObjectURI, destPath string) map[string]error {
 	errors := make(map[string]error)
 	for _, obj := range uris {
-		relativeName := casper.JoinWithTailOverlap(destPath, obj.ObjectName)
+		relativeName := filepath.Join(destPath, casper.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
 		// Fallback: if relativeName is empty, use the object name directly
 		if relativeName == "" {
 			relativeName = obj.ObjectName

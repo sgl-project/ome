@@ -182,7 +182,7 @@ Create `.vscode/launch.json`:
 2. **Edit Configuration:**
    - Name: `ome-controller-manager`
    - Run Kind: `File`
-   - Files: `${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore/ome/cmd/manager/main.go`
+   - Files: `${GOPATH}/src/github.com/sgl-project/sgl-ome/cmd/manager/main.go`
    - Environment Variables: `KUBECONFIG=/path/to/kubeconfig`
    - Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-bind-address 127.0.0.1:8080 --leader-elect`
 
