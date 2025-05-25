@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/status"
 
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
@@ -98,11 +99,12 @@ const (
 // InferenceServiceReconciler reconciles an InferenceService object
 type InferenceServiceReconciler struct {
 	client.Client
-	ClientConfig *rest.Config
-	Clientset    kubernetes.Interface
-	Log          logr.Logger
-	Scheme       *runtime.Scheme
-	Recorder     record.EventRecorder
+	ClientConfig  *rest.Config
+	Clientset     kubernetes.Interface
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	StatusManager *status.StatusReconciler
 }
 
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -200,12 +202,13 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return result, nil
 		}
 	}
-	// reconcile RoutesReady and LatestDeploymentReady conditions for serverless deployment
+
 	if deploymentMode == constants.Serverless {
 		componentList := []v1beta2.ComponentType{v1beta2.PredictorComponent}
-		isvc.Status.PropagateCrossComponentStatus(componentList, v1beta2.RoutesReady)
-		isvc.Status.PropagateCrossComponentStatus(componentList, v1beta2.LatestDeploymentReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.LatestDeploymentReady)
 	}
+
 	// Reconcile ingress
 	ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
 	if err != nil {
@@ -333,6 +336,9 @@ func inferenceServiceStatusEqual(s1, s2 v1beta2.InferenceServiceStatus) bool {
 
 func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployConfig *controllerconfig.DeployConfig, ingressConfig *controllerconfig.IngressConfig) error {
 	r.ClientConfig = mgr.GetConfig()
+
+	// NEW: Initialize StatusReconciler
+	r.StatusManager = status.NewStatusReconciler()
 
 	ksvcFound, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if err != nil {

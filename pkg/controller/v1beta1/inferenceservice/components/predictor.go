@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/status"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
@@ -42,6 +43,7 @@ type Predictor struct {
 	deploymentMode                    constants.DeploymentModeType
 	fineTunedServing                  bool
 	fineTunedServingWithMergedWeights bool
+	statusManager                     *status.StatusReconciler
 	Log                               logr.Logger
 }
 
@@ -54,6 +56,7 @@ func NewPredictor(client client.Client, clientset kubernetes.Interface, scheme *
 		scheme:                 scheme,
 		inferenceServiceConfig: inferenceServiceConfig,
 		deploymentMode:         deploymentMode,
+		statusManager:          status.NewStatusReconciler(),
 		Log:                    ctrl.Log.WithName("PredictorReconciler"),
 	}
 }
@@ -161,7 +164,7 @@ func (p *Predictor) reconcileRawDeployment(isvc *v1beta1.InferenceService, objec
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
-	isvc.Status.PropagateRawStatus(v1beta1.PredictorComponent, deployment, r.URL)
+	p.statusManager.PropagateRawStatus(&isvc.Status, v1beta1.PredictorComponent, deployment, r.URL)
 	return ctrl.Result{}, nil
 }
 
@@ -178,7 +181,7 @@ func (p *Predictor) reconcileMultiNodeVLLM(isvc *v1beta1.InferenceService, objec
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
-	isvc.Status.PropagateMultiNodeRayVLLMStatus(v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
+	p.statusManager.PropagateMultiNodeRayVLLMStatus(&isvc.Status, v1beta1.PredictorComponent, r.MultiNodeProber.Deployments, r.URL)
 	return result, nil
 }
 
@@ -195,7 +198,7 @@ func (p *Predictor) reconcileMultiNode(isvc *v1beta1.InferenceService, objectMet
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
-	isvc.Status.PropagateMultiNodeStatus(v1beta1.PredictorComponent, lws, r.URL)
+	p.statusManager.PropagateMultiNodeStatus(&isvc.Status, v1beta1.PredictorComponent, lws, r.URL)
 	return ctrl.Result{}, nil
 }
 
@@ -209,7 +212,7 @@ func (p *Predictor) reconcileKnativeDeployment(isvc *v1beta1.InferenceService, o
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile predictor")
 	}
-	isvc.Status.PropagateStatus(v1beta1.PredictorComponent, status)
+	p.statusManager.PropagateStatus(&isvc.Status, v1beta1.PredictorComponent, status)
 	return ctrl.Result{}, nil
 }
 
@@ -223,7 +226,7 @@ func (p *Predictor) updatePredictorStatus(isvc *v1beta1.InferenceService, object
 	if err != nil {
 		return errors.Wrapf(err, "failed to list inference service pods by label")
 	}
-	isvc.Status.PropagateModelStatus(statusSpec, predictorPods, rawDeployment)
+	p.statusManager.PropagateModelStatus(&isvc.Status, statusSpec, predictorPods, rawDeployment)
 	return nil
 }
 
@@ -979,7 +982,7 @@ func (p *Predictor) getBaseModelSpec(isvc *v1beta1.InferenceService) (v1beta1.Ba
 
 // updateModelTransitionStatus updates the model transition status for the predictor.
 func (p *Predictor) updateModelTransitionStatus(isvc *v1beta1.InferenceService, reason v1beta1.FailureReason, message string) {
-	isvc.Status.UpdateModelTransitionStatus(v1beta1.InvalidSpec, &v1beta1.FailureInfo{
+	p.statusManager.UpdateModelTransitionStatus(&isvc.Status, v1beta1.InvalidSpec, &v1beta1.FailureInfo{
 		Reason:  reason,
 		Message: message,
 	})
