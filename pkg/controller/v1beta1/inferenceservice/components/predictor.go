@@ -16,7 +16,6 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
 	isvcutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	trainingutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/utils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 
 	"github.com/go-logr/logr"
@@ -376,7 +375,7 @@ func (p *Predictor) processServingAnnotations(
 		annotations[constants.FineTunedAdapterInjectionKey] = fineTunedWeights[0].Name
 
 		// Add fine-tuned weight ft strategy, required by ft adapter & serving sidecar
-		fineTunedWeightFTStrategy, err := trainingutils.GetHyperparameterValueByKey(constants.StrategyConfigKey, fineTunedWeights[0].Spec.HyperParameters)
+		fineTunedWeightFTStrategy, err := isvcutils.GetValueFromRawExtension(fineTunedWeights[0].Spec.HyperParameters, constants.StrategyConfigKey)
 		if err != nil || fineTunedWeightFTStrategy == nil {
 			p.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", fineTunedWeights[0].Name, "namespace", isvc.Namespace)
 			return err
@@ -445,7 +444,7 @@ func (p *Predictor) processLabels(
 
 	// Conditionally add fine-tuned serving related labels
 	if p.fineTunedServing {
-		ftStrategyParameter, err := trainingutils.GetHyperparameterValueByKey(constants.StrategyConfigKey, fineTunedWeights[0].Spec.HyperParameters)
+		ftStrategyParameter, err := isvcutils.GetValueFromRawExtension(fineTunedWeights[0].Spec.HyperParameters, constants.StrategyConfigKey)
 		if err != nil {
 			p.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", fineTunedWeights[0].Name, "namespace", isvc.Namespace)
 			return nil, err

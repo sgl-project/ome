@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -368,4 +370,24 @@ func GetBaseModelVendor(baseModel v1beta1.BaseModelSpec) string {
 		baseModelVendor = *baseModel.Vendor
 	}
 	return baseModelVendor
+}
+
+// GetValueFromRawExtension extracts a value by key from a JSON-encoded runtime.RawExtension.
+// It returns nil if the key does not exist or the data is not a map.
+func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}, error) {
+	if len(raw.Raw) == 0 {
+		return nil, nil
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(raw.Raw, &data); err != nil {
+		return nil, err
+	}
+
+	val, ok := data[key]
+	if !ok {
+		return nil, nil // or optionally return an error if key must exist
+	}
+
+	return val, nil
 }
