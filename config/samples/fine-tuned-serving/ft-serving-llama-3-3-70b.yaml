@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ft-serving-llama-3-3-70b
+  namespace: amaaaaaabgjpxjqafj7egs4ha32dmch5kvaymcsq432v22n5l57cu7eag6ha
+spec:
+  predictor:
+    maxReplicas: 1
+    minReplicas: 1
+    model:
+      baseModel: llama-3-3-70b-instruct
+      fineTunedWeights:
+        - amaaaaaabgjpxjqadn4i2h75upir2lvec2lpyp24j3ignysqmf7a3ia5tpyq # a fine-tuned model weight trained against ft base model llama-3-3-70b-instruct-ft using LoRA FT strategy
+      protocolVersion: openAI
+      # runtime: vllm-llama-3-3-70b-instruct # Comment runtime for runtime auto-selection

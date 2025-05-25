@@ -1,0 +1,39 @@
+{
+  "availabilityDomain" : "GYEC:US-ASHBURN-AD-2",
+  "faultDomain" : "FAULT-DOMAIN-3",
+  "compartmentId" : "ocid1.compartment.oc1..aaaaaaaanpl7hs5aijorrea4jn72oe47gfoe4tauerrqpxamk7cn7mde3req",
+  "displayName" : "permissions-service-host-display-name",
+  "hostname" : "permissions-service-host-name",
+  "id" : "ocid1.instance.oc1.iad.a47c490fd1eb04eefad95beedd1953d8b",
+  "image" : "ocid1.image.oc1.iad.a237f2bc965e41ca87fda983dd9f71cf",
+  "metadata" : {
+    "hostclass" : "PERMISSIONS-SERVICE-UNSTABLE-OCICORP"
+  },
+  "region" : "iad",
+  "canonicalRegionName" : "us-ashburn-1",
+  "ociAdName" : "iad-ad-2",
+  "regionInfo" : {
+    "realmKey" : "oc1",
+    "realmDomainComponent" : "oraclecloud.com",
+    "regionKey" : "IAD",
+    "regionIdentifier" : "us-ashburn-1"
+  },
+  "shape" : "VM.Standard1.1",
+  "shapeConfig" : {
+    "ocpus" : 1.0,
+    "memoryInGBs" : 7.0,
+    "networkingBandwidthInGbps" : 0.6,
+    "maxVnicAttachments" : 2
+  },
+  "state" : "Running",
+  "timeCreated" : 1566503761256,
+  "agentConfig" : {
+    "monitoringDisabled" : false,
+    "managementDisabled" : false,
+    "allPluginsDisabled" : false
+  },
+  "freeformTags" : {
+    "OCI:TandenPipelineId" : "fc11677a-9f3c-4849-a7f7-c9eb5e062895",
+    "OCI:Fleet" : "permissions-service-test"
+  }
+}

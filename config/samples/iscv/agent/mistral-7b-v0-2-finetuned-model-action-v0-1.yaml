@@ -1,0 +1,12 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mistral-7b-v0-2-finetuned-model-action-v0-1
+  namespace: mistral-7b-v0-2-finetuned-model-action-v0-1
+spec:
+  predictor:
+    model:
+      baseModel: mistral-7b-v0-2-finetuned-model-action-v0-1
+      protocolVersion: openAI
+    minReplicas: 1
+    maxReplicas: 1

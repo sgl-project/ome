@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: benchmarkjob-config
+  namespace: ome
+data:
+  benchmarkjob: |
+    {
+      "podConfig": {
+        "image": "phx.ocir.io/idqj093njucb/genai-bench:0.1.113",
+        "cpuRequest": "2",
+        "memoryRequest": "2Gi",
+        "cpuLimit": "2",
+        "memoryLimit": "2Gi"
+      }
+    }

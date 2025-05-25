@@ -7,10 +7,8 @@
 <br />
 <div align="center">
   <a href="https://github.com/github_username/repo_name">
-    <img src="site/assets/ome-logo-hd.png" alt="Logo" width="" height="300">
+    <img src="site/assets/icons/logo-clear-background.png" alt="Logo" width="" height="600">
   </a>
-
-<h3 align="center">Open Model Engine</h3>
 
   <p align="center">
 Enterprise-Grade AI/ML Workload Management Platform on Kubernetes

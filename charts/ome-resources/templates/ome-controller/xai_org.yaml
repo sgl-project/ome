@@ -1,0 +1,30 @@
+{{- if .Values.xai.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{.Values.xai.namespace}}
+---
+apiVersion: ome.io/v1beta1
+kind: Organization
+metadata:
+  name: genai-xai-0001
+spec:
+  organizationId: {{.Values.ome.ociETC.serviceCompartmentId}}
+  vendor: xai
+  disabled: false
+  secretRef:
+    name: xai-admin-key
+    key: XAI_ADMIN_API_KEY
+    namespace: {{.Values.xai.namespace}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: xai-admin-key
+  namespace: {{.Values.xai.namespace}}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  XAI_ADMIN_API_KEY: c2stYWRtaW4tV0FlTUJoVVVhYXlRTjNCMTduRjYxdTF4MnVpMVE5aDhReDNzNzJOLVdVNkI4WkwyUmN5VENOWExWdVQzQmxia0ZKVUNMTGRwSWJ5aWN2TG5UWmdxUU9CeHdsd0VOSGRZczYwX2czNENPTnNVa2FwOHNtWWQwTGxUZVlvQQ==
+{{- end }}

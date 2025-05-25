@@ -1,0 +1,22 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: deepseek-r1
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-r1
+  namespace: deepseek-r1
+  annotations:
+    ome.io/deploymentMode: "MultiNode"
+spec:
+  predictor:
+    model:
+      baseModel: deepseek-r1
+      protocolVersion: openAI
+      runtime: srt-multi-node-deepseek-r1-rdma
+    minReplicas: 1
+    maxReplicas: 1

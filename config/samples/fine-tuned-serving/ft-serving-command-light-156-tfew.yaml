@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ft-serving-cohere-command-light-tfew-v15-6
+  namespace: amaaaaaabgjpxjqaklfjk5ars3ddzmjpx54iwqxvj5gmlp7dayoy4cq6cxra
+spec:
+  predictor:
+    maxReplicas: 1
+    minReplicas: 1
+    model:
+      baseModel: command-6b-v15-6-gen
+      fineTunedWeights:
+        - amaaaaaabgjpxjqaov3n5kwax4rj2kdow75e4odjwn6peeq7bapkhyi2accq # a fine-tuned model weight trained against ft base model 6b-v15-6-gen using TFew FT strategy
+      protocolVersion: cohere
+      # runtime: cohere-command-1-small # Comment runtime for runtime auto-selection

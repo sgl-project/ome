@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - vllm/ray-multi-node-llama-3-1-405b-instruct-fp8-rt.yaml
+  - vllm/ray-multi-node-llama-3-1-405b-instruct-fp8-rdma-rt.yaml
+  - vllm/llama-3-1-405b-instruct-fp8-rt.yaml
+  - vllm/llama-3-1-nemotron-nano-8b-v1-rt.yaml
+  - vllm/llama-3-1-nemotron-ultra-253b-v1-rt.yaml
+  - vllm/llama-3-1-70b-instruct-rt.yaml
+  - vllm/llama-3-2-11b-vision-instruct-rt.yaml
+  - vllm/llama-3-2-1b-instruct-rt.yaml
+  - vllm/llama-3-2-3b-instruct-rt.yaml
+  - vllm/llama-3-2-90b-vision-instruct-fp8-rt.yaml
+  - vllm/llama-3-2-90b-vision-instruct-fp8-tp8-rt.yaml
+  - vllm/llama-3-3-70b-instruct-rt.yaml
+  - vllm/llama-3-3-70b-instruct-fp8-dynamic-rt.yaml
+  - vllm/llama-3-3-nemotron-super-49b-v1-rt.yaml
+  - vllm/llama-4-maverick-17b-128e-instruct-fp8-rt.yaml
+  - vllm/llama-4-scout-17b-16e-instruct-rt.yaml
+  - vllm/mistral-7b-instruct-rt.yaml
+  - vllm/deepseek-v3-rt.yaml
+  - vllm/deepseek-v3-rdma-rt.yaml
+  - vllm/e5-mistral-7b-instruct-rt.yaml
+  - vllm/phi-3-vision-128k-instruct-rt.yaml
+  - vllm/mixtral-8x7b-instruct-rt.yaml
+  - srt/e5-mistral-7b-instruct-rt.yaml
+  - srt/llama-3-1-405b-instruct-fp8-rt.yaml
+  - srt/llama-3-1-70b-instruct-rt.yaml
+  - srt/llama-3-2-1b-instruct-rt.yaml
+  - srt/llama-3-2-3b-instruct-rt.yaml
+  - srt/llama-3-2-11b-vision-instruct-rt.yaml
+  - srt/llama-3-2-90b-vision-instruct-fp8-rt.yaml
+  - srt/llama-3-3-70b-instruct-rt.yaml
+  - srt/llama-4-maverick-17b-128e-instruct-fp8-rt.yaml
+  - srt/llama-4-scout-17b-16e-instruct-rt.yaml
+  - srt/deepseek-r1-rdma-rt.yaml
+  - srt/deepseek-v3-rdma-rt.yaml
+  - srt/deepseek-r1-rt.yaml
+  - srt/deepseek-v3-rt.yaml
+  - srt/mistral-7b-instruct-rt.yaml
+  - srt/mixtral-8x7b-instruct-rt.yaml

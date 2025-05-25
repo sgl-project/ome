@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: model-downloader
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: model-downloader
+  template:
+    metadata:
+      labels:
+        app: model-downloader
+    spec:
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      tolerations:
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 300
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 300
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: model-downloader
+        image: ubuntu:devel
+        command: 
+          - "/bin/bash"
+          - "-c"
+          - |
+            set -e
+            apt update && \
+            apt install -y python3-pip python3.12-venv
+
+            export MODEL_ID="meta-llama/Llama-4-Scout-17B-16E-Instruct"
+            rm -rf /raid/models/${MODEL_ID}
+            mkdir -p /raid/models/${MODEL_ID}
+
+            python3 -m venv /opt/venv && source /opt/venv/bin/activate && pip install huggingface_hub[hf_transfer]
+            HF_HUB_ENABLE_HF_TRANSFER=1 /opt/venv/bin/huggingface-cli download ${MODEL_ID} \
+            --token <fill in token> \
+            --local-dir /raid/models/${MODEL_ID} \
+            --cache-dir /raid/models/${MODEL_ID} \
+            --exclude "*.bin"
+            echo "Downloaded, sleeping forever"
+            sleep 999999999
+        volumeMounts:
+        - name: raid
+          mountPath: /raid
+        resources:
+          limits:
+            cpu: "10"
+            memory: "20Gi"
+          requests:
+            cpu: "10"
+            memory: "20Gi"
+      volumes:
+      - name: raid
+        hostPath:
+          path: /raid
+          type: ''
+      nodeSelector:
+        beta.kubernetes.io/instance-type: BM.GPU.H100.8

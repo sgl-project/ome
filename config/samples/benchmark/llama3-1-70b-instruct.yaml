@@ -1,0 +1,40 @@
+apiVersion: ome.io/v1beta1
+kind: BenchmarkJob
+metadata:
+  name: llama-3-1-70b-benchmark
+  namespace: llama-3-1-70b
+spec:
+  podOverride:
+    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+  huggingFaceSecretReference:
+    name: huggingface-secret
+  endpoint:
+    inferenceService:
+      name: llama-3-1-70b-instruct
+      namespace: llama-3-1-70b-instruct
+  task: text-to-text
+  trafficScenarios:
+    - "N(480,240)/(300,150)"
+    - "D(100,100)"
+    - "D(100,1000)"
+    - "D(2000,200)"
+    - "D(7800,200)"
+  numConcurrency:
+    - 1
+    - 2
+    - 4
+    - 8
+    - 16
+    - 32
+    - 64
+    - 128
+    - 256
+  maxTimePerIteration: 15
+  maxRequestsPerIteration: 100
+  additionalRequestParams:
+    temperature: "0.0"
+  outputLocation:
+    storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/llama-3-1-70b-benchmark"
+    parameters:
+      auth: "instance_principal"
+      region: "eu-frankfurt-1"

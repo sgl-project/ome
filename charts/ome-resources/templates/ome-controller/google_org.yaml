@@ -1,0 +1,30 @@
+{{- if .Values.google.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{.Values.google.namespace}}
+---
+apiVersion: ome.io/v1beta1
+kind: Organization
+metadata:
+  name: genai-google-0001
+spec:
+  organizationId: {{.Values.ome.ociETC.serviceCompartmentId}}
+  vendor: google
+  disabled: false
+  secretRef:
+    name: google-admin-key
+    key: GOOGLE_ADMIN_API_KEY
+    namespace: {{.Values.google.namespace}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: google-admin-key
+  namespace: {{.Values.google.namespace}}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  GOOGLE_ADMIN_API_KEY: c2stYWRtaW4tV0FlTUJoVVVhYXlRTjNCMTduRjYxdTF4MnVpMVE5aDhReDNzNzJOLVdVNkI4WkwyUmN5VENOWExWdVQzQmxia0ZKVUNMTGRwSWJ5aWN2TG5UWmdxUU9CeHdsd0VOSGRZczYwX2czNENPTnNVa2FwOHNtWWQwTGxUZVlvQQ==
+{{- end }}

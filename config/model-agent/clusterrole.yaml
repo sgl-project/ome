@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ome-model-agent
+  labels:
+    app.kubernetes.io/component: "ome-model-agent-daemonset"
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "watch", "list", "get", "patch", "update" ]
+  - apiGroups: [ "" ]
+    resources: [ "configmaps" ]
+    verbs: [ "get", "list", "watch", "patch", "update", "create", "delete" ]
+  - apiGroups: [ "ome.io" ]
+    resources: [ "basemodels" ]
+    verbs: [ "get", "list", "watch", "patch", "update" ]
+  - apiGroups: [ "ome.io" ]
+    resources: [ "clusterbasemodels" ]
+    verbs: [ "get", "list", "watch", "patch", "update" ]
