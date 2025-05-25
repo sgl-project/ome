@@ -3,26 +3,11 @@ package casper
 import (
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+
 	"github.com/sgl-project/sgl-ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 )
-
-// TestLogger for testing
-type TestUploadLogger struct{}
-
-func (l *TestUploadLogger) WithField(key string, value interface{}) logging.Interface { return l }
-func (l *TestUploadLogger) WithError(err error) logging.Interface                     { return l }
-func (l *TestUploadLogger) Debug(msg string)                                          {}
-func (l *TestUploadLogger) Info(msg string)                                           {}
-func (l *TestUploadLogger) Warn(msg string)                                           {}
-func (l *TestUploadLogger) Error(msg string)                                          {}
-func (l *TestUploadLogger) Fatal(msg string)                                          {}
-func (l *TestUploadLogger) Debugf(format string, args ...interface{})                 {}
-func (l *TestUploadLogger) Infof(format string, args ...interface{})                  {}
-func (l *TestUploadLogger) Warnf(format string, args ...interface{})                  {}
-func (l *TestUploadLogger) Errorf(format string, args ...interface{})                 {}
-func (l *TestUploadLogger) Fatalf(format string, args ...interface{})                 {}
 
 // Test upload request preparation without actual OCI client
 func TestPrepareMultipartUploadRequest(t *testing.T) {
@@ -88,7 +73,7 @@ func TestUploadConfiguration(t *testing.T) {
 			AuthType:      &authType,
 			Name:          "upload-test",
 			Region:        "us-chicago-1",
-			AnotherLogger: &TestUploadLogger{},
+			AnotherLogger: testingPkg.SetupMockLogger(),
 		}
 
 		err := config.Validate()
