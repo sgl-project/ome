@@ -30,6 +30,9 @@ func ResolveVaultPrefix(vaultId string) string {
 		return ""
 	}
 	vaultIdChunks := strings.Split(vaultId, ".")
+	if len(vaultIdChunks) < 2 {
+		return vaultIdChunks[0]
+	}
 	return vaultIdChunks[len(vaultIdChunks)-2]
 }
 
