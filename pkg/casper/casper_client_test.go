@@ -4,8 +4,9 @@ import (
 	"crypto/rsa"
 	"testing"
 
+	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+
 	"github.com/oracle/oci-go-sdk/v65/common"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
 	"github.com/sgl-project/sgl-ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -51,22 +52,6 @@ func (m *MockConfigProvider) AuthType() (common.AuthConfig, error) {
 	return args.Get(0).(common.AuthConfig), args.Error(1)
 }
 
-// MockLogger for testing
-type MockTestLogger struct{}
-
-func (l *MockTestLogger) WithField(key string, value interface{}) logging.Interface { return l }
-func (l *MockTestLogger) WithError(err error) logging.Interface                     { return l }
-func (l *MockTestLogger) Debug(msg string)                                          {}
-func (l *MockTestLogger) Info(msg string)                                           {}
-func (l *MockTestLogger) Warn(msg string)                                           {}
-func (l *MockTestLogger) Error(msg string)                                          {}
-func (l *MockTestLogger) Fatal(msg string)                                          {}
-func (l *MockTestLogger) Debugf(format string, args ...interface{})                 {}
-func (l *MockTestLogger) Infof(format string, args ...interface{})                  {}
-func (l *MockTestLogger) Warnf(format string, args ...interface{})                  {}
-func (l *MockTestLogger) Errorf(format string, args ...interface{})                 {}
-func (l *MockTestLogger) Fatalf(format string, args ...interface{})                 {}
-
 // Mock for principals package
 type MockPrincipalsBuilder struct {
 	mock.Mock
@@ -86,7 +71,7 @@ func TestNewObjectStorageClient(t *testing.T) {
 		config := &Config{
 			EnableOboToken: false,
 			Region:         "us-ashburn-1",
-			AnotherLogger:  &MockTestLogger{},
+			AnotherLogger:  testingPkg.SetupMockLogger(),
 		}
 
 		// We can't test actual client creation without real credentials
@@ -100,7 +85,7 @@ func TestNewObjectStorageClient(t *testing.T) {
 			EnableOboToken: true,
 			OboToken:       "test-token",
 			Region:         "us-ashburn-1",
-			AnotherLogger:  &MockTestLogger{},
+			AnotherLogger:  testingPkg.SetupMockLogger(),
 		}
 
 		assert.True(t, config.EnableOboToken)
@@ -111,7 +96,7 @@ func TestNewObjectStorageClient(t *testing.T) {
 		config := &Config{
 			EnableOboToken: true,
 			OboToken:       "", // Empty token should cause validation error
-			AnotherLogger:  &MockTestLogger{},
+			AnotherLogger:  testingPkg.SetupMockLogger(),
 		}
 
 		authType := principals.InstancePrincipal
@@ -129,7 +114,7 @@ func TestGetConfigProvider(t *testing.T) {
 		authType := principals.InstancePrincipal
 		config := &Config{
 			AuthType:      &authType,
-			AnotherLogger: &MockTestLogger{},
+			AnotherLogger: testingPkg.SetupMockLogger(),
 		}
 
 		// We can't test actual config provider creation without real environment
@@ -147,7 +132,7 @@ func TestCasperClientIntegration(t *testing.T) {
 			AuthType:       &authType,
 			EnableOboToken: false,
 			Region:         "us-chicago-1",
-			AnotherLogger:  &MockTestLogger{},
+			AnotherLogger:  testingPkg.SetupMockLogger(),
 		}
 
 		// Test that config is properly structured for client creation
@@ -167,7 +152,7 @@ func TestCasperClientIntegration(t *testing.T) {
 			EnableOboToken: true,
 			OboToken:       "valid-obo-token",
 			Region:         "us-chicago-1",
-			AnotherLogger:  &MockTestLogger{},
+			AnotherLogger:  testingPkg.SetupMockLogger(),
 		}
 
 		// Test OBO token configuration

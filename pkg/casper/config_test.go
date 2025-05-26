@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
 	"github.com/sgl-project/sgl-ome/pkg/principals"
@@ -13,80 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockLogger is a mock implementation of logging.Interface for testing
-type MockLogger struct {
-	mock.Mock
-}
-
-func (m *MockLogger) WithField(key string, value interface{}) logging.Interface {
-	args := m.Called(key, value)
-	return args.Get(0).(logging.Interface)
-}
-
-func (m *MockLogger) WithError(err error) logging.Interface {
-	args := m.Called(err)
-	return args.Get(0).(logging.Interface)
-}
-
-func (m *MockLogger) Debug(msg string) {
-	m.Called(msg)
-}
-
-func (m *MockLogger) Debugf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Info(msg string) {
-	m.Called(msg)
-}
-
-func (m *MockLogger) Infof(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Warn(msg string) {
-	m.Called(msg)
-}
-
-func (m *MockLogger) Warnf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Error(msg string) {
-	m.Called(msg)
-}
-
-func (m *MockLogger) Errorf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Fatal(msg string) {
-	m.Called(msg)
-}
-
-func (m *MockLogger) Fatalf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) With(args ...interface{}) logging.Interface {
-	m.Called(args)
-	return m
-}
-
-func (m *MockLogger) Named(name string) logging.Interface {
-	m.Called(name)
-	return m
-}
-
-func (m *MockLogger) Sync() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
 // Create a helper to create a valid config for testing
 func createValidConfig() *Config {
 	authType := principals.AuthenticationType("InstancePrincipal")
-	mockLogger := new(MockLogger)
+	mockLogger := testingPkg.SetupMockLogger()
 	// Set up necessary mock expectations
 	mockLogger.On("WithField", mock.Anything, mock.Anything).Return(mockLogger)
 	mockLogger.On("WithError", mock.Anything).Return(mockLogger)
@@ -384,7 +316,7 @@ func TestWithAnotherLog(t *testing.T) {
 		},
 		{
 			name:        "Valid logger",
-			logger:      new(MockLogger),
+			logger:      testingPkg.SetupMockLogger(),
 			expectError: false,
 		},
 	}
@@ -486,7 +418,7 @@ func TestConfig_Validate(t *testing.T) {
 // TestConfigIntegration tests the integration of all config components
 func TestConfigIntegration(t *testing.T) {
 	// Create a mock logger without expectations - we just need a valid logger instance
-	mockLogger := new(MockLogger)
+	mockLogger := testingPkg.SetupMockLogger()
 
 	// Create a viper instance
 	v := viper.New()

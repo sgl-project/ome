@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+
 	"github.com/sgl-project/sgl-ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -373,7 +375,7 @@ func TestCasperDataStoreSetRegion(t *testing.T) {
 		AuthType:      &authType,
 		Name:          "test-config",
 		Region:        "us-west-1",
-		AnotherLogger: &TestLogger{},
+		AnotherLogger: testingPkg.SetupMockLogger(),
 	}
 
 	// We can't create a real CasperDataStore without OCI client, but we can test the config

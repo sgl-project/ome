@@ -1,9 +1,3 @@
-# Check Go version and set environment at the start
-ifeq ($(shell which go),/opt/go-1.19.13/bin/go)
-    export GOROOT := /opt/go-1.23.0
-    export PATH := $(GOROOT)/bin:$(PATH)
-endif
-
 # Define the directory containing the charts
 CHARTS_DIR := ./charts
 
@@ -42,7 +36,7 @@ CRD_OPTIONS ?= "crd:maxDescLen=0"
 OME_ENABLE_SELF_SIGNED_CA ?= false
 
 # ENVTEST K8s version configuration
-ENVTEST_K8S_VERSION = 1.27
+ENVTEST_K8S_VERSION = 1.30
 
 # Image configuration for success and error scenarios
 SUCCESS_200_ISVC_IMG ?= success-200-isvc
@@ -485,51 +479,55 @@ artifacts: kustomize ## Generate artifacts for release.
 	$(KUSTOMIZE) build config/clusterresources -o artifacts/clusterresources.yaml
 	@echo "✅ Artifacts generated"
 
-.PHONY: integration-test
-integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
-	@echo "🧪 Running integration tests..."
-	go test -v ./integration_tests/... -ginkgo.v -ginkgo.trace
-	@echo "✅ Integration tests passed"
-
 ##@ 🧪 Testing
-.PHONY: test
-test: test-cmd test-pkg test-internal ## 🧪 Run all tests
 
-.PHONY: test-cmd
-test-cmd: fmt vet manifests envtest ## 🧪 Run cmd tests with coverage
+# Define test packages with proper exclusions
+TEST_PACKAGES := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
+CMD_PACKAGES := $(shell go list ./cmd/...)
+PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
+INTERNAL_PACKAGES := $(shell go list ./internal/...)
+
+.PHONY: test
+test: fmt vet manifests envtest ## 🧪 Run all tests with coverage (optimized - runs dependencies once)
+	@echo "\n🧪 Running comprehensive test suite..."
+	@echo "📋 Test scope:"
+	@echo "  • CMD packages: $(words $(CMD_PACKAGES)) packages"
+	@echo "  • PKG packages: $(words $(PKG_PACKAGES)) packages" 
+	@echo "  • Internal packages: $(words $(INTERNAL_PACKAGES)) packages"
+	@echo "  • Excluded: pkg/apis, pkg/testing, pkg/openapi, pkg/client"
+	@echo ""
+	
 	@echo "🧪 Running command tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		./cmd/... \
+		$(CMD_PACKAGES) \
 		-coverprofile=coverage-cmd.out.tmp \
 		--covermode=atomic
-	@echo "🔍 Filtering coverage report..."
-	@cat coverage-cmd.out.tmp | grep -v "pkg/testing/" | grep -v "pkg/testutils/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-cmd.out
+	@echo "🔍 Filtering CMD coverage report..."
+	@cat coverage-cmd.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-cmd.out
 	@rm coverage-cmd.out.tmp
 	@echo "✅ Command tests passed"
-
-.PHONY: test-pkg
-test-pkg: fmt vet manifests envtest ## 🧪 Run pkg tests with coverage
-	@echo "🧪 Running package tests..."
+	
+	@echo "\n🧪 Running package tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		$$(go list ./pkg/... | grep -v ./pkg/apis |grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing) \
+		$(PKG_PACKAGES) \
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
-	@echo "🔍 Filtering coverage report..."
-	@cat coverage-pkg.out.tmp | grep -v "/pkg/apis/" | grep -v "pkg/testing/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-pkg.out
+	@echo "🔍 Filtering PKG coverage report..."
+	@cat coverage-pkg.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-pkg.out
 	@rm coverage-pkg.out.tmp
 	@echo "✅ Package tests passed"
-
-.PHONY: test-internal
-test-internal: fmt vet manifests envtest ## 🧪 Run internal tests with coverage
-	@echo "🧪 Running internal tests..."
+	
+	@echo "\n🧪 Running internal tests..."
 	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
-		./internal/... \
+		$(INTERNAL_PACKAGES) \
 		-coverprofile=coverage-internal.out.tmp \
 		--covermode=atomic
-	@echo "🔍 Filtering coverage report..."
-	@cat coverage-internal.out.tmp | grep -v "pkg/testing/" | grep -v "_generated.go" | grep -v "zz_generated" > coverage-internal.out
+	@echo "🔍 Filtering Internal coverage report..."
+	@cat coverage-internal.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-internal.out
 	@rm coverage-internal.out.tmp
 	@echo "✅ Internal tests passed"
+	
+	@echo "\n🎉 All tests completed successfully!"
 
 .PHONY: coverage
 coverage: ## Show coverage for all packages
@@ -554,3 +552,8 @@ coverage: ## Show coverage for all packages
 		exit 1; \
 	fi
 
+.PHONY: integration-test
+integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
+	@echo "🧪 Running integration tests..."
+	go test -v ./integration_tests/... -ginkgo.v -ginkgo.trace
+	@echo "✅ Integration tests passed"
