@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/sgl-project/sgl-ome/pkg/casper"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 )
 
 const (
@@ -25,8 +25,8 @@ type ReplicaAgent struct {
 }
 
 type ReplicationResult struct {
-	source casper.ObjectURI
-	target casper.ObjectURI
+	source ociobjectstore.ObjectURI
+	target ociobjectstore.ObjectURI
 	error  error
 }
 
@@ -107,7 +107,7 @@ func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.Obj
 			continue
 		}
 
-		srcObj := casper.ObjectURI{
+		srcObj := ociobjectstore.ObjectURI{
 			Namespace:  r.Config.SourceObjectStoreURI.Namespace,
 			BucketName: r.Config.SourceObjectStoreURI.BucketName,
 			ObjectName: *obj.Name,
@@ -139,11 +139,11 @@ func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.Obj
 	}
 }
 
-func (r *ReplicaAgent) downloadObject(srcObj casper.ObjectURI, obj *objectstorage.ObjectSummary) error {
+func (r *ReplicaAgent) downloadObject(srcObj ociobjectstore.ObjectURI, obj *objectstorage.ObjectSummary) error {
 	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
 	err := r.Config.ObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
-		casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
-		casper.WithThreads(DefaultDownloadThreads))
+		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		ociobjectstore.WithThreads(DefaultDownloadThreads))
 	if err != nil {
 		r.logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
 		return err
@@ -151,7 +151,7 @@ func (r *ReplicaAgent) downloadObject(srcObj casper.ObjectURI, obj *objectstorag
 	return nil
 }
 
-func (r *ReplicaAgent) uploadObject(targetObj casper.ObjectURI, objName string) error {
+func (r *ReplicaAgent) uploadObject(targetObj ociobjectstore.ObjectURI, objName string) error {
 	r.Config.ObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
 	curFilePath := filepath.Join(r.Config.LocalPath, objName)
 
@@ -174,9 +174,9 @@ func (r *ReplicaAgent) prepareObjectChannel(objects []objectstorage.ObjectSummar
 	return objChan
 }
 
-func (r *ReplicaAgent) getTargetObjectURI(objName string) casper.ObjectURI {
+func (r *ReplicaAgent) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
 	targetObjName := strings.Replace(objName, r.Config.SourceObjectStoreURI.Prefix, r.Config.TargetObjectStoreURI.Prefix, 1)
-	return casper.ObjectURI{
+	return ociobjectstore.ObjectURI{
 		Namespace:  r.Config.TargetObjectStoreURI.Namespace,
 		BucketName: r.Config.TargetObjectStoreURI.BucketName,
 		ObjectName: targetObjName,

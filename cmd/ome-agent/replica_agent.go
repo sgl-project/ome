@@ -6,8 +6,8 @@ import (
 
 	"github.com/sgl-project/sgl-ome/internal/ome-agent/replica"
 	"github.com/sgl-project/sgl-ome/pkg/afero"
-	"github.com/sgl-project/sgl-ome/pkg/casper"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 )
 
 // ReplicaAgent implements the AgentModule interface for object storage replica agent
@@ -44,7 +44,7 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		casper.CasperDataStoreModule,
+		ociobjectstore.OCIOSDataStoreModule,
 		replica.Module,
 		fx.Populate(&r.agent),
 	}

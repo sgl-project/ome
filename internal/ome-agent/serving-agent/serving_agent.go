@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sgl-project/sgl-ome/pkg/casper"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 	"github.com/sgl-project/sgl-ome/pkg/zipper"
 )
 
@@ -107,13 +107,14 @@ func (s *ServingSidecar) applyFinetunedModelChanges() {
 			}
 			// Download model to target directory with retries
 			for attempt := 1; attempt <= maxRetries; attempt++ {
-				err = s.Config.ObjectStorageDataStore.DownloadBasedOnObjectSize(
+				err = s.Config.ObjectStorageDataStore.DownloadWithStrategy(
 					uri,
 					zippedFtModelDir,
-					true,
-					int(BigFileSizeInMB),
-					int(DefaultDownloadChunkSizeInMB),
-					int(DefaultDownloadThreads))
+					ociobjectstore.WithBaseNameOnly(true),
+					ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
+					ociobjectstore.WithThreads(DefaultDownloadThreads),
+					ociobjectstore.WithSizeThreshold(BigFileSizeInMB),
+				)
 
 				if err != nil {
 					s.logger.Infof("Error when downloading '%s'\n", uri.ObjectName)
@@ -130,7 +131,7 @@ func (s *ServingSidecar) applyFinetunedModelChanges() {
 			}
 			s.logger.Infof("Model '%s' downloaded\n", uri.ObjectName)
 
-			zippedFtModelPath := filepath.Join(zippedFtModelDir, casper.ObjectBaseName(uri.ObjectName))
+			zippedFtModelPath := filepath.Join(zippedFtModelDir, ociobjectstore.ObjectBaseName(uri.ObjectName))
 
 			// Unzip the downloaded model
 			err = zipper.Unzip(zippedFtModelPath, unzippedFtModelDir)
@@ -197,7 +198,7 @@ func (s *ServingSidecar) watchFileChanges(watcher *fsnotify.Watcher, filePath st
 }
 
 // Reads a JSON file and returns a slice of ObjectURIs and a slice of object names
-func readObjectURIsFromFile(filePath string) ([]casper.ObjectURI, []string, error) {
+func readObjectURIsFromFile(filePath string) ([]ociobjectstore.ObjectURI, []string, error) {
 	// Read the content of the JSON file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -212,7 +213,7 @@ func readObjectURIsFromFile(filePath string) ([]casper.ObjectURI, []string, erro
 	}
 
 	// Unmarshal the JSON content into a slice of ObjectURI
-	var objectURIs []casper.ObjectURI
+	var objectURIs []ociobjectstore.ObjectURI
 	err = json.Unmarshal(fileContent, &objectURIs)
 	if err != nil {
 		return nil, nil, err

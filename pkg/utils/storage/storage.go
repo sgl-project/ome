@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sgl-project/sgl-ome/pkg/casper"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 )
 
 const (
@@ -235,7 +235,7 @@ func ValidateStorageURI(uri string) error {
 // - oci://n/namespace/b/bucket/o/prefix
 // - hf://model-id[@branch]
 // NewObjectURI creates a new ObjectURI from a storage URI string
-func NewObjectURI(uriStr string) (*casper.ObjectURI, error) {
+func NewObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 	storageType, err := GetStorageType(uriStr)
 	if err != nil {
 		return nil, err
@@ -252,7 +252,7 @@ func NewObjectURI(uriStr string) (*casper.ObjectURI, error) {
 }
 
 // parseHuggingFaceObjectURI parses a Hugging Face URI into an ObjectURI
-func parseHuggingFaceObjectURI(uriStr string) (*casper.ObjectURI, error) {
+func parseHuggingFaceObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 	hfComponents, err := ParseHuggingFaceStorageURI(uriStr)
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ func parseHuggingFaceObjectURI(uriStr string) (*casper.ObjectURI, error) {
 	// - Use BucketName field to store the model ID
 	// - Use Prefix field to store the branch
 	// - Use Namespace to identify this as a Hugging Face resource
-	return &casper.ObjectURI{
+	return &ociobjectstore.ObjectURI{
 		Namespace:  "huggingface", // Identifies this as a Hugging Face model
 		BucketName: hfComponents.ModelID,
 		Prefix:     hfComponents.Branch,
@@ -270,7 +270,7 @@ func parseHuggingFaceObjectURI(uriStr string) (*casper.ObjectURI, error) {
 }
 
 // parseOCIObjectURI parses an OCI URI string into an ObjectURI
-func parseOCIObjectURI(uriStr string) (*casper.ObjectURI, error) {
+func parseOCIObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 	if !strings.HasPrefix(uriStr, OCIStoragePrefix) {
 		return nil, fmt.Errorf("URI must start with '%s'", OCIStoragePrefix)
 	}
@@ -300,7 +300,7 @@ func parseOCIObjectURI(uriStr string) (*casper.ObjectURI, error) {
 			prefix = strings.Join(parts[5:], "/")
 		}
 
-		return &casper.ObjectURI{
+		return &ociobjectstore.ObjectURI{
 			Namespace:  namespace,
 			BucketName: bucketName,
 			Prefix:     prefix,
@@ -343,7 +343,7 @@ func parseOCIObjectURI(uriStr string) (*casper.ObjectURI, error) {
 		return nil, fmt.Errorf("invalid URI format, missing bucket name: %s", uriStr)
 	}
 
-	return &casper.ObjectURI{
+	return &ociobjectstore.ObjectURI{
 		Namespace:  namespace,
 		BucketName: bucketName,
 		Prefix:     prefix,

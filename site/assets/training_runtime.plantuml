@@ -1,0 +1,82 @@
+@startuml TrainingRuntime
+
+package "Training Runtime" {
+  object TrainingRuntime {
+    + TrainingRuntimeSpec spec
+  }
+
+  object ClusterTrainingRuntime {
+    + TrainingRuntimeSpec spec
+  }
+
+  object TrainingRuntimeSpec {
+    + MLPolicy mlPolicy
+    + PodGroupPolicy podGroupPolicy
+    + JobSetTemplateSpec template
+    + map<string,string> labels
+    + map<string,string> annotations
+    + string compartmentID
+  }
+
+  object JobSetTemplateSpec {
+    + ObjectMeta metadata
+    + JobSetSpec spec
+  }
+
+  object PodGroupPolicy {
+    + CoschedulingPodGroupPolicyConfig coscheduling
+  }
+
+  object CoschedulingPodGroupPolicyConfig {
+    + int32 scheduleTimeoutSeconds
+  }
+
+  object MLPolicy {
+    + int32 numNodes
+    + MLPolicyConfig
+  }
+
+  object MLPolicyConfig {
+    + TorchMLPolicyConfig torch
+    + MPIMLPolicyConfig mpi
+  }
+
+  object TorchMLPolicyConfig {
+    + string numProcPerNode
+    + TorchElasticPolicy elasticPolicy
+  }
+
+  object TorchElasticPolicy {
+    + int32 maxRestarts
+    + int32 minNodes
+    + int32 maxNodes
+    + MetricSpec[] metrics
+  }
+
+  object MPIMLPolicyConfig {
+    + int32 numProcPerNode
+    + MPIImplementation mpiImplementation
+    + string sshAuthMountPath
+    + bool runLauncherAsNode
+  }
+
+  enum MPIImplementation {
+    + OpenMPI
+    + Intel
+    + MPICH
+  }
+
+  TrainingRuntime --> TrainingRuntimeSpec
+  ClusterTrainingRuntime --> TrainingRuntimeSpec
+  TrainingRuntimeSpec --> MLPolicy
+  TrainingRuntimeSpec --> PodGroupPolicy
+  TrainingRuntimeSpec --> JobSetTemplateSpec
+  PodGroupPolicy --> CoschedulingPodGroupPolicyConfig
+  MLPolicy --|> MLPolicyConfig
+  MLPolicyConfig --> TorchMLPolicyConfig
+  MLPolicyConfig --> MPIMLPolicyConfig
+  TorchMLPolicyConfig --> TorchElasticPolicy
+  MPIMLPolicyConfig --> MPIImplementation
+}
+
+@enduml

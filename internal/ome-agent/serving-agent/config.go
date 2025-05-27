@@ -4,19 +4,19 @@ import (
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/sgl-project/sgl-ome/pkg/casper"
 	"github.com/sgl-project/sgl-ome/pkg/configutils"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
 	AnotherLogger logging.Interface
 
-	FineTunedWeightInfoFilePath      string                  `mapstructure:"fine_tuned_weight_info_file_path" validate:"required"`
-	UnzippedFineTunedWeightDirectory string                  `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
-	ZippedFineTunedWeightDirectory   string                  `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
-	ObjectStorageDataStore           *casper.CasperDataStore `validate:"required"`
+	FineTunedWeightInfoFilePath      string                         `mapstructure:"fine_tuned_weight_info_file_path" validate:"required"`
+	UnzippedFineTunedWeightDirectory string                         `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
+	ZippedFineTunedWeightDirectory   string                         `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
+	ObjectStorageDataStore           *ociobjectstore.OCIOSDataStore `validate:"required"`
 }
 
 type Option func(*Config) error

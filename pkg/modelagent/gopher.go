@@ -15,8 +15,8 @@ import (
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/casper"
 	"github.com/sgl-project/sgl-ome/pkg/hfutil/hub"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 	"github.com/sgl-project/sgl-ome/pkg/utils/storage"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +46,7 @@ type Gopher struct {
 	concurrency          int
 	multipartConcurrency int
 	modelRootDir         string
-	casperDataStore      *casper.CasperDataStore
+	casperDataStore      *ociobjectstore.OCIOSDataStore
 	hubClient            *hub.HubClient
 	kubeClient           kubernetes.Interface
 	gopherChan           <-chan *GopherTask
@@ -63,7 +63,7 @@ const (
 func NewGopher(
 	modelConfigParser *ModelConfigParser,
 	modelConfigUpdater *ModelConfigUpdater,
-	casperDataStore *casper.CasperDataStore,
+	casperDataStore *ociobjectstore.OCIOSDataStore,
 	hubClient *hub.HubClient,
 	kubeClient kubernetes.Interface,
 	concurrency int,
@@ -76,7 +76,7 @@ func NewGopher(
 	logger *zap.SugaredLogger) (*Gopher, error) {
 
 	if casperDataStore == nil {
-		return nil, fmt.Errorf("casper data store cannot be nil")
+		return nil, fmt.Errorf("ociobjectstore data store cannot be nil")
 	}
 
 	if hubClient == nil {
@@ -407,7 +407,7 @@ func getDestPath(baseModel *v1beta1.BaseModelSpec, modelRootDir string) string {
 }
 
 // getTargetDirPath determines the target directory path for a model based on its storage configuration
-func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*casper.ObjectURI, error) {
+func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*ociobjectstore.ObjectURI, error) {
 
 	storagePath := *baseModel.Storage.StorageUri
 
@@ -423,7 +423,7 @@ func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*casper.ObjectURI, erro
 
 }
 
-func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *GopherTask) error {
+func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
 	startTime := time.Now()
 	defer func() {
 		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
@@ -464,12 +464,12 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *Gop
 		return fmt.Errorf("no objects found under namespace %s, bucket %s, object prefix %s", uri.Namespace, uri.BucketName, uri.Prefix)
 	}
 
-	var objectUris []casper.ObjectURI
+	var objectUris []ociobjectstore.ObjectURI
 	for _, obj := range objects {
 		if obj.Name == nil {
 			continue
 		}
-		objectUris = append(objectUris, casper.ObjectURI{
+		objectUris = append(objectUris, ociobjectstore.ObjectURI{
 			Namespace:  uri.Namespace,
 			BucketName: uri.BucketName,
 			ObjectName: *obj.Name,
@@ -478,11 +478,11 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *Gop
 	}
 
 	errs := s.casperDataStore.BulkDownload(objectUris, destPath, s.concurrency,
-		casper.WithThreads(s.multipartConcurrency),
-		casper.WithChunkSize(BigFileSizeInMB),
-		casper.WithSizeThreshold(BigFileSizeInMB),
-		casper.WithOverrideEnabled(false),
-		casper.WithStripPrefix(uri.Prefix))
+		ociobjectstore.WithThreads(s.multipartConcurrency),
+		ociobjectstore.WithChunkSize(BigFileSizeInMB),
+		ociobjectstore.WithSizeThreshold(BigFileSizeInMB),
+		ociobjectstore.WithOverrideEnabled(false),
+		ociobjectstore.WithStripPrefix(uri.Prefix))
 	if errs != nil {
 		return fmt.Errorf("failed to download objects: %v", errs)
 	}
@@ -510,10 +510,10 @@ func (s *Gopher) downloadModel(uri *casper.ObjectURI, destPath string, task *Gop
 	return nil
 }
 
-func (s *Gopher) verifyDownloadedFiles(uris []casper.ObjectURI, destPath string) map[string]error {
+func (s *Gopher) verifyDownloadedFiles(uris []ociobjectstore.ObjectURI, destPath string) map[string]error {
 	errors := make(map[string]error)
 	for _, obj := range uris {
-		relativeName := filepath.Join(destPath, casper.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
+		relativeName := filepath.Join(destPath, ociobjectstore.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
 		// Fallback: if relativeName is empty, use the object name directly
 		if relativeName == "" {
 			relativeName = obj.ObjectName

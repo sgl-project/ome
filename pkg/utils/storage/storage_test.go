@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/casper"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -668,7 +668,7 @@ func TestNewObjectURI(t *testing.T) {
 	tests := []struct {
 		name        string
 		uri         string
-		expect      *casper.ObjectURI
+		expect      *ociobjectstore.ObjectURI
 		wantErr     bool
 		errContains string
 	}{
@@ -676,7 +676,7 @@ func TestNewObjectURI(t *testing.T) {
 		{
 			name: "valid hugging face uri with model ID only",
 			uri:  "hf://meta-llama/Llama-3-70B-Instruct",
-			expect: &casper.ObjectURI{
+			expect: &ociobjectstore.ObjectURI{
 				Namespace:  "huggingface",
 				BucketName: "meta-llama/Llama-3-70B-Instruct",
 				Prefix:     "main", // Default branch when not specified
@@ -686,7 +686,7 @@ func TestNewObjectURI(t *testing.T) {
 		{
 			name: "valid hugging face uri with model ID and branch",
 			uri:  "hf://meta-llama/Llama-3-70B-Instruct@experimental",
-			expect: &casper.ObjectURI{
+			expect: &ociobjectstore.ObjectURI{
 				Namespace:  "huggingface",
 				BucketName: "meta-llama/Llama-3-70B-Instruct",
 				Prefix:     "experimental", // Specified branch
@@ -703,37 +703,37 @@ func TestNewObjectURI(t *testing.T) {
 		{
 			name:    "valid n/namespace/b/bucket/o/prefix",
 			uri:     "oci://n/myns/b/mybucket/o/myprefix",
-			expect:  &casper.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "myprefix"},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "myprefix"},
 			wantErr: false,
 		},
 		{
 			name:    "valid n/namespace/b/bucket/o/multi/level/prefix",
 			uri:     "oci://n/myns/b/mybucket/o/dir1/dir2/file.txt",
-			expect:  &casper.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "dir1/dir2/file.txt"},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: "dir1/dir2/file.txt"},
 			wantErr: false,
 		},
 		{
 			name:    "valid namespace@region/bucket/prefix",
 			uri:     "oci://myns@us-phoenix-1/mybucket/myprefix",
-			expect:  &casper.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: "myprefix"},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: "myprefix"},
 			wantErr: false,
 		},
 		{
 			name:    "valid namespace@region/bucket with no prefix",
 			uri:     "oci://myns@us-phoenix-1/mybucket",
-			expect:  &casper.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: ""},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", Region: "us-phoenix-1", BucketName: "mybucket", Prefix: ""},
 			wantErr: false,
 		},
 		{
 			name:    "valid bucket/prefix (no namespace/region)",
 			uri:     "oci://mybucket/myprefix",
-			expect:  &casper.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: "myprefix"},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: "myprefix"},
 			wantErr: false,
 		},
 		{
 			name:    "valid bucket only (no namespace/region/prefix)",
 			uri:     "oci://mybucket",
-			expect:  &casper.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: ""},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "", Region: "", BucketName: "mybucket", Prefix: ""},
 			wantErr: false,
 		},
 		{
@@ -775,7 +775,7 @@ func TestNewObjectURI(t *testing.T) {
 		{
 			name:    "oci://n/namespace/b/bucket/o/ (empty prefix)",
 			uri:     "oci://n/myns/b/mybucket/o/",
-			expect:  &casper.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: ""},
+			expect:  &ociobjectstore.ObjectURI{Namespace: "myns", BucketName: "mybucket", Prefix: ""},
 			wantErr: false,
 		},
 	}

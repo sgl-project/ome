@@ -6,8 +6,8 @@ import (
 
 	servingAgent "github.com/sgl-project/sgl-ome/internal/ome-agent/serving-agent"
 	"github.com/sgl-project/sgl-ome/pkg/afero"
-	"github.com/sgl-project/sgl-ome/pkg/casper"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
 )
 
 // ServingAgent implements the AgentModule interface for serving sidecar agent
@@ -44,7 +44,7 @@ func (s *ServingAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		casper.CasperDataStoreModule,
+		ociobjectstore.OCIOSDataStoreModule,
 		servingAgent.Module,
 		fx.Populate(&s.agent),
 	}

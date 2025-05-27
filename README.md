@@ -7,7 +7,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/github_username/repo_name">
-    <img src="site/assets/icons/logo-clear-background.png" alt="Logo" width="" height="600">
+    <img src="site/assets/icons/logo-clear-background.png" alt="Logo" width="300" height="auto" style="max-width: 100%;">
   </a>
 
   <p align="center">
