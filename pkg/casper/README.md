@@ -5,7 +5,7 @@ The Casper package provides a robust data store abstraction backed by Oracle Obj
 ## Features
 
 - **Functional Options API**: Clean, flexible configuration using functional options pattern
-- **Smart Downloads**: Automatically chooses between standard and multipart downloads based on file size
+- **Downloads with Strategy**: Automatically chooses between standard and multipart downloads based on file size
 - **Multipart Downloads**: Efficient parallel downloading for large files with configurable chunk sizes and thread counts
 - **Integrity Validation**: MD5 checksum verification for downloaded files
 - **Path Manipulation**: Flexible options for handling object paths during downloads
@@ -103,19 +103,19 @@ Smart downloads automatically choose the best download method based on file size
 
 ```go
 // Smart download with automatic method selection
-err := cds.SmartDownload(source, "/local/target/dir",
+err := cds.DownloadWithStrategy(source, "/local/target/dir",
     casper.WithSizeThreshold(100),  // Use multipart for files > 100MB
     casper.WithChunkSize(8),        // 8MB chunks for multipart
     casper.WithThreads(15))         // 15 concurrent threads
 
 // Force multipart download regardless of size
-err = cds.SmartDownload(source, "/local/target/dir",
+err = cds.DownloadWithStrategy(source, "/local/target/dir",
     casper.WithForceMultipart(true),
     casper.WithChunkSize(32),
     casper.WithThreads(25))
 
 // Force standard download regardless of size
-err = cds.SmartDownload(source, "/local/target/dir",
+err = cds.DownloadWithStrategy(source, "/local/target/dir",
     casper.WithForceStandard(true))
 ```
 

@@ -72,13 +72,14 @@ func (d *TrainingAgent) downloadData() {
 	d.logger.Infof("Training data store url: %+v", *d.Config.TrainingDataObjectStoreURI)
 	d.logger.Infof("Training data local store path: %+v", d.Config.TrainingDataStoreDirectory)
 
-	if err := d.Config.InputObjectStorageDataStore.DownloadBasedOnObjectSize(
+	if err := d.Config.InputObjectStorageDataStore.DownloadWithStrategy(
 		*d.Config.TrainingDataObjectStoreURI,
 		d.Config.TrainingDataStoreDirectory,
-		true,
-		BigFileSizeInMB,
-		DefaultDownloadChunkSizeInMB,
-		DefaultDownloadThreads); err != nil {
+		casper.WithBaseNameOnly(true),
+		casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		casper.WithThreads(DefaultDownloadThreads),
+		casper.WithSizeThreshold(BigFileSizeInMB),
+	); err != nil {
 
 		panic(fmt.Errorf("failed to download training data: %+v", err))
 	}

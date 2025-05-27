@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -97,6 +98,22 @@ func JoinWithTailOverlap(directoryPath, objectPath string) string {
 
 	// No overlap found
 	return "/" + path.Join(append(dirParts, objParts...)...)
+}
+
+func ComputeTargetFilePath(source ObjectURI, target string, opts *DownloadOptions) string {
+	// Handle nil options by using default behavior
+	if opts == nil {
+		return filepath.Join(target, source.ObjectName)
+	}
+
+	if opts.StripPrefix {
+		return filepath.Join(target, TrimObjectPrefix(source.ObjectName, opts.PrefixToStrip))
+	} else if opts.UseBaseNameOnly {
+		return filepath.Join(target, ObjectBaseName(source.ObjectName))
+	} else if opts.JoinWithTailOverlap {
+		return JoinWithTailOverlap(target, source.ObjectName)
+	}
+	return filepath.Join(target, source.ObjectName)
 }
 
 func slicesEqual(a, b []string) bool {

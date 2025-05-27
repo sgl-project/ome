@@ -38,13 +38,13 @@ func (m *FineTunedAdapter) Start() error {
 	}
 
 	// 1. Download the fine-tuned weight
-	err = m.Config.ObjectStorageDataStore.DownloadBasedOnObjectSize(
+	err = m.Config.ObjectStorageDataStore.DownloadWithStrategy(
 		*m.Config.FineTunedWeightURI,
 		m.Config.ZippedFineTunedWeightDirectory,
-		true,
-		int(BigFileSizeInMB),
-		int(DefaultDownloadChunkSizeInMB),
-		int(DefaultDownloadThreads),
+		casper.WithBaseNameOnly(true),
+		casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		casper.WithThreads(DefaultDownloadThreads),
+		casper.WithSizeThreshold(BigFileSizeInMB),
 	)
 	if err != nil {
 		return err

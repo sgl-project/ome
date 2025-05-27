@@ -107,13 +107,14 @@ func (s *ServingSidecar) applyFinetunedModelChanges() {
 			}
 			// Download model to target directory with retries
 			for attempt := 1; attempt <= maxRetries; attempt++ {
-				err = s.Config.ObjectStorageDataStore.DownloadBasedOnObjectSize(
+				err = s.Config.ObjectStorageDataStore.DownloadWithStrategy(
 					uri,
 					zippedFtModelDir,
-					true,
-					int(BigFileSizeInMB),
-					int(DefaultDownloadChunkSizeInMB),
-					int(DefaultDownloadThreads))
+					casper.WithBaseNameOnly(true),
+					casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
+					casper.WithThreads(DefaultDownloadThreads),
+					casper.WithSizeThreshold(BigFileSizeInMB),
+				)
 
 				if err != nil {
 					s.logger.Infof("Error when downloading '%s'\n", uri.ObjectName)

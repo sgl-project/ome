@@ -500,3 +500,178 @@ func TestJoinWithTailOverlap(t *testing.T) {
 		})
 	}
 }
+
+func TestComputeTargetFilePath(t *testing.T) {
+	tests := []struct {
+		name           string
+		source         ObjectURI
+		target         string
+		options        *DownloadOptions
+		expectedOutput string
+	}{
+		{
+			name: "StripPrefix option",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "prefix/path/to/file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				StripPrefix:   true,
+				PrefixToStrip: "prefix/",
+			},
+			expectedOutput: "/local/target/path/to/file.txt",
+		},
+		{
+			name: "StripPrefix with empty prefix",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "path/to/file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				StripPrefix:   true,
+				PrefixToStrip: "",
+			},
+			expectedOutput: "/local/target/path/to/file.txt",
+		},
+		{
+			name: "UseBaseNameOnly option",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "path/to/file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				UseBaseNameOnly: true,
+			},
+			expectedOutput: "/local/target/file.txt",
+		},
+		{
+			name: "UseBaseNameOnly with object containing no path",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				UseBaseNameOnly: true,
+			},
+			expectedOutput: "/local/target/file.txt",
+		},
+		{
+			name: "JoinWithTailOverlap option",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "/to/path/file.txt",
+			},
+			target: "/local/path/to",
+			options: &DownloadOptions{
+				JoinWithTailOverlap: true,
+			},
+			expectedOutput: "/local/path/to/path/file.txt",
+		},
+		{
+			name: "JoinWithTailOverlap with no overlap",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "/completely/different/path/file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				JoinWithTailOverlap: true,
+			},
+			expectedOutput: "/local/target/completely/different/path/file.txt",
+		},
+		{
+			name: "Default behavior (no special options)",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "path/to/file.txt",
+			},
+			target:         "/local/target",
+			options:        &DownloadOptions{},
+			expectedOutput: "/local/target/path/to/file.txt",
+		},
+		{
+			name: "Default behavior with empty ObjectName",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "",
+			},
+			target:         "/local/target",
+			options:        &DownloadOptions{},
+			expectedOutput: "/local/target",
+		},
+		{
+			name: "Priority order: StripPrefix takes precedence over UseBaseNameOnly",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "prefix/path/to/file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				StripPrefix:     true,
+				PrefixToStrip:   "prefix/",
+				UseBaseNameOnly: true,
+			},
+			expectedOutput: "/local/target/path/to/file.txt",
+		},
+		{
+			name: "Priority order: StripPrefix takes precedence over JoinWithTailOverlap",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "prefix/path/to/file.txt",
+			},
+			target: "/local/target",
+			options: &DownloadOptions{
+				StripPrefix:         true,
+				PrefixToStrip:       "prefix/",
+				JoinWithTailOverlap: true,
+			},
+			expectedOutput: "/local/target/path/to/file.txt",
+		},
+		{
+			name: "Priority order: UseBaseNameOnly takes precedence over JoinWithTailOverlap",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "path/to/file.txt",
+			},
+			target: "/local/path",
+			options: &DownloadOptions{
+				UseBaseNameOnly:     true,
+				JoinWithTailOverlap: true,
+			},
+			expectedOutput: "/local/path/file.txt",
+		},
+		{
+			name: "Nil options should use default behavior",
+			source: ObjectURI{
+				Namespace:  "test-namespace",
+				BucketName: "test-bucket",
+				ObjectName: "path/to/file.txt",
+			},
+			target:         "/local/target",
+			options:        nil,
+			expectedOutput: "/local/target/path/to/file.txt",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ComputeTargetFilePath(tc.source, tc.target, tc.options)
+			assert.Equal(t, tc.expectedOutput, result)
+		})
+	}
+}

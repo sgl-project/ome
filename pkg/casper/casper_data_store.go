@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,7 +34,7 @@ type CasperDataStore struct {
 	Client *objectstorage.ObjectStorageClient `validate:"required"`
 }
 
-// DownloadOptions defines parameters to control SmartDownload behavior.
+// DownloadOptions defines parameters to control DownloadWithStrategy behavior.
 type DownloadOptions struct {
 	SizeThresholdInMB   int      // Threshold above which multipart download is used
 	ChunkSizeInMB       int      // Multipart chunk size
@@ -130,15 +129,10 @@ func applyDownloadDefaults(opts *DownloadOptions) DownloadOptions {
 	return merged
 }
 
-// BulkDownload uses SmartDownload for each object with concurrency and retry logic.
+// BulkDownload uses DownloadWithStrategy for each object with concurrency and retry logic.
 func (cds *CasperDataStore) BulkDownload(objects []ObjectURI, targetDir string, concurrency int, opts ...DownloadOption) error {
 	if len(objects) == 0 {
 		return nil
-	}
-
-	downloadOpts, err := applyDownloadOptions(opts...)
-	if err != nil {
-		return fmt.Errorf("failed to apply download options: %w", err)
 	}
 
 	jobs := make(chan ObjectURI, len(objects))
@@ -152,27 +146,7 @@ func (cds *CasperDataStore) BulkDownload(objects []ObjectURI, targetDir string, 
 			for object := range jobs {
 				var err error
 				for attempt := 1; attempt <= maxRetries; attempt++ {
-					// Compute the intended target file path
-					var targetFilePath string
-					if downloadOpts.StripPrefix {
-						targetFilePath = filepath.Join(targetDir, TrimObjectPrefix(object.ObjectName, downloadOpts.PrefixToStrip))
-					} else if downloadOpts.UseBaseNameOnly {
-						targetFilePath = filepath.Join(targetDir, ObjectBaseName(object.ObjectName))
-					} else if downloadOpts.JoinWithTailOverlap {
-						targetFilePath = JoinWithTailOverlap(targetDir, object.ObjectName)
-					} else {
-						targetFilePath = filepath.Join(targetDir, object.ObjectName)
-					}
-					if downloadOpts.DisableOverride {
-						valid, errCheck := cds.IsLocalCopyValid(object, targetFilePath)
-						if errCheck != nil {
-							cds.logger.Warnf("[Worker %d] Failed to check if local copy is valid for %s: %v", workerID, object.ObjectName, errCheck)
-						} else if valid {
-							cds.logger.Infof("[Worker %d] Skipping download for %s: valid local copy exists at %s", workerID, object.ObjectName, targetFilePath)
-							break
-						}
-					}
-					err = cds.SmartDownload(object, targetDir, opts...)
+					err = cds.DownloadWithStrategy(object, targetDir, opts...)
 					if err == nil {
 						cds.logger.Infof("[Worker %d] Successfully downloaded and validated %s", workerID, object.ObjectName)
 						break
@@ -202,8 +176,8 @@ func (cds *CasperDataStore) BulkDownload(objects []ObjectURI, targetDir string, 
 	return nil
 }
 
-// SmartDownload chooses between standard and multipart download based on object size and options.
-func (cds *CasperDataStore) SmartDownload(source ObjectURI, target string, opts ...DownloadOption) error {
+// DownloadWithStrategy chooses between standard and multipart download based on object size and options.
+func (cds *CasperDataStore) DownloadWithStrategy(source ObjectURI, target string, opts ...DownloadOption) error {
 	downloadOpts, err := applyDownloadOptions(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to apply download options: %w", err)
@@ -220,16 +194,7 @@ func (cds *CasperDataStore) SmartDownload(source ObjectURI, target string, opts 
 	}
 
 	// Compute the intended target file path
-	var targetFilePath string
-	if downloadOpts.StripPrefix {
-		targetFilePath = filepath.Join(target, TrimObjectPrefix(source.ObjectName, downloadOpts.PrefixToStrip))
-	} else if downloadOpts.UseBaseNameOnly {
-		targetFilePath = filepath.Join(target, ObjectBaseName(source.ObjectName))
-	} else if downloadOpts.JoinWithTailOverlap {
-		targetFilePath = JoinWithTailOverlap(target, source.ObjectName)
-	} else {
-		targetFilePath = filepath.Join(target, source.ObjectName)
-	}
+	targetFilePath := ComputeTargetFilePath(source, target, &downloadOpts)
 
 	if downloadOpts.DisableOverride {
 		valid, err := cds.IsLocalCopyValid(source, targetFilePath)
@@ -253,59 +218,17 @@ func (cds *CasperDataStore) SmartDownload(source ObjectURI, target string, opts 
 	object := objects[0]
 
 	if downloadOpts.ForceStandard {
-		cds.logger.Infof("SmartDownload forced standard download for %s", source.ObjectName)
+		cds.logger.Infof("DownloadWithStrategy forced standard download for %s", source.ObjectName)
 		return cds.Download(source, target, opts...)
 	}
 
 	if downloadOpts.ForceMultipart || (object.Size != nil && *object.Size >= int64(downloadOpts.SizeThresholdInMB)*1024*1024) {
-		cds.logger.Infof("SmartDownload using multipart for %s, size: %d", source.ObjectName, *object.Size)
+		cds.logger.Infof("DownloadWithStrategy using multipart for %s, size: %d", source.ObjectName, *object.Size)
 		return cds.MultipartDownload(source, target, opts...)
 	}
 
-	cds.logger.Infof("SmartDownload using standard download for %s", source.ObjectName)
+	cds.logger.Infof("DownloadWithStrategy using standard download for %s", source.ObjectName)
 	return cds.Download(source, target, opts...)
-}
-
-func (cds *CasperDataStore) DownloadBasedOnObjectSize(source ObjectURI, target string, excludePrefix bool, sizeThresholdInMB int, downloadingChunkSize int, downloadingThread int) error {
-	source.Prefix = source.ObjectName
-
-	// Convert old parameters to functional options
-	var opts []DownloadOption
-	opts = append(opts, WithStripPrefix(""))
-	if excludePrefix {
-		opts = append(opts, WithStripPrefix(source.BucketName))
-	}
-	opts = append(opts, WithSizeThreshold(sizeThresholdInMB))
-	opts = append(opts, WithChunkSize(downloadingChunkSize))
-	opts = append(opts, WithThreads(downloadingThread))
-
-	objectSummary, err := cds.ListObjects(source)
-	if err != nil {
-		return fmt.Errorf("failed to do object list: %+v", err)
-	}
-
-	if len(objectSummary) == 0 {
-		return fmt.Errorf("object %s not found in object storage bucket: %s, in namespace: %s", source.ObjectName, source.BucketName, source.Namespace)
-	}
-
-	object := objectSummary[0]
-
-	if object.Size == nil {
-		cds.logger.Infof("Regular download %s \n", source.ObjectName)
-		err = cds.Download(source, target, opts...)
-	} else if *(object.Size) < (int64(sizeThresholdInMB) * int64(MB)) {
-		cds.logger.Infof("Regular download %s, size: %d \n", source.ObjectName, *(object.Size))
-		err = cds.Download(source, target, opts...)
-	} else {
-		cds.logger.Infof("Multipart download %s, size: %d \n", source.ObjectName, *(object.Size))
-		err = cds.MultipartDownload(source, target, opts...)
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to download object %s in object storage bucket: %s, in namespace: %s: %+v", source.ObjectName, source.BucketName, source.Namespace, err)
-	}
-
-	return nil
 }
 
 func (cds *CasperDataStore) Download(source ObjectURI, target string, opts ...DownloadOption) error {
@@ -329,17 +252,7 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, opts ...Do
 		}
 	}(responseContent)
 
-	// Write the downloaded object to the target file
-	var targetFilePath string
-	if downloadOpts.UseBaseNameOnly {
-		targetFilePath = filepath.Join(target, ObjectBaseName(source.ObjectName))
-	} else if downloadOpts.StripPrefix {
-		targetFilePath = filepath.Join(target, TrimObjectPrefix(source.ObjectName, downloadOpts.PrefixToStrip))
-	} else if downloadOpts.JoinWithTailOverlap {
-		targetFilePath = JoinWithTailOverlap(target, source.ObjectName)
-	} else {
-		targetFilePath = filepath.Join(target, source.ObjectName)
-	}
+	targetFilePath := ComputeTargetFilePath(source, target, &downloadOpts)
 
 	err = os.MkdirAll(path.Dir(targetFilePath), os.ModePerm)
 	if err != nil {

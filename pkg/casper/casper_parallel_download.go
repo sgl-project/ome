@@ -113,17 +113,7 @@ func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, o
 	prepareDownloadParts := splitToParts(totalParts, partSize, objectSize, source)
 	downloadedParts := cds.multipartDownload(context.Background(), threads, prepareDownloadParts)
 
-	// Compute the relative local file path by removing the first two path segments (vendor/model)
-	var targetFilePath string
-	if downloadOpts.UseBaseNameOnly {
-		targetFilePath = filepath.Join(target, ObjectBaseName(source.ObjectName))
-	} else if downloadOpts.StripPrefix {
-		targetFilePath = filepath.Join(target, TrimObjectPrefix(source.ObjectName, downloadOpts.PrefixToStrip))
-	} else if downloadOpts.JoinWithTailOverlap {
-		targetFilePath = JoinWithTailOverlap(target, source.ObjectName)
-	} else {
-		targetFilePath = filepath.Join(target, source.ObjectName)
-	}
+	targetFilePath := ComputeTargetFilePath(source, target, &downloadOpts)
 	tempTargetFilePath := targetFilePath + ".temp"
 
 	// Ensure target directory exists
