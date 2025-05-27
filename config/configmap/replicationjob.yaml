@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: replicationjob-config
+  namespace: ome
+data:
+  replicationjob: |
+    {
+      "downloadSizeLimit": "3072",
+      "enableSizeLimitCheck": "true",
+      "compartmentId": "ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq",
+      "authType" : "InstancePrincipal",
+      "region": "us-chicago-1",
+      "podConfig": {
+        "image": "us-chicago-1.ocir.io/axoxdievda5j/genai-ome-agent:v1.1-500",
+        "resources": {
+          "limits": {
+            "cpu": "10",
+            "memory": "100Gi"
+          },
+          "requests": {
+            "cpu": "10",
+            "memory": "100Gi"
+          }
+        }
+      }
+    }

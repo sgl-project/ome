@@ -170,6 +170,27 @@ data:
         "memoryLimit": "{{ .Values.ome.benchmarkJob.memoryLimit }}"
       }
     }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: replicationjob-config
+  namespace: ome
+data:
+  replicationjob: |
+    {
+      "podConfig": {
+        "image": "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "resources": {{ .Values.ome.replicationJob.resources | toJson }}
+      },
+      "downloadSizeLimit": "{{ .Values.ome.replicationJob.downloadSizeLimit }}",
+      "enableSizeLimitCheck": "{{ .Values.ome.replicationJob.enableSizeLimitCheck }}",
+      "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
+      "authType" : "{{ .Values.ome.omeAgent.authType }}",
+      "region": "{{ .Values.ome.omeAgent.region }}"
+    }
+
 ---
 apiVersion: v1
 kind: ConfigMap

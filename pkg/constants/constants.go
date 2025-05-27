@@ -23,6 +23,7 @@ import (
 var (
 	OMEName                          = "ome"
 	OMEAPIGroupName                  = "ome.io"
+	OMEAPIVersion                    = "v1beta1"
 	KnativeAutoscalingAPIGroupName   = "autoscaling.knative.dev"
 	KnativeServingAPIGroupNamePrefix = "serving.knative"
 	ChainsawAPIGroupName             = "chainsaw.k8s-integration.oracle.com"
@@ -34,6 +35,13 @@ var (
 var (
 	BenchmarjJobName          = "benchmarkjob"
 	BenchmarkJobConfigMapName = "benchmarkjob-config"
+)
+
+// Replication Job Constants
+var (
+	ReplicationJobConfigMapName = "replicationjob-config"
+	ReplicationJobKind          = "ReplicationJob"
+	ReplicationJobLabel         = "replicationJob"
 )
 
 // AI Platform Constants
@@ -58,6 +66,7 @@ var (
 	CapacityReservationConfigMapName    = "capacityreservation-config"
 	DedicatedAiClusterFinalizer         = "dedicatedaiclusters.ome.io/finalizer"
 	ClusterCapacityReservationFinalizer = "clustercapacityreservations.ome.io/finalizer"
+	ReplicationJobFinalizer             = "replicationjobs.ome.io/finalizer"
 )
 
 // OME Agent Constants

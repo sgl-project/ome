@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: ReplicationJob
+metadata:
+  name: replication-job-model-id
+  namespace: default
+spec:
+  source:
+    path: /mnt/data/replication-job-model-id
+    storageUri: oci://n/idqj093njucb/b/model-store/o/meta/llama-2-70b-chat
+    parameters:
+      region: us-chicago-1
+  destination:
+    storageUri: oci://n/idqj093njucb/b/replication-job-test/o/meta/llama-2-70b-chat
+    parameters:
+      region: us-chicago-1
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva

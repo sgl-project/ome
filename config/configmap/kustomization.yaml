@@ -4,5 +4,6 @@ kind: Kustomization
 resources:
 - inferenceservice.yaml
 - benchmarkjob.yaml
+- replicationjob.yaml
 - capacityreservation.yaml
 - aip.yaml

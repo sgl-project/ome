@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: ReplicationJob
+metadata:
+  name: replication-job-modelid
+  namespace: default
+spec:
+  source:
+    path: /mnt/data/test
+    storageUri: oci://n/id2imsfqczrq/b/cj-test-1/o/test-model-1
+    parameters:
+      region: us-chicago-1
+  destination:
+    storageUri: oci://n/idqj093njucb/b/replication-job-test/o/test-model
+    parameters:
+      region: us-chicago-1
+  compartmentID: ocid1.tenancy.oc1..aaaaaaaaumuuscymm6yb3wsbaicfx3mjhesghplvrvamvbypyehh5pgaasna

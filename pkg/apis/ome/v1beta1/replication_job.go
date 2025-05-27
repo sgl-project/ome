@@ -1,10 +1,12 @@
 package v1beta1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ReplicationJobPhase defines possible states of a ReplicationJob
+// +kubebuilder:validation:Enum=Completed;Running;Pending;Suspended;Failed
 type ReplicationJobPhase string
 
 const (
@@ -16,6 +18,7 @@ const (
 )
 
 // ReplicationJobSpec defines the desired state of ReplicationJob.
+// +k8s:openapi-gen=true
 type ReplicationJobSpec struct {
 	// Source specifies the data source for the replication job.
 	// +required
@@ -28,9 +31,14 @@ type ReplicationJobSpec struct {
 	// The compartment ID to use for the replication job.
 	// +optional
 	CompartmentID string `json:"compartmentID,omitempty"`
+
+	// ContainerOverride defines the custom container configuration used for the replication job.
+	// +optional
+	ContainerOverride *v1.Container `json:"containerOverride,omitempty"`
 }
 
 // ReplicationJobStatus represents the current state of the ReplicationJob.
+// +k8s:openapi-gen=true
 type ReplicationJobStatus struct {
 	// Status represents the overall phase of the replication job.
 	Status ReplicationJobPhase `json:"status,omitempty"`
@@ -58,10 +66,12 @@ type ReplicationJobStatus struct {
 }
 
 // ReplicationJob is the Schema for the replicationjobs API
+// +kubebuilder:subresource:status
 // +k8s:openapi-gen=true
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 type ReplicationJob struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -73,8 +83,13 @@ type ReplicationJob struct {
 // ReplicationJobList contains a list of ReplicationJob
 // +k8s:openapi-gen=true
 // +kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ReplicationJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ReplicationJob `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&ReplicationJob{}, &ReplicationJobList{})
 }

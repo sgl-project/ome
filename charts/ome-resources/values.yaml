@@ -26,6 +26,16 @@ ome:
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
+  replicationJob:
+    downloadSizeLimit: 3072
+    enableSizeLimitCheck: true
+    resources:
+      limits:
+        cpu: 10
+        memory: 100Gi
+      requests:
+        cpu: 10
+        memory: 100Gi
   multinodeProber:
     image: eu-frankfurt-1.ocir.io/idlsnvn0f2is/multinode-prober
     tag: v0.1

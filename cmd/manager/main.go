@@ -17,6 +17,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1dacccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/dac"
 	v1beta1isvccontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice"
+	v1beta1replicationjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/replicationjob"
 	v1beta1trainingcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training"
 	trainingruntimecore "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/training/runtime/core"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
@@ -312,6 +313,20 @@ func main() {
 		Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create Benchmark Job controller")
+		os.Exit(1)
+	}
+
+	replicationJobEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up Replication controller")
+	replicationJobEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1replicationjobcontroller.ReplicationJobReconciler{
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("ReplicationJob"),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  replicationJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create Replication Job controller")
 		os.Exit(1)
 	}
 

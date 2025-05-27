@@ -26,7 +26,7 @@ skip_sha: false
 retry_internal_in_seconds: 10
 num_connections: 100
 
-download_size_limit_gb: 650
+download_size_limit_gb: 3072
 enable_size_limit_check: true
 
 source:

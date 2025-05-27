@@ -248,3 +248,14 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 
 	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
+
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+func DerefString(s *string) string {
+	if s != nil {
+		return *s
+	}
+	return ""
+}

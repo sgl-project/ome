@@ -22,6 +22,7 @@ const (
 	DacReservationJobConfigName                  = "reservationJob"
 	MultiNodeProberName                          = "multinodeProber"
 	BenchmarkJobConfigName                       = "benchmarkjob"
+	ReplicationJobConfigName                     = "replicationjob"
 	AIPlatformSecretConfigName                   = "aiplatform-config"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
@@ -45,12 +46,22 @@ type BenchmarkJobConfig struct {
 	PodConfig PodConfig `json:"podConfig"`
 }
 
+type ReplicationJobConfig struct {
+	PodConfig            PodConfig `json:"podConfig"`
+	DownloadSizeLimit    string    `json:"downloadSizeLimit"`
+	EnableSizeLimitCheck string    `json:"EnableSizeLimitCheck"`
+	CompartmentId        string    `json:"compartmentId"`
+	AuthType             string    `json:"authType"`
+	Region               string    `json:"region"`
+}
+
 type PodConfig struct {
-	Image         string `json:"image"`
-	CPURequest    string `json:"cpuRequest"`
-	MemoryRequest string `json:"memoryRequest"`
-	CPULimit      string `json:"cpuLimit"`
-	MemoryLimit   string `json:"memoryLimit"`
+	Image         string                   `json:"image"`
+	CPURequest    string                   `json:"cpuRequest,omitempty"`
+	MemoryRequest string                   `json:"memoryRequest,omitempty"`
+	CPULimit      string                   `json:"cpuLimit,omitempty"`
+	MemoryLimit   string                   `json:"memoryLimit,omitempty"`
+	Resources     *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // +kubebuilder:object:generate=false
@@ -332,6 +343,22 @@ func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig,
 		}
 	}
 	return benchmarkJobConfig, nil
+}
+
+func NewReplicationJobConfig(clientset kubernetes.Interface) (*ReplicationJobConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.ReplicationJobConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	replicationJobConfig := &ReplicationJobConfig{}
+	for _, err := range []error{
+		getComponentConfig(ReplicationJobConfigName, configMap, &replicationJobConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return replicationJobConfig, nil
 }
 
 func NewAIPlatformConfig(clientset kubernetes.Interface) (*AIPlatformConfig, error) {

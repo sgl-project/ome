@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -495,6 +496,69 @@ func TestIsPrefixSupported(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			res := IsPrefixSupported(scenario.input, prefixes)
 			g.Expect(res).Should(gomega.Equal(scenario.expected))
+		})
+	}
+}
+
+func TestPtr(t *testing.T) {
+	// test with int
+	i := 42
+	pi := Ptr(i)
+	if pi == nil {
+		t.Fatal("Ptr returned nil for int")
+	}
+	if *pi != i {
+		t.Errorf("Ptr returned pointer to %v, want %v", *pi, i)
+	}
+
+	// test with string
+	s := "hello"
+	ps := Ptr(s)
+	if ps == nil {
+		t.Fatal("Ptr returned nil for string")
+	}
+	if *ps != s {
+		t.Errorf("Ptr returned pointer to %q, want %q", *ps, s)
+	}
+
+	// test with struct
+	type Example struct {
+		Field string
+	}
+	e := Example{Field: "test"}
+	pe := Ptr(e)
+	if pe == nil {
+		t.Fatal("Ptr returned nil for struct")
+	}
+	if !reflect.DeepEqual(*pe, e) {
+		t.Errorf("Ptr returned pointer to %+v, want %+v", *pe, e)
+	}
+}
+
+func TestDerefString(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *string
+		expected string
+	}{
+		{
+			name:     "non-nil string pointer",
+			input:    Ptr("hello"),
+			expected: "hello",
+		},
+		{
+			name:     "nil pointer",
+			input:    nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DerefString(tt.input)
+			if result != tt.expected {
+				t.Errorf("derefString() = %q, want %q", result, tt.expected)
+			}
 		})
 	}
 }
