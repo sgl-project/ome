@@ -97,7 +97,7 @@ err = cds.Download(source, "/local/target/dir",
     casper.WithSizeThreshold(50)) // Use multipart for files > 50MB
 ```
 
-#### Smart Downloads (Recommended)
+#### Download with Strategy (Recommended)
 
 Smart downloads automatically choose the best download method based on file size:
 
