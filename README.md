@@ -7,10 +7,8 @@
 <br />
 <div align="center">
   <a href="https://github.com/github_username/repo_name">
-    <img src="site/assets/ome-logo-hd.png" alt="Logo" width="" height="300">
+    <img src="site/assets/icons/logo-clear-background.png" alt="Logo">
   </a>
-
-<h3 align="center">Open Model Engine</h3>
 
   <p align="center">
 Enterprise-Grade AI/ML Workload Management Platform on Kubernetes
@@ -34,31 +32,31 @@ OME is a comprehensive operator for managing the lifecycle of Large Language Mod
 
 3. **OME Core Components**: Provides specialized Kubernetes operators for managing AI/ML workflows:
 
-   - **Model Management**: Manages model lifecycle, from import to versioning, with support for various model formats and architectures including large-scale models (LLaMA, Mistral, Mixtral, etc.)
-     - **Dynamic Model Parsing**: Automatically analyzes model files to extract architecture, parameter count, and capabilities directly from safetensors files
-   
-   - **Inference Services**: Deploys models as inference services with flexible scaling options, from serverless to dedicated resources
-   
-   - **Training System**: Orchestrates distributed training jobs with support for popular frameworks
-   
-   - **Resource Management**: Controls GPU allocation through Capacity Reservations and Dedicated AI Clusters with cache-aware resource allocation
+    - **Model Management**: Manages model lifecycle, from import to versioning, with support for various model formats and architectures including large-scale models (LLaMA, Mistral, Mixtral, etc.)
+        - **Dynamic Model Parsing**: Automatically analyzes model files to extract architecture, parameter count, and capabilities directly from safetensors files
 
-   - **Performance Analysis**: Provides benchmarking tools for model evaluation and optimization
+    - **Inference Services**: Deploys models as inference services with flexible scaling options, from serverless to dedicated resources
+
+    - **Training System**: Orchestrates distributed training jobs with support for popular frameworks
+
+    - **Resource Management**: Controls GPU allocation through Capacity Reservations and Dedicated AI Clusters with cache-aware resource allocation
+
+    - **Performance Analysis**: Provides benchmarking tools for model evaluation and optimization
 
 ### Runtime Support
 
 - **Serving Runtimes**: Integrates with popular inference engines including vLLM, SGLang, TGI, NIM, Triton, and more
-   - **Intelligent Runtime Selection**: Automatically selects the optimal runtime based on model architecture, model type, format, quantization, and parameter size
-   - **Advanced Model Parsing**: Built-in support for parsing configurations from popular model families including LLaMA, Mistral, Mixtral, DeepSeek, Phi, and Qwen
+    - **Intelligent Runtime Selection**: Automatically selects the optimal runtime based on model architecture, model type, format, quantization, and parameter size
+    - **Advanced Model Parsing**: Built-in support for parsing configurations from popular model families including LLaMA, Mistral, Mixtral, DeepSeek, Phi, and Qwen
 
-- **Training Frameworks**: Supports Accelerate, DeepSpeed, PyTorch, TensorFlow, and MPI-based systems 
+- **Training Frameworks**: Supports Accelerate, DeepSpeed, PyTorch, TensorFlow, and MPI-based systems
 
 - **Deployment Patterns**:
-   - **PD Deployment**: Prefill-Decode disaggregated serving for efficient token generation
-   - **Multi-Node Serving**: Distributed inference across multiple nodes
-   - **Serverless**: On-demand scaling with zero idle resources
-   - **Multi-Node Training**: Distributed training with gang scheduling
-   - **Cache-Aware Load Balancing**: Intelligent routing to optimize model cache utilization
+    - **PD Deployment**: Prefill-Decode disaggregated serving for efficient token generation
+    - **Multi-Node Serving**: Distributed inference across multiple nodes
+    - **Serverless**: On-demand scaling with zero idle resources
+    - **Multi-Node Training**: Distributed training with gang scheduling
+    - **Cache-Aware Load Balancing**: Intelligent routing to optimize model cache utilization
 
 ## Key Features
 
