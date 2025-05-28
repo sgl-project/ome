@@ -15,5 +15,5 @@ rules:
     resources: [ "basemodels" ]
     verbs: [ "get", "list", "watch", "patch", "update" ]
   - apiGroups: [ "ome.io" ]
-    resources: [ "clusterbasemodels", "patch", "update"]
-    verbs: [ "get", "list", "watch" ]
+    resources: [ "clusterbasemodels" ]
+    verbs: [ "get", "list", "watch", "patch", "update" ]
