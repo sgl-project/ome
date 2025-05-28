@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"crypto/rsa"
@@ -140,7 +140,7 @@ func TestGetConfigProvider(t *testing.T) {
 }
 
 // Integration test using mocks for both functions
-func TestCasperClientIntegration(t *testing.T) {
+func TestOCIOSClientIntegration(t *testing.T) {
 	t.Run("Client configuration validation", func(t *testing.T) {
 		authType := principals.InstancePrincipal
 		config := &Config{

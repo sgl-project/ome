@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"fmt"
@@ -8,17 +8,19 @@ import (
 	"testing"
 	"time"
 
+	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewCasperDataStore(t *testing.T) {
+func TestNewOCIOSDataStore(t *testing.T) {
 	t.Run("Nil config", func(t *testing.T) {
-		cds, err := NewCasperDataStore(nil)
+		cds, err := NewOCIOSDataStore(nil)
 		assert.Error(t, err)
 		assert.Nil(t, cds)
-		assert.Contains(t, err.Error(), "casper config is nil")
+		assert.Contains(t, err.Error(), "ociobjectstore config is nil")
 	})
 
 	t.Run("Invalid config", func(t *testing.T) {
@@ -26,10 +28,10 @@ func TestNewCasperDataStore(t *testing.T) {
 			// Missing required AuthType
 		}
 
-		cds, err := NewCasperDataStore(config)
+		cds, err := NewOCIOSDataStore(config)
 		assert.Error(t, err)
 		assert.Nil(t, cds)
-		assert.Contains(t, err.Error(), "casper config is invalid")
+		assert.Contains(t, err.Error(), "ociobjectstore config is invalid")
 	})
 
 	t.Run("Valid config validation", func(t *testing.T) {
@@ -119,7 +121,7 @@ func TestApplyDownloadDefaults(t *testing.T) {
 	})
 }
 
-func TestCasperDefaultDownloadOptions(t *testing.T) {
+func TestOCIOSDefaultDownloadOptions(t *testing.T) {
 	opts := DefaultDownloadOptions()
 
 	assert.Equal(t, defaultThresholdMB, opts.SizeThresholdInMB)
@@ -366,17 +368,17 @@ func TestDownloadOptionsCombinations(t *testing.T) {
 	})
 }
 
-// Test CasperDataStore methods that don't require OCI client
-func TestCasperDataStoreSetRegion(t *testing.T) {
+// Test OCIOSDataStore methods that don't require OCI client
+func TestOCIOSDataStoreSetRegion(t *testing.T) {
 	authType := principals.InstancePrincipal
 	config := &Config{
 		AuthType:      &authType,
 		Name:          "test-config",
 		Region:        "us-west-1",
-		AnotherLogger: &TestLogger{},
+		AnotherLogger: testingPkg.SetupMockLogger(),
 	}
 
-	// We can't create a real CasperDataStore without OCI client, but we can test the config
+	// We can't create a real OCIOSDataStore without OCI client, but we can test the config
 	assert.Equal(t, "us-west-1", config.Region)
 
 	// Test region update
@@ -421,7 +423,7 @@ func TestDownloadOptionsApplication(t *testing.T) {
 }
 
 // Test constants and default values
-func TestCasperConstants(t *testing.T) {
+func TestOCIOSConstants(t *testing.T) {
 	t.Run("Default threshold", func(t *testing.T) {
 		assert.Equal(t, 100, defaultThresholdMB)
 	})
@@ -521,24 +523,24 @@ func TestDownloadOptionsStruct(t *testing.T) {
 }
 
 // Test error scenarios
-func TestCasperErrorScenarios(t *testing.T) {
-	t.Run("NewCasperDataStore with nil config", func(t *testing.T) {
-		cds, err := NewCasperDataStore(nil)
+func TestOCIOSErrorScenarios(t *testing.T) {
+	t.Run("NewOCIOSDataStore with nil config", func(t *testing.T) {
+		cds, err := NewOCIOSDataStore(nil)
 		assert.Error(t, err)
 		assert.Nil(t, cds)
-		assert.Contains(t, err.Error(), "casper config is nil")
+		assert.Contains(t, err.Error(), "ociobjectstore config is nil")
 	})
 
-	t.Run("NewCasperDataStore with invalid config", func(t *testing.T) {
+	t.Run("NewOCIOSDataStore with invalid config", func(t *testing.T) {
 		config := &Config{
 			// Missing required AuthType
 			Name: "invalid-config",
 		}
 
-		cds, err := NewCasperDataStore(config)
+		cds, err := NewOCIOSDataStore(config)
 		assert.Error(t, err)
 		assert.Nil(t, cds)
-		assert.Contains(t, err.Error(), "casper config is invalid")
+		assert.Contains(t, err.Error(), "ociobjectstore config is invalid")
 	})
 }
 

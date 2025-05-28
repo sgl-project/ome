@@ -3,7 +3,7 @@ package replica
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -208,7 +208,7 @@ func TestWithViper(t *testing.T) {
 }
 
 func TestWithAppParams(t *testing.T) {
-	mockDataStore := &casper.CasperDataStore{}
+	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 	params := replicaParams{
 		AnotherLogger:           testingPkg.SetupMockLogger(),
 		ObjectStorageDataStores: mockDataStore,
@@ -241,9 +241,9 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:    100,
 					EnableSizeLimitCheck:   true,
 					NumConnections:         5,
-					SourceObjectStoreURI:   casper.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					TargetObjectStoreURI:   casper.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-					ObjectStorageDataStore: &casper.CasperDataStore{Client: &ociClient},
+					SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: false,
@@ -255,9 +255,9 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:    100,
 					EnableSizeLimitCheck:   true,
 					NumConnections:         5,
-					SourceObjectStoreURI:   casper.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					TargetObjectStoreURI:   casper.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-					ObjectStorageDataStore: &casper.CasperDataStore{Client: &ociClient},
+					SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -270,8 +270,8 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:    100,
 					EnableSizeLimitCheck:   true,
 					NumConnections:         5,
-					TargetObjectStoreURI:   casper.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-					ObjectStorageDataStore: &casper.CasperDataStore{Client: &ociClient},
+					TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -284,8 +284,8 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:    100,
 					EnableSizeLimitCheck:   true,
 					NumConnections:         5,
-					SourceObjectStoreURI:   casper.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					ObjectStorageDataStore: &casper.CasperDataStore{Client: &ociClient},
+					SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -298,8 +298,8 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:  100,
 					EnableSizeLimitCheck: true,
 					NumConnections:       5,
-					SourceObjectStoreURI: casper.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					TargetObjectStoreURI: casper.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					SourceObjectStoreURI: ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					TargetObjectStoreURI: ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
 				}
 			},
 			expectError: true,

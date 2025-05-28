@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
@@ -14,13 +14,13 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath              string                  `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB    int                     `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck   bool                    `mapstructure:"enable_size_limit_check"`
-	NumConnections         int                     `mapstructure:"num_connections"`
-	SourceObjectStoreURI   casper.ObjectURI        `mapstructure:"source" validate:"required"`
-	TargetObjectStoreURI   casper.ObjectURI        `mapstructure:"target" validate:"required"`
-	ObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
+	LocalPath              string                         `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB    int                            `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck   bool                           `mapstructure:"enable_size_limit_check"`
+	NumConnections         int                            `mapstructure:"num_connections"`
+	SourceObjectStoreURI   ociobjectstore.ObjectURI       `mapstructure:"source" validate:"required"`
+	TargetObjectStoreURI   ociobjectstore.ObjectURI       `mapstructure:"target" validate:"required"`
+	ObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
 }
 
 type Option func(*Config) error

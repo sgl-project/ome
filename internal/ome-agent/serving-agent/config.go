@@ -3,9 +3,9 @@ package serving_agent
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
@@ -13,10 +13,10 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	FineTunedWeightInfoFilePath      string                  `mapstructure:"fine_tuned_weight_info_file_path" validate:"required"`
-	UnzippedFineTunedWeightDirectory string                  `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
-	ZippedFineTunedWeightDirectory   string                  `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
-	ObjectStorageDataStore           *casper.CasperDataStore `validate:"required"`
+	FineTunedWeightInfoFilePath      string                         `mapstructure:"fine_tuned_weight_info_file_path" validate:"required"`
+	UnzippedFineTunedWeightDirectory string                         `mapstructure:"unzipped_fine_tuned_weight_directory" validate:"required"`
+	ZippedFineTunedWeightDirectory   string                         `mapstructure:"zipped_fine_tuned_weight_directory" validate:"required"`
+	ObjectStorageDataStore           *ociobjectstore.OCIOSDataStore `validate:"required"`
 }
 
 type Option func(*Config) error

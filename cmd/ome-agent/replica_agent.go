@@ -6,8 +6,8 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/replica"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 )
 
 // ReplicaAgent implements the AgentModule interface for object storage replica agent
@@ -44,7 +44,7 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		casper.CasperDataStoreModule,
+		ociobjectstore.OCIOSDataStoreModule,
 		replica.Module,
 		fx.Populate(&r.agent),
 	}

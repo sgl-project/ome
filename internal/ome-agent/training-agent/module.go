@@ -3,8 +3,8 @@ package training_agent
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )
@@ -13,7 +13,7 @@ type trainingAgentParams struct {
 	fx.In
 
 	AnotherLogger       logging.Interface `name:"another_log"`
-	CasperDataStoreList []*casper.CasperDataStore
+	CasperDataStoreList []*ociobjectstore.OCIOSDataStore
 }
 
 var Module = fx.Provide(

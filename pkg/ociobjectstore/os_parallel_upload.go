@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage/transfer"
 )
 
-func (cds *CasperDataStore) prepareMultipartUploadRequest(target ObjectURI, chunkSizeInMB int, uploadThreads int) (*transfer.UploadRequest, error) {
+func (cds *OCIOSDataStore) prepareMultipartUploadRequest(target ObjectURI, chunkSizeInMB int, uploadThreads int) (*transfer.UploadRequest, error) {
 	if target.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
@@ -29,7 +29,7 @@ func (cds *CasperDataStore) prepareMultipartUploadRequest(target ObjectURI, chun
 	return &uploadRequest, nil
 }
 
-func (cds *CasperDataStore) MultipartStreamUpload(streamReader io.ReadCloser, target ObjectURI, chunkSizeInMB int, uploadThreads int) error {
+func (cds *OCIOSDataStore) MultipartStreamUpload(streamReader io.ReadCloser, target ObjectURI, chunkSizeInMB int, uploadThreads int) error {
 	uploadRequest, err := cds.prepareMultipartUploadRequest(target, chunkSizeInMB, uploadThreads)
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func (cds *CasperDataStore) MultipartStreamUpload(streamReader io.ReadCloser, ta
 	return nil
 }
 
-func (cds *CasperDataStore) MultipartFileUpload(filePath string, target ObjectURI, chunkSizeInMB int, uploadThreads int) error {
+func (cds *OCIOSDataStore) MultipartFileUpload(filePath string, target ObjectURI, chunkSizeInMB int, uploadThreads int) error {
 	uploadRequest, err := cds.prepareMultipartUploadRequest(target, chunkSizeInMB, uploadThreads)
 	if err != nil {
 		return err

@@ -10,12 +10,12 @@ import (
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	omev1beta1client "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/informers/externalversions"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/modelagent"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -209,20 +209,20 @@ func initializeComponents(
 	zapLogger := logger.Desugar()
 
 	// Create Casper config with a proper logger adapter
-	casperConfig, err := casper.NewConfig(
-		casper.WithAnotherLog(logging.ForZap(zapLogger)),
+	casperConfig, err := ociobjectstore.NewConfig(
+		ociobjectstore.WithAnotherLog(logging.ForZap(zapLogger)),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create casper config: %w", err)
+		return nil, nil, fmt.Errorf("failed to create ociobjectstore config: %w", err)
 	}
 
 	// Set auth type (needs to be a pointer)
 	casperConfig.AuthType = &authType
 
-	// Create CasperDataStore
-	casperDS, err := casper.NewCasperDataStore(casperConfig)
+	// Create OCIOSDataStore
+	casperDS, err := ociobjectstore.NewOCIOSDataStore(casperConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create casper data store: %w", err)
+		return nil, nil, fmt.Errorf("failed to create ociobjectstore data store: %w", err)
 	}
 
 	// Create a ModelConfigParser instance
@@ -270,7 +270,7 @@ func initializeComponents(
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
 		modelConfigUpdater,
-		casperDS, // Pass the casper data store directly
+		casperDS, // Pass the ociobjectstore data store directly
 		hfHubClient,
 		kubeClient, // Pass the Kubernetes client for secret access
 		cfg.concurrency,

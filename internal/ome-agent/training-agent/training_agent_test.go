@@ -3,7 +3,7 @@ package training_agent
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 )
 
@@ -16,19 +16,19 @@ func TestNewTrainingAgent(t *testing.T) {
 	config.ZippedModelPath = "zipped-model-path"
 	config.ZippedMergedModelPath = "zipped-merged-model-path"
 	config.TrainingDataStoreDirectory = "training-data-dir"
-	config.TrainingDataObjectStoreURI = &casper.ObjectURI{
+	config.TrainingDataObjectStoreURI = &ociobjectstore.ObjectURI{
 		BucketName: "bucket-name",
 	}
-	config.ModelObjectStoreURI = &casper.ObjectURI{
+	config.ModelObjectStoreURI = &ociobjectstore.ObjectURI{
 		BucketName: "bucket-name",
 	}
-	config.TrainingMetricsObjectStoreURI = &casper.ObjectURI{
+	config.TrainingMetricsObjectStoreURI = &ociobjectstore.ObjectURI{
 		BucketName: "bucket-name",
 	}
-	config.InputObjectStorageDataStore = &casper.CasperDataStore{
+	config.InputObjectStorageDataStore = &ociobjectstore.OCIOSDataStore{
 		Client: &objectstorage.ObjectStorageClient{},
 	}
-	config.OutputObjectStorageDataStore = &casper.CasperDataStore{
+	config.OutputObjectStorageDataStore = &ociobjectstore.OCIOSDataStore{
 		Client: &objectstorage.ObjectStorageClient{},
 	}
 	config.PeftFineTuneDetails = &PeftFineTuneDetails{}

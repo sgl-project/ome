@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 )
 
@@ -75,10 +75,10 @@ func (d *TrainingAgent) downloadData() {
 	if err := d.Config.InputObjectStorageDataStore.DownloadWithStrategy(
 		*d.Config.TrainingDataObjectStoreURI,
 		d.Config.TrainingDataStoreDirectory,
-		casper.WithBaseNameOnly(true),
-		casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
-		casper.WithThreads(DefaultDownloadThreads),
-		casper.WithSizeThreshold(BigFileSizeInMB),
+		ociobjectstore.WithBaseNameOnly(true),
+		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		ociobjectstore.WithThreads(DefaultDownloadThreads),
+		ociobjectstore.WithSizeThreshold(BigFileSizeInMB),
 	); err != nil {
 
 		panic(fmt.Errorf("failed to download training data: %+v", err))
@@ -211,7 +211,7 @@ func (d *TrainingAgent) zipTrainedModel() {
 func (d *TrainingAgent) uploadModelToObjectStorage() {
 	// upload ft model weights to bucket
 	d.logger.Infof("Uploading FT model weights to bucket..")
-	ftModelWeights := casper.ObjectURI{
+	ftModelWeights := ociobjectstore.ObjectURI{
 		Namespace:  d.Config.ModelObjectStoreURI.Namespace,
 		BucketName: d.Config.ModelObjectStoreURI.BucketName,
 		ObjectName: d.Config.ModelObjectStoreURI.ObjectName,
@@ -221,7 +221,7 @@ func (d *TrainingAgent) uploadModelToObjectStorage() {
 	if d.Config.Runtime == constants.PeftTrainingSidecar || d.Config.CohereFineTuneDetails.ServingStrategy == constants.VanillaServingStrategy {
 		d.logger.Infof("%s runtime, uploading merged model weights to bucket..", d.Config.Runtime)
 		// upload merged model weights to bucket
-		mergedModelWeights := casper.ObjectURI{
+		mergedModelWeights := ociobjectstore.ObjectURI{
 			Namespace:  d.Config.ModelObjectStoreURI.Namespace,
 			BucketName: d.Config.ModelObjectStoreURI.BucketName,
 			ObjectName: d.Config.ModelObjectStoreURI.ObjectName + constants.MergedModelWeightZippedFileSuffix,
@@ -253,7 +253,7 @@ func (d *TrainingAgent) uploadTrainingMetricsToObjectStorage() {
 	}
 	d.logger.Infof("Successfully wrote metrics JSON to file %s", filename)
 
-	genaiObjectURI := casper.ObjectURI{
+	genaiObjectURI := ociobjectstore.ObjectURI{
 		Namespace:  d.Config.TrainingMetricsObjectStoreURI.Namespace,
 		BucketName: d.Config.TrainingMetricsObjectStoreURI.BucketName,
 		ObjectName: d.Config.TrainingMetricsObjectStoreURI.ObjectName,
@@ -396,7 +396,7 @@ func (d *TrainingAgent) zipFTWeightsAndMergedWeights(ftWeightsDir string, merged
 	d.logger.Infof("Successfully zipped directory: %s", mergedModelWeightsDirectory)
 }
 
-func (d *TrainingAgent) uploadModelToObjectStorageHelper(objectUrl casper.ObjectURI, uploadedFilePath string) {
+func (d *TrainingAgent) uploadModelToObjectStorageHelper(objectUrl ociobjectstore.ObjectURI, uploadedFilePath string) {
 	fileInfo, err := os.Stat(uploadedFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -406,7 +406,7 @@ func (d *TrainingAgent) uploadModelToObjectStorageHelper(objectUrl casper.Object
 	}
 
 	d.logger.Infof("Uploading Object %s to bucket %s under namesapce %s", objectUrl.ObjectName, objectUrl.BucketName, objectUrl.Namespace)
-	if fileInfo.Size() < int64(BigFileSizeInMB)*int64(casper.MB) {
+	if fileInfo.Size() < int64(BigFileSizeInMB)*int64(ociobjectstore.MB) {
 		if err := d.Config.OutputObjectStorageDataStore.Upload(uploadedFilePath, objectUrl); err != nil {
 			panic(err)
 		}

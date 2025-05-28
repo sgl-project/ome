@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"fmt"
@@ -149,7 +149,7 @@ func TestExtractNonPrefixObjectName(t *testing.T) {
 
 func TestCopyByFilePath(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "casper-utils-test")
+	tempDir, err := os.MkdirTemp("", "ociobjectstore-utils-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -304,7 +304,7 @@ func generateLargeContent(size int) string {
 // TestCopyByFilePathConcurrent tests concurrent copying of files
 func TestCopyByFilePathConcurrent(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "casper-utils-concurrent-test")
+	tempDir, err := os.MkdirTemp("", "ociobjectstore-utils-concurrent-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}

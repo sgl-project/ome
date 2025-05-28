@@ -1,46 +1,31 @@
-package casper
+package ociobjectstore
 
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// MockLogger for testing
-type TestLogger struct{}
-
-func (l *TestLogger) WithField(key string, value interface{}) logging.Interface { return l }
-func (l *TestLogger) WithError(err error) logging.Interface                     { return l }
-func (l *TestLogger) Debug(msg string)                                          {}
-func (l *TestLogger) Info(msg string)                                           {}
-func (l *TestLogger) Warn(msg string)                                           {}
-func (l *TestLogger) Error(msg string)                                          {}
-func (l *TestLogger) Fatal(msg string)                                          {}
-func (l *TestLogger) Debugf(format string, args ...interface{})                 {}
-func (l *TestLogger) Infof(format string, args ...interface{})                  {}
-func (l *TestLogger) Warnf(format string, args ...interface{})                  {}
-func (l *TestLogger) Errorf(format string, args ...interface{})                 {}
-func (l *TestLogger) Fatalf(format string, args ...interface{})                 {}
-
-func TestProvideCasperDataStore(t *testing.T) {
+func TestProvideOCIOSDataStore(t *testing.T) {
 	t.Run("Config validation only", func(t *testing.T) {
 		v := viper.New()
 		v.Set(AuthTypeViperKeyName, "InstancePrincipal")
-		v.Set(NameViperKeyName, "test-casper")
+		v.Set(NameViperKeyName, "test-ociobjectstore")
 		v.Set(RegionViperKeyName, "us-chicago-1")
 		v.Set(EnableOboTokenViperKeyName, false)
 
-		logger := &TestLogger{}
+		logger := testingPkg.SetupMockLogger()
 
 		// Test config creation and validation without actual client creation
 		config, err := NewConfig(WithViper(v), WithAnotherLog(logger))
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
-		assert.Equal(t, "test-casper", config.Name)
+		assert.Equal(t, "test-ociobjectstore", config.Name)
 		assert.Equal(t, "us-chicago-1", config.Region)
 		assert.False(t, config.EnableOboToken)
 
@@ -53,7 +38,7 @@ func TestProvideCasperDataStore(t *testing.T) {
 		v := viper.New()
 		// Missing required auth_type
 
-		logger := &TestLogger{}
+		logger := testingPkg.SetupMockLogger()
 
 		config, err := NewConfig(WithViper(v), WithAnotherLog(logger))
 		// Config creation might succeed even with missing auth_type
@@ -79,10 +64,10 @@ func TestProvideCasperDataStore(t *testing.T) {
 	})
 }
 
-func TestCasperDataStoreModule(t *testing.T) {
+func TestOCIOSDataStoreModule(t *testing.T) {
 	t.Run("Module provides function", func(t *testing.T) {
 		// Test that the module is properly defined
-		assert.NotNil(t, CasperDataStoreModule)
+		assert.NotNil(t, OCIOSDataStoreModule)
 
 		// Test config creation without trying to create OCI client
 		v := viper.New()
@@ -90,7 +75,7 @@ func TestCasperDataStoreModule(t *testing.T) {
 		v.Set(NameViperKeyName, "test-module")
 		v.Set(RegionViperKeyName, "us-chicago-1")
 
-		logger := &TestLogger{}
+		logger := testingPkg.SetupMockLogger()
 
 		// Test config creation only - don't try to create the actual data store
 		config, err := NewConfig(WithViper(v), WithAnotherLog(logger))
@@ -105,12 +90,12 @@ func TestCasperDataStoreModule(t *testing.T) {
 	})
 
 	t.Run("Module structure validation", func(t *testing.T) {
-		// Test that CasperDataStoreModule is a valid fx.Option
-		assert.NotNil(t, CasperDataStoreModule)
+		// Test that OCIOSDataStoreModule is a valid fx.Option
+		assert.NotNil(t, OCIOSDataStoreModule)
 
 		// Test that we can create the module without panicking
 		assert.NotPanics(t, func() {
-			_ = CasperDataStoreModule
+			_ = OCIOSDataStoreModule
 		})
 	})
 
@@ -118,19 +103,19 @@ func TestCasperDataStoreModule(t *testing.T) {
 		v := viper.New()
 		// Don't set auth_type to test error handling
 
-		logger := &TestLogger{}
+		logger := testingPkg.SetupMockLogger()
 
-		_, err := ProvideCasperDataStore(v, logger)
+		_, err := ProvideOCIOSDataStore(v, logger)
 		assert.Error(t, err)
 		// The actual error message is about config validation, not "error reading download agent config"
-		assert.Contains(t, err.Error(), "casper config is invalid")
+		assert.Contains(t, err.Error(), "ociobjectstore config is invalid")
 	})
 
 	t.Run("Provider function with nil logger", func(t *testing.T) {
 		v := viper.New()
 		v.Set(AuthTypeViperKeyName, "InstancePrincipal")
 
-		_, err := ProvideCasperDataStore(v, nil)
+		_, err := ProvideOCIOSDataStore(v, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "nil another logger")
 	})
@@ -140,7 +125,7 @@ func TestAppParams(t *testing.T) {
 	t.Run("AppParams structure", func(t *testing.T) {
 		// Test that appParams can be created
 		params := appParams{
-			AnotherLogger: &TestLogger{},
+			AnotherLogger: testingPkg.SetupMockLogger(),
 			Configs: []*Config{
 				{
 					AuthType: func() *principals.AuthenticationType {
@@ -166,47 +151,47 @@ func TestAppParams(t *testing.T) {
 	})
 }
 
-func TestProvideListOfCasperDataStoreWithAppParams(t *testing.T) {
+func TestProvideListOfOCIOSDataStoreWithAppParams(t *testing.T) {
 	t.Run("Empty configs list", func(t *testing.T) {
 		params := appParams{
-			AnotherLogger: &TestLogger{},
+			AnotherLogger: testingPkg.SetupMockLogger(),
 			Configs:       []*Config{},
 		}
 
-		stores, err := ProvideListOfCasperDataStoreWithAppParams(params)
+		stores, err := ProvideListOfOCIOSDataStoreWithAppParams(params)
 		assert.NoError(t, err)
 		assert.Empty(t, stores)
 	})
 
 	t.Run("Nil config in list", func(t *testing.T) {
 		params := appParams{
-			AnotherLogger: &TestLogger{},
+			AnotherLogger: testingPkg.SetupMockLogger(),
 			Configs: []*Config{
 				nil, // This should be skipped
 			},
 		}
 
 		// This should skip nil configs and return empty list
-		stores, err := ProvideListOfCasperDataStoreWithAppParams(params)
+		stores, err := ProvideListOfOCIOSDataStoreWithAppParams(params)
 		assert.NoError(t, err)
 		assert.Empty(t, stores)
 	})
 
 	t.Run("Invalid config validation", func(t *testing.T) {
 		params := appParams{
-			AnotherLogger: &TestLogger{},
+			AnotherLogger: testingPkg.SetupMockLogger(),
 			Configs: []*Config{
 				{
 					// Missing required AuthType
 					Name:          "invalid-config",
-					AnotherLogger: &TestLogger{},
+					AnotherLogger: testingPkg.SetupMockLogger(),
 				},
 			},
 		}
 
-		stores, err := ProvideListOfCasperDataStoreWithAppParams(params)
+		stores, err := ProvideListOfOCIOSDataStoreWithAppParams(params)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "error initializing CasperDataStore")
+		assert.Contains(t, err.Error(), "error initializing OCIOSDataStore")
 		assert.Empty(t, stores)
 	})
 }
@@ -227,7 +212,7 @@ func TestViperKeyConstants(t *testing.T) {
 func TestViperConfiguration(t *testing.T) {
 	t.Run("Complete viper configuration", func(t *testing.T) {
 		v := viper.New()
-		v.Set(NameViperKeyName, "test-casper")
+		v.Set(NameViperKeyName, "test-ociobjectstore")
 		v.Set(AuthTypeViperKeyName, "InstancePrincipal")
 		v.Set(CompartmentIdViperKeyName, "ocid1.compartment.oc1..test")
 		v.Set(RegionViperKeyName, "us-chicago-1")
@@ -237,7 +222,7 @@ func TestViperConfiguration(t *testing.T) {
 		config, err := NewConfig(WithViper(v))
 		require.NoError(t, err)
 
-		assert.Equal(t, "test-casper", config.Name)
+		assert.Equal(t, "test-ociobjectstore", config.Name)
 		assert.Equal(t, principals.InstancePrincipal, *config.AuthType)
 		assert.Equal(t, "ocid1.compartment.oc1..test", *config.CompartmentId)
 		assert.Equal(t, "us-chicago-1", config.Region)
@@ -272,7 +257,7 @@ func TestViperConfiguration(t *testing.T) {
 		assert.NotNil(t, config.AuthType)
 		assert.Equal(t, principals.AuthenticationType("invalid_auth_type"), *config.AuthType)
 
-		// Casper config validation only checks for required fields, not enum values
+		// OCIOS config validation only checks for required fields, not enum values
 		err = config.Validate()
 		assert.NoError(t, err) // This passes because AuthType is not nil
 
@@ -285,14 +270,14 @@ func TestViperConfiguration(t *testing.T) {
 func TestFxIntegration(t *testing.T) {
 	t.Run("Fx module structure test", func(t *testing.T) {
 		// Test that the module is properly defined without actually running it
-		assert.NotNil(t, CasperDataStoreModule)
+		assert.NotNil(t, OCIOSDataStoreModule)
 
 		// Test that we can create the providers without executing them
 		v := viper.New()
 		v.Set(AuthTypeViperKeyName, "InstancePrincipal")
 		v.Set(NameViperKeyName, "fx-test")
 
-		logger := &TestLogger{}
+		logger := testingPkg.SetupMockLogger()
 
 		// Test config creation (this is what the provider would do)
 		config, err := NewConfig(WithViper(v), WithAnotherLog(logger))
@@ -305,8 +290,8 @@ func TestFxIntegration(t *testing.T) {
 		// Test configuration that would be used in fx
 		authType := principals.InstancePrincipal
 		configs := []*Config{
-			{AuthType: &authType, Name: "config1", AnotherLogger: &TestLogger{}},
-			{AuthType: &authType, Name: "config2", AnotherLogger: &TestLogger{}},
+			{AuthType: &authType, Name: "config1", AnotherLogger: testingPkg.SetupMockLogger()},
+			{AuthType: &authType, Name: "config2", AnotherLogger: testingPkg.SetupMockLogger()},
 		}
 
 		// Validate all configs

@@ -3,8 +3,8 @@ package fine_tuned_adapter
 import (
 	"fmt"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )
@@ -13,7 +13,7 @@ type fineTunedAdapterParams struct {
 	fx.In
 
 	AnotherLogger           logging.Interface `name:"another_log"`
-	ObjectStorageDataStores *casper.CasperDataStore
+	ObjectStorageDataStores *ociobjectstore.OCIOSDataStore
 }
 
 var Module = fx.Provide(

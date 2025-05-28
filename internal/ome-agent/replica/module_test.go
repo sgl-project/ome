@@ -3,7 +3,7 @@ package replica
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +18,7 @@ func TestModule(t *testing.T) {
 func TestReplicaParams(t *testing.T) {
 	// Test the replicaParams struct
 	mockLogger := testingPkg.SetupMockLogger()
-	mockDataStore := &casper.CasperDataStore{}
+	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 
 	params := replicaParams{
 		AnotherLogger:           mockLogger,
@@ -73,7 +73,7 @@ func TestModuleProvider(t *testing.T) {
 
 			// Setup mock dependencies
 			mockLogger := testingPkg.SetupMockLogger()
-			mockDataStore := &casper.CasperDataStore{}
+			mockDataStore := &ociobjectstore.OCIOSDataStore{}
 
 			params := replicaParams{
 				AnotherLogger:           mockLogger,
@@ -129,7 +129,7 @@ func TestModuleIntegration(t *testing.T) {
 
 	// Setup mock dependencies
 	mockLogger := testingPkg.SetupMockLogger()
-	mockDataStore := &casper.CasperDataStore{}
+	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 
 	params := replicaParams{
 		AnotherLogger:           mockLogger,

@@ -9,8 +9,8 @@ import (
 
 	trainingAgent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/training-agent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
 )
 
@@ -74,7 +74,7 @@ func NewTrainingAgent() *TrainingAgent {
 	return &TrainingAgent{}
 }
 
-/*CasperConfigWrapper provides CasperConfig to the fx app defined in casper module (from casper pkg).
+/*CasperConfigWrapper provides CasperConfig to the fx app defined in ociobjectstore module (from ociobjectstore pkg).
  * The initialized configuration in this struct will be added to the "casperConfigs" group, further allowing multiple
  * CasperConfig to be injected and managed collectively.
  * More info regarding fx Value Groups can be found: https://pkg.go.dev/go.uber.org/fx#hdr-Value_Groups
@@ -82,7 +82,7 @@ func NewTrainingAgent() *TrainingAgent {
 type CasperConfigWrapper struct {
 	fx.Out
 
-	CasperConfig *casper.Config `group:"casperConfigs"`
+	CasperConfig *ociobjectstore.Config `group:"casperConfigs"`
 }
 
 func AuthTypeProvider() fx.Option {
@@ -99,12 +99,12 @@ func CasperDataStoreListProvider() fx.Option {
 	return fx.Provide(
 		provideInputCasperConfig,
 		provideOutputCasperConfig,
-		casper.ProvideListOfCasperDataStoreWithAppParams,
+		ociobjectstore.ProvideListOfOCIOSDataStoreWithAppParams,
 	)
 }
 
 func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType principals.AuthenticationType) CasperConfigWrapper {
-	inputCasperConfig := &casper.Config{}
+	inputCasperConfig := &ociobjectstore.Config{}
 	if err := v.UnmarshalKey("input_object_store", inputCasperConfig); err != nil {
 		panic(fmt.Errorf("error occurred when unmarshalling key input_object_store: %+v", err))
 	}
@@ -118,7 +118,7 @@ func provideInputCasperConfig(logger logging.Interface, v *viper.Viper, authType
 }
 
 func provideOutputCasperConfig(logger logging.Interface, authType principals.AuthenticationType) CasperConfigWrapper {
-	outputCasperConfig := &casper.Config{
+	outputCasperConfig := &ociobjectstore.Config{
 		AnotherLogger: logger,
 		Name:          trainingAgent.OutputCasperConfigName,
 		AuthType:      &authType,

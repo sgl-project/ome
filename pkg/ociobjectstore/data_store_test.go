@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"testing"
@@ -8,9 +8,9 @@ import (
 
 // Test DataStore interface compliance
 func TestDataStoreInterface(t *testing.T) {
-	t.Run("CasperDataStore implements DataStore", func(t *testing.T) {
-		// Test that CasperDataStore implements the DataStore interface
-		var _ DataStore = (*CasperDataStore)(nil)
+	t.Run("OCIOSDataStore implements DataStore", func(t *testing.T) {
+		// Test that OCIOSDataStore implements the DataStore interface
+		var _ DataStore = (*OCIOSDataStore)(nil)
 	})
 
 	t.Run("LocalDataStore implements DataStore", func(t *testing.T) {

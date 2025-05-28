@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"errors"
@@ -21,7 +21,7 @@ const (
 	OboTokenViperKeyName       = "obo_token"
 )
 
-// Config holds the configuration parameters required to initialize a CasperDataStore.
+// Config holds the configuration parameters required to initialize a OCIOSDataStore.
 // Fields are populated using `viper`, environment values, or explicitly through Options.
 type Config struct {
 	AnotherLogger  logging.Interface              // Optional: Named logger for diagnostics

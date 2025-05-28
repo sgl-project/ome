@@ -6,8 +6,8 @@ import (
 
 	servingAgent "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/serving-agent"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 )
 
 // ServingAgent implements the AgentModule interface for serving sidecar agent
@@ -44,7 +44,7 @@ func (s *ServingAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		casper.CasperDataStoreModule,
+		ociobjectstore.OCIOSDataStoreModule,
 		servingAgent.Module,
 		fx.Populate(&s.agent),
 	}

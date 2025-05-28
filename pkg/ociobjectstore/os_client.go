@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"fmt"

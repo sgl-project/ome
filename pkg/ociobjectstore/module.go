@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"fmt"
@@ -8,24 +8,24 @@ import (
 	"go.uber.org/fx"
 )
 
-// ProvideCasperDataStore initializes a single CasperDataStore using viper configuration,
+// ProvideOCIOSDataStore initializes a single OCIOSDataStore using viper configuration,
 // environment context, and a logger. It is intended to be used as an fx provider.
 //
 // Returns:
-//   - a pointer to CasperDataStore if initialization is successful
+//   - a pointer to OCIOSDataStore if initialization is successful
 //   - an error if configuration loading or initialization fails
-func ProvideCasperDataStore(v *viper.Viper, logger logging.Interface) (*CasperDataStore, error) {
+func ProvideOCIOSDataStore(v *viper.Viper, logger logging.Interface) (*OCIOSDataStore, error) {
 	config, err := NewConfig(WithViper(v), WithAnotherLog(logger))
 	if err != nil {
 		return nil, fmt.Errorf("error reading download agent config: %w", err)
 	}
-	return NewCasperDataStore(config)
+	return NewOCIOSDataStore(config)
 }
 
-// CasperDataStoreModule is an fx module that provides a singleton CasperDataStore.
-// It wires ProvideCasperDataStore into the fx dependency graph.
-var CasperDataStoreModule = fx.Provide(
-	ProvideCasperDataStore,
+// OCIOSDataStoreModule is an fx module that provides a singleton OCIOSDataStore.
+// It wires ProvideOCIOSDataStore into the fx dependency graph.
+var OCIOSDataStoreModule = fx.Provide(
+	ProvideOCIOSDataStore,
 )
 
 // appParams defines the fx input struct for dependency injection.
@@ -38,11 +38,11 @@ type appParams struct {
 	// AnotherLogger is an injected named logger (useful if multiple loggers exist).
 	AnotherLogger logging.Interface `name:"another_log"`
 
-	// Configs is a list of Casper configuration instances injected via value group.
+	// Configs is a list of Object Storage configuration instances injected via value group.
 	Configs []*Config `group:"casperConfigs"`
 }
 
-// ProvideListOfCasperDataStoreWithAppParams initializes a list of CasperDataStore instances
+// ProvideListOfOCIOSDataStoreWithAppParams initializes a list of OCIOSDataStore instances
 // from a group of configuration values (fx.ValueGroup).
 //
 // This is useful when multiple CasperDataStores need to be constructed and operated in parallel.
@@ -52,22 +52,22 @@ type appParams struct {
 //   - params: injected struct containing config list and logger
 //
 // Returns:
-//   - a list of initialized CasperDataStore pointers
+//   - a list of initialized OCIOSDataStore pointers
 //   - an error if any store fails to initialize (but partial list is returned)
-func ProvideListOfCasperDataStoreWithAppParams(params appParams) ([]*CasperDataStore, error) {
-	casperDataStoreList := make([]*CasperDataStore, 0)
+func ProvideListOfOCIOSDataStoreWithAppParams(params appParams) ([]*OCIOSDataStore, error) {
+	osDataStoreList := make([]*OCIOSDataStore, 0)
 	for _, config := range params.Configs {
 		// Skip nil configs to avoid panics
 		if config == nil {
 			continue
 		}
-		casperDataStore, err := NewCasperDataStore(config)
+		dataStore, err := NewOCIOSDataStore(config)
 		if err != nil {
-			return casperDataStoreList, fmt.Errorf(
-				"error initializing CasperDataStore using CasperConfig %+v: %+v", config, err,
+			return osDataStoreList, fmt.Errorf(
+				"error initializing OCIOSDataStore using CasperConfig %+v: %+v", config, err,
 			)
 		}
-		casperDataStoreList = append(casperDataStoreList, casperDataStore)
+		osDataStoreList = append(osDataStoreList, dataStore)
 	}
-	return casperDataStoreList, nil
+	return osDataStoreList, nil
 }

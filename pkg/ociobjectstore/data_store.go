@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 // ObjectURI defines the identity and location of an object in a logical or physical data store.
 // It can represent an object in local file systems, object storage (like OCI, S3), or other backends.

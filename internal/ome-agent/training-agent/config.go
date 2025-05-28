@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/configutils"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
@@ -25,15 +25,15 @@ type Config struct {
 	ModelDirectory                string                           `mapstructure:"model_directory" validate:"required"`
 	ZippedModelPath               string                           `validate:"required"`
 	ZippedMergedModelPath         string
-	TrainingDataStoreDirectory    string                 `mapstructure:"training_data_directory" validate:"required"`
-	TrainingDataObjectStoreURI    *casper.ObjectURI      `mapstructure:"training_data" validate:"required"`
-	ModelObjectStoreURI           *casper.ObjectURI      `mapstructure:"model" validate:"required"`
-	TrainingMetricsObjectStoreURI *casper.ObjectURI      `mapstructure:"training_metrics" validate:"required"`
-	CohereFineTuneDetails         *CohereFineTuneDetails `mapstructure:"cohere_ft"`
-	PeftFineTuneDetails           *PeftFineTuneDetails   `mapstructure:"peft_ft"`
+	TrainingDataStoreDirectory    string                    `mapstructure:"training_data_directory" validate:"required"`
+	TrainingDataObjectStoreURI    *ociobjectstore.ObjectURI `mapstructure:"training_data" validate:"required"`
+	ModelObjectStoreURI           *ociobjectstore.ObjectURI `mapstructure:"model" validate:"required"`
+	TrainingMetricsObjectStoreURI *ociobjectstore.ObjectURI `mapstructure:"training_metrics" validate:"required"`
+	CohereFineTuneDetails         *CohereFineTuneDetails    `mapstructure:"cohere_ft"`
+	PeftFineTuneDetails           *PeftFineTuneDetails      `mapstructure:"peft_ft"`
 
-	InputObjectStorageDataStore  *casper.CasperDataStore `mapstructure:"input_object_store" validate:"required"`
-	OutputObjectStorageDataStore *casper.CasperDataStore `validate:"required"`
+	InputObjectStorageDataStore  *ociobjectstore.OCIOSDataStore `mapstructure:"input_object_store" validate:"required"`
+	OutputObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
 }
 
 // Option represents a server configuration option.

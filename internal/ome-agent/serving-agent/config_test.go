@@ -3,7 +3,7 @@ package serving_agent
 import (
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -175,7 +175,7 @@ func TestWithViper(t *testing.T) {
 }
 
 func TestWithAppParams(t *testing.T) {
-	mockDataStore := &casper.CasperDataStore{}
+	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 	params := servingSidecarParams{
 		AnotherLogger:           testingPkg.SetupMockLogger(),
 		ObjectStorageDataStores: mockDataStore,
@@ -207,7 +207,7 @@ func TestConfig_Validate(t *testing.T) {
 					FineTunedWeightInfoFilePath:      "/test/path/weights.json",
 					UnzippedFineTunedWeightDirectory: "/test/path/unzipped",
 					ZippedFineTunedWeightDirectory:   "/test/path/zipped",
-					ObjectStorageDataStore:           &casper.CasperDataStore{Client: &ociClient},
+					ObjectStorageDataStore:           &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: false,
@@ -218,7 +218,7 @@ func TestConfig_Validate(t *testing.T) {
 				return &Config{
 					UnzippedFineTunedWeightDirectory: "/test/path/unzipped",
 					ZippedFineTunedWeightDirectory:   "/test/path/zipped",
-					ObjectStorageDataStore:           &casper.CasperDataStore{Client: &ociClient},
+					ObjectStorageDataStore:           &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -229,7 +229,7 @@ func TestConfig_Validate(t *testing.T) {
 				return &Config{
 					FineTunedWeightInfoFilePath:    "/test/path/weights.json",
 					ZippedFineTunedWeightDirectory: "/test/path/zipped",
-					ObjectStorageDataStore:         &casper.CasperDataStore{Client: &ociClient},
+					ObjectStorageDataStore:         &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -240,7 +240,7 @@ func TestConfig_Validate(t *testing.T) {
 				return &Config{
 					FineTunedWeightInfoFilePath:      "/test/path/weights.json",
 					UnzippedFineTunedWeightDirectory: "/test/path/unzipped",
-					ObjectStorageDataStore:           &casper.CasperDataStore{Client: &ociClient},
+					ObjectStorageDataStore:           &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,

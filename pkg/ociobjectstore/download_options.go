@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 // DownloadOption represents a functional option for configuring download operations.
 // This allows users to customize download behavior using a fluent API.

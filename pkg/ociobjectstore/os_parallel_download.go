@@ -1,4 +1,4 @@
-package casper
+package ociobjectstore
 
 import (
 	"context"
@@ -55,7 +55,7 @@ type DownloadedFile struct {
 }
 
 // MultipartDownload used to download big file, or the download will timeout
-func (cds *CasperDataStore) MultipartDownload(source ObjectURI, target string, opts ...DownloadOption) error {
+func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, opts ...DownloadOption) error {
 	downloadOpts, err := applyDownloadOptions(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to apply download options: %w", err)
@@ -249,7 +249,7 @@ func splitToParts(totalParts, partSize, objectSize int, source ObjectURI) chan *
 	return prepareDownloadParts
 }
 
-func (cds *CasperDataStore) multipartDownload(ctx context.Context, downloadThreads int, prepareDownloadParts chan *PrepareDownloadPart) chan *DownloadedPart {
+func (cds *OCIOSDataStore) multipartDownload(ctx context.Context, downloadThreads int, prepareDownloadParts chan *PrepareDownloadPart) chan *DownloadedPart {
 	result := make(chan *DownloadedPart)
 
 	var wg sync.WaitGroup
@@ -271,7 +271,7 @@ func (cds *CasperDataStore) multipartDownload(ctx context.Context, downloadThrea
 }
 
 // downloadFilePart wraps objectStorage GetObject API call
-func (cds *CasperDataStore) downloadFilePart(ctx context.Context, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart) {
+func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart) {
 	for part := range prepareDownloadParts {
 		var lastErr error
 		var content []byte
@@ -332,7 +332,7 @@ func (cds *CasperDataStore) downloadFilePart(ctx context.Context, prepareDownloa
 	}
 }
 
-func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {
+func (cds *OCIOSDataStore) DownloadWithMultiThreads(downloadThreads int, filesToDownload chan *FileToDownload) chan *DownloadedFile {
 	cds.logger.Infof("Download objects with %d threads", downloadThreads)
 	result := make(chan *DownloadedFile)
 
@@ -354,7 +354,7 @@ func (cds *CasperDataStore) DownloadWithMultiThreads(downloadThreads int, filesT
 	return result
 }
 
-func (cds *CasperDataStore) downloadFiles(filesToDownload chan *FileToDownload, result chan *DownloadedFile) {
+func (cds *OCIOSDataStore) downloadFiles(filesToDownload chan *FileToDownload, result chan *DownloadedFile) {
 	for fileToDownload := range filesToDownload {
 		err := cds.downloadFile(fileToDownload)
 		downloadedFile := &DownloadedFile{
@@ -370,7 +370,7 @@ func (cds *CasperDataStore) downloadFiles(filesToDownload chan *FileToDownload, 
 	}
 }
 
-func (cds *CasperDataStore) downloadFile(fileToDownload *FileToDownload) error {
+func (cds *OCIOSDataStore) downloadFile(fileToDownload *FileToDownload) error {
 	objectFullName := fmt.Sprintf(
 		"%s/%s/%s", fileToDownload.source.Namespace, fileToDownload.source.BucketName, fileToDownload.source.ObjectName)
 

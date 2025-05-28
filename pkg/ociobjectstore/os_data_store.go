@@ -1,7 +1,7 @@
-// Package casper provides a data store abstraction backed by Oracle Object Storage.
+// Package ociobjectstore provides a data store abstraction backed by Oracle Object Storage.
 // It supports object uploads, downloads (including multipart), metadata inspection,
 // and local integrity validation via MD5 checksum comparison.
-package casper
+package ociobjectstore
 
 import (
 	"context"
@@ -23,12 +23,12 @@ import (
 )
 
 /*
- * CasperDataStore used to perform data store operations with Object Storage(Casper)
+ * OCIOSDataStore used to perform data store operations with Object Storage
  */
 
-// CasperDataStore performs data store operations against Oracle Object Storage ("Casper").
+// OCIOSDataStore performs data store operations against Oracle Object Storage.
 // It provides file upload, download, listing, and validation methods.
-type CasperDataStore struct {
+type OCIOSDataStore struct {
 	logger logging.Interface
 	Config *Config
 	Client *objectstorage.ObjectStorageClient `validate:"required"`
@@ -72,14 +72,14 @@ func DefaultDownloadOptions() DownloadOptions {
 	}
 }
 
-// NewCasperDataStore initializes a CasperDataStore using the given configuration and environment.
+// NewOCIOSDataStore initializes a OCIOSDataStore using the given configuration and environment.
 // It validates the config, creates an OCI config provider, and initializes the Object Storage client.
-func NewCasperDataStore(config *Config) (*CasperDataStore, error) {
+func NewOCIOSDataStore(config *Config) (*OCIOSDataStore, error) {
 	if config == nil {
-		return nil, fmt.Errorf("casper config is nil")
+		return nil, fmt.Errorf("ociobjectstore config is nil")
 	}
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("casper config is invalid: %+v", err)
+		return nil, fmt.Errorf("ociobjectstore config is invalid: %+v", err)
 	}
 
 	configProvider, err := getConfigProvider(config)
@@ -92,7 +92,7 @@ func NewCasperDataStore(config *Config) (*CasperDataStore, error) {
 		return nil, err
 	}
 
-	return &CasperDataStore{
+	return &OCIOSDataStore{
 		logger: config.AnotherLogger,
 		Config: config,
 		Client: client,
@@ -100,7 +100,7 @@ func NewCasperDataStore(config *Config) (*CasperDataStore, error) {
 }
 
 // SetRegion updates the configured region for both the client and config object.
-func (cds *CasperDataStore) SetRegion(region string) {
+func (cds *OCIOSDataStore) SetRegion(region string) {
 	cds.Config.Region = region
 	cds.Client.SetRegion(region)
 }
@@ -130,7 +130,7 @@ func applyDownloadDefaults(opts *DownloadOptions) DownloadOptions {
 }
 
 // BulkDownload uses DownloadWithStrategy for each object with concurrency and retry logic.
-func (cds *CasperDataStore) BulkDownload(objects []ObjectURI, targetDir string, concurrency int, opts ...DownloadOption) error {
+func (cds *OCIOSDataStore) BulkDownload(objects []ObjectURI, targetDir string, concurrency int, opts ...DownloadOption) error {
 	if len(objects) == 0 {
 		return nil
 	}
@@ -177,7 +177,7 @@ func (cds *CasperDataStore) BulkDownload(objects []ObjectURI, targetDir string, 
 }
 
 // DownloadWithStrategy chooses between standard and multipart download based on object size and options.
-func (cds *CasperDataStore) DownloadWithStrategy(source ObjectURI, target string, opts ...DownloadOption) error {
+func (cds *OCIOSDataStore) DownloadWithStrategy(source ObjectURI, target string, opts ...DownloadOption) error {
 	downloadOpts, err := applyDownloadOptions(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to apply download options: %w", err)
@@ -231,7 +231,7 @@ func (cds *CasperDataStore) DownloadWithStrategy(source ObjectURI, target string
 	return cds.Download(source, target, opts...)
 }
 
-func (cds *CasperDataStore) Download(source ObjectURI, target string, opts ...DownloadOption) error {
+func (cds *OCIOSDataStore) Download(source ObjectURI, target string, opts ...DownloadOption) error {
 	downloadOpts, err := applyDownloadOptions(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to apply download options: %w", err)
@@ -274,7 +274,7 @@ func (cds *CasperDataStore) Download(source ObjectURI, target string, opts ...Do
 //
 // If the `source` is a file path, the file is read and uploaded.
 // If the `source` is a raw string, it is uploaded as the object body.
-func (cds *CasperDataStore) Upload(source string, target ObjectURI) error {
+func (cds *OCIOSDataStore) Upload(source string, target ObjectURI) error {
 	if target.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
@@ -315,7 +315,7 @@ func (cds *CasperDataStore) Upload(source string, target ObjectURI) error {
 		ContentLength: uploadObjectSize,
 		PutObjectBody: putObjectBody,
 	}
-	// Make the put request to Casper
+	// Make the put request to OCI Object Storage
 	response, err := cds.Client.PutObject(context.Background(), putObjectRequest)
 	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
 		return fmt.Errorf(
@@ -330,7 +330,7 @@ func (cds *CasperDataStore) Upload(source string, target ObjectURI) error {
 // HeadObject fetches metadata headers for an object in OCI Object Storage.
 //
 // It returns an OCI HeadObjectResponse which contains fields such as size, ETag, and MD5 checksum.
-func (cds *CasperDataStore) HeadObject(target ObjectURI) (*objectstorage.HeadObjectResponse, error) {
+func (cds *OCIOSDataStore) HeadObject(target ObjectURI) (*objectstorage.HeadObjectResponse, error) {
 	if target.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
@@ -360,7 +360,7 @@ func (cds *CasperDataStore) HeadObject(target ObjectURI) (*objectstorage.HeadObj
 
 // GetObject retrieves the object body and headers from OCI Object Storage.
 // The caller is responsible for closing the returned ReadCloser.
-func (cds *CasperDataStore) GetObject(source ObjectURI) (*objectstorage.GetObjectResponse, error) {
+func (cds *OCIOSDataStore) GetObject(source ObjectURI) (*objectstorage.GetObjectResponse, error) {
 	if source.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
@@ -392,7 +392,7 @@ func (cds *CasperDataStore) GetObject(source ObjectURI) (*objectstorage.GetObjec
 
 // GetNamespace returns the current OCI Object Storage namespace for the authenticated principal.
 // Required for all object storage operations.
-func (cds *CasperDataStore) GetNamespace() (*string, error) {
+func (cds *OCIOSDataStore) GetNamespace() (*string, error) {
 	getNamespaceClient := objectstorage.GetNamespaceRequest{}
 	if cds.Config.CompartmentId != nil {
 		getNamespaceClient.CompartmentId = cds.Config.CompartmentId
@@ -400,7 +400,7 @@ func (cds *CasperDataStore) GetNamespace() (*string, error) {
 
 	response, err := cds.Client.GetNamespace(context.Background(), getNamespaceClient)
 	if err != nil || response.RawResponse == nil || response.RawResponse.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error getting casper namespace: %+v", err)
+		return nil, fmt.Errorf("error getting ociobjectstore namespace: %+v", err)
 	}
 
 	return response.Value, nil
@@ -409,7 +409,7 @@ func (cds *CasperDataStore) GetNamespace() (*string, error) {
 // ListObjects lists all objects under the given prefix (virtual folder) in the target bucket.
 //
 // Returns a list of object summaries containing name, size, and MD5 info.
-func (cds *CasperDataStore) ListObjects(target ObjectURI) ([]objectstorage.ObjectSummary, error) {
+func (cds *OCIOSDataStore) ListObjects(target ObjectURI) ([]objectstorage.ObjectSummary, error) {
 	if target.Namespace == "" {
 		namespace, err := cds.GetNamespace()
 		if err != nil {
@@ -449,7 +449,7 @@ func (cds *CasperDataStore) ListObjects(target ObjectURI) ([]objectstorage.Objec
 // If the object was uploaded via multipart and lacks a standard MD5, it attempts to verify via custom metadata.
 //
 // Returns true if the local file is a valid, verified copy of the object.
-func (cds *CasperDataStore) IsLocalCopyValid(source ObjectURI, localFilePath string) (bool, error) {
+func (cds *OCIOSDataStore) IsLocalCopyValid(source ObjectURI, localFilePath string) (bool, error) {
 	fileInfo, err := os.Stat(localFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/assert"
@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockCasperDataStore mocks the CasperDataStore for testing
+// MockCasperDataStore mocks the OCIOSDataStore for testing
 type MockCasperDataStore struct {
 	mock.Mock
-	*casper.CasperDataStore // embedding for type compatibility
+	*ociobjectstore.OCIOSDataStore // embedding for type compatibility
 }
 
 func (m *MockCasperDataStore) SetRegion(region string) {
@@ -27,19 +27,19 @@ func (m *MockCasperDataStore) SetRegion(region string) {
 	// No need to delegate to the embedded implementation
 }
 
-func (m *MockCasperDataStore) DownloadBasedOnObjectSize(uri casper.ObjectURI, localPath string, createMissingDirs bool, bigFileSizeInMB, defaultChunkSizeInMB, defaultThreads int) error {
+func (m *MockCasperDataStore) DownloadBasedOnObjectSize(uri ociobjectstore.ObjectURI, localPath string, createMissingDirs bool, bigFileSizeInMB, defaultChunkSizeInMB, defaultThreads int) error {
 	args := m.Called(uri, localPath, createMissingDirs, bigFileSizeInMB, defaultChunkSizeInMB, defaultThreads)
 	return args.Error(0)
 }
 
-func (m *MockCasperDataStore) ListObjects(uri casper.ObjectURI) ([]interface{}, error) {
+func (m *MockCasperDataStore) ListObjects(uri ociobjectstore.ObjectURI) ([]interface{}, error) {
 	args := m.Called(uri)
 	return args.Get(0).([]interface{}), args.Error(1)
 }
 
 func TestNewServingSidecar(t *testing.T) {
 	mockLogger := testingPkg.SetupMockLogger()
-	mockDataStore := &casper.CasperDataStore{}
+	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 
 	config := &Config{
 		AnotherLogger:                    mockLogger,
@@ -349,7 +349,7 @@ func TestServingSidecar_Start_Basic(t *testing.T) {
 	mockLogger := testingPkg.SetupMockLogger()
 	// Create a properly initialized mock
 	mockDataStore := &MockCasperDataStore{
-		CasperDataStore: &casper.CasperDataStore{},
+		OCIOSDataStore: &ociobjectstore.OCIOSDataStore{},
 	}
 
 	// Create temporary directories for testing
@@ -380,7 +380,7 @@ func TestServingSidecar_Start_Basic(t *testing.T) {
 			FineTunedWeightInfoFilePath:      infoFilePath,
 			UnzippedFineTunedWeightDirectory: unzippedDir,
 			ZippedFineTunedWeightDirectory:   zippedDir,
-			ObjectStorageDataStore:           mockDataStore.CasperDataStore, // Use embedded type for compatibility
+			ObjectStorageDataStore:           mockDataStore.OCIOSDataStore, // Use embedded type for compatibility
 		},
 	}
 

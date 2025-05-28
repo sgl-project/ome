@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/zipper"
 )
 
@@ -41,16 +41,16 @@ func (m *FineTunedAdapter) Start() error {
 	err = m.Config.ObjectStorageDataStore.DownloadWithStrategy(
 		*m.Config.FineTunedWeightURI,
 		m.Config.ZippedFineTunedWeightDirectory,
-		casper.WithBaseNameOnly(true),
-		casper.WithChunkSize(DefaultDownloadChunkSizeInMB),
-		casper.WithThreads(DefaultDownloadThreads),
-		casper.WithSizeThreshold(BigFileSizeInMB),
+		ociobjectstore.WithBaseNameOnly(true),
+		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		ociobjectstore.WithThreads(DefaultDownloadThreads),
+		ociobjectstore.WithSizeThreshold(BigFileSizeInMB),
 	)
 	if err != nil {
 		return err
 	}
 
-	fineTunedWeightPath := filepath.Join(m.Config.ZippedFineTunedWeightDirectory, casper.ObjectBaseName(m.Config.FineTunedWeightURI.ObjectName))
+	fineTunedWeightPath := filepath.Join(m.Config.ZippedFineTunedWeightDirectory, ociobjectstore.ObjectBaseName(m.Config.FineTunedWeightURI.ObjectName))
 	m.logger.Infof("Finished downloading the fine-tuned weight %s", m.Config.FineTunedWeightURI.ObjectName)
 
 	// 2. Unzip the fine-tuned weight to the required path

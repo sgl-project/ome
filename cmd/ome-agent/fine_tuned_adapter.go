@@ -6,8 +6,8 @@ import (
 
 	finetunedadapter "bitbucket.oci.oraclecorp.com/genaicore/ome/internal/ome-agent/fine-tuned-adapter"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/afero"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 )
 
 // FineTunedAdapterAgent implements the AgentModule interface for fine-tuned adapter agent
@@ -44,7 +44,7 @@ func (m *FineTunedAdapterAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		casper.CasperDataStoreModule,
+		ociobjectstore.OCIOSDataStoreModule,
 		finetunedadapter.Module,
 		fx.Populate(&m.agent),
 	}

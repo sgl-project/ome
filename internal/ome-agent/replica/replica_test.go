@@ -4,17 +4,17 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
 	testingPkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// MockCasperDataStore mocks the CasperDataStore for testing
+// MockCasperDataStore mocks the OCIOSDataStore for testing
 type MockCasperDataStore struct {
 	mock.Mock
-	*casper.CasperDataStore // embedding for type compatibility
+	*ociobjectstore.OCIOSDataStore // embedding for type compatibility
 }
 
 func (m *MockCasperDataStore) SetRegion(region string) {
@@ -23,30 +23,30 @@ func (m *MockCasperDataStore) SetRegion(region string) {
 	// No need to delegate to the embedded implementation
 }
 
-func (m *MockCasperDataStore) ListObjects(uri casper.ObjectURI) ([]objectstorage.ObjectSummary, error) {
+func (m *MockCasperDataStore) ListObjects(uri ociobjectstore.ObjectURI) ([]objectstorage.ObjectSummary, error) {
 	args := m.Called(uri)
 	return args.Get(0).([]objectstorage.ObjectSummary), args.Error(1)
 }
 
-func (m *MockCasperDataStore) MultipartDownload(uri casper.ObjectURI, localPath string, opts ...casper.DownloadOption) error {
+func (m *MockCasperDataStore) MultipartDownload(uri ociobjectstore.ObjectURI, localPath string, opts ...ociobjectstore.DownloadOption) error {
 	args := m.Called(uri, localPath, opts)
 	return args.Error(0)
 }
 
-func (m *MockCasperDataStore) MultipartFileUpload(filePath string, uri casper.ObjectURI, chunkSizeInMB, threads int) error {
+func (m *MockCasperDataStore) MultipartFileUpload(filePath string, uri ociobjectstore.ObjectURI, chunkSizeInMB, threads int) error {
 	args := m.Called(filePath, uri, chunkSizeInMB, threads)
 	return args.Error(0)
 }
 
 func TestNewReplicaAgent(t *testing.T) {
 	mockLogger := testingPkg.SetupMockLogger()
-	mockDataStore := &casper.CasperDataStore{}
+	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 
 	config := &Config{
 		AnotherLogger:          mockLogger,
 		LocalPath:              "/test/path",
-		SourceObjectStoreURI:   casper.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-		TargetObjectStoreURI:   casper.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+		SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+		TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
 		ObjectStorageDataStore: mockDataStore,
 		NumConnections:         5,
 		DownloadSizeLimitGB:    100,
@@ -66,24 +66,24 @@ func TestGetTargetObjectURI(t *testing.T) {
 		name        string
 		config      Config
 		objName     string
-		expectedURI casper.ObjectURI
+		expectedURI ociobjectstore.ObjectURI
 	}{
 		{
 			name: "replace source prefix with target prefix",
 			config: Config{
-				SourceObjectStoreURI: casper.ObjectURI{
+				SourceObjectStoreURI: ociobjectstore.ObjectURI{
 					Namespace:  "src-ns",
 					BucketName: "src-bucket",
 					Prefix:     "src-prefix/",
 				},
-				TargetObjectStoreURI: casper.ObjectURI{
+				TargetObjectStoreURI: ociobjectstore.ObjectURI{
 					Namespace:  "tgt-ns",
 					BucketName: "tgt-bucket",
 					Prefix:     "tgt-prefix/",
 				},
 			},
 			objName: "src-prefix/model.bin",
-			expectedURI: casper.ObjectURI{
+			expectedURI: ociobjectstore.ObjectURI{
 				Namespace:  "tgt-ns",
 				BucketName: "tgt-bucket",
 				ObjectName: "tgt-prefix/model.bin",
@@ -92,19 +92,19 @@ func TestGetTargetObjectURI(t *testing.T) {
 		{
 			name: "source and target with same prefix",
 			config: Config{
-				SourceObjectStoreURI: casper.ObjectURI{
+				SourceObjectStoreURI: ociobjectstore.ObjectURI{
 					Namespace:  "src-ns",
 					BucketName: "src-bucket",
 					Prefix:     "models/",
 				},
-				TargetObjectStoreURI: casper.ObjectURI{
+				TargetObjectStoreURI: ociobjectstore.ObjectURI{
 					Namespace:  "tgt-ns",
 					BucketName: "tgt-bucket",
 					Prefix:     "models/",
 				},
 			},
 			objName: "models/model.bin",
-			expectedURI: casper.ObjectURI{
+			expectedURI: ociobjectstore.ObjectURI{
 				Namespace:  "tgt-ns",
 				BucketName: "tgt-bucket",
 				ObjectName: "models/model.bin",
@@ -282,13 +282,13 @@ func TestReplicaAgent_Start(t *testing.T) {
 	tgtPrefix := "models/"
 
 	// Setup source and target URIs
-	sourceURI := casper.ObjectURI{
+	sourceURI := ociobjectstore.ObjectURI{
 		Namespace:  srcNamespace,
 		BucketName: srcBucket,
 		Prefix:     srcPrefix,
 	}
 
-	targetURI := casper.ObjectURI{
+	targetURI := ociobjectstore.ObjectURI{
 		Namespace:  tgtNamespace,
 		BucketName: tgtBucket,
 		Prefix:     tgtPrefix,
@@ -298,8 +298,8 @@ func TestReplicaAgent_Start(t *testing.T) {
 	mockDataStore.On("SetRegion", mock.Anything).Return(nil)
 	mockDataStore.On("ListObjects", mock.Anything).Return([]objectstorage.ObjectSummary{}, nil)
 
-	// Initialize the real CasperDataStore in the mock to avoid nil pointer dereference
-	mockDataStore.CasperDataStore = &casper.CasperDataStore{}
+	// Initialize the real OCIOSDataStore in the mock to avoid nil pointer dereference
+	mockDataStore.OCIOSDataStore = &ociobjectstore.OCIOSDataStore{}
 
 	// Create the agent
 	agent := &ReplicaAgent{
@@ -309,7 +309,7 @@ func TestReplicaAgent_Start(t *testing.T) {
 			LocalPath:              "/test/path",
 			SourceObjectStoreURI:   sourceURI,
 			TargetObjectStoreURI:   targetURI,
-			ObjectStorageDataStore: mockDataStore.CasperDataStore,
+			ObjectStorageDataStore: mockDataStore.OCIOSDataStore,
 			NumConnections:         1,
 			DownloadSizeLimitGB:    100,
 			EnableSizeLimitCheck:   true,

@@ -1,6 +1,6 @@
-# Casper Data Store
+# OCI Object Storage Data Store
 
-The Casper package provides a robust data store abstraction backed by Oracle Object Storage (OCI). It supports object uploads, downloads (including multipart), metadata inspection, and local integrity validation via MD5 checksum comparison.
+The OCI Object Storage package provides a robust data store abstraction backed by Oracle Object Storage (OCI). It supports object uploads, downloads (including multipart), metadata inspection, and local integrity validation via MD5 checksum comparison.
 
 ## Features
 
@@ -17,7 +17,7 @@ The Casper package provides a robust data store abstraction backed by Oracle Obj
 ## Installation
 
 ```bash
-go get bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper
+go get bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ go get bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper
 package main
 
 import (
-    "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+    "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
     "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/principals"
     "github.com/spf13/viper"
 )
@@ -43,7 +43,7 @@ func main() {
     logger := &YourLogger{}
     
     // Create data store
-    cds, err := casper.ProvideCasperDataStore(v, logger)
+    cds, err := ociobjectstore.ProvideOCIOSDataStore(v, logger)
     if err != nil {
         panic(err)
     }
@@ -56,14 +56,14 @@ func main() {
 
 ```go
 authType := principals.InstancePrincipal
-config := &casper.Config{
+config := &ociobjectstore.Config{
     AuthType:      &authType,
-    Name:          "my-casper-store",
+    Name:          "my-ociobjectstore-store",
     Region:        "us-chicago-1",
     AnotherLogger: logger,
 }
 
-cds, err := casper.NewCasperDataStore(config)
+cds, err := ociobjectstore.NewOCIOSDataStore(config)
 if err != nil {
     panic(err)
 }
@@ -78,7 +78,7 @@ The functional options API provides a clean and flexible way to configure downlo
 #### Simple Downloads
 
 ```go
-source := casper.ObjectURI{
+source := ociobjectstore.ObjectURI{
     BucketName: "my-bucket",
     ObjectName: "path/to/file.txt",
 }
@@ -88,13 +88,13 @@ err := cds.Download(source, "/local/target/dir")
 
 // Download with custom thread count
 err = cds.Download(source, "/local/target/dir", 
-    casper.WithThreads(10))
+    ociobjectstore.WithThreads(10))
 
 // Download with multiple options
 err = cds.Download(source, "/local/target/dir",
-    casper.WithThreads(20),
-    casper.WithChunkSize(16), // 16MB chunks
-    casper.WithSizeThreshold(50)) // Use multipart for files > 50MB
+    ociobjectstore.WithThreads(20),
+    ociobjectstore.WithChunkSize(16), // 16MB chunks
+    ociobjectstore.WithSizeThreshold(50)) // Use multipart for files > 50MB
 ```
 
 #### Download with Strategy (Recommended)
@@ -104,19 +104,19 @@ Smart downloads automatically choose the best download method based on file size
 ```go
 // Smart download with automatic method selection
 err := cds.DownloadWithStrategy(source, "/local/target/dir",
-    casper.WithSizeThreshold(100),  // Use multipart for files > 100MB
-    casper.WithChunkSize(8),        // 8MB chunks for multipart
-    casper.WithThreads(15))         // 15 concurrent threads
+    ociobjectstore.WithSizeThreshold(100),  // Use multipart for files > 100MB
+    ociobjectstore.WithChunkSize(8),        // 8MB chunks for multipart
+    ociobjectstore.WithThreads(15))         // 15 concurrent threads
 
 // Force multipart download regardless of size
 err = cds.DownloadWithStrategy(source, "/local/target/dir",
-    casper.WithForceMultipart(true),
-    casper.WithChunkSize(32),
-    casper.WithThreads(25))
+    ociobjectstore.WithForceMultipart(true),
+    ociobjectstore.WithChunkSize(32),
+    ociobjectstore.WithThreads(25))
 
 // Force standard download regardless of size
 err = cds.DownloadWithStrategy(source, "/local/target/dir",
-    casper.WithForceStandard(true))
+    ociobjectstore.WithForceStandard(true))
 ```
 
 #### Bulk Downloads
@@ -124,17 +124,17 @@ err = cds.DownloadWithStrategy(source, "/local/target/dir",
 Download multiple objects with concurrency control:
 
 ```go
-objects := []casper.ObjectURI{
+objects := []ociobjectstore.ObjectURI{
     {BucketName: "bucket1", ObjectName: "file1.txt"},
     {BucketName: "bucket1", ObjectName: "file2.txt"},
     {BucketName: "bucket1", ObjectName: "large-file.bin"},
 }
 
 err := cds.BulkDownload(objects, "/local/target/dir", 5, // 5 concurrent downloads
-    casper.WithSizeThreshold(50),
-    casper.WithChunkSize(16),
-    casper.WithThreads(10),
-    casper.WithOverrideEnabled(false)) // Skip existing valid files
+    ociobjectstore.WithSizeThreshold(50),
+    ociobjectstore.WithChunkSize(16),
+    ociobjectstore.WithThreads(10),
+    ociobjectstore.WithOverrideEnabled(false)) // Skip existing valid files
 ```
 
 ### Path Manipulation Options
@@ -144,19 +144,19 @@ Control how object paths are handled during downloads:
 ```go
 // Strip prefix from object paths
 err := cds.Download(source, "/local/target/dir",
-    casper.WithStripPrefix("models/v1/"))
+    ociobjectstore.WithStripPrefix("models/v1/"))
 
 // Use only the base filename
 err = cds.Download(source, "/local/target/dir",
-    casper.WithBaseNameOnly(true))
+    ociobjectstore.WithBaseNameOnly(true))
 
 // Join paths with tail overlap detection
 err = cds.Download(source, "/local/target/dir",
-    casper.WithTailOverlap(true))
+    ociobjectstore.WithTailOverlap(true))
 
 // Exclude certain patterns
 err = cds.BulkDownload(objects, "/local/target/dir", 5,
-    casper.WithExcludePatterns([]string{"*.tmp", "*.log", ".DS_Store"}))
+    ociobjectstore.WithExcludePatterns([]string{"*.tmp", "*.log", ".DS_Store"}))
 ```
 
 ### File Integrity and Overrides
@@ -164,11 +164,11 @@ err = cds.BulkDownload(objects, "/local/target/dir", 5,
 ```go
 // Enable file override (re-download existing files)
 err := cds.Download(source, "/local/target/dir",
-    casper.WithOverrideEnabled(true))
+    ociobjectstore.WithOverrideEnabled(true))
 
 // Disable override (skip existing valid files) - default behavior
 err = cds.Download(source, "/local/target/dir",
-    casper.WithOverrideEnabled(false))
+    ociobjectstore.WithOverrideEnabled(false))
 
 // Check if local copy is valid
 valid, err := cds.IsLocalCopyValid(source, "/local/path/to/file.txt")
@@ -183,7 +183,7 @@ if !valid {
 ### Uploads
 
 ```go
-target := casper.ObjectURI{
+target := ociobjectstore.ObjectURI{
     BucketName: "my-bucket",
     ObjectName: "uploaded/file.txt",
 }
@@ -204,13 +204,13 @@ err = cds.MultipartFileUpload("/local/large-file.bin", target,
 
 ```go
 // List objects with prefix
-objects, err := cds.ListObjects(casper.ObjectURI{
+objects, err := cds.ListObjects(ociobjectstore.ObjectURI{
     BucketName: "my-bucket",
     Prefix:     "models/v1/",
 })
 
 // Get object metadata
-metadata, err := cds.HeadObject(casper.ObjectURI{
+metadata, err := cds.HeadObject(ociobjectstore.ObjectURI{
     BucketName: "my-bucket",
     ObjectName: "file.txt",
 })
@@ -245,7 +245,7 @@ defer response.Content.Close()
 auth_type: "InstancePrincipal"  # or "UserPrincipal", "ResourcePrincipal"
 
 # Optional
-name: "my-casper-store"
+name: "my-ociobjectstore-store"
 region_override: "us-chicago-1"
 compartment_id: "ocid1.compartment.oc1..example"
 enable_obo_token: false
@@ -263,7 +263,7 @@ obo_token: "your-obo-token"  # Required if enable_obo_token is true
 For On-Behalf-Of (OBO) token authentication:
 
 ```go
-config := &casper.Config{
+config := &ociobjectstore.Config{
     AuthType:       &authType,
     EnableOboToken: true,
     OboToken:       "your-obo-token",
@@ -279,7 +279,7 @@ config := &casper.Config{
 package main
 
 import (
-    "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/casper"
+    "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
     "go.uber.org/fx"
 )
 
@@ -289,11 +289,11 @@ func main() {
         fx.Provide(NewViper),
         fx.Provide(NewLogger),
         
-        // Add Casper module
-        casper.CasperDataStoreModule,
+        // Add OCI Object Store module
+        ociobjectstore.OCIOSDataStoreModule,
         
         // Use the data store
-        fx.Invoke(func(cds *casper.CasperDataStore) {
+        fx.Invoke(func(cds *ociobjectstore.OCIOSDataStore) {
             // Your application logic here
         }),
     )
@@ -308,14 +308,14 @@ func main() {
 func main() {
     app := fx.New(
         fx.Provide(NewLogger),
-        fx.Provide(func() []*casper.Config {
-            return []*casper.Config{
+        fx.Provide(func() []*ociobjectstore.Config {
+            return []*ociobjectstore.Config{
                 {AuthType: &instancePrincipal, Name: "store1"},
                 {AuthType: &instancePrincipal, Name: "store2"},
             }
         }),
-        fx.Provide(casper.ProvideListOfCasperDataStoreWithAppParams),
-        fx.Invoke(func(stores []*casper.CasperDataStore) {
+        fx.Provide(ociobjectstore.ProvideListOfOCIOSDataStoreWithAppParams),
+        fx.Invoke(func(stores []*ociobjectstore.OCIOSDataStore) {
             // Use multiple stores
         }),
     )
@@ -329,7 +329,7 @@ func main() {
 For testing and local development:
 
 ```go
-lds := &casper.LocalDataStore{
+lds := &ociobjectstore.LocalDataStore{
     WorkingDirectory: "/local/storage/path",
 }
 
@@ -364,29 +364,29 @@ if err != nil {
 
 #### Small Files (< 10MB)
 ```go
-casper.WithForceStandard(true),
-casper.WithThreads(5)
+ociobjectstore.WithForceStandard(true),
+ociobjectstore.WithThreads(5)
 ```
 
 #### Medium Files (10MB - 100MB)
 ```go
-casper.WithSizeThreshold(50),
-casper.WithChunkSize(8),
-casper.WithThreads(10)
+ociobjectstore.WithSizeThreshold(50),
+ociobjectstore.WithChunkSize(8),
+ociobjectstore.WithThreads(10)
 ```
 
 #### Large Files (> 100MB)
 ```go
-casper.WithForceMultipart(true),
-casper.WithChunkSize(16),
-casper.WithThreads(20)
+ociobjectstore.WithForceMultipart(true),
+ociobjectstore.WithChunkSize(16),
+ociobjectstore.WithThreads(20)
 ```
 
 #### Bulk Downloads
 ```go
 // Use moderate concurrency to avoid overwhelming the service
 cds.BulkDownload(objects, target, 5, // 5 concurrent downloads
-    casper.WithSizeThreshold(50),
-    casper.WithChunkSize(8),
-    casper.WithThreads(8))
+    ociobjectstore.WithSizeThreshold(50),
+    ociobjectstore.WithChunkSize(8),
+    ociobjectstore.WithThreads(8))
 ```
