@@ -1633,11 +1633,6 @@ func (in *InferenceServiceSpec) DeepCopyInto(out *InferenceServiceSpec) {
 		*out = new(RouterSpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.CompartmentID != nil {
-		in, out := &in.CompartmentID, &out.CompartmentID
-		*out = new(string)
-		**out = **in
-	}
 	if in.KedaConfig != nil {
 		in, out := &in.KedaConfig, &out.KedaConfig
 		*out = new(KedaConfig)

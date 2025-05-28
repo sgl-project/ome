@@ -56,8 +56,6 @@ spec:
               type: object
             spec:
               properties:
-                compartmentID:
-                  type: string
                 decoder:
                   properties:
                     activeDeadlineSeconds:

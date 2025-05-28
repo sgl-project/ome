@@ -22,6 +22,8 @@ func RegisterDefaults(scheme *runtime.Scheme) error {
 	scheme.AddTypeDefaultingFunc(&ClusterTrainingRuntimeList{}, func(obj interface{}) { SetObjectDefaults_ClusterTrainingRuntimeList(obj.(*ClusterTrainingRuntimeList)) })
 	scheme.AddTypeDefaultingFunc(&InferenceService{}, func(obj interface{}) { SetObjectDefaults_InferenceService(obj.(*InferenceService)) })
 	scheme.AddTypeDefaultingFunc(&InferenceServiceList{}, func(obj interface{}) { SetObjectDefaults_InferenceServiceList(obj.(*InferenceServiceList)) })
+	scheme.AddTypeDefaultingFunc(&ReplicationJob{}, func(obj interface{}) { SetObjectDefaults_ReplicationJob(obj.(*ReplicationJob)) })
+	scheme.AddTypeDefaultingFunc(&ReplicationJobList{}, func(obj interface{}) { SetObjectDefaults_ReplicationJobList(obj.(*ReplicationJobList)) })
 	scheme.AddTypeDefaultingFunc(&ServingRuntime{}, func(obj interface{}) { SetObjectDefaults_ServingRuntime(obj.(*ServingRuntime)) })
 	scheme.AddTypeDefaultingFunc(&ServingRuntimeList{}, func(obj interface{}) { SetObjectDefaults_ServingRuntimeList(obj.(*ServingRuntimeList)) })
 	scheme.AddTypeDefaultingFunc(&TrainingRuntime{}, func(obj interface{}) { SetObjectDefaults_TrainingRuntime(obj.(*TrainingRuntime)) })
@@ -3264,6 +3266,48 @@ func SetObjectDefaults_InferenceServiceList(in *InferenceServiceList) {
 	for i := range in.Items {
 		a := &in.Items[i]
 		SetObjectDefaults_InferenceService(a)
+	}
+}
+
+func SetObjectDefaults_ReplicationJob(in *ReplicationJob) {
+	if in.Spec.ContainerOverride != nil {
+		for i := range in.Spec.ContainerOverride.Ports {
+			a := &in.Spec.ContainerOverride.Ports[i]
+			if a.Protocol == "" {
+				a.Protocol = "TCP"
+			}
+		}
+		if in.Spec.ContainerOverride.LivenessProbe != nil {
+			if in.Spec.ContainerOverride.LivenessProbe.ProbeHandler.GRPC != nil {
+				if in.Spec.ContainerOverride.LivenessProbe.ProbeHandler.GRPC.Service == nil {
+					var ptrVar1 string = ""
+					in.Spec.ContainerOverride.LivenessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+				}
+			}
+		}
+		if in.Spec.ContainerOverride.ReadinessProbe != nil {
+			if in.Spec.ContainerOverride.ReadinessProbe.ProbeHandler.GRPC != nil {
+				if in.Spec.ContainerOverride.ReadinessProbe.ProbeHandler.GRPC.Service == nil {
+					var ptrVar1 string = ""
+					in.Spec.ContainerOverride.ReadinessProbe.ProbeHandler.GRPC.Service = &ptrVar1
+				}
+			}
+		}
+		if in.Spec.ContainerOverride.StartupProbe != nil {
+			if in.Spec.ContainerOverride.StartupProbe.ProbeHandler.GRPC != nil {
+				if in.Spec.ContainerOverride.StartupProbe.ProbeHandler.GRPC.Service == nil {
+					var ptrVar1 string = ""
+					in.Spec.ContainerOverride.StartupProbe.ProbeHandler.GRPC.Service = &ptrVar1
+				}
+			}
+		}
+	}
+}
+
+func SetObjectDefaults_ReplicationJobList(in *ReplicationJobList) {
+	for i := range in.Items {
+		a := &in.Items[i]
+		SetObjectDefaults_ReplicationJob(a)
 	}
 }
 

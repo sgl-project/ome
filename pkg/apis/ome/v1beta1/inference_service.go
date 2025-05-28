@@ -44,11 +44,6 @@ type InferenceServiceSpec struct {
 	// +optional
 	Router *RouterSpec `json:"router,omitempty"`
 
-	// The compartment ID to use for the inference service
-	// Specifies the OCI compartment where the inference service resources will be created.
-	// +optional
-	CompartmentID *string `json:"compartmentID,omitempty"`
-
 	// KedaConfig defines the autoscaling configuration for KEDA
 	// Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling),
 	// allowing the service to scale based on custom metrics or event sources.

@@ -2338,10 +2338,6 @@
         "predictor"
       ],
       "properties": {
-        "compartmentID": {
-          "description": "The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.",
-          "type": "string"
-        },
         "decoder": {
           "description": "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
           "$ref": "#/definitions/v1beta1.DecoderSpec"
@@ -4642,6 +4638,10 @@
         "compartmentID": {
           "description": "The compartment ID to use for the replication job.",
           "type": "string"
+        },
+        "containerOverride": {
+          "description": "ContainerOverride defines the custom container configuration used for the replication job.",
+          "$ref": "#/definitions/v1.Container"
         },
         "destination": {
           "description": "Destination specifies the data destination for the replication job.",

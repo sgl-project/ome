@@ -4262,13 +4262,6 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RouterSpec"),
 						},
 					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"kedaConfig": {
 						SchemaProps: spec.SchemaProps{
 							Description: "KedaConfig defines the autoscaling configuration for KEDA Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling), allowing the service to scale based on custom metrics or event sources.",
@@ -8312,12 +8305,18 @@ func schema_pkg_apis_ome_v1beta1_ReplicationJobSpec(ref common.ReferenceCallback
 							Format:      "",
 						},
 					},
+					"containerOverride": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContainerOverride defines the custom container configuration used for the replication job.",
+							Ref:         ref("k8s.io/api/core/v1.Container"),
+						},
+					},
 				},
 				Required: []string{"source", "destination"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/api/core/v1.Container"},
 	}
 }
 
