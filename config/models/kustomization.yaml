@@ -2,21 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - meta/Llama-3.1-70B-Instruct.yaml
-  - meta/Llama-3.1-405B-Instruct-FP8.yaml
-  - meta/Llama-3.2-1B-Instruct.yaml
-  - meta/Llama-3.2-3B-Instruct.yaml
-  - meta/Llama-3.2-11B-Vision-Instruct.yaml
-  - meta/Llama-3.2-90B-Vision-Instruct-FP8-Dynamic.yaml
   - meta/Llama-3.3-70B-instruct.yaml
   - meta/Llama-3.3-70B-instruct-FP8-Dynamic.yaml
   - meta/llama-4-maverick-17b-128e-instruct-fp8.yaml
   - meta/llama-4-scout-17b-16e-instruct.yaml
   - intfloat/e5-mistral-7b-instruct.yaml
   - microsoft/Phi-3-vision-128k-instruct.yaml
-  - nvidia/Llama-3.1-Nemotron-Nano-8B-v1.yaml
-  - nvidia/Llama-3_1-Nemotron-Ultra-253B-v1.yaml
-  - nvidia/Llama-3_3-Nemotron-Super-49B-v1.yaml
-  - agent/phi-3-vision-128k-instruct-ft-v1.yaml
   - deepseek-ai/DeepSeek-V3.yaml
   - deepseek-ai/DeepSeek-R1.yaml

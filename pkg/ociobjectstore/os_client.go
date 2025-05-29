@@ -12,6 +12,7 @@ import (
 )
 
 func NewObjectStorageClient(configurationProvider common.ConfigurationProvider, config *Config) (*objectstorage.ObjectStorageClient, error) {
+	common.EnableInstanceMetadataServiceLookup()
 	var client objectstorage.ObjectStorageClient
 	var err error
 	if config.EnableOboToken {

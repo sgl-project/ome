@@ -2,16 +2,16 @@ package servingruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-
 	"github.com/sgl-project/sgl-ome/pkg/constants"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -25,6 +25,9 @@ const (
 	PriorityIsNotSameServingRuntimeError        = "%s under the servingruntime %s"
 	PriorityIsNotSameClusterServingRuntimeError = "%s under the clusterservingruntime %s"
 	ChainsawInjectAnnotationNotAllowError       = "chainsaw inject annotation is not allowed"
+	InvalidConfigurationError                   = "invalid configuration: %s"
+	MultiNodeConfigurationError                 = "for MultiNode deployment, both leader and worker must be defined and worker.size must be greater than 0"
+	RawDeploymentConfigurationError             = "for RawDeployment, leader and worker must not be defined"
 )
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
@@ -57,6 +60,11 @@ func (sr *ServingRuntimeValidator) Handle(ctx context.Context, req admission.Req
 	// Only validate for priority if the new serving runtime is not disabled
 	if servingRuntime.Spec.IsDisabled() {
 		return admission.Allowed("")
+	}
+
+	// Validate the configuration based on engineConfig and decoderConfig
+	if err := validateServingRuntimeConfiguration(&servingRuntime.Spec); err != nil {
+		return admission.Denied(fmt.Sprintf(InvalidConfigurationError, err.Error()))
 	}
 
 	for i := range ExistingRuntimes.Items {
@@ -203,9 +211,85 @@ func validateServingRuntimePriority(newSpec *v1beta1.ServingRuntimeSpec, existin
 	return nil
 }
 
+func validateServingRuntimeConfiguration(spec *v1beta1.ServingRuntimeSpec) error {
+	// Check if both engineConfig and decoderConfig are specified
+	hasEngineConfig := spec.EngineConfig != nil
+	hasDecoderConfig := spec.DecoderConfig != nil
+
+	// If both engineConfig and decoderConfig are specified, this is a PDDisaggregated deployment
+	// No additional validation needed for this case
+	if hasEngineConfig && hasDecoderConfig {
+		// This is PDDisaggregated mode
+		return nil
+	}
+
+	// First, validate any worker configuration regardless of deployment mode
+	// If worker size is specified as 0 or negative, that's always invalid
+	if spec.WorkerPodSpec != nil && spec.WorkerPodSpec.Size != nil && *spec.WorkerPodSpec.Size <= 0 {
+		return errors.New(MultiNodeConfigurationError)
+	}
+
+	// Check for explicit deployment mode in environment variables
+	isExplicitMultiNode := false
+	isExplicitRawDeployment := false
+	for _, container := range spec.Containers {
+		for _, env := range container.Env {
+			if env.Name == "DEPLOYMENT_MODE" {
+				if env.Value == string(constants.MultiNode) {
+					isExplicitMultiNode = true
+				} else if env.Value == string(constants.RawDeployment) {
+					isExplicitRawDeployment = true
+				}
+			}
+		}
+	}
+
+	// If only engineConfig is specified, check for the deployment mode configuration
+	if hasEngineConfig && !hasDecoderConfig {
+		// Check if this is a MultiNode configuration
+		isMultiNode := isExplicitMultiNode
+
+		// If no explicit mode is set, check worker configuration to determine mode
+		if !isExplicitMultiNode && !isExplicitRawDeployment {
+			// Check if there are worker pods defined with size > 0
+			if spec.WorkerPodSpec != nil && spec.WorkerPodSpec.Size != nil && *spec.WorkerPodSpec.Size > 0 {
+				isMultiNode = true
+			}
+		}
+
+		// For MultiNode configuration, validate according to requirements:
+		// - Must have both leader and worker defined
+		// - Worker size must be greater than 0
+		if isMultiNode {
+			// Check if worker is properly defined
+			if spec.WorkerPodSpec == nil || spec.WorkerPodSpec.Size == nil || *spec.WorkerPodSpec.Size <= 0 {
+				return errors.New(MultiNodeConfigurationError)
+			}
+
+			// In the future, we can add leader node validation here when the API supports it
+		}
+
+		// For RawDeployment, validate that workers are not defined
+		if isExplicitRawDeployment {
+			// If explicit RawDeployment mode is set and there are workers, that's invalid
+			if spec.WorkerPodSpec != nil && spec.WorkerPodSpec.Size != nil && *spec.WorkerPodSpec.Size > 0 {
+				return errors.New(RawDeploymentConfigurationError)
+			}
+		} else if !isMultiNode {
+			// Default case is RawDeployment without explicit mode set
+			// Check that no worker configuration is present for default RawDeployment
+			if spec.WorkerPodSpec != nil && spec.WorkerPodSpec.Size != nil && *spec.WorkerPodSpec.Size > 0 {
+				return errors.New(RawDeploymentConfigurationError)
+			}
+		}
+	}
+
+	return nil
+}
+
 func contains[T comparable](slice []T, element T) bool {
-	for _, v := range slice {
-		if v == element {
+	for _, item := range slice {
+		if item == element {
 			return true
 		}
 	}

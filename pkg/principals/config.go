@@ -78,7 +78,7 @@ func (c Config) Validate() error {
 // Build builds an oci-go-sdk common.ConfigurationProvider from c.
 func (c Config) Build(opts Opts) (common.ConfigurationProvider, error) {
 	opts.Log.WithField("AuthType", c.AuthType).Info("Config provider principal type")
-
+	common.EnableInstanceMetadataServiceLookup()
 	var (
 		confProvider common.ConfigurationProvider
 		err          error
