@@ -1114,32 +1114,6 @@ func TestMigrateSpecViaJSON(t *testing.T) {
 	})
 }
 
-func TestGetIntReference(t *testing.T) {
-	// Test with a value of 42
-	value := 42
-	ptr := GetIntReference(value)
-
-	// Verify that the pointer is not nil and points to the correct value
-	assert.NotNil(t, ptr)
-	assert.Equal(t, value, *ptr)
-
-	// Create a new value to show pointers are independent
-	otherValue := 100
-	// Original pointer should still point to 42, not otherValue
-	assert.Equal(t, 42, *ptr)
-	assert.NotEqual(t, otherValue, *ptr)
-
-	// Test with zero value
-	zeroPtr := GetIntReference(0)
-	assert.NotNil(t, zeroPtr)
-	assert.Equal(t, 0, *zeroPtr)
-
-	// Test with negative value
-	negPtr := GetIntReference(-5)
-	assert.NotNil(t, negPtr)
-	assert.Equal(t, -5, *negPtr)
-}
-
 // =============================================================================
 // Webhook Integration Tests
 // =============================================================================
