@@ -49,7 +49,6 @@ spec:
   modelSizeRange:
     min: 400B
     max: 420B
-  pipelineParallelism: true
   containers:
     - name: ome-container
       image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1

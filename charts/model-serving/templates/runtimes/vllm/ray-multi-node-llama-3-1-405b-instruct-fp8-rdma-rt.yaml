@@ -39,7 +39,6 @@ spec:
   {{ with .Values.llama_3_1_405b_instruct }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
-  pipelineParallelism: true
   modelSizeRange:
     min: 400B
     max: 420B

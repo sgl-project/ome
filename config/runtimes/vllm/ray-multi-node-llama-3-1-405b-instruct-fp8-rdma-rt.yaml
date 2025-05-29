@@ -33,7 +33,6 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
-  pipelineParallelism: true
   modelSizeRange:
     min: 400B
     max: 420B
