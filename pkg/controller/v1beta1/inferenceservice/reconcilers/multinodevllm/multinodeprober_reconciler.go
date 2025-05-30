@@ -65,6 +65,9 @@ func createRawDeployment(
 ) *appsv1.Deployment {
 	podMetadata := componentMeta.DeepCopy()
 	podMetadata.Name = rayutils.CheckName(fmt.Sprintf("%s-%d-mnp", componentMeta.Name, index))
+	if podMetadata.Labels == nil {
+		podMetadata.Labels = make(map[string]string)
+	}
 	podMetadata.Labels["app"] = constants.GetRawServiceLabel(componentMeta.Name)
 	utils.SetPodLabelsFromAnnotations(podMetadata)
 

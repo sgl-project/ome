@@ -192,6 +192,89 @@ func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpe
 	return &corePodSpec, nil
 }
 
+// MergeEngineSpec merges the runtime EngineSpec with the InferenceService EngineSpec
+// The InferenceService spec takes precedence over the runtime spec
+func MergeEngineSpec(runtimeEngine *v1beta1.EngineSpec, isvcEngine *v1beta1.EngineSpec) (*v1beta1.EngineSpec, error) {
+	if runtimeEngine == nil && isvcEngine == nil {
+		return nil, nil
+	}
+
+	if runtimeEngine == nil {
+		return isvcEngine.DeepCopy(), nil
+	}
+
+	if isvcEngine == nil {
+		return runtimeEngine.DeepCopy(), nil
+	}
+
+	rtEngineJson, err := json.Marshal(v1beta1.EngineSpec{
+		ComponentExtensionSpec: runtimeEngine.ComponentExtensionSpec,
+		PodSpec:                runtimeEngine.PodSpec,
+		Leader:                 runtimeEngine.Leader,
+		Worker:                 runtimeEngine.Worker,
+		Runner:                 runtimeEngine.Runner,
+	})
+	if err != nil {
+		return nil, err
+	}
+	overrides, err := json.Marshal(isvcEngine)
+	if err != nil {
+		return nil, err
+	}
+	mergedEngine := v1beta1.EngineSpec{}
+	jsonResult, err := strategicpatch.StrategicMergePatch(rtEngineJson, overrides, v1beta1.EngineSpec{})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(jsonResult, &mergedEngine); err != nil {
+		return nil, err
+	}
+
+	return &mergedEngine, nil
+}
+
+// MergeDecoderSpec merges the runtime DecoderSpec with the InferenceService DecoderSpec
+// The InferenceService spec takes precedence over the runtime spec
+func MergeDecoderSpec(runtimeDecoder *v1beta1.DecoderSpec, isvcDecoder *v1beta1.DecoderSpec) (*v1beta1.DecoderSpec, error) {
+	if runtimeDecoder == nil && isvcDecoder == nil {
+		return nil, nil
+	}
+
+	if runtimeDecoder == nil {
+		return isvcDecoder.DeepCopy(), nil
+	}
+
+	if isvcDecoder == nil {
+		return runtimeDecoder.DeepCopy(), nil
+	}
+
+	rtDecoderJson, err := json.Marshal(v1beta1.DecoderSpec{
+		ComponentExtensionSpec: runtimeDecoder.ComponentExtensionSpec,
+		PodSpec:                runtimeDecoder.PodSpec,
+		Leader:                 runtimeDecoder.Leader,
+		Worker:                 runtimeDecoder.Worker,
+		Runner:                 runtimeDecoder.Runner,
+	})
+	if err != nil {
+		return nil, err
+	}
+	overrides, err := json.Marshal(isvcDecoder)
+	if err != nil {
+		return nil, err
+	}
+	mergedDecoder := v1beta1.DecoderSpec{}
+	jsonResult, err := strategicpatch.StrategicMergePatch(rtDecoderJson, overrides, v1beta1.DecoderSpec{})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(jsonResult, &mergedDecoder); err != nil {
+		return nil, err
+	}
+	return &mergedDecoder, nil
+}
+
 // GetServingRuntime Get a ServingRuntime by name. First, ServingRuntimes in the given namespace will be checked.
 // If a resource of the specified name is not found, then ClusterServingRuntimes will be checked.
 func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta1.ServingRuntimeSpec, error) {
@@ -364,6 +447,8 @@ func GetOmeContainerIndex(containers []v1.Container) int {
 	return -1
 }
 
+// GetBaseModelVendor returns the vendor of the base model.
+// If vendor is not set, it returns "Unknown".
 func GetBaseModelVendor(baseModel v1beta1.BaseModelSpec) string {
 	baseModelVendor := "Unknown"
 	if baseModel.Vendor != nil {
@@ -390,4 +475,142 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 	}
 
 	return val, nil
+}
+
+// DetermineEngineDeploymentMode determines the deployment mode for the engine based on its configuration
+func DetermineEngineDeploymentMode(engine *v1beta1.EngineSpec) constants.DeploymentModeType {
+	if engine == nil {
+		return constants.RawDeployment
+	}
+
+	// Multi-node if leader and worker are defined
+	if engine.Leader != nil || engine.Worker != nil {
+		return constants.MultiNode
+	}
+
+	// Serverless if min replicas is 0
+	if engine.MinReplicas != nil && *engine.MinReplicas == 0 {
+		return constants.Serverless
+	}
+
+	// Default to raw deployment
+	return constants.RawDeployment
+}
+
+// ReconcileBaseModel retrieves and validates the base model for an InferenceService
+func ReconcileBaseModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
+	if isvc.Spec.Model == nil || isvc.Spec.Model.Name == "" {
+		return nil, nil, goerrors.New("model reference is required")
+	}
+
+	baseModel, baseModelMeta, err := GetBaseModel(cl, isvc.Spec.Model.Name, isvc.Namespace)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if baseModel.Disabled != nil && *baseModel.Disabled {
+		return nil, nil, fmt.Errorf("specified base model %s is disabled", isvc.Spec.Model.Name)
+	}
+
+	return baseModel, baseModelMeta, nil
+}
+
+// GetRuntimeForNewArchitecture retrieves the runtime for the new architecture
+// It either uses the specified runtime or auto-selects based on the model
+func GetRuntimeForNewArchitecture(cl client.Client, isvc *v1beta1.InferenceService, baseModel *v1beta1.BaseModelSpec) (*v1beta1.ServingRuntimeSpec, string, error) {
+	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
+		// Use specified runtime
+		rt, err := GetServingRuntime(cl, isvc.Spec.Runtime.Name, isvc.Namespace)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if rt.IsDisabled() {
+			return nil, "", fmt.Errorf("specified runtime %s is disabled", isvc.Spec.Runtime.Name)
+		}
+
+		// Verify the runtime supports the model
+		if err := RuntimeSupportsModelNewArchitecture(baseModel, rt, isvc.Spec.Runtime.Name); err != nil {
+			// Fill in model name in error if available
+			if compatErr, ok := err.(*RuntimeCompatibilityError); ok {
+				compatErr.ModelName = isvc.Spec.Model.Name
+			}
+			return nil, "", err
+		}
+
+		return rt, isvc.Spec.Runtime.Name, nil
+	}
+
+	// Auto-select runtime based on model
+	runtimes, excludedRuntimes, err := GetSupportingRuntimesNewArchitecture(baseModel, cl, isvc.Namespace)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if len(runtimes) == 0 {
+		// Generate a detailed error message including why runtimes were excluded
+		var excludedReasons []string
+		for name, reason := range excludedRuntimes {
+			excludedReasons = append(excludedReasons, fmt.Sprintf("%s: %v", name, reason))
+		}
+
+		errMsg := fmt.Sprintf("no runtime found to support model %s with format %s",
+			isvc.Spec.Model.Name, baseModel.ModelFormat.Name)
+		if len(excludedReasons) > 0 {
+			sort.Strings(excludedReasons)
+			errMsg += ". Excluded runtimes: " + strings.Join(excludedReasons, "; ")
+		}
+		return nil, "", goerrors.New(errMsg)
+	}
+
+	// Use the first supporting runtime (highest priority)
+	selectedRuntime := &runtimes[0]
+	return &selectedRuntime.Spec, selectedRuntime.Name, nil
+}
+
+// MergeRuntimeSpecs merges the runtime and isvc specs to get final engine and decoder specs
+func MergeRuntimeSpecs(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec) (*v1beta1.EngineSpec, *v1beta1.DecoderSpec, error) {
+	var runtimeEngine *v1beta1.EngineSpec
+	var runtimeDecoder *v1beta1.DecoderSpec
+
+	// Extract runtime specs if available
+	if runtime != nil {
+		runtimeEngine = runtime.EngineConfig
+		runtimeDecoder = runtime.DecoderConfig
+	}
+
+	// Merge engine specs
+	mergedEngine, err := MergeEngineSpec(runtimeEngine, isvc.Spec.Engine)
+	if err != nil {
+		return nil, nil, goerrors.Wrap(err, "failed to merge engine specs")
+	}
+
+	// Merge decoder specs
+	mergedDecoder, err := MergeDecoderSpec(runtimeDecoder, isvc.Spec.Decoder)
+	if err != nil {
+		return nil, nil, goerrors.Wrap(err, "failed to merge decoder specs")
+	}
+
+	return mergedEngine, mergedDecoder, nil
+}
+
+// ConvertPodSpec converts v1beta1.PodSpec to v1.PodSpec
+// This handles the conversion between the custom v1beta1.PodSpec type and the core v1.PodSpec type
+func ConvertPodSpec(spec *v1beta1.PodSpec) (*v1.PodSpec, error) {
+	if spec == nil {
+		return nil, goerrors.New("cannot convert nil PodSpec")
+	}
+
+	// Use JSON marshaling to convert between the types
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return nil, goerrors.Wrap(err, "failed to marshal v1beta1.PodSpec")
+	}
+
+	var podSpec v1.PodSpec
+	if err := json.Unmarshal(data, &podSpec); err != nil {
+		return nil, goerrors.Wrap(err, "failed to unmarshal to v1.PodSpec")
+	}
+
+	return &podSpec, nil
 }

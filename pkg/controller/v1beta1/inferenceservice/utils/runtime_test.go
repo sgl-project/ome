@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
@@ -675,4 +676,904 @@ func TestSortSupportedRuntimeByPriority(t *testing.T) {
 // Helper function to create a pointer to a value
 func ptr[T any](v T) *T {
 	return &v
+}
+
+// MockClient is a mock implementation of client.Client for testing
+type mockClient struct {
+	client.Client
+	listFunc func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+}
+
+func (m *mockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, list, opts...)
+	}
+	return nil
+}
+
+// Tests for New Architecture functions
+
+func TestRuntimeCompatibilityError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      *RuntimeCompatibilityError
+		expected string
+	}{
+		{
+			name: "error without detailed error",
+			err: &RuntimeCompatibilityError{
+				RuntimeName: "test-runtime",
+				ModelName:   "test-model",
+				ModelFormat: "pytorch",
+				Reason:      "incompatible format",
+			},
+			expected: "runtime test-runtime does not support model test-model: incompatible format",
+		},
+		{
+			name: "error with detailed error",
+			err: &RuntimeCompatibilityError{
+				RuntimeName:   "test-runtime",
+				ModelName:     "test-model",
+				ModelFormat:   "pytorch",
+				Reason:        "size mismatch",
+				DetailedError: errors.New("size 70B > max 13B"),
+			},
+			expected: "runtime test-runtime does not support model test-model: size mismatch (size 70B > max 13B)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.err.Error())
+		})
+	}
+}
+
+func TestFormatToString(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name     string
+		format   v1beta1.SupportedModelFormat
+		expected string
+	}{
+		{
+			name: "format with only name",
+			format: v1beta1.SupportedModelFormat{
+				Name: "simple-format",
+			},
+			expected: "simple-format",
+		},
+		{
+			name: "format with model format no version",
+			format: v1beta1.SupportedModelFormat{
+				Name: "ignored",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			expected: "pytorch",
+		},
+		{
+			name: "format with model format and version",
+			format: v1beta1.SupportedModelFormat{
+				Name: "ignored",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:    "pytorch",
+					Version: strPtr("2.0"),
+				},
+			},
+			expected: "pytorch:2.0",
+		},
+		{
+			name: "format with architecture",
+			format: v1beta1.SupportedModelFormat{
+				Name: "ignored",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+				ModelArchitecture: strPtr("LlamaForCausalLM"),
+			},
+			expected: "safetensors/LlamaForCausalLM",
+		},
+		{
+			name: "format with quantization",
+			format: v1beta1.SupportedModelFormat{
+				Name: "ignored",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name: "onnx",
+				},
+				Quantization: (*v1beta1.ModelQuantization)(strPtr("fp8")),
+			},
+			expected: "onnx/fp8",
+		},
+		{
+			name: "format with all fields",
+			format: v1beta1.SupportedModelFormat{
+				Name: "ignored",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:    "pytorch",
+					Version: strPtr("2.0"),
+				},
+				ModelArchitecture: strPtr("LlamaForCausalLM"),
+				Quantization:      (*v1beta1.ModelQuantization)(strPtr("fp8")),
+			},
+			expected: "pytorch:2.0/LlamaForCausalLM/fp8",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatToString(tt.format)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name          string
+		baseModel     *v1beta1.BaseModelSpec
+		srSpec        *v1beta1.ServingRuntimeSpec
+		runtimeName   string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "supported model format",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("7B"),
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "supported model format with all attributes matching",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+						AutoSelect: boolPtr(true),
+					},
+				},
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "unsupported model format",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "tensorflow",
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+			},
+			runtimeName:   "test-runtime",
+			expectError:   true,
+			errorContains: "model format 'mt:tensorflow' not in supported formats",
+		},
+		{
+			name: "model size out of range",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("70B"),
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: strPtr("1B"),
+					Max: strPtr("13B"),
+				},
+			},
+			runtimeName:   "test-runtime",
+			expectError:   true,
+			errorContains: "model size 70B is outside supported range [1B, 13B]",
+		},
+		{
+			name: "model with architecture and quantization match",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "safetensors",
+					Version: strPtr("1.0"),
+				},
+				ModelArchitecture: strPtr("LlamaForCausalLM"),
+				Quantization:      (*v1beta1.ModelQuantization)(strPtr("fp8")),
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "safetensors",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:    "safetensors",
+							Version: strPtr("1.0"),
+						},
+						ModelArchitecture: strPtr("LlamaForCausalLM"),
+						Quantization:      (*v1beta1.ModelQuantization)(strPtr("fp8")),
+					},
+				},
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "model with nil parameter size",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: nil,
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: strPtr("1B"),
+					Max: strPtr("13B"),
+				},
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "runtime with nil size range",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("7B"),
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+				ModelSizeRange: nil,
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "model size at minimum boundary",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("1B"),
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: strPtr("1B"),
+					Max: strPtr("13B"),
+				},
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "model size at maximum boundary",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("13B"),
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						Name: "pytorch",
+						ModelFormat: &v1beta1.ModelFormat{
+							Name: "pytorch",
+						},
+					},
+				},
+				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+					Min: strPtr("1B"),
+					Max: strPtr("13B"),
+				},
+			},
+			runtimeName: "test-runtime",
+			expectError: false,
+		},
+		{
+			name: "empty supported formats",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			srSpec: &v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{},
+			},
+			runtimeName:   "test-runtime",
+			expectError:   true,
+			errorContains: "model format 'mt:pytorch' not in supported formats []",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := RuntimeSupportsModelNewArchitecture(tt.baseModel, tt.srSpec, tt.runtimeName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				// Verify it's a RuntimeCompatibilityError
+				var compatErr *RuntimeCompatibilityError
+				assert.True(t, errors.As(err, &compatErr))
+				assert.Equal(t, tt.runtimeName, compatErr.RuntimeName)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestGetSupportingRuntimesNewArchitecture(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	boolPtr := func(b bool) *bool { return &b }
+	int32Ptr := func(i int32) *int32 { return &i }
+
+	tests := []struct {
+		name             string
+		baseModel        *v1beta1.BaseModelSpec
+		namespace        string
+		setupClient      func() client.Client
+		expectedCount    int
+		expectedFirst    string
+		expectedExcluded map[string]string // runtime name -> expected error substring
+		expectError      bool
+	}{
+		{
+			name: "find runtimes supporting pytorch model",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("7B"),
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "pytorch-runtime",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+												Priority:   int32Ptr(10),
+											},
+										},
+									},
+								},
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "multi-format-runtime",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+												Priority:   int32Ptr(5),
+											},
+											{
+												Name: "onnx",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "onnx",
+												},
+												AutoSelect: boolPtr(true),
+											},
+										},
+									},
+								},
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "no-autoselect-runtime",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(false),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 2,
+			expectedFirst: "pytorch-runtime", // Higher priority
+			expectedExcluded: map[string]string{
+				"no-autoselect-runtime": "runtime does not have auto-select enabled",
+			},
+			expectError: false,
+		},
+		{
+			name: "no runtimes support the model",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "custom-format",
+				},
+				ModelParameterSize: strPtr("100B"),
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "pytorch-only",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 0,
+			expectedExcluded: map[string]string{
+				"pytorch-only": "model format 'mt:custom-format' not in supported formats",
+			},
+			expectError: false,
+		},
+		{
+			name: "runtime is disabled",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("7B"),
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "disabled-runtime",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										Disabled: boolPtr(true),
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 0,
+			expectedExcluded: map[string]string{
+				"disabled-runtime": "runtime is disabled",
+			},
+			expectError: false,
+		},
+		{
+			name: "error listing namespace runtimes",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if _, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							return errors.New("failed to list namespace runtimes")
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 0,
+			expectError:   true,
+		},
+		{
+			name: "error listing cluster runtimes",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if _, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							// Return empty namespace list
+							return nil
+						}
+						if _, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							return errors.New("failed to list cluster runtimes")
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 0,
+			expectError:   true,
+		},
+		{
+			name: "mix of namespace and cluster runtimes",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: strPtr("7B"),
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "namespace-runtime",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name: "cluster-runtime",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 2,
+			expectedFirst: "namespace-runtime", // Namespace runtimes come first
+			expectError:   false,
+		},
+		{
+			name: "model without parameter size",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+				ModelParameterSize: nil, // No size specified
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "runtime-with-priority",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+												Priority:   int32Ptr(10),
+											},
+										},
+									},
+								},
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "runtime-lower-priority",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(true),
+												Priority:   int32Ptr(5),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 2,
+			expectedFirst: "runtime-with-priority",
+			expectError:   false,
+		},
+		{
+			name: "runtime with nil auto-select defaults to false",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "runtime-nil-autoselect",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: nil, // nil should be treated as false
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 0,
+			expectedExcluded: map[string]string{
+				"runtime-nil-autoselect": "runtime does not have auto-select enabled",
+			},
+			expectError: false,
+		},
+		{
+			name: "runtime supports model but has all formats with autoselect false",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "pytorch",
+				},
+			},
+			namespace: "test-namespace",
+			setupClient: func() client.Client {
+				return &mockClient{
+					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
+							runtimeList.Items = []v1beta1.ServingRuntime{
+								{
+									ObjectMeta: metav1.ObjectMeta{
+										Name:      "runtime-mixed-autoselect",
+										Namespace: "test-namespace",
+									},
+									Spec: v1beta1.ServingRuntimeSpec{
+										SupportedModelFormats: []v1beta1.SupportedModelFormat{
+											{
+												Name: "pytorch",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "pytorch",
+												},
+												AutoSelect: boolPtr(false),
+											},
+											{
+												Name: "onnx",
+												ModelFormat: &v1beta1.ModelFormat{
+													Name: "onnx",
+												},
+												AutoSelect: boolPtr(false),
+											},
+										},
+									},
+								},
+							}
+							return nil
+						}
+						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
+							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
+							return nil
+						}
+						return nil
+					},
+				}
+			},
+			expectedCount: 0,
+			expectedExcluded: map[string]string{
+				"runtime-mixed-autoselect": "runtime does not have auto-select enabled",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := tt.setupClient()
+			result, excludedRuntimes, err := GetSupportingRuntimesNewArchitecture(tt.baseModel, cl, tt.namespace)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, result, tt.expectedCount)
+				if tt.expectedCount > 0 {
+					assert.Equal(t, tt.expectedFirst, result[0].Name)
+				}
+
+				// Check excluded runtimes
+				for name, expectedErr := range tt.expectedExcluded {
+					if err, exists := excludedRuntimes[name]; exists {
+						assert.Contains(t, err.Error(), expectedErr)
+					} else {
+						t.Errorf("Expected runtime %s to be excluded but it wasn't", name)
+					}
+				}
+			}
+		})
+	}
 }

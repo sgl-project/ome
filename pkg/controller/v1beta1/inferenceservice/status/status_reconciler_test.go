@@ -71,6 +71,82 @@ func TestPropagateRawStatus(t *testing.T) {
 			},
 		},
 		{
+			name:      "engine deployment with available condition",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.EngineComponent,
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-engine-deployment",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"deployment.kubernetes.io/revision": "2",
+					},
+				},
+				Status: appsv1.DeploymentStatus{
+					Replicas:           2,
+					ReadyReplicas:      2,
+					AvailableReplicas:  2,
+					UpdatedReplicas:    2,
+					ObservedGeneration: 1,
+					Conditions: []appsv1.DeploymentCondition{
+						{
+							Type:   appsv1.DeploymentAvailable,
+							Status: corev1.ConditionTrue,
+							Reason: "MinimumReplicasAvailable",
+						},
+						{
+							Type:   appsv1.DeploymentProgressing,
+							Status: corev1.ConditionTrue,
+							Reason: "NewReplicaSetAvailable",
+						},
+					},
+				},
+			},
+			url: &apis.URL{Scheme: "http", Host: "test-engine-service.default.svc.cluster.local"},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "2",
+				URL:                   &apis.URL{Scheme: "http", Host: "test-engine-service.default.svc.cluster.local"},
+			},
+		},
+		{
+			name:      "decoder deployment with progressing condition",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.DecoderComponent,
+			deployment: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-decoder-deployment",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"deployment.kubernetes.io/revision": "3",
+					},
+				},
+				Status: appsv1.DeploymentStatus{
+					Replicas:           4,
+					ReadyReplicas:      2,
+					AvailableReplicas:  2,
+					UpdatedReplicas:    3,
+					ObservedGeneration: 2,
+					Conditions: []appsv1.DeploymentCondition{
+						{
+							Type:   appsv1.DeploymentProgressing,
+							Status: corev1.ConditionTrue,
+							Reason: "ReplicaSetUpdated",
+						},
+						{
+							Type:   appsv1.DeploymentAvailable,
+							Status: corev1.ConditionFalse,
+							Reason: "MinimumReplicasUnavailable",
+						},
+					},
+				},
+			},
+			url: nil,
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "3",
+				URL:                   nil,
+			},
+		},
+		{
 			name:      "deployment with progressing condition",
 			status:    &v1beta1.InferenceServiceStatus{},
 			component: v1beta1.PredictorComponent,
@@ -154,6 +230,31 @@ func TestPropagateRawStatus(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus.LatestCreatedRevision, actualStatus.LatestCreatedRevision)
 			assert.Equal(t, tt.expectedStatus.URL, actualStatus.URL)
 			assert.Equal(t, tt.deployment.Status.ObservedGeneration, tt.status.ObservedGeneration)
+
+			// Verify the correct condition was set based on component type
+			var expectedCondition apis.ConditionType
+			switch tt.component {
+			case v1beta1.PredictorComponent:
+				expectedCondition = v1beta1.PredictorReady
+			case v1beta1.EngineComponent:
+				expectedCondition = v1beta1.EngineReady
+			case v1beta1.DecoderComponent:
+				expectedCondition = v1beta1.DecoderReady
+			}
+			condition := tt.status.GetCondition(expectedCondition)
+
+			// For deployments with Available condition, we expect a condition to be set
+			// For deployments with only failure conditions, the condition might not be set
+			hasAvailableCondition := false
+			for _, deploymentCondition := range tt.deployment.Status.Conditions {
+				if deploymentCondition.Type == appsv1.DeploymentAvailable {
+					hasAvailableCondition = true
+					break
+				}
+			}
+			if hasAvailableCondition {
+				assert.NotNil(t, condition)
+			}
 		})
 	}
 }
@@ -205,6 +306,80 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 			},
 		},
 		{
+			name:      "engine LeaderWorkerSet with ready condition",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.EngineComponent,
+			lws: &lwsspec.LeaderWorkerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-engine-lws",
+					Namespace:  "default",
+					Generation: 1,
+					Annotations: map[string]string{
+						"resourceVersion": "67890",
+					},
+				},
+				Status: lwsspec.LeaderWorkerSetStatus{
+					Replicas:        2,
+					ReadyReplicas:   2,
+					UpdatedReplicas: 2,
+					Conditions: []metav1.Condition{
+						{
+							Type:   string(lwsspec.LeaderWorkerSetAvailable),
+							Status: metav1.ConditionTrue,
+							Reason: "AllReplicasReady",
+						},
+						{
+							Type:   "Progressing",
+							Status: metav1.ConditionTrue,
+							Reason: "NewReplicaSetAvailable",
+						},
+					},
+				},
+			},
+			url: &apis.URL{Scheme: "http", Host: "test-engine-lws-service.default.svc.cluster.local"},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "67890",
+				URL:                   &apis.URL{Scheme: "http", Host: "test-engine-lws-service.default.svc.cluster.local"},
+			},
+		},
+		{
+			name:      "decoder LeaderWorkerSet with progressing condition",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.DecoderComponent,
+			lws: &lwsspec.LeaderWorkerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-decoder-lws",
+					Namespace:  "default",
+					Generation: 2,
+					Annotations: map[string]string{
+						"resourceVersion": "54321",
+					},
+				},
+				Status: lwsspec.LeaderWorkerSetStatus{
+					Replicas:        4,
+					ReadyReplicas:   2,
+					UpdatedReplicas: 3,
+					Conditions: []metav1.Condition{
+						{
+							Type:   "Progressing",
+							Status: metav1.ConditionTrue,
+							Reason: "ReplicaSetUpdated",
+						},
+						{
+							Type:   string(lwsspec.LeaderWorkerSetAvailable),
+							Status: metav1.ConditionFalse,
+							Reason: "MinimumReplicasUnavailable",
+						},
+					},
+				},
+			},
+			url: nil,
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "54321",
+				URL:                   nil,
+			},
+		},
+		{
 			name:      "LeaderWorkerSet with progressing condition",
 			status:    &v1beta1.InferenceServiceStatus{},
 			component: v1beta1.PredictorComponent,
@@ -253,6 +428,31 @@ func TestPropagateMultiNodeStatus(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus.LatestCreatedRevision, actualStatus.LatestCreatedRevision)
 			assert.Equal(t, tt.expectedStatus.URL, actualStatus.URL)
 			assert.Equal(t, tt.lws.Generation, tt.status.ObservedGeneration)
+
+			// Verify the correct condition was set based on component type
+			var expectedCondition apis.ConditionType
+			switch tt.component {
+			case v1beta1.PredictorComponent:
+				expectedCondition = v1beta1.PredictorReady
+			case v1beta1.EngineComponent:
+				expectedCondition = v1beta1.EngineReady
+			case v1beta1.DecoderComponent:
+				expectedCondition = v1beta1.DecoderReady
+			}
+			condition := tt.status.GetCondition(expectedCondition)
+
+			// For deployments with Available condition, we expect a condition to be set
+			// For deployments with only failure conditions, the condition might not be set
+			hasAvailableCondition := false
+			for _, deploymentCondition := range tt.lws.Status.Conditions {
+				if deploymentCondition.Type == string(lwsspec.LeaderWorkerSetAvailable) {
+					hasAvailableCondition = true
+					break
+				}
+			}
+			if hasAvailableCondition {
+				assert.NotNil(t, condition)
+			}
 		})
 	}
 }
@@ -309,6 +509,99 @@ func TestPropagateStatus(t *testing.T) {
 				Address:               &duckv1.Addressable{URL: &apis.URL{Scheme: "https", Host: "test-service.example.com"}},
 			},
 		},
+		{
+			name:      "successful engine Knative service",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.EngineComponent,
+			serviceStatus: &knservingv1.ServiceStatus{
+				Status: duckv1.Status{
+					Conditions: duckv1.Conditions{
+						{
+							Type:   knservingv1.ServiceConditionReady,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+				RouteStatusFields: knservingv1.RouteStatusFields{
+					URL: &apis.URL{
+						Scheme: "https",
+						Host:   "test-engine-service.example.com",
+					},
+					Address: &duckv1.Addressable{
+						URL: &apis.URL{
+							Scheme: "https",
+							Host:   "test-engine-service.example.com",
+						},
+					},
+					Traffic: []knservingv1.TrafficTarget{
+						{
+							RevisionName:   "test-engine-service-00002",
+							Percent:        ptr.To(int64(100)),
+							LatestRevision: ptr.To(true),
+						},
+					},
+				},
+				ConfigurationStatusFields: knservingv1.ConfigurationStatusFields{
+					LatestReadyRevisionName:   "test-engine-service-00002",
+					LatestCreatedRevisionName: "test-engine-service-00002",
+				},
+			},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "test-engine-service-00002",
+				LatestCreatedRevision: "test-engine-service-00002",
+				URL:                   &apis.URL{Scheme: "https", Host: "test-engine-service.example.com"},
+				Address:               &duckv1.Addressable{URL: &apis.URL{Scheme: "https", Host: "test-engine-service.example.com"}},
+			},
+		},
+		{
+			name:      "decoder service with traffic split",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.DecoderComponent,
+			serviceStatus: &knservingv1.ServiceStatus{
+				Status: duckv1.Status{
+					Conditions: duckv1.Conditions{
+						{
+							Type:   knservingv1.ServiceConditionReady,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+				RouteStatusFields: knservingv1.RouteStatusFields{
+					URL: &apis.URL{
+						Scheme: "https",
+						Host:   "test-decoder-service.example.com",
+					},
+					Address: &duckv1.Addressable{
+						URL: &apis.URL{
+							Scheme: "https",
+							Host:   "test-decoder-service.example.com",
+						},
+					},
+					Traffic: []knservingv1.TrafficTarget{
+						{
+							RevisionName:   "test-decoder-service-00003",
+							Percent:        ptr.To(int64(50)),
+							LatestRevision: ptr.To(true),
+						},
+						{
+							RevisionName:   "test-decoder-service-00002",
+							Percent:        ptr.To(int64(50)),
+							LatestRevision: ptr.To(false),
+						},
+					},
+				},
+				ConfigurationStatusFields: knservingv1.ConfigurationStatusFields{
+					LatestReadyRevisionName:   "test-decoder-service-00003",
+					LatestCreatedRevisionName: "test-decoder-service-00003",
+				},
+			},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "test-decoder-service-00003",
+				LatestCreatedRevision: "test-decoder-service-00003",
+				URL:                   &apis.URL{Scheme: "https", Host: "test-decoder-service.example.com"},
+				Address:               &duckv1.Addressable{URL: &apis.URL{Scheme: "https", Host: "test-decoder-service.example.com"}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -322,6 +615,22 @@ func TestPropagateStatus(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus.LatestCreatedRevision, actualStatus.LatestCreatedRevision)
 			assert.Equal(t, tt.expectedStatus.URL, actualStatus.URL)
 			assert.Equal(t, tt.expectedStatus.Address, actualStatus.Address)
+
+			// Verify appropriate conditions were set
+			var expectedReadyCondition apis.ConditionType
+
+			switch tt.component {
+			case v1beta1.PredictorComponent:
+				expectedReadyCondition = v1beta1.PredictorReady
+			case v1beta1.EngineComponent:
+				expectedReadyCondition = v1beta1.EngineReady
+			case v1beta1.DecoderComponent:
+				expectedReadyCondition = v1beta1.DecoderReady
+			}
+
+			// The status reconciler will propagate service conditions to component conditions
+			readyCondition := tt.status.GetCondition(expectedReadyCondition)
+			assert.NotNil(t, readyCondition)
 		})
 	}
 }
@@ -548,6 +857,58 @@ func TestPropagateCrossComponentStatus(t *testing.T) {
 			},
 			expectedStatus: corev1.ConditionFalse,
 		},
+		{
+			name:          "multiple components all ready",
+			status:        &v1beta1.InferenceServiceStatus{},
+			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			conditionType: v1beta1.RoutesReady,
+			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
+				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
+					Type:   v1beta1.EngineRouteReady,
+					Status: corev1.ConditionTrue,
+				})
+				status.SetCondition(v1beta1.DecoderRouteReady, &apis.Condition{
+					Type:   v1beta1.DecoderRouteReady,
+					Status: corev1.ConditionTrue,
+				})
+			},
+			expectedStatus: corev1.ConditionTrue,
+		},
+		{
+			name:          "multiple components one not ready",
+			status:        &v1beta1.InferenceServiceStatus{},
+			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			conditionType: v1beta1.RoutesReady,
+			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
+				status.SetCondition(v1beta1.EngineRouteReady, &apis.Condition{
+					Type:   v1beta1.EngineRouteReady,
+					Status: corev1.ConditionTrue,
+				})
+				status.SetCondition(v1beta1.DecoderRouteReady, &apis.Condition{
+					Type:   v1beta1.DecoderRouteReady,
+					Status: corev1.ConditionFalse,
+					Reason: "DecoderRouteNotReady",
+				})
+			},
+			expectedStatus: corev1.ConditionFalse,
+		},
+		{
+			name:          "configuration ready for engine and decoder",
+			status:        &v1beta1.InferenceServiceStatus{},
+			componentList: []v1beta1.ComponentType{v1beta1.EngineComponent, v1beta1.DecoderComponent},
+			conditionType: v1beta1.LatestDeploymentReady,
+			setupStatus: func(status *v1beta1.InferenceServiceStatus) {
+				status.SetCondition(v1beta1.EngineConfigurationReady, &apis.Condition{
+					Type:   v1beta1.EngineConfigurationReady,
+					Status: corev1.ConditionTrue,
+				})
+				status.SetCondition(v1beta1.DecoderConfigurationReady, &apis.Condition{
+					Type:   v1beta1.DecoderConfigurationReady,
+					Status: corev1.ConditionTrue,
+				})
+			},
+			expectedStatus: corev1.ConditionTrue,
+		},
 	}
 
 	for _, tt := range tests {
@@ -689,6 +1050,124 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:      "engine multi-deployment all available",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.EngineComponent,
+			deployments: []*appsv1.Deployment{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "engine-head",
+						Namespace: "default",
+						Annotations: map[string]string{
+							"deployment.kubernetes.io/revision": "2",
+						},
+					},
+					Status: appsv1.DeploymentStatus{
+						Replicas:           1,
+						ReadyReplicas:      1,
+						AvailableReplicas:  1,
+						UpdatedReplicas:    1,
+						ObservedGeneration: 2,
+						Conditions: []appsv1.DeploymentCondition{
+							{
+								Type:   appsv1.DeploymentAvailable,
+								Status: corev1.ConditionTrue,
+								Reason: "MinimumReplicasAvailable",
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "engine-worker",
+						Namespace: "default",
+						Annotations: map[string]string{
+							"deployment.kubernetes.io/revision": "2",
+						},
+					},
+					Status: appsv1.DeploymentStatus{
+						Replicas:           4,
+						ReadyReplicas:      4,
+						AvailableReplicas:  4,
+						UpdatedReplicas:    4,
+						ObservedGeneration: 2,
+						Conditions: []appsv1.DeploymentCondition{
+							{
+								Type:   appsv1.DeploymentAvailable,
+								Status: corev1.ConditionTrue,
+								Reason: "MinimumReplicasAvailable",
+							},
+						},
+					},
+				},
+			},
+			url: &apis.URL{Scheme: "http", Host: "engine-service.default.svc.cluster.local"},
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "2",
+				URL:                   &apis.URL{Scheme: "http", Host: "engine-service.default.svc.cluster.local"},
+			},
+			expectError: false,
+		},
+		{
+			name:      "decoder deployment partially available",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.DecoderComponent,
+			deployments: []*appsv1.Deployment{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "decoder-head",
+						Namespace: "default",
+						Annotations: map[string]string{
+							"deployment.kubernetes.io/revision": "3",
+						},
+					},
+					Status: appsv1.DeploymentStatus{
+						Replicas:           1,
+						ReadyReplicas:      1,
+						AvailableReplicas:  1,
+						UpdatedReplicas:    1,
+						ObservedGeneration: 3,
+						Conditions: []appsv1.DeploymentCondition{
+							{
+								Type:   appsv1.DeploymentAvailable,
+								Status: corev1.ConditionTrue,
+								Reason: "MinimumReplicasAvailable",
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "decoder-worker",
+						Namespace: "default",
+						Annotations: map[string]string{
+							"deployment.kubernetes.io/revision": "3",
+						},
+					},
+					Status: appsv1.DeploymentStatus{
+						Replicas:           3,
+						ReadyReplicas:      1,
+						AvailableReplicas:  1,
+						UpdatedReplicas:    2,
+						ObservedGeneration: 3,
+						Conditions: []appsv1.DeploymentCondition{
+							{
+								Type:   appsv1.DeploymentAvailable,
+								Status: corev1.ConditionFalse,
+								Reason: "MinimumReplicasUnavailable",
+							},
+						},
+					},
+				},
+			},
+			url: nil,
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "3",
+				URL:                   nil,
+			},
+			expectError: false,
+		},
+		{
 			name:      "one deployment not available",
 			status:    &v1beta1.InferenceServiceStatus{},
 			component: v1beta1.PredictorComponent,
@@ -759,6 +1238,18 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			name:        "empty deployment list for engine",
+			status:      &v1beta1.InferenceServiceStatus{},
+			component:   v1beta1.EngineComponent,
+			deployments: []*appsv1.Deployment{},
+			url:         nil,
+			expectedStatus: v1beta1.ComponentStatusSpec{
+				LatestCreatedRevision: "",
+				URL:                   nil,
+			},
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -769,7 +1260,17 @@ func TestPropagateMultiNodeRayVLLMStatus(t *testing.T) {
 
 			if tt.expectError {
 				// Check that a condition was set indicating the error
-				condition := tt.status.GetCondition(v1beta1.PredictorReady)
+				var expectedCondition apis.ConditionType
+				switch tt.component {
+				case v1beta1.PredictorComponent:
+					expectedCondition = v1beta1.PredictorReady
+				case v1beta1.EngineComponent:
+					expectedCondition = v1beta1.EngineReady
+				case v1beta1.DecoderComponent:
+					expectedCondition = v1beta1.DecoderReady
+				}
+
+				condition := tt.status.GetCondition(expectedCondition)
 				if condition != nil {
 					assert.Equal(t, corev1.ConditionFalse, condition.Status)
 				}

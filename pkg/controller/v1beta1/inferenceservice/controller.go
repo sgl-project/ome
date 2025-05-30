@@ -128,6 +128,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create DeployConfig")
 	}
 
+	// For backward compatibility with predictor-based architecture
 	deploymentMode := isvcutils.GetDeploymentMode(annotations, deployConfig)
 	r.Log.Info("Inference service deployment mode ", "namespace", isvc.Namespace, "inference service", isvc.Name, "deployment mode", deploymentMode)
 
@@ -184,8 +185,105 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return result, err
 	}
 
+	// Determine which components to reconcile based on the spec
 	reconcilers := []components.Component{}
-	reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
+
+	// TODO: covert predictor spec to engine spec, and remove predictor spec
+
+	// Check if we should use the new architecture
+	if isvc.Spec.Model != nil && (isvc.Spec.Engine != nil || isvc.Spec.Decoder != nil || isvc.Spec.Runtime != nil) {
+		// New architecture path
+		r.Log.Info("Using new engine/decoder architecture", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+
+		// Step 1: Reconcile model first
+		baseModel, baseModelMeta, err := isvcutils.ReconcileBaseModel(r.Client, isvc)
+		if err != nil {
+			r.Log.Error(err, "Failed to reconcile base model", "Name", isvc.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "ModelReconcileError", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		// TODO, instead of failing, we should use isvc spec to create deployment
+		// Step 2: Get rt spec (either specified or auto-selected based on model)
+		rt, rtName, err := isvcutils.GetRuntimeForNewArchitecture(r.Client, isvc, baseModel)
+		if err != nil {
+			r.Log.Error(err, "Failed to get rt", "Name", isvc.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeReconcileError", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		// Step 3: Merge rt and isvc specs to get final engine and decoder specs
+		mergedEngine, mergedDecoder, err := isvcutils.MergeRuntimeSpecs(isvc, rt)
+		if err != nil {
+			r.Log.Error(err, "Failed to merge specs", "Name", isvc.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "MergeSpecsError", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		// Step 4: Determine deployment modes based on merged specs
+		engineDeploymentMode := isvcutils.DetermineEngineDeploymentMode(mergedEngine)
+		decoderDeploymentMode := constants.RawDeployment // Default for decoder
+
+		// If both engine and decoder exist, it's PD-disaggregated
+		if mergedEngine != nil && mergedDecoder != nil {
+			r.Log.Info("PD-disaggregated deployment detected", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+			// In PD-disaggregated mode, both components use their individual deployment modes
+			if mergedDecoder.Leader != nil && mergedDecoder.Worker != nil {
+				decoderDeploymentMode = constants.MultiNode
+			}
+		}
+
+		// Step 5: Create reconcilers based on merged specs
+		if mergedEngine != nil {
+			r.Log.Info("Creating engine reconciler",
+				"deploymentMode", engineDeploymentMode,
+				"namespace", isvc.Namespace,
+				"inferenceService", isvc.Name)
+
+			engineReconciler := components.NewEngine(
+				r.Client,
+				r.Clientset,
+				r.Scheme,
+				isvcConfig,
+				engineDeploymentMode,
+				baseModel,
+				baseModelMeta,
+				mergedEngine,
+				rt,
+				rtName,
+			)
+			reconcilers = append(reconcilers, engineReconciler)
+		}
+
+		if mergedDecoder != nil {
+			r.Log.Info("Creating decoder reconciler",
+				"deploymentMode", decoderDeploymentMode,
+				"namespace", isvc.Namespace,
+				"inferenceService", isvc.Name)
+
+			decoderReconciler := components.NewDecoder(
+				r.Client,
+				r.Clientset,
+				r.Scheme,
+				isvcConfig,
+				decoderDeploymentMode,
+				baseModel,
+				baseModelMeta,
+				mergedDecoder,
+				rt,
+				rtName,
+			)
+			reconcilers = append(reconcilers, decoderReconciler)
+		}
+	} else if isvc.Spec.Predictor.Model != nil {
+		// Legacy architecture: use predictor with deployment mode from annotations/configmap
+		r.Log.Info("Using legacy predictor architecture",
+			"deploymentMode", deploymentMode,
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+		// TODO: change this to v2 predictor
+		reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
+	}
 
 	for _, reconciler := range reconcilers {
 		result, err := reconciler.Reconcile(isvc)
@@ -203,20 +301,13 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
-	if deploymentMode == constants.Serverless {
-		componentList := []v1beta2.ComponentType{v1beta2.PredictorComponent}
-		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
-		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.LatestDeploymentReady)
-	}
-
 	// Reconcile ingress
 	ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
 	}
 
-	// check raw deployment
-	if deploymentMode == constants.RawDeployment || deploymentMode == constants.MultiNodeRayVLLM || deploymentMode == constants.MultiNode {
+	if deploymentMode != constants.Serverless {
 		reconciler, err := ingress.NewRawIngressReconciler(r.Client, r.Scheme, ingressConfig)
 		if err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
@@ -230,6 +321,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err := reconciler.Reconcile(isvc); err != nil {
 			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
 		}
+		componentList := []v1beta2.ComponentType{v1beta2.EngineComponent}
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.LatestDeploymentReady)
 	}
 
 	if err = r.updateStatus(isvc, deploymentMode); err != nil {

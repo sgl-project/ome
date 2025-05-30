@@ -11,6 +11,8 @@ import (
 // InferenceServiceStatus defines the observed state of InferenceService
 type InferenceServiceStatus struct {
 	// Conditions for the InferenceService <br/>
+	// - EngineRouteReady: engine route readiness condition; <br/>
+	// - DecoderRouteReady: decoder route readiness condition; <br/>
 	// - PredictorReady: predictor readiness condition; <br/>
 	// - RoutesReady (serverless mode only): aggregated routing condition, i.e. endpoint readiness condition; <br/>
 	// - LatestDeploymentReady (serverless mode only): aggregated configuration condition, i.e. latest deployment readiness condition; <br/>
@@ -66,14 +68,28 @@ type ComponentType string
 // PredictorComponent ComponentType Enum
 const (
 	PredictorComponent ComponentType = "predictor"
+	EngineComponent    ComponentType = "engine"
+	DecoderComponent   ComponentType = "decoder"
 )
 
 // ConditionType represents a Service condition value
 const (
+	// EngineRouteReady is set when engine route is ready
+	EngineRouteReady apis.ConditionType = "EngineRouteReady"
+	// DecoderRouteReady is set when decoder route is ready
+	DecoderRouteReady apis.ConditionType = "DecoderRouteReady"
 	// PredictorRouteReady is set when network configuration has completed.
 	PredictorRouteReady apis.ConditionType = "PredictorRouteReady"
+	// EngineConfigurationReady is set when engine pods are ready.
+	EngineConfigurationReady apis.ConditionType = "EngineConfigurationReady"
+	// DecoderConfigurationReady is set when decoder pods are ready.
+	DecoderConfigurationReady apis.ConditionType = "DecoderConfigurationReady"
 	// PredictorConfigurationReady is set when predictor pods are ready.
 	PredictorConfigurationReady apis.ConditionType = "PredictorConfigurationReady"
+	// EngineReady is set when engine pods are ready.
+	EngineReady apis.ConditionType = "EngineReady"
+	// DecoderReady is set when decoder pods are ready.
+	DecoderReady apis.ConditionType = "DecoderReady"
 	// PredictorReady is set when predictor has reported readiness.
 	PredictorReady apis.ConditionType = "PredictorReady"
 	// IngressReady is set when Ingress is created
@@ -210,9 +226,10 @@ type FailureInfo struct {
 	ExitCode int32 `json:"exitCode,omitempty"`
 }
 
-// InferenceService Ready condition is depending on predictor and route readiness condition
+// InferenceService component conditions
+// The overall Ready condition is managed by the conditionSet which only requires IngressReady
+// Component-specific ready conditions (PredictorReady, EngineReady, DecoderReady) are managed separately
 var conditionSet = apis.NewLivingConditionSet(
-	PredictorReady,
 	IngressReady,
 )
 
