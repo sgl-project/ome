@@ -9,7 +9,8 @@ import (
 type InferenceServiceSpec struct {
 	// Predictor defines the model serving spec
 	// It specifies how the model should be deployed and served, handling inference requests.
-	// +required
+	// Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.
+	// +optional
 	Predictor PredictorSpec `json:"predictor"`
 
 	// Engine defines the serving engine spec
@@ -43,11 +44,6 @@ type InferenceServiceSpec struct {
 	// Router defines the router spec
 	// +optional
 	Router *RouterSpec `json:"router,omitempty"`
-
-	// The compartment ID to use for the inference service
-	// Specifies the OCI compartment where the inference service resources will be created.
-	// +optional
-	CompartmentID *string `json:"compartmentID,omitempty"`
 
 	// KedaConfig defines the autoscaling configuration for KEDA
 	// Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling),
@@ -272,12 +268,12 @@ type LoggerSpec struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
-// +kubebuilder:printcolumn:name="BaseModel",type="string",JSONPath=".spec.predictor.model.baseModel"
-// +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.predictor.model.runtime"
-// +kubebuilder:printcolumn:name="Prev",type="integer",JSONPath=".status.components.predictor.traffic[?(@.tag=='prev')].percent"
-// +kubebuilder:printcolumn:name="Latest",type="integer",JSONPath=".status.components.predictor.traffic[?(@.latestRevision==true)].percent"
-// +kubebuilder:printcolumn:name="PrevRolledoutRevision",type="string",JSONPath=".status.components.predictor.traffic[?(@.tag=='prev')].revisionName"
-// +kubebuilder:printcolumn:name="LatestReadyRevision",type="string",JSONPath=".status.components.predictor.traffic[?(@.latestRevision==true)].revisionName"
+// +kubebuilder:printcolumn:name="BaseModel",type="string",JSONPath=".spec.model.name"
+// +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.runtime.name"
+// +kubebuilder:printcolumn:name="Prev",type="integer",JSONPath=".status.components.engine.traffic[?(@.tag=='prev')].percent"
+// +kubebuilder:printcolumn:name="Latest",type="integer",JSONPath=".status.components.engine.traffic[?(@.latestRevision==true)].percent"
+// +kubebuilder:printcolumn:name="PrevRolledoutRevision",type="string",JSONPath=".status.components.engine.traffic[?(@.tag=='prev')].revisionName"
+// +kubebuilder:printcolumn:name="LatestReadyRevision",type="string",JSONPath=".status.components.engine.traffic[?(@.latestRevision==true)].revisionName"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:path=inferenceservices,shortName=isvc
 // +kubebuilder:storageversion

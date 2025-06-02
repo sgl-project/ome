@@ -19,7 +19,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.BenchmarkJobList":           schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":           schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":         schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
-		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.BuiltInAdapter":             schema_pkg_apis_ome_v1beta1_BuiltInAdapter(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ClusterBaseModel":           schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":       schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
@@ -65,6 +64,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
+		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingAdapter":             schema_pkg_apis_ome_v1beta1_ServingAdapter(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":      schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
@@ -626,53 +626,6 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref common.ReferenceCallback
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_BuiltInAdapter(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"serverType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"modelLoadingTimeoutMillis": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Timeout for model loading operations in milliseconds",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"env": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Environment variables used to control other aspects of the built-in adapter's behaviour (uncommon)",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/api/core/v1.EnvVar"},
 	}
 }
 
@@ -2724,7 +2677,7 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 				Properties: map[string]spec.Schema{
 					"predictor": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests.",
+							Description: "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests. Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.",
 							Default:     map[string]interface{}{},
 							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.PredictorSpec"),
 						},
@@ -2759,13 +2712,6 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec"),
 						},
 					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"kedaConfig": {
 						SchemaProps: spec.SchemaProps{
 							Description: "KedaConfig defines the autoscaling configuration for KEDA Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling), allowing the service to scale based on custom metrics or event sources.",
@@ -2773,7 +2719,6 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref common.ReferenceCallba
 						},
 					},
 				},
-				Required: []string{"predictor"},
 			},
 		},
 		Dependencies: []string{
@@ -6864,6 +6809,53 @@ func schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ServingAdapter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"serverType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"modelLoadingTimeoutMillis": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeout for model loading operations in milliseconds",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"env": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.EnvVar"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ServingRuntime(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6978,7 +6970,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -7140,7 +7132,6 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref common.ReferenceCallb
 						},
 					},
 				},
-				Required: []string{"containers"},
 			},
 		},
 		Dependencies: []string{
@@ -7271,7 +7262,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -7438,46 +7429,17 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerPodSpec"),
 						},
 					},
-					"httpDataEndpoint": {
-						SchemaProps: spec.SchemaProps{
-							Description: "HTTP endpoint for inferencing",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"replicas": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Configure the number of replicas in the Deployments generated by this ServingRuntime If specified, this overrides the podsPerRuntime configuration value",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"builtInAdapter": {
+					"servingAdapter": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Provide the details about built-in runtime adapter",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.BuiltInAdapter"),
-						},
-					},
-					"pipelineParallelism": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Enable pipeline parallelism for the runtime When pipeline parallelism is enabled, the runtime informs the model server to use pipeline parallelism for model inference with multiple compute nodes via Ray Cluster and vLLM only. The number of compute nodes is determined by the number of replicas in the Inference Service. The worker node will be minimum replica minus one, which is reserved for head node. This field is deprecated and will be removed in a future release. Please use the annotation \"ome.io/deploymentMode: MultiNodeRayVLLM\" instead.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"compartmentID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "The compartment ID to use for the serving runtime",
-							Type:        []string{"string"},
-							Format:      "",
+							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingAdapter"),
 						},
 					},
 				},
-				Required: []string{"containers"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.BuiltInAdapter", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingAdapter", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 
@@ -7709,7 +7671,7 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+							Description: "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -7871,7 +7833,6 @@ func schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref common.ReferenceCallback) com
 						},
 					},
 				},
-				Required: []string{"containers"},
 			},
 		},
 		Dependencies: []string{

@@ -323,29 +323,6 @@
         }
       }
     },
-    "v1beta1.BuiltInAdapter": {
-      "type": "object",
-      "properties": {
-        "env": {
-          "description": "Environment variables used to control other aspects of the built-in adapter's behaviour (uncommon)",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1.EnvVar"
-          },
-          "x-kubernetes-list-type": "atomic"
-        },
-        "modelLoadingTimeoutMillis": {
-          "description": "Timeout for model loading operations in milliseconds",
-          "type": "integer",
-          "format": "int32"
-        },
-        "serverType": {
-          "description": "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
-          "type": "string"
-        }
-      }
-    },
     "v1beta1.ClusterBaseModel": {
       "description": "ClusterBaseModel is the Schema for the basemodels API",
       "type": "object",
@@ -1526,14 +1503,7 @@
     "v1beta1.InferenceServiceSpec": {
       "description": "InferenceServiceSpec is the top level type for this resource",
       "type": "object",
-      "required": [
-        "predictor"
-      ],
       "properties": {
-        "compartmentID": {
-          "description": "The compartment ID to use for the inference service Specifies the OCI compartment where the inference service resources will be created.",
-          "type": "string"
-        },
         "decoder": {
           "description": "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
           "$ref": "#/definitions/v1beta1.DecoderSpec"
@@ -1551,7 +1521,7 @@
           "$ref": "#/definitions/v1beta1.ModelRef"
         },
         "predictor": {
-          "description": "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests.",
+          "description": "Predictor defines the model serving spec It specifies how the model should be deployed and served, handling inference requests. Deprecated: Predictor is deprecated and will be removed in a future release. Please use Engine and Model fields instead.",
           "default": {},
           "$ref": "#/definitions/v1beta1.PredictorSpec"
         },
@@ -3862,6 +3832,29 @@
         }
       }
     },
+    "v1beta1.ServingAdapter": {
+      "type": "object",
+      "properties": {
+        "env": {
+          "description": "Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.EnvVar"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "modelLoadingTimeoutMillis": {
+          "description": "Timeout for model loading operations in milliseconds",
+          "type": "integer",
+          "format": "int32"
+        },
+        "serverType": {
+          "description": "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.ServingRuntime": {
       "description": "ServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
@@ -3918,9 +3911,6 @@
     },
     "v1beta1.ServingRuntimePodSpec": {
       "type": "object",
-      "required": [
-        "containers"
-      ],
       "properties": {
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
@@ -3935,7 +3925,7 @@
           }
         },
         "containers": {
-          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
           "type": "array",
           "items": {
             "default": {},
@@ -4040,9 +4030,6 @@
     "v1beta1.ServingRuntimeSpec": {
       "description": "ServingRuntimeSpec defines the desired state of ServingRuntime. This spec is currently provisional and are subject to change as details regarding single-model serving and multi-model serving are hammered out.",
       "type": "object",
-      "required": [
-        "containers"
-      ],
       "properties": {
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
@@ -4056,16 +4043,8 @@
             "default": ""
           }
         },
-        "builtInAdapter": {
-          "description": "Provide the details about built-in runtime adapter",
-          "$ref": "#/definitions/v1beta1.BuiltInAdapter"
-        },
-        "compartmentID": {
-          "description": "The compartment ID to use for the serving runtime",
-          "type": "string"
-        },
         "containers": {
-          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
           "type": "array",
           "items": {
             "default": {},
@@ -4102,10 +4081,6 @@
           "description": "Host networking requested for this pod. Use the host's network namespace. If this option is set, the ports that will be used must be specified. Default to false.",
           "type": "boolean"
         },
-        "httpDataEndpoint": {
-          "description": "HTTP endpoint for inferencing",
-          "type": "string"
-        },
         "imagePullSecrets": {
           "description": "ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec. If specified, these secrets will be passed to individual puller implementations for them to use. More info: https://kubernetes.io/docs/concepts/containers/images#specifying-imagepullsecrets-on-a-pod",
           "type": "array",
@@ -4140,10 +4115,6 @@
             "default": ""
           }
         },
-        "pipelineParallelism": {
-          "description": "Enable pipeline parallelism for the runtime When pipeline parallelism is enabled, the runtime informs the model server to use pipeline parallelism for model inference with multiple compute nodes via Ray Cluster and vLLM only. The number of compute nodes is determined by the number of replicas in the Inference Service. The worker node will be minimum replica minus one, which is reserved for head node. This field is deprecated and will be removed in a future release. Please use the annotation \"ome.io/deploymentMode: MultiNodeRayVLLM\" instead.",
-          "type": "boolean"
-        },
         "protocolVersions": {
           "description": "Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)",
           "type": "array",
@@ -4153,11 +4124,6 @@
           },
           "x-kubernetes-list-type": "atomic"
         },
-        "replicas": {
-          "description": "Configure the number of replicas in the Deployments generated by this ServingRuntime If specified, this overrides the podsPerRuntime configuration value",
-          "type": "integer",
-          "format": "int32"
-        },
         "routerConfig": {
           "description": "Router configuration for this runtime",
           "$ref": "#/definitions/v1beta1.RouterSpec"
@@ -4165,6 +4131,10 @@
         "schedulerName": {
           "description": "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
           "type": "string"
+        },
+        "servingAdapter": {
+          "description": "Provide the details about built-in runtime adapter",
+          "$ref": "#/definitions/v1beta1.ServingAdapter"
         },
         "supportedModelFormats": {
           "description": "Model formats and version supported by this runtime",
@@ -4320,9 +4290,6 @@
     },
     "v1beta1.WorkerPodSpec": {
       "type": "object",
-      "required": [
-        "containers"
-      ],
       "properties": {
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
@@ -4337,7 +4304,7 @@
           }
         },
         "containers": {
-          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. There must be at least one container in a Pod. Cannot be updated.",
+          "description": "List of containers belonging to the pod. Containers cannot currently be added or removed. Cannot be updated.",
           "type": "array",
           "items": {
             "default": {},

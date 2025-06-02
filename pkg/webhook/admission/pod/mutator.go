@@ -100,12 +100,15 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
 	servingSidecarInjector := newServingSidecarInjector(configMap)
 
+	rdmaInjector := NewRDMAInjector()
+
 	mutators := []func(pod *v1.Pod) error{
 		agentInjector.InjectAgent,
 		metricsAggregator.InjectMetricsAggregator,
 		modelInitInjector.InjectModelInit,
 		fineTunedAdapterInjector.InjectFineTunedAdapter,
 		servingSidecarInjector.InjectServingSidecar,
+		rdmaInjector.InjectRDMA,
 	}
 
 	for _, mutator := range mutators {

@@ -44,6 +44,36 @@ func TestInitializeComponentStatus(t *testing.T) {
 				LatestReadyRevision: "existing-rev",
 			},
 		},
+		{
+			name:      "initialize engine component",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.EngineComponent,
+			expected:  v1beta1.ComponentStatusSpec{},
+		},
+		{
+			name:      "initialize decoder component",
+			status:    &v1beta1.InferenceServiceStatus{},
+			component: v1beta1.DecoderComponent,
+			expected:  v1beta1.ComponentStatusSpec{},
+		},
+		{
+			name: "initialize engine with existing data",
+			status: &v1beta1.InferenceServiceStatus{
+				Components: map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+					v1beta1.EngineComponent: {
+						LatestReadyRevision:   "engine-rev-1",
+						LatestCreatedRevision: "engine-rev-2",
+						URL:                   &apis.URL{Scheme: "http", Host: "engine.example.com"},
+					},
+				},
+			},
+			component: v1beta1.EngineComponent,
+			expected: v1beta1.ComponentStatusSpec{
+				LatestReadyRevision:   "engine-rev-1",
+				LatestCreatedRevision: "engine-rev-2",
+				URL:                   &apis.URL{Scheme: "http", Host: "engine.example.com"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -536,6 +566,8 @@ func TestGetReadyConditionsMap(t *testing.T) {
 
 	assert.NotNil(t, conditionsMap)
 	assert.Equal(t, v1beta1.PredictorReady, conditionsMap[v1beta1.PredictorComponent])
+	assert.Equal(t, v1beta1.EngineReady, conditionsMap[v1beta1.EngineComponent])
+	assert.Equal(t, v1beta1.DecoderReady, conditionsMap[v1beta1.DecoderComponent])
 }
 
 func TestGetRouteConditionsMap(t *testing.T) {
@@ -544,6 +576,8 @@ func TestGetRouteConditionsMap(t *testing.T) {
 
 	assert.NotNil(t, conditionsMap)
 	assert.Equal(t, v1beta1.PredictorRouteReady, conditionsMap[v1beta1.PredictorComponent])
+	assert.Equal(t, v1beta1.EngineRouteReady, conditionsMap[v1beta1.EngineComponent])
+	assert.Equal(t, v1beta1.DecoderRouteReady, conditionsMap[v1beta1.DecoderComponent])
 }
 
 func TestGetConfigurationConditionsMap(t *testing.T) {
@@ -552,6 +586,8 @@ func TestGetConfigurationConditionsMap(t *testing.T) {
 
 	assert.NotNil(t, conditionsMap)
 	assert.Equal(t, v1beta1.PredictorConfigurationReady, conditionsMap[v1beta1.PredictorComponent])
+	assert.Equal(t, v1beta1.EngineConfigurationReady, conditionsMap[v1beta1.EngineComponent])
+	assert.Equal(t, v1beta1.DecoderConfigurationReady, conditionsMap[v1beta1.DecoderComponent])
 }
 
 func TestGetConditionsMapIndex(t *testing.T) {

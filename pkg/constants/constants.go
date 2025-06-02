@@ -129,6 +129,9 @@ var (
 	PrometheusPortAnnotationKey              = "prometheus.io/port"
 	PrometheusPathAnnotationKey              = "prometheus.io/path"
 	PrometheusScrapeAnnotationKey            = "prometheus.io/scrape"
+	RDMAAutoInjectAnnotationKey              = "rdma.ome.io/auto-inject"
+	RDMAProfileAnnotationKey                 = "rdma.ome.io/profile"
+	RDMAContainerNameAnnotationKey           = "rdma.ome.io/container-name"
 	DefaultPrometheusPath                    = "/metrics"
 	QueueProxyAggregatePrometheusMetricsPort = 9088
 	DefaultPodPrometheusPort                 = "9091"

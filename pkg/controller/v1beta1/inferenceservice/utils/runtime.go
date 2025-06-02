@@ -3,6 +3,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -301,4 +302,200 @@ func parseModelSize(sizeStr string) float64 {
 	}
 
 	return size * multiplier
+}
+
+// NewArchitecture: Functions for the new engine/decoder architecture
+// These functions work directly with BaseModelSpec instead of ModelSpec
+
+// RuntimeCompatibilityError represents an error when a runtime doesn't support a model
+type RuntimeCompatibilityError struct {
+	RuntimeName   string
+	ModelName     string
+	ModelFormat   string
+	Reason        string
+	DetailedError error
+}
+
+func (e *RuntimeCompatibilityError) Error() string {
+	if e.DetailedError != nil {
+		return fmt.Sprintf("runtime %s does not support model %s: %s (%v)",
+			e.RuntimeName, e.ModelName, e.Reason, e.DetailedError)
+	}
+	return fmt.Sprintf("runtime %s does not support model %s: %s",
+		e.RuntimeName, e.ModelName, e.Reason)
+}
+
+// RuntimeSupportsModelNewArchitecture checks if a runtime can support a specific model in the new architecture.
+// It returns nil if the runtime supports the model, or a RuntimeCompatibilityError if not.
+func RuntimeSupportsModelNewArchitecture(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.ServingRuntimeSpec, runtimeName string) error {
+	// Check if runtime supports the model format
+	modelLabel := getModelFormatLabel(baseModel)
+	var supportedFormats []string
+
+	// Check all supported formats, collecting them for error reporting
+	formatSupported := false
+	for _, format := range srSpec.SupportedModelFormats {
+		label := generateLabel(
+			format.ModelFormat,
+			format.ModelArchitecture,
+			format.Quantization,
+			format.ModelFramework,
+		)
+		supportedFormats = append(supportedFormats, label)
+		if label == modelLabel {
+			formatSupported = true
+			break
+		}
+	}
+
+	if !formatSupported {
+		return &RuntimeCompatibilityError{
+			RuntimeName: runtimeName,
+			ModelName:   "", // Will be filled by caller if available
+			ModelFormat: baseModel.ModelFormat.Name,
+			Reason:      fmt.Sprintf("model format '%s' not in supported formats %v", modelLabel, supportedFormats),
+		}
+	}
+
+	// Check if model size is within runtime's supported range
+	if baseModel.ModelParameterSize != nil && srSpec.ModelSizeRange != nil {
+		modelSize := parseModelSize(*baseModel.ModelParameterSize)
+		minSize := parseModelSize(*srSpec.ModelSizeRange.Min)
+		maxSize := parseModelSize(*srSpec.ModelSizeRange.Max)
+
+		if modelSize < minSize || modelSize > maxSize {
+			return &RuntimeCompatibilityError{
+				RuntimeName: runtimeName,
+				ModelName:   "", // Will be filled by caller if available
+				ModelFormat: baseModel.ModelFormat.Name,
+				Reason: fmt.Sprintf("model size %s is outside supported range [%s, %s]",
+					*baseModel.ModelParameterSize, *srSpec.ModelSizeRange.Min, *srSpec.ModelSizeRange.Max),
+			}
+		}
+	}
+
+	return nil
+}
+
+// formatToString converts a SupportedModelFormat to a human-readable string
+func formatToString(format v1beta1.SupportedModelFormat) string {
+	result := format.Name
+	if format.ModelFormat != nil {
+		result = format.ModelFormat.Name
+		if format.ModelFormat.Version != nil {
+			result += ":" + *format.ModelFormat.Version
+		}
+	}
+	if format.ModelArchitecture != nil {
+		result += "/" + *format.ModelArchitecture
+	}
+	if format.Quantization != nil {
+		result += "/" + string(*format.Quantization)
+	}
+	return result
+}
+
+// GetSupportingRuntimesNewArchitecture returns a list of ServingRuntimeSpecs that can support the given model.
+// It considers both namespace-scoped and cluster-scoped runtimes, and sorts them by priority.
+// It also returns detailed reasons why each runtime was excluded, which can be used for debugging.
+func GetSupportingRuntimesNewArchitecture(baseModel *v1beta1.BaseModelSpec, cl client.Client, namespace string) ([]v1beta1.SupportedRuntime, map[string]error, error) {
+	excludedRuntimes := make(map[string]error)
+
+	// List all namespace-scoped runtimes
+	runtimes := &v1beta1.ServingRuntimeList{}
+	if err := cl.List(context.TODO(), runtimes, client.InNamespace(namespace)); err != nil {
+		return nil, nil, err
+	}
+	// Sort namespace-scoped runtimes by created timestamp desc and name asc
+	sortServingRuntimeList(runtimes)
+
+	// List all cluster-scoped runtimes
+	clusterRuntimes := &v1beta1.ClusterServingRuntimeList{}
+	if err := cl.List(context.TODO(), clusterRuntimes); err != nil {
+		return nil, nil, err
+	}
+	// Sort cluster-scoped runtimes by created timestamp desc and name asc
+	sortClusterServingRuntimeList(clusterRuntimes)
+
+	var srSpecs []v1beta1.SupportedRuntime
+	var clusterSrSpecs []v1beta1.SupportedRuntime
+
+	// Process namespace-scoped runtimes
+	for i := range runtimes.Items {
+		rt := &runtimes.Items[i]
+
+		if rt.Spec.IsDisabled() {
+			excludedRuntimes[rt.GetName()] = fmt.Errorf("runtime is disabled")
+			continue
+		}
+
+		if err := RuntimeSupportsModelNewArchitecture(baseModel, &rt.Spec, rt.GetName()); err != nil {
+			excludedRuntimes[rt.GetName()] = err
+			continue
+		}
+
+		// Check if runtime has auto-select enabled for at least one supported format
+		hasAutoSelect := false
+		for _, format := range rt.Spec.SupportedModelFormats {
+			if format.AutoSelect != nil && *format.AutoSelect {
+				hasAutoSelect = true
+				break
+			}
+		}
+
+		if !hasAutoSelect {
+			excludedRuntimes[rt.GetName()] = fmt.Errorf("runtime does not have auto-select enabled")
+			continue
+		}
+
+		srSpecs = append(srSpecs, v1beta1.SupportedRuntime{Name: rt.GetName(), Spec: rt.Spec})
+	}
+
+	// Sort namespace-scoped runtimes by priority
+	if baseModel.ModelParameterSize != nil {
+		sortSupportedRuntimeByPriority(srSpecs, baseModel.ModelFormat, parseModelSize(*baseModel.ModelParameterSize))
+	} else {
+		sortSupportedRuntimeByPriority(srSpecs, baseModel.ModelFormat, 0)
+	}
+
+	// Process cluster-scoped runtimes
+	for i := range clusterRuntimes.Items {
+		crt := &clusterRuntimes.Items[i]
+
+		if crt.Spec.IsDisabled() {
+			excludedRuntimes[crt.GetName()] = fmt.Errorf("runtime is disabled")
+			continue
+		}
+
+		if err := RuntimeSupportsModelNewArchitecture(baseModel, &crt.Spec, crt.GetName()); err != nil {
+			excludedRuntimes[crt.GetName()] = err
+			continue
+		}
+
+		// Check if runtime has auto-select enabled for at least one supported format
+		hasAutoSelect := false
+		for _, format := range crt.Spec.SupportedModelFormats {
+			if format.AutoSelect != nil && *format.AutoSelect {
+				hasAutoSelect = true
+				break
+			}
+		}
+
+		if !hasAutoSelect {
+			excludedRuntimes[crt.GetName()] = fmt.Errorf("runtime does not have auto-select enabled")
+			continue
+		}
+
+		clusterSrSpecs = append(clusterSrSpecs, v1beta1.SupportedRuntime{Name: crt.GetName(), Spec: crt.Spec})
+	}
+
+	// Sort cluster-scoped runtimes by priority
+	if baseModel.ModelParameterSize != nil {
+		sortSupportedRuntimeByPriority(clusterSrSpecs, baseModel.ModelFormat, parseModelSize(*baseModel.ModelParameterSize))
+	} else {
+		sortSupportedRuntimeByPriority(clusterSrSpecs, baseModel.ModelFormat, 0)
+	}
+
+	srSpecs = append(srSpecs, clusterSrSpecs...)
+	return srSpecs, excludedRuntimes, nil
 }
