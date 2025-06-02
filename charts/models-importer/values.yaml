@@ -381,6 +381,14 @@ o4-mini-2025-04-16:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+text-embedding-3-small:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+text-embedding-3-large:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 gemini-2-0-flash-lite:
   enabled: false
   lifecyclePhase: "ACTIVE"

@@ -213,6 +213,8 @@ A Helm chart for importing ome base models
 | o4-mini-2025-04-16.lifecyclePhase                                   | string | `"ACTIVE"`                                   |             |
 | o4-mini.enabled                                                     | bool   | `false`                                      |             |
 | o4-mini.lifecyclePhase                                              | string | `"ACTIVE"`                                   |             |
+| text-embedding-3-small.lifecyclePhase                                              | string | `"ACTIVE"`                                   |             |
+| text-embedding-3-large.lifecyclePhase                                              | string | `"ACTIVE"`                                   |             |
 | osnamespace                                                         | string | `"mynamespace"`                              |             |
 | phi-3-vision-128k-instruct-chat.enabled                             | bool   | `false`                                      |             |
 | phi-3-vision-128k-instruct-chat.lifecyclePhase                      | string | `"ACTIVE"`                                   |             |
