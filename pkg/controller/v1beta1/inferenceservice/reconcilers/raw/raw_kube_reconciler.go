@@ -1,12 +1,12 @@
 package raw
 
 import (
-	"fmt"
-
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
-
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/deployment"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,11 +14,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	autoscaler "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
-	deployment "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/deployment"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
-	service "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 // RawKubeReconciler reconciles the Native K8S Resources
@@ -36,31 +31,40 @@ func NewRawKubeReconciler(client client.Client,
 	clientset kubernetes.Interface,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	inferenceServiceSepc *v1beta1.InferenceServiceSpec,
+	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
 	podSpec *corev1.PodSpec,
+	makeServiceHeadless bool,
 ) (*RawKubeReconciler, error) {
-	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSepc)
+	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
 	}
 
-	url, err := createRawURL(clientset, componentMeta)
+	url, err := CreateRawURL(clientset, componentMeta)
 	if err != nil {
 		return nil, err
 	}
 
-	componentExt := &inferenceServiceSepc.Predictor.ComponentExtensionSpec
+	// TODO: Remove this once we have a better way to handle the component extension spec
+	// Ensure we are using the predictor's extension spec for the component reconcilers
+	componentExt := &inferenceServiceSpec.Predictor.ComponentExtensionSpec
+	// Define the service selector based on the component label, which should be reliably added
+	// by the predictor's metadata processing and applied to the deployment's pods.
+	serviceSelector := map[string]string{
+		"ome.io/component": string(v1beta1.PredictorComponent),
+	}
+
 	return &RawKubeReconciler{
 		client:     client,
 		scheme:     scheme,
 		Deployment: deployment.NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec),
-		Service:    service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, nil),
+		Service:    service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, serviceSelector, makeServiceHeadless),
 		Scaler:     as,
 		URL:        url,
 	}, nil
 }
 
-func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*knapis.URL, error) {
+func CreateRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*knapis.URL, error) {
 	ingressConfig, err := controllerconfig.NewIngressConfig(clientset)
 	if err != nil {
 		return nil, err
@@ -70,7 +74,7 @@ func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*
 	url.Scheme = "http"
 	url.Host, err = ingress.GenerateDomainName(metadata.Name, metadata, ingressConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed creating host name: %w", err)
+		return nil, err
 	}
 
 	return url, nil

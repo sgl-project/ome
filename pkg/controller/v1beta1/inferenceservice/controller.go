@@ -69,12 +69,13 @@ import (
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations;validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
@@ -171,6 +172,11 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// Initialize status if not already initialized
+	if isvc.Status.Components == nil {
+		isvc.Status.Components = make(map[v1beta2.ComponentType]v1beta2.ComponentStatusSpec)
+	}
+
 	// Setup reconcilers
 	r.Log.Info("Reconciling inference service", "apiVersion", isvc.APIVersion, "namespace", isvc.Namespace, "isvc", isvc.Name)
 	isvcConfig, err := controllerconfig.NewInferenceServicesConfig(r.Clientset)
@@ -185,21 +191,40 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	reconcilers := []components.Component{}
+	// Always add Predictor
 	reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
+	// Add Router reconciler if spec exists
+	if isvc.Spec.Router != nil {
+		reconcilers = append(reconcilers, components.NewRouter(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
+	}
 
-	for _, reconciler := range reconcilers {
-		result, err := reconciler.Reconcile(isvc)
+	// Reconcile components sequentially
+	for _, component := range reconcilers {
+		componentType := reflect.TypeOf(component).String()
+		r.Log.Info("Reconciling component", "component", componentType)
+		result, err := component.Reconcile(isvc) // Call Reconcile directly
 		if err != nil {
-			r.Log.Error(err, "Failed to reconcile", "reconciler", reflect.ValueOf(reconciler), "Name", isvc.Name)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "InternalError", err.Error())
-			if err := r.updateStatus(isvc, deploymentMode); err != nil {
-				r.Log.Error(err, "Error updating status")
-				return result, err
+			r.Log.Error(err, "Failed to reconcile component", "component", componentType)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "InternalError", fmt.Sprintf("Failed to reconcile component %s: %s", componentType, err.Error()))
+			// Attempt to update status before returning error
+			if updateErr := r.updateStatus(isvc, deploymentMode); updateErr != nil {
+				r.Log.Error(updateErr, "Failed to update status after component reconciliation error")
+				// Return the update error as it indicates a problem persisting state
+				return reconcile.Result{}, updateErr
 			}
-			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile component")
+			// Return error to trigger retry
+			return reconcile.Result{}, errors.Wrapf(err, "failed to reconcile component %s", componentType)
 		}
+		// Handle requeue requests from components
 		if result.Requeue || result.RequeueAfter > 0 {
-			return result, nil
+			r.Log.Info("Component requested requeue", "component", componentType, "requeue", result.Requeue, "requeueAfter", result.RequeueAfter)
+			// Update status before requeueing
+			if updateErr := r.updateStatus(isvc, deploymentMode); updateErr != nil {
+				r.Log.Error(updateErr, "Failed to update status before requeue")
+				// Return the update error
+				return reconcile.Result{}, updateErr
+			}
+			return result, nil // Return the component's requested requeue result
 		}
 	}
 

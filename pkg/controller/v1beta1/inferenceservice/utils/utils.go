@@ -20,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -50,6 +51,25 @@ func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
 	return annotations[constants.ModelInitInjectionKey] != "true" &&
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
+}
+
+// IsEntrypointRouter checks if the InferenceService has the
+// entrypoint-component annotation set to router.
+// Returns true if the annotation is set to router, false otherwise.
+func IsEntrypointRouter(annotations map[string]string) bool {
+	componentValue, hasAnnotation := annotations[constants.EntrypointComponent]
+	if !hasAnnotation {
+		return false
+	}
+
+	// Validate against known component types
+	switch v1beta1.ComponentType(componentValue) {
+	case v1beta1.RouterComponent:
+		return true
+	default:
+		// Invalid component type
+		return false
+	}
 }
 
 func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (bool, error) {
@@ -181,6 +201,42 @@ func MergePodSpec(runtimePodSpec *v1beta1.ServingRuntimePodSpec, predictorPodSpe
 
 	corePodSpec := v1.PodSpec{}
 	jsonResult, err := strategicpatch.StrategicMergePatch(runtimePodSpecJson, overrides, corePodSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(jsonResult, &corePodSpec); err != nil {
+		return nil, err
+	}
+
+	return &corePodSpec, nil
+}
+
+// MergeRouterPodSpec Merge the predictor PodSpec struct with the runtime PodSpec struct, allowing users
+// to override runtime PodSpec settings from the predictor spec.
+func MergeRouterPodSpec(routerSpec *v1beta1.RouterSpec, routerPodSpec *v1beta1.PodSpec) (*v1.PodSpec, error) {
+	routerSpecJson, err := json.Marshal(v1.PodSpec{
+		NodeSelector:     routerSpec.NodeSelector,
+		Affinity:         routerSpec.Affinity,
+		Tolerations:      routerSpec.Tolerations,
+		Volumes:          routerSpec.Volumes,
+		ImagePullSecrets: routerSpec.ImagePullSecrets,
+		DNSPolicy:        routerSpec.DNSPolicy,
+		HostNetwork:      routerSpec.HostNetwork,
+		SchedulerName:    routerSpec.SchedulerName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Use JSON Marshal/Unmarshal to merge PodSpec structs.
+	overrides, err := json.Marshal(routerPodSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	corePodSpec := v1.PodSpec{}
+	jsonResult, err := strategicpatch.StrategicMergePatch(routerSpecJson, overrides, corePodSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -336,6 +392,20 @@ func ListPodsByLabel(cl client.Client, namespace string, labelKey string, labelV
 	return podList, nil
 }
 
+func ListPodsByLabelSelector(cl client.Client, namespace string, selector labels.Selector) (*v1.PodList, error) {
+	podList := &v1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabelsSelector{Selector: selector},
+	}
+	if err := cl.List(context.TODO(), podList, listOpts...); err != nil {
+		// Log error but don't fail reconciliation entirely
+		return nil, err
+	}
+	sortPodsByCreatedTimestampDesc(podList)
+	return podList, nil
+}
+
 func sortPodsByCreatedTimestampDesc(pods *v1.PodList) {
 	sort.Slice(pods.Items, func(i, j int) bool {
 		return pods.Items[j].ObjectMeta.CreationTimestamp.Before(&pods.Items[i].ObjectMeta.CreationTimestamp)
@@ -354,10 +424,10 @@ func GetScaledObjectName(isvcName string) string {
 	return fmt.Sprintf("%s%s", prefix, isvcName)
 }
 
-// GetOmeContainerIndex returns the index of the OME container in the runtime containers.
-func GetOmeContainerIndex(containers []v1.Container) int {
+// GetContainerIndex returns the index of the container in the runtime containers.
+func GetContainerIndex(containers []v1.Container, containerName string) int {
 	for i, container := range containers {
-		if container.Name == constants.MainContainerName {
+		if container.Name == containerName {
 			return i
 		}
 	}

@@ -56,6 +56,13 @@ const (
 	RouterPort                   = 8080
 )
 
+// InferenceService Router Constants
+const (
+	RouterContainerName = "router" // Assuming a standard name for the router container
+	RouterDefaultHost   = "0.0.0.0"
+	RouterDefaultPort   = 8080
+)
+
 // InferenceService Constants
 var (
 	InferenceServiceName                = "inferenceservice"
@@ -172,6 +179,7 @@ var (
 	FTServingWithMergedWeightsAnnotationKey  = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
 	ServiceType                              = OMEAPIGroupName + "/service-type"
 	LoadBalancerIP                           = OMEAPIGroupName + "/load-balancer-ip"
+	EntrypointComponent                      = OMEAPIGroupName + "/entrypoint-component"
 	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
 	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
 	PrometheusPortAnnotationKey              = "prometheus.io/port"
@@ -417,6 +425,7 @@ var (
 // InferenceService Component enums
 const (
 	Predictor InferenceServiceComponent = "predictor"
+	Router    InferenceServiceComponent = "router"
 )
 
 // InferenceService verb enums

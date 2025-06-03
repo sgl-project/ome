@@ -55,7 +55,7 @@ func NewMultiNodeReconciler(client client.Client,
 		LWS:          lws.NewLWSReconciler(client, scheme, headPodSpec, workerPodSpec, int32(workerSize), componentExt, componentMeta),
 		URL:          url,
 		IstioSidecar: raycluster.NewIstioSidecarReconciler(client, scheme, componentMeta, enabled),
-		Service:      service.NewServiceReconciler(client, scheme, componentMeta, componentExt, headPodSpec, selector),
+		Service:      service.NewServiceReconciler(client, scheme, componentMeta, componentExt, headPodSpec, selector, false),
 	}, nil
 }
 

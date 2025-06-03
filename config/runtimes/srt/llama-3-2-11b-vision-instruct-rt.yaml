@@ -42,6 +42,14 @@ spec:
     max: 12B
   protocolVersions:
     - openAI
+  routerConfig:
+    containers:
+      - name: router
+        image: fra.ocir.io/idqj093njucb/sgl-router:0.1.4
+        ports:
+        - containerPort: 8080
+          name: http
+        args: ["--host", "0.0.0.0", "--port", "8080"]
   containers:
     - name: ome-container
       image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124

@@ -108,8 +108,16 @@ func (p *Predictor) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, erro
 
 	size := p.getWorkerSize(isvc, sRuntime)
 
+	// Custom service for Predictor if router is defined
+	makePredictorHeadless := false
+
+	if isvcutils.IsEntrypointRouter(isvc.Annotations) && isvc.Spec.Router != nil {
+		// Determine if a headless service is needed (true if a router is defined and set as entrypoint)
+		makePredictorHeadless = true
+	}
+
 	// Reconcile deployment based on the deployment mode
-	if result, err := p.reconcileDeployment(isvc, objectMeta, &podSpec, size, &workerPodSpec); err != nil {
+	if result, err := p.reconcileDeployment(isvc, objectMeta, &podSpec, size, &workerPodSpec, makePredictorHeadless); err != nil {
 		return result, err
 	}
 
@@ -138,9 +146,9 @@ func (p *Predictor) getWorkerSize(isvc *v1beta1.InferenceService, runtime v1beta
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes.
-func (p *Predictor) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+func (p *Predictor) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec, makeServiceHeadless bool) (ctrl.Result, error) {
 	if p.deploymentMode == constants.RawDeployment {
-		return p.reconcileRawDeployment(isvc, objectMeta, podSpec)
+		return p.reconcileRawDeployment(isvc, objectMeta, podSpec, makeServiceHeadless)
 	}
 	if p.deploymentMode == constants.MultiNodeRayVLLM {
 		return p.reconcileMultiNodeVLLM(isvc, objectMeta, podSpec)
@@ -155,8 +163,8 @@ func (p *Predictor) reconcileDeployment(isvc *v1beta1.InferenceService, objectMe
 	return ctrl.Result{}, errors.New("invalid deployment mode")
 }
 
-func (p *Predictor) reconcileRawDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
-	r, err := p.createRawKubeReconciler(isvc, objectMeta, podSpec)
+func (p *Predictor) reconcileRawDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, makeServiceHeadless bool) (ctrl.Result, error) {
+	r, err := p.createRawKubeReconciler(isvc, objectMeta, podSpec, makeServiceHeadless)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -239,8 +247,8 @@ func (p *Predictor) getPodLabelInfo(rawDeployment bool, objectMeta metav1.Object
 }
 
 // createRawKubeReconciler creates a new RawKubeReconciler instance.
-func (p *Predictor) createRawKubeReconciler(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (*raw.RawKubeReconciler, error) {
-	r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec, podSpec)
+func (p *Predictor) createRawKubeReconciler(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, makeServiceHeadless bool) (*raw.RawKubeReconciler, error) {
+	r, err := raw.NewRawKubeReconciler(p.client, p.clientset, p.scheme, objectMeta, &isvc.Spec, podSpec, makeServiceHeadless)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create RawKubeReconciler for predictor")
 	}
@@ -482,6 +490,12 @@ func (p *Predictor) determinePredictorName(isvc *v1beta1.InferenceService) (stri
 		}
 	}
 
+	// Check for entrypoint-component annotation using utility function
+	if isvcutils.IsEntrypointRouter(isvc.Annotations) && isvc.Spec.Router != nil {
+		// If router is the entrypoint, the predictor should be named with "-predictor" suffix
+		return constants.PredictorServiceName(fmt.Sprintf("%s-%s", isvc.Name, v1beta1.PredictorComponent)), nil
+	}
+
 	return constants.PredictorServiceName(isvc.Name), nil
 }
 
@@ -560,12 +574,12 @@ func (p *Predictor) findWorkerContainerIndices(isvc *v1beta1.InferenceService, s
 
 	// Find OME container in runtime worker spec
 	if sRuntime.WorkerPodSpec != nil && sRuntime.WorkerPodSpec.Containers != nil {
-		indices.runtimeIndex = isvcutils.GetOmeContainerIndex(sRuntime.WorkerPodSpec.Containers)
+		indices.runtimeIndex = isvcutils.GetContainerIndex(sRuntime.WorkerPodSpec.Containers, constants.MainContainerName)
 	}
 
 	// Find OME container in isvc worker spec
 	if isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Containers != nil {
-		indices.isvcIndex = isvcutils.GetOmeContainerIndex(isvc.Spec.Predictor.Worker.Containers)
+		indices.isvcIndex = isvcutils.GetContainerIndex(isvc.Spec.Predictor.Worker.Containers, constants.MainContainerName)
 	}
 
 	return indices, nil
@@ -841,7 +855,7 @@ func (p *Predictor) validateRuntime(isvc *v1beta1.InferenceService, sRuntime v1b
 		return ctrl.Result{}, errors.New("no container configuration found in selected serving runtime")
 	}
 
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
+	omeContainerIdx := isvcutils.GetContainerIndex(sRuntime.Containers, constants.MainContainerName)
 	if omeContainerIdx == -1 {
 		return ctrl.Result{}, errors.New("failed to find ome-container in ServingRuntime containers")
 	}
@@ -998,7 +1012,7 @@ func (p *Predictor) reconcilePodSpec(
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
+	omeContainerIdx := isvcutils.GetContainerIndex(sRuntime.Containers, constants.MainContainerName)
 	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
 
 	if err != nil {

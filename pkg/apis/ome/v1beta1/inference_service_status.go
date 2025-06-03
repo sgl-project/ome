@@ -66,6 +66,7 @@ type ComponentType string
 // PredictorComponent ComponentType Enum
 const (
 	PredictorComponent ComponentType = "predictor"
+	RouterComponent    ComponentType = "router"
 )
 
 // ConditionType represents a Service condition value
@@ -82,6 +83,16 @@ const (
 	RoutesReady apis.ConditionType = "RoutesReady"
 	// LatestDeploymentReady is set when underlying configurations for all components have reported readiness.
 	LatestDeploymentReady apis.ConditionType = "LatestDeploymentReady"
+)
+
+// RouterConditionType represents a Router condition value
+const (
+	// RouterRouteReady is set when network configuration has completed.
+	RouterRouteReady apis.ConditionType = "RouterRouteReady"
+	// RouterConfigurationReady is set when router pods are ready.
+	RouterConfigurationReady apis.ConditionType = "RouterConfigurationReady"
+	// RouterReady is set when router has reported readiness.
+	RouterReady apis.ConditionType = "RouterReady"
 )
 
 type ModelStatus struct {
@@ -187,6 +198,9 @@ const (
 	FineTunedWeightsDeprecated FailureReason = "FineTunedWeightsDeprecated"
 	// FineTuneWeightLoadFailed fine-tuned weights load failed
 	FineTuneWeightLoadFailed FailureReason = "FineTuneWeightLoadFailed"
+
+	// RouterInvalidSpec router has invalid spec
+	InvalidRouterSpec FailureReason = "InvalidRouterSpec"
 )
 
 type FailureInfo struct {
@@ -214,6 +228,7 @@ type FailureInfo struct {
 var conditionSet = apis.NewLivingConditionSet(
 	PredictorReady,
 	IngressReady,
+	RouterReady,
 )
 
 var _ apis.ConditionsAccessor = (*InferenceServiceStatus)(nil)
