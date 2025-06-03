@@ -118,7 +118,7 @@ find "$DOWNLOAD_PATH" -type f -print0 | while IFS= read -r -d '' FILE; do
   echo "[$COUNT/$TOTAL] Processing: $FILE"
 
   REL_PATH="${FILE#$DEST_DIR/}"  # Path relative to root of model directory
-  MD5_HASH=$(md5sum "$FILE" | awk '{print $1}')
+  MD5_HASH=$(md5sum "$FILE" | awk '{print $1}' | xxd -r -p | base64)
   OBJECT_NAME=$(echo "$REL_PATH" | sed 's| |%20|g')  # URL-encode spaces if any
 
   echo "Updating metadata for: $OBJECT_NAME (md5: $MD5_HASH)"
