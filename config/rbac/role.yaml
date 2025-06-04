@@ -12,6 +12,7 @@ rules:
   - persistentvolumeclaims
   - persistentvolumes
   - pods
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -40,12 +41,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - get
 - apiGroups:
   - admissionregistration.k8s.io
   resources:
@@ -238,6 +233,19 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - serving.knative.dev
   resources:
