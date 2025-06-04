@@ -121,6 +121,23 @@ func (b *ComponentBuilder) BuildDecoder(spec *v1beta1.DecoderSpec) Component {
 	)
 }
 
+// BuildRouter creates a Router component
+func (b *ComponentBuilder) BuildRouter(spec *v1beta1.RouterSpec) Component {
+	// For now, using the existing Router constructor (from router_v2.go)
+	return NewRouter(
+		b.client,
+		b.clientset,
+		b.scheme,
+		b.inferenceServiceConfig,
+		b.deploymentMode,
+		b.baseModel,
+		b.baseModelMeta,
+		spec,
+		b.runtime,
+		b.runtimeName,
+	)
+}
+
 // BuildCustomComponent creates a custom component with a strategy
 func (b *ComponentBuilder) BuildCustomComponent(componentType v1beta1.ComponentType, strategy ComponentConfig) Component {
 	baseFields := b.buildBaseFields()
@@ -189,4 +206,20 @@ func (f *ComponentBuilderFactory) CreateDecoderComponent(
 		WithBaseModel(baseModel, baseModelMeta).
 		WithRuntime(runtime, runtimeName).
 		BuildDecoder(decoderSpec)
+}
+
+// CreateRouterComponent is a convenience method to create a router component
+func (f *ComponentBuilderFactory) CreateRouterComponent(
+	deploymentMode constants.DeploymentModeType,
+	baseModel *v1beta1.BaseModelSpec,
+	baseModelMeta *metav1.ObjectMeta,
+	routerSpec *v1beta1.RouterSpec,
+	runtime *v1beta1.ServingRuntimeSpec,
+	runtimeName string,
+) Component {
+	return f.NewBuilder().
+		WithDeploymentMode(deploymentMode).
+		WithBaseModel(baseModel, baseModelMeta).
+		WithRuntime(runtime, runtimeName).
+		BuildRouter(routerSpec)
 }

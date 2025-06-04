@@ -65,6 +65,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				Spec: v1beta1.InferenceServiceSpec{
 					Model: &v1beta1.ModelRef{
 						Name: "base-model-1",
+						Kind: stringPtr("BaseModel"),
 					},
 					Engine: &v1beta1.EngineSpec{
 						PodSpec: v1beta1.PodSpec{
@@ -174,6 +175,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				Spec: v1beta1.InferenceServiceSpec{
 					Model: &v1beta1.ModelRef{
 						Name: "base-model-2",
+						Kind: stringPtr("BaseModel"),
 					},
 					Engine: &v1beta1.EngineSpec{
 						PodSpec: v1beta1.PodSpec{
@@ -409,6 +411,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				Spec: v1beta1.InferenceServiceSpec{
 					Model: &v1beta1.ModelRef{
 						Name: "base-model-3",
+						Kind: stringPtr("BaseModel"),
 					},
 					Runtime: &v1beta1.ServingRuntimeRef{
 						Name: "custom-runtime",
@@ -517,6 +520,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				Spec: v1beta1.InferenceServiceSpec{
 					Model: &v1beta1.ModelRef{
 						Name: "base-model-4",
+						Kind: stringPtr("BaseModel"),
 					},
 					Engine: &v1beta1.EngineSpec{
 						Leader: &v1beta1.LeaderSpec{

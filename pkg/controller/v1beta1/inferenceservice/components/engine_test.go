@@ -163,7 +163,9 @@ func TestEngineReconcile(t *testing.T) {
 				}, deployment)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				g.Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(gomega.Equal("engine:latest"))
-				g.Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(gomega.ConsistOf(v1.EnvVar{Name: "MODEL_PATH", Value: "/mnt/models/model1"}))
+				// For a raw deployment test without a runner specified, we shouldn't expect MODEL_PATH
+				// since environment variables are only applied to the runner container
+				g.Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(gomega.BeEmpty())
 
 				// Check service was created
 				service := &v1.Service{}
@@ -361,6 +363,12 @@ func TestEngineReconcile(t *testing.T) {
 							Name:  "ft-container",
 							Image: "ft:latest",
 						},
+					},
+				},
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "ft-container", // Using same name so it will match and merge
+						Image: "ft:latest",
 					},
 				},
 			},
@@ -728,14 +736,14 @@ func TestEngineWorkerPodSpec(t *testing.T) {
 					},
 				},
 			},
-			expectedContainers: 2,
+			expectedContainers: 1,
 			validatePodSpec: func(ps *v1.PodSpec) {
-				// Should have merged container
+				// Should have worker container (leader runner is not merged into worker pod spec)
 				found := false
 				for _, c := range ps.Containers {
-					if c.Name == "leader-runner" {
+					if c.Name == "worker-container" {
 						found = true
-						g.Expect(c.Image).To(gomega.Equal("leader-runtime:latest"))
+						g.Expect(c.Image).To(gomega.Equal("worker:latest"))
 					}
 				}
 				g.Expect(found).To(gomega.BeTrue())

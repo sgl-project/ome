@@ -273,19 +273,17 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 		basePodSpec = e.engineSpec.PodSpec
 		runnerSpec = e.engineSpec.Runner
 	}
+	if runnerSpec != nil {
+		UpdateEnvVariables(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+	}
 
 	// Use common pod spec reconciler for base logic
 	podSpec, err := e.podSpecReconciler.ReconcilePodSpec(isvc, objectMeta, &basePodSpec, runnerSpec)
 	if err != nil {
 		return nil, err
 	}
-
-	// Update volume mounts using common function
-	if len(podSpec.Containers) > 0 {
-		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &podSpec.Containers[0], objectMeta)
-		UpdateEnvVariables(&e.BaseComponentFields, isvc, &podSpec.Containers[0], objectMeta)
-		UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, podSpec, objectMeta)
-	}
+	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, podSpec, objectMeta)
 
 	e.Log.Info("Engine PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
@@ -298,25 +296,22 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 		return nil, nil
 	}
 
-	// Get leader runner spec if available
-	var leaderRunner *v1beta1.RunnerSpec
-	if e.engineSpec.Leader != nil {
-		leaderRunner = e.engineSpec.Leader.Runner
+	// Get worker runner spec if available
+	var workerRunner *v1beta1.RunnerSpec
+	if e.engineSpec.Worker != nil {
+		workerRunner = e.engineSpec.Worker.Runner
+		if workerRunner != nil {
+			UpdateVolumeMounts(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+			UpdateEnvVariables(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+		}
 	}
 
 	// Use common reconciler for worker pod spec
-	workerPodSpec, err := e.podSpecReconciler.ReconcileWorkerPodSpec(isvc, objectMeta, &e.engineSpec.Worker.PodSpec, leaderRunner)
+	workerPodSpec, err := e.podSpecReconciler.ReconcileWorkerPodSpec(isvc, objectMeta, &e.engineSpec.Worker.PodSpec, workerRunner)
 	if err != nil {
 		return nil, err
 	}
-
-	// Update volume mounts and env vars using common functions
-	if len(workerPodSpec.Containers) > 0 {
-		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &workerPodSpec.Containers[0], objectMeta)
-		UpdateEnvVariables(&e.BaseComponentFields, isvc, &workerPodSpec.Containers[0], objectMeta)
-		UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
-	}
-
+	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	e.Log.Info("Engine Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
 }

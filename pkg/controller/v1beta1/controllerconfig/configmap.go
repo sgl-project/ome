@@ -63,18 +63,21 @@ type InferenceServicesConfig struct {
 
 // +kubebuilder:object:generate=false
 type IngressConfig struct {
-	IngressGateway           string    `json:"ingressGateway,omitempty"`
-	IngressServiceName       string    `json:"ingressService,omitempty"`
-	LocalGateway             string    `json:"localGateway,omitempty"`
-	LocalGatewayServiceName  string    `json:"localGatewayService,omitempty"`
-	IngressDomain            string    `json:"ingressDomain,omitempty"`
-	IngressClassName         *string   `json:"ingressClassName,omitempty"`
-	AdditionalIngressDomains *[]string `json:"additionalIngressDomains,omitempty"`
-	DomainTemplate           string    `json:"domainTemplate,omitempty"`
-	UrlScheme                string    `json:"urlScheme,omitempty"`
-	DisableIstioVirtualHost  bool      `json:"disableIstioVirtualHost,omitempty"`
-	PathTemplate             string    `json:"pathTemplate,omitempty"`
-	DisableIngressCreation   bool      `json:"disableIngressCreation,omitempty"`
+	IngressGateway             string    `json:"ingressGateway,omitempty"`
+	IngressServiceName         string    `json:"ingressService,omitempty"`
+	LocalGateway               string    `json:"localGateway,omitempty"`
+	LocalGatewayServiceName    string    `json:"localGatewayService,omitempty"`
+	KnativeLocalGatewayService string    `json:"knativeLocalGatewayService,omitempty"`
+	OmeIngressGateway          string    `json:"omeIngressGateway,omitempty"`
+	IngressDomain              string    `json:"ingressDomain,omitempty"`
+	IngressClassName           *string   `json:"ingressClassName,omitempty"`
+	AdditionalIngressDomains   *[]string `json:"additionalIngressDomains,omitempty"`
+	DomainTemplate             string    `json:"domainTemplate,omitempty"`
+	UrlScheme                  string    `json:"urlScheme,omitempty"`
+	DisableIstioVirtualHost    bool      `json:"disableIstioVirtualHost,omitempty"`
+	PathTemplate               string    `json:"pathTemplate,omitempty"`
+	DisableIngressCreation     bool      `json:"disableIngressCreation,omitempty"`
+	EnableGatewayAPI           bool      `json:"enableGatewayAPI,omitempty"`
 }
 
 // +kubebuilder:object:generate=false

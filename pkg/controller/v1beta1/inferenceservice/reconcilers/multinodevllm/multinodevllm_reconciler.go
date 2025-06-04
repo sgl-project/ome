@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
 
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
@@ -73,9 +74,10 @@ func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*
 		return nil, err
 	}
 
+	domainService := services.NewDomainService()
 	url := &knapis.URL{}
 	url.Scheme = "http"
-	url.Host, err = ingress.GenerateDomainName(metadata.Name, metadata, ingressConfig)
+	url.Host, err = domainService.GenerateDomainName(metadata.Name, metadata, ingressConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating host name: %w", err)
 	}
