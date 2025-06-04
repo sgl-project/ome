@@ -132,8 +132,9 @@ func TestProgressWriter(t *testing.T) {
 	// Create a buffer to capture writes
 	var buf bytes.Buffer
 
-	// Create a mock progress bar
-	bar := progressbar.DefaultBytes(100, "test")
+	// Create a mock progress bar and wrap it
+	rawBar := progressbar.DefaultBytes(100, "test")
+	bar := &SingleProgressBar{bar: rawBar}
 
 	// Create progress writer
 	pw := NewProgressWriter(bar, &buf)
@@ -310,7 +311,8 @@ func BenchmarkFormatSize(b *testing.B) {
 
 func BenchmarkProgressWriter(b *testing.B) {
 	var buffer bytes.Buffer
-	bar := progressbar.NewOptions64(1024*1024, progressbar.OptionSetWidth(10))
+	rawBar := progressbar.NewOptions64(1024*1024, progressbar.OptionSetWidth(10))
+	bar := &SingleProgressBar{bar: rawBar}
 	pw := NewProgressWriter(bar, &buffer)
 	data := []byte("test data for benchmarking")
 

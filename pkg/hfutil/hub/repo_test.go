@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -351,5 +355,395 @@ func createMockRepoServerForBench(b *testing.B, files []RepoFile, statusCode int
 		if statusCode == 200 {
 			_ = json.NewEncoder(w).Encode(files)
 		}
+	}))
+}
+
+// Test the new concurrent download functionality
+
+func TestDownloadWorker(t *testing.T) {
+	t.Run("successful file download", func(t *testing.T) {
+		content := "test worker content"
+		server := createMockHubServerForWorkerTest(t, content, 200)
+		defer server.Close()
+
+		tmpDir := t.TempDir()
+
+		taskChan := make(chan downloadTask, 1)
+		resultChan := make(chan downloadResult, 1)
+
+		// Create test task
+		task := downloadTask{
+			file: RepoFile{
+				Path: "test.txt",
+				Size: int64(len(content)),
+				Type: "file",
+			},
+			config: &DownloadConfig{
+				RepoID:   "test/repo",
+				Filename: "test.txt",
+				LocalDir: tmpDir,
+				Endpoint: server.URL,
+			},
+			index: 0,
+		}
+
+		ctx := context.Background()
+
+		// Start worker
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			downloadWorker(ctx, 1, taskChan, resultChan, nil)
+		}()
+
+		// Send task
+		taskChan <- task
+		close(taskChan)
+
+		// Get result
+		result := <-resultChan
+		wg.Wait()
+
+		assert.NoError(t, result.err)
+		assert.Equal(t, 0, result.index)
+		assert.Greater(t, result.duration, time.Duration(0))
+		assert.True(t, FileExists(filepath.Join(tmpDir, "test.txt")))
+	})
+
+	t.Run("download error handling", func(t *testing.T) {
+		server := createMockHubServerForWorkerTest(t, "", 500) // Server error
+		defer server.Close()
+
+		tmpDir := t.TempDir()
+
+		taskChan := make(chan downloadTask, 1)
+		resultChan := make(chan downloadResult, 1)
+
+		task := downloadTask{
+			file: RepoFile{
+				Path: "test.txt",
+				Size: 1024,
+				Type: "file",
+			},
+			config: &DownloadConfig{
+				RepoID:   "test/repo",
+				Filename: "test.txt",
+				LocalDir: tmpDir,
+				Endpoint: server.URL,
+			},
+			index: 0,
+		}
+
+		ctx := context.Background()
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			downloadWorker(ctx, 1, taskChan, resultChan, nil)
+		}()
+
+		taskChan <- task
+		close(taskChan)
+
+		result := <-resultChan
+		wg.Wait()
+
+		assert.Error(t, result.err)
+		assert.Equal(t, 0, result.index)
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Simulate slow response
+			time.Sleep(100 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		taskChan := make(chan downloadTask, 1)
+		resultChan := make(chan downloadResult, 1)
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			downloadWorker(ctx, 1, taskChan, resultChan, nil)
+		}()
+
+		// Cancel context immediately
+		cancel()
+
+		// Worker should exit gracefully
+		close(taskChan)
+		wg.Wait()
+
+		// Channel should be empty since worker exited due to cancellation
+		select {
+		case <-resultChan:
+			t.Error("Expected no results due to cancellation")
+		default:
+			// Expected - no results
+		}
+	})
+}
+
+func TestSnapshotDownloadConcurrent(t *testing.T) {
+	t.Run("concurrent download with multiple workers", func(t *testing.T) {
+		// Create test files
+		testFiles := []RepoFile{
+			{Path: "file1.txt", Size: 100, Type: "file"},
+			{Path: "file2.txt", Size: 200, Type: "file"},
+			{Path: "file3.txt", Size: 300, Type: "file"},
+			{Path: "subdir/file4.txt", Size: 400, Type: "file"},
+		}
+
+		server := createMockRepoAndFileServer(t, testFiles, 200)
+		defer server.Close()
+
+		tmpDir := t.TempDir()
+		config := &DownloadConfig{
+			RepoID:     "test/repo",
+			LocalDir:   tmpDir,
+			Endpoint:   server.URL,
+			MaxWorkers: 2, // Use 2 workers for testing concurrency
+		}
+
+		// Create HubConfig for worker configuration
+		hubConfig := &HubConfig{
+			MaxWorkers:          3,    // This should be overridden by config.MaxWorkers
+			DisableProgressBars: true, // Disable progress bars for testing
+		}
+		ctx := context.WithValue(context.Background(), HubConfigKey, hubConfig)
+
+		result, err := SnapshotDownload(ctx, config)
+
+		require.NoError(t, err)
+		assert.Equal(t, tmpDir, result)
+
+		// Verify all files were downloaded
+		for _, file := range testFiles {
+			filePath := filepath.Join(tmpDir, file.Path)
+			assert.True(t, FileExists(filePath), "File %s should exist", file.Path)
+		}
+	})
+
+	t.Run("partial failure handling", func(t *testing.T) {
+		testFiles := []RepoFile{
+			{Path: "file1.txt", Size: 100, Type: "file"},
+			{Path: "file2.txt", Size: 200, Type: "file"}, // This will fail
+			{Path: "file3.txt", Size: 300, Type: "file"},
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Handle repository listing
+			if r.URL.Path == "/api/models/test/repo/tree/main" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(testFiles)
+				return
+			}
+
+			// Fail file2.txt immediately with non-retryable error
+			if strings.Contains(r.URL.Path, "file2.txt") {
+				w.WriteHeader(http.StatusNotFound) // Non-retryable error
+				return
+			}
+
+			// Handle HEAD requests for metadata (successful files)
+			if r.Method == "HEAD" {
+				w.Header().Set(HuggingfaceHeaderXRepoCommit, "abc123")
+				w.Header().Set(HuggingfaceHeaderXLinkedEtag, "def456")
+				w.Header().Set(HuggingfaceHeaderXLinkedSize, "100")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			// Handle GET requests for file downloads (successful files)
+			if r.Method == "GET" {
+				w.Header().Set("Content-Length", "100")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(make([]byte, 100))
+				return
+			}
+
+			// Default response
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		tmpDir := t.TempDir()
+		config := &DownloadConfig{
+			RepoID:     "test/repo",
+			LocalDir:   tmpDir,
+			Endpoint:   server.URL,
+			MaxWorkers: 2,
+		}
+
+		ctx := context.Background()
+		result, err := SnapshotDownload(ctx, config)
+
+		// Should return error but still provide the directory
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to download")
+		assert.Equal(t, tmpDir, result)
+
+		// Verify successful files were downloaded
+		assert.True(t, FileExists(filepath.Join(tmpDir, "file1.txt")))
+		assert.True(t, FileExists(filepath.Join(tmpDir, "file3.txt")))
+
+		// Verify failed file was not downloaded
+		assert.False(t, FileExists(filepath.Join(tmpDir, "file2.txt")))
+	})
+
+	t.Run("context cancellation during concurrent download", func(t *testing.T) {
+		testFiles := []RepoFile{
+			{Path: "file1.txt", Size: 100, Type: "file"},
+			{Path: "file2.txt", Size: 200, Type: "file"},
+			{Path: "file3.txt", Size: 300, Type: "file"},
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Handle repository listing quickly
+			if r.URL.Path == "/api/models/test/repo/tree/main" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(testFiles)
+				return
+			}
+
+			// For metadata and downloads, check if context is still valid
+			// If not, just return immediately to avoid hanging
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+
+			// Handle HEAD requests for metadata
+			if r.Method == "HEAD" {
+				w.Header().Set(HuggingfaceHeaderXRepoCommit, "abc123")
+				w.Header().Set(HuggingfaceHeaderXLinkedEtag, "def456")
+				w.Header().Set(HuggingfaceHeaderXLinkedSize, "100")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			// Handle GET requests - respond immediately
+			w.Header().Set("Content-Length", "100")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(make([]byte, 100))
+		}))
+		defer server.Close()
+
+		tmpDir := t.TempDir()
+		config := &DownloadConfig{
+			RepoID:     "test/repo",
+			LocalDir:   tmpDir,
+			Endpoint:   server.URL,
+			MaxWorkers: 2,
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// Cancel context immediately to test cancellation
+		cancel()
+
+		result, err := SnapshotDownload(ctx, config)
+
+		assert.Error(t, err)
+		// Check if the error is or contains context.Canceled
+		assert.True(t, err == context.Canceled || strings.Contains(err.Error(), "context canceled"))
+		assert.Empty(t, result)
+	})
+}
+
+func TestConcurrentDownloadTasks(t *testing.T) {
+	t.Run("downloadTask and downloadResult structures", func(t *testing.T) {
+		file := RepoFile{
+			Path: "test.txt",
+			Size: 1024,
+			Type: "file",
+		}
+
+		config := &DownloadConfig{
+			RepoID:   "test/repo",
+			Filename: "test.txt",
+		}
+
+		task := downloadTask{
+			file:   file,
+			config: config,
+			index:  5,
+		}
+
+		assert.Equal(t, file, task.file)
+		assert.Equal(t, config, task.config)
+		assert.Equal(t, 5, task.index)
+
+		result := downloadResult{
+			index:    5,
+			filePath: "/path/to/file",
+			err:      nil,
+			duration: time.Second,
+			size:     1024,
+		}
+
+		assert.Equal(t, 5, result.index)
+		assert.Equal(t, "/path/to/file", result.filePath)
+		assert.NoError(t, result.err)
+		assert.Equal(t, time.Second, result.duration)
+		assert.Equal(t, int64(1024), result.size)
+	})
+}
+
+// Helper functions for concurrent testing
+
+func createMockHubServerForWorkerTest(t *testing.T, content string, statusCode int) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "HEAD" {
+			// Mock metadata response
+			w.Header().Set(HuggingfaceHeaderXRepoCommit, "abc123")
+			w.Header().Set(HuggingfaceHeaderXLinkedEtag, "def456")
+			w.Header().Set(HuggingfaceHeaderXLinkedSize, fmt.Sprintf("%d", len(content)))
+			w.WriteHeader(http.StatusOK)
+		} else if r.Method == "GET" {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+			w.WriteHeader(statusCode)
+			if statusCode == 200 {
+				_, _ = w.Write([]byte(content))
+			}
+		}
+	}))
+}
+
+func createMockRepoAndFileServer(t *testing.T, files []RepoFile, statusCode int) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/models/test/repo/tree/main" {
+			// Repository listing
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			if statusCode == 200 {
+				_ = json.NewEncoder(w).Encode(files)
+			}
+			return
+		}
+
+		// Handle HEAD requests for metadata
+		if r.Method == "HEAD" {
+			w.Header().Set(HuggingfaceHeaderXRepoCommit, "abc123")
+			w.Header().Set(HuggingfaceHeaderXLinkedEtag, "def456")
+			w.Header().Set(HuggingfaceHeaderXLinkedSize, "100")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Handle file downloads
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(make([]byte, 100))
 	}))
 }

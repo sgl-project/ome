@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/schollz/progressbar/v3"
 )
 
 // HFFileMetadata represents metadata about a file on the Hub
@@ -108,7 +107,10 @@ func HfHubDownload(ctx context.Context, config *DownloadConfig) (string, error) 
 func hfHubDownloadToCacheDir(ctx context.Context, config *DownloadConfig) (string, error) {
 	storageFolder := filepath.Join(config.CacheDir, RepoFolderName(config.RepoID, config.RepoType))
 
-	// Cross platform transcription of filename
+	// Cross platform transcription of filename - WITH SECURITY VALIDATION
+	if strings.Contains(config.Filename, "..") {
+		return "", fmt.Errorf("invalid filename: path traversal detected in %s", config.Filename)
+	}
 	relativeFilename := filepath.Join(strings.Split(config.Filename, "/")...)
 
 	// If revision is a commit hash and file exists, return immediately
@@ -236,7 +238,10 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 
 	// Remove incomplete file if force_download is true
 	if config.ForceDownload && FileExists(incompletePath) {
-		os.Remove(incompletePath)
+		err := os.Remove(incompletePath)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create directories
@@ -264,8 +269,17 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 	return nil
 }
 
-// httpDownload performs the actual HTTP download with progress reporting
+// httpDownload performs the actual HTTP download with progress reporting and retry logic
 func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMetadata, filePath string) error {
+	// Get retry configuration from context (HubConfig)
+	var maxRetries int = 3                             // default
+	var retryInterval time.Duration = 10 * time.Second // default
+
+	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
+		maxRetries = hubConfig.MaxRetries
+		retryInterval = hubConfig.RetryInterval
+	}
+
 	// Create progress manager if config supports it
 	var progressManager *ProgressManager
 	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
@@ -307,83 +321,203 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 	}
 
 	// Create progress bar for this file
-	var progressBar *progressbar.ProgressBar
+	var progressBar ProgressBar
 	var progressWriter io.Writer = file
+
+	// Check if we have a worker ID in context for multi-progress tracking
+	workerID, hasWorkerID := ctx.Value(WorkerIDKey).(int)
 
 	if progressManager != nil {
 		filename := filepath.Base(config.Filename)
-		progressBar = progressManager.CreateFileProgressBar(filename, remainingSize)
-		if progressBar != nil {
-			progressWriter = NewProgressWriter(progressBar, file)
+
+		if hasWorkerID && progressManager.multiProgress != nil {
+			// Use worker-specific progress bar for concurrent downloads
+			progressBar = progressManager.CreateWorkerFileProgressBar(workerID, filename, remainingSize)
+			if progressBar != nil {
+				progressWriter = NewProgressWriter(progressBar, file)
+			}
+		} else {
+			// Use regular progress bar for single downloads
+			progressBar = progressManager.CreateFileProgressBar(filename, remainingSize)
+			if progressBar != nil {
+				progressWriter = NewProgressWriter(progressBar, file)
+			}
 		}
 	}
 
-	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", metadata.Location, nil)
-	if err != nil {
-		if progressManager != nil {
-			progressManager.LogError("http_request_creation", config.RepoID, err)
+	// Retry loop for HTTP download
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Check if context is cancelled
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
-		return fmt.Errorf("failed to create request: %w", err)
-	}
 
-	// Add headers
-	headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	// Add range header for resume
-	if resumeSize > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeSize))
-		if progressManager != nil && progressManager.enableDetailedLogs {
-			logger := progressManager.logger.
-				WithField("repo_id", config.RepoID).
-				WithField("filename", config.Filename).
-				WithField("resume_size", resumeSize)
-			logger.Info("Resuming download from byte position")
+		// Create HTTP request
+		req, err := http.NewRequestWithContext(ctx, "GET", metadata.Location, nil)
+		if err != nil {
+			if progressManager != nil {
+				progressManager.LogError("http_request_creation", config.RepoID, err)
+			}
+			return fmt.Errorf("failed to create request: %w", err)
 		}
-	}
 
-	// Perform request
-	client := &http.Client{
-		Timeout: DownloadTimeout,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		if progressManager != nil {
-			progressManager.LogError("http_request", config.RepoID, err)
+		// Add headers
+		headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
+		for k, v := range headers {
+			req.Header.Set(k, v)
 		}
-		return fmt.Errorf("failed to perform request: %w", err)
-	}
-	defer resp.Body.Close()
 
-	// Check status code
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
-		if progressManager != nil {
-			progressManager.LogError("http_response", config.RepoID, err)
+		// Add range header for resume
+		if resumeSize > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeSize))
+			if progressManager != nil && progressManager.enableDetailedLogs {
+				logger := progressManager.logger.
+					WithField("repo_id", config.RepoID).
+					WithField("filename", config.Filename).
+					WithField("resume_size", resumeSize)
+				logger.Info("Resuming download from byte position")
+			}
 		}
-		return err
-	}
 
-	// Copy response body to file with progress tracking
-	_, err = io.Copy(progressWriter, resp.Body)
-	if err != nil {
-		if progressManager != nil {
-			progressManager.LogError("file_write", config.RepoID, err)
+		// Perform request
+		client := &http.Client{
+			Timeout: DownloadTimeout,
 		}
-		return fmt.Errorf("failed to write file: %w", err)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			if progressManager != nil {
+				progressManager.LogError("http_request", config.RepoID, err)
+			}
+
+			// Check if this is the last attempt
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to perform request after %d attempts: %w", maxRetries+1, lastErr)
+			}
+
+			// Log retry attempt
+			if progressManager != nil && progressManager.enableDetailedLogs {
+				progressManager.logger.
+					WithField("repo_id", config.RepoID).
+					WithField("filename", config.Filename).
+					WithField("attempt", attempt+1).
+					WithField("max_retries", maxRetries+1).
+					WithField("error", err.Error()).
+					Warn("HTTP request failed, retrying...")
+			}
+
+			// Wait with exponential backoff before retrying
+			delay := exponentialBackoff(attempt+1, retryInterval)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+				continue
+			}
+		}
+		defer func() {
+			if resp != nil && resp.Body != nil {
+				resp.Body.Close()
+			}
+		}()
+
+		// Check status code
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			lastErr = fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
+
+			// Check if this error is retryable
+			if !retryableHTTPError(nil, resp.StatusCode) || attempt == maxRetries {
+				if progressManager != nil {
+					progressManager.LogError("http_response", config.RepoID, lastErr)
+				}
+				return lastErr
+			}
+
+			// Log retry attempt for HTTP errors
+			if progressManager != nil && progressManager.enableDetailedLogs {
+				progressManager.logger.
+					WithField("repo_id", config.RepoID).
+					WithField("filename", config.Filename).
+					WithField("attempt", attempt+1).
+					WithField("max_retries", maxRetries+1).
+					WithField("status_code", resp.StatusCode).
+					Warn("HTTP error response, retrying...")
+			}
+
+			// Wait with exponential backoff before retrying
+			delay := exponentialBackoff(attempt+1, retryInterval)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+				continue
+			}
+		}
+
+		// Download successful - copy response body to file with context awareness
+		_, err = copyWithContext(ctx, progressWriter, resp.Body)
+		if err != nil {
+			lastErr = err
+			if progressManager != nil {
+				progressManager.LogError("file_write", config.RepoID, err)
+			}
+
+			// Check if context was cancelled
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			// Check if this is the last attempt
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to write file after %d attempts: %w", maxRetries+1, lastErr)
+			}
+
+			// Log retry attempt for write errors
+			if progressManager != nil && progressManager.enableDetailedLogs {
+				progressManager.logger.
+					WithField("repo_id", config.RepoID).
+					WithField("filename", config.Filename).
+					WithField("attempt", attempt+1).
+					WithField("max_retries", maxRetries+1).
+					WithField("error", err.Error()).
+					Warn("File write failed, retrying...")
+			}
+
+			// Reset file position for retry
+			if _, err := file.Seek(resumeSize, 0); err != nil {
+				return fmt.Errorf("failed to reset file position: %w", err)
+			}
+
+			// Wait with exponential backoff before retrying
+			delay := exponentialBackoff(attempt+1, retryInterval)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+				continue
+			}
+		}
+
+		// Success! Break out of retry loop
+		break
 	}
 
-	// Complete progress bar
+	// Complete download and clean up
 	if progressBar != nil {
 		if err := progressBar.Finish(); err != nil {
-			// Log error but don't fail the download
+			// Log but don't fail the operation
 			if progressManager != nil && progressManager.logger != nil {
 				progressManager.logger.Debug("Failed to finish progress bar")
 			}
+		}
+
+		// Clean up worker progress if this was a multi-progress download
+		if hasWorkerID && progressManager != nil {
+			progressManager.CompleteWorkerProgress(workerID)
 		}
 	}
 
@@ -404,10 +538,19 @@ type FileMetadata struct {
 	Size       int64
 }
 
-// getMetadataOrCatchError gets file metadata from the Hub API
+// getMetadataOrCatchError gets file metadata from the Hub API with retry logic
 func getMetadataOrCatchError(ctx context.Context, config *DownloadConfig, storageFolder, relativeFilename string) (*FileMetadata, error) {
 	if config.LocalFilesOnly {
 		return nil, NewOfflineModeIsEnabledError("Cannot access file since local_files_only=true")
+	}
+
+	// Get retry configuration from context (HubConfig)
+	var maxRetries int = 3                             // default
+	var retryInterval time.Duration = 10 * time.Second // default
+
+	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
+		maxRetries = hubConfig.MaxRetries
+		retryInterval = hubConfig.RetryInterval
 	}
 
 	// Construct URL for HEAD request
@@ -416,89 +559,135 @@ func getMetadataOrCatchError(ctx context.Context, config *DownloadConfig, storag
 		return nil, fmt.Errorf("failed to construct URL: %w", err)
 	}
 
-	// Create HEAD request
-	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create HEAD request: %w", err)
-	}
-
-	// Add headers
-	headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	req.Header.Set("Accept-Encoding", "identity") // Prevent compression
-
-	// Perform request
-	client := &http.Client{
-		Timeout: config.EtagTimeout,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform HEAD request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Handle error responses
-	if resp.StatusCode != http.StatusOK {
-		return nil, handleHTTPError(resp, config.RepoID, config.RepoType, config.Revision, config.Filename)
-	}
-
-	// Extract metadata from headers
-	metadata := &FileMetadata{
-		CommitHash: resp.Header.Get(HuggingfaceHeaderXRepoCommit),
-		Etag:       NormalizeEtag(resp.Header.Get(HuggingfaceHeaderXLinkedEtag)),
-		Location:   url, // Default to request URL
-		Size:       0,
-	}
-
-	// Use ETag header if X-Linked-Etag is not available
-	if metadata.Etag == "" {
-		metadata.Etag = NormalizeEtag(resp.Header.Get("ETag"))
-	}
-
-	// Get file size
-	if contentLength := resp.Header.Get(HuggingfaceHeaderXLinkedSize); contentLength != "" {
-		if size, err := parseSize(contentLength); err == nil {
-			metadata.Size = size
+	// Retry loop for metadata fetching
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Check if context is cancelled
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
-	}
-	if metadata.Size == 0 {
-		if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
+
+		// Create HEAD request
+		req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HEAD request: %w", err)
+		}
+
+		// Add headers
+		headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		req.Header.Set("Accept-Encoding", "identity") // Prevent compression
+
+		// Perform request
+		client := &http.Client{
+			Timeout: config.EtagTimeout,
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+
+			// Check if this is the last attempt
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("failed to perform HEAD request after %d attempts: %w", maxRetries+1, err)
+			}
+
+			// Wait with exponential backoff before retrying
+			delay := exponentialBackoff(attempt+1, retryInterval)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+				continue
+			}
+		}
+		defer func() {
+			if resp != nil && resp.Body != nil {
+				resp.Body.Close()
+			}
+		}()
+
+		// Handle error responses
+		if resp.StatusCode != http.StatusOK {
+			lastErr = handleHTTPError(resp, config.RepoID, config.RepoType, config.Revision, config.Filename)
+
+			// Check if this error is retryable
+			if !retryableHTTPError(nil, resp.StatusCode) || attempt == maxRetries {
+				return nil, lastErr
+			}
+
+			// Wait with exponential backoff before retrying
+			delay := exponentialBackoff(attempt+1, retryInterval)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+				continue
+			}
+		}
+
+		// Extract metadata from headers
+		metadata := &FileMetadata{
+			CommitHash: resp.Header.Get(HuggingfaceHeaderXRepoCommit),
+			Etag:       NormalizeEtag(resp.Header.Get(HuggingfaceHeaderXLinkedEtag)),
+			Location:   url, // Default to request URL
+			Size:       0,
+		}
+
+		// Use ETag header if X-Linked-Etag is not available
+		if metadata.Etag == "" {
+			metadata.Etag = NormalizeEtag(resp.Header.Get("ETag"))
+		}
+
+		// Get file size
+		if contentLength := resp.Header.Get(HuggingfaceHeaderXLinkedSize); contentLength != "" {
 			if size, err := parseSize(contentLength); err == nil {
 				metadata.Size = size
 			}
 		}
+		if metadata.Size == 0 {
+			if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
+				if size, err := parseSize(contentLength); err == nil {
+					metadata.Size = size
+				}
+			}
+		}
+
+		// Use redirect location if available
+		if location := resp.Header.Get("Location"); location != "" {
+			metadata.Location = location
+		}
+
+		// For local directory downloads, we can be more flexible with commit hash
+		// as we don't need the cache structure
+		isLocalDirDownload := config.LocalDir != ""
+
+		// Validate required fields
+		if metadata.CommitHash == "" && !isLocalDirDownload {
+			// For cache downloads, we need commit hash for proper cache structure
+			return nil, NewFileMetadataError(config.Filename, "Distant resource does not seem to be on huggingface.co")
+		}
+		if metadata.Etag == "" {
+			return nil, NewFileMetadataError(config.Filename, "Distant resource does not have an ETag")
+		}
+		if metadata.Size == 0 {
+			return nil, NewFileMetadataError(config.Filename, "Distant resource does not have a Content-Length")
+		}
+
+		// For local dir downloads without commit hash, use revision as fallback
+		if metadata.CommitHash == "" && isLocalDirDownload {
+			metadata.CommitHash = config.Revision
+		}
+
+		return metadata, nil
 	}
 
-	// Use redirect location if available
-	if location := resp.Header.Get("Location"); location != "" {
-		metadata.Location = location
-	}
-
-	// For local directory downloads, we can be more flexible with commit hash
-	// as we don't need the cache structure
-	isLocalDirDownload := config.LocalDir != ""
-
-	// Validate required fields
-	if metadata.CommitHash == "" && !isLocalDirDownload {
-		// For cache downloads, we need commit hash for proper cache structure
-		return nil, NewFileMetadataError(config.Filename, "Distant resource does not seem to be on huggingface.co")
-	}
-	if metadata.Etag == "" {
-		return nil, NewFileMetadataError(config.Filename, "Distant resource does not have an ETag")
-	}
-	if metadata.Size == 0 {
-		return nil, NewFileMetadataError(config.Filename, "Distant resource does not have a Content-Length")
-	}
-
-	// For local dir downloads without commit hash, use revision as fallback
-	if metadata.CommitHash == "" && isLocalDirDownload {
-		metadata.CommitHash = config.Revision
-	}
-
-	return metadata, nil
+	// This should never be reached due to the loop structure, but just in case
+	return nil, fmt.Errorf("failed to get metadata after %d attempts: %w", maxRetries+1, lastErr)
 }
 
 // handleHTTPError converts HTTP errors to appropriate Hub errors
@@ -546,4 +735,48 @@ func parseSize(s string) (int64, error) {
 		return 0, err
 	}
 	return size, nil
+}
+
+// contextReader wraps an io.Reader to respect context cancellation
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (cr *contextReader) Read(p []byte) (n int, err error) {
+	select {
+	case <-cr.ctx.Done():
+		return 0, cr.ctx.Err()
+	default:
+		return cr.r.Read(p)
+	}
+}
+
+// retryableHTTPError checks if an HTTP error is retryable
+func retryableHTTPError(err error, statusCode int) bool {
+	if err != nil {
+		return true // Network errors are retryable
+	}
+
+	// Retry on server errors and rate limiting
+	return statusCode >= 500 || statusCode == 429 || statusCode == 408
+}
+
+// exponentialBackoff calculates the delay for exponential backoff
+func exponentialBackoff(attempt int, baseDelay time.Duration) time.Duration {
+	if attempt <= 0 {
+		return 0
+	}
+	// Cap at 30 seconds to avoid extremely long delays
+	delay := time.Duration(math.Min(float64(baseDelay)*math.Pow(2, float64(attempt-1)), float64(30*time.Second)))
+	return delay
+}
+
+// copyWithContext copies data from src to dst while respecting context cancellation
+func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
+	// Wrap the source reader to respect context cancellation
+	contextSrc := &contextReader{ctx: ctx, r: src}
+
+	// Use io.Copy which will call Read on our context-aware reader
+	return io.Copy(dst, contextSrc)
 }
