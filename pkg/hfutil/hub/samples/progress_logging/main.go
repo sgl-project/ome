@@ -130,9 +130,7 @@ func main() {
 	fmt.Printf("  ⚡ Concurrent downloads (%d workers)\n", config.MaxWorkers)
 	fmt.Printf("  🔄 Resume capability if interrupted\n")
 
-	fmt.Print("\nProceed with enhanced download? (y/N): ")
-	var response string
-	_, _ = fmt.Scanln(&response) // Ignore input parsing errors
+	response := "y" // Ignore input parsing errors
 
 	if response == "y" || response == "Y" || response == "yes" || response == "Yes" {
 		fmt.Printf("\n🚀 Starting Enhanced Download with Progress Tracking...\n")

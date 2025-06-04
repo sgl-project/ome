@@ -3,9 +3,12 @@ package hub
 import (
 	"fmt"
 	"io"
+	"os"
+	"sync"
 	"time"
 
-	"github.com/schollz/progressbar/v3"
+	fortiopb "fortio.org/progressbar"
+	schollzpb "github.com/schollz/progressbar/v3"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
 )
 
@@ -14,6 +17,233 @@ type ProgressManager struct {
 	logger             logging.Interface
 	enableProgressBars bool
 	enableDetailedLogs bool
+	multiProgress      *MultiProgressManager
+}
+
+// MultiProgressManager coordinates multiple concurrent progress bars
+type MultiProgressManager struct {
+	multiBar    *fortiopb.MultiBar
+	maxWorkers  int
+	enabled     bool
+	mutex       sync.RWMutex
+	workerFiles map[int]string // Track which file each worker is downloading
+}
+
+// NewMultiProgressManager creates a new multi-progress manager
+func NewMultiProgressManager(maxWorkers int, enabled bool) *MultiProgressManager {
+	if !enabled {
+		return &MultiProgressManager{
+			maxWorkers: maxWorkers,
+			enabled:    false,
+		}
+	}
+
+	// Create fortio progressbar configuration
+	cfg := fortiopb.DefaultConfig()
+	cfg.ExtraLines = 1
+	cfg.ScreenWriter = os.Stdout
+
+	// Create prefixes: overall + workers
+	prefixes := make([]string, maxWorkers+1)
+	prefixes[0] = "📦 Overall     "
+	for i := 1; i <= maxWorkers; i++ {
+		prefixes[i] = fmt.Sprintf("Worker %d      ", i-1)
+	}
+
+	multiBar := cfg.NewMultiBarPrefixes(prefixes...)
+
+	return &MultiProgressManager{
+		multiBar:    multiBar,
+		maxWorkers:  maxWorkers,
+		enabled:     true,
+		workerFiles: make(map[int]string),
+	}
+}
+
+// CreateSnapshotProgressBar initializes the overall progress bar
+func (mpm *MultiProgressManager) CreateSnapshotProgressBar(totalFiles int, totalSize int64) ProgressBar {
+	if !mpm.enabled || mpm.multiBar == nil || len(mpm.multiBar.Bars) == 0 {
+		return nil
+	}
+
+	mpm.mutex.Lock()
+	defer mpm.mutex.Unlock()
+
+	overallBar := mpm.multiBar.Bars[0]
+	overallBar.WriteAbove(fmt.Sprintf("📦 Starting download: %d files (%s) with %d workers",
+		totalFiles, formatSize(totalSize), mpm.maxWorkers))
+
+	return &ConcurrentProgressBar{
+		bar:         overallBar,
+		total:       int64(totalFiles),
+		manager:     mpm,
+		workerID:    -1, // -1 indicates overall bar
+		description: "Overall Progress",
+		startTime:   time.Now(),
+	}
+}
+
+// CreateWorkerProgressBar creates a progress bar for a specific worker
+func (mpm *MultiProgressManager) CreateWorkerProgressBar(workerID int, filename string, size int64) ProgressBar {
+	if !mpm.enabled || mpm.multiBar == nil || workerID >= mpm.maxWorkers {
+		return nil
+	}
+
+	mpm.mutex.Lock()
+	defer mpm.mutex.Unlock()
+
+	if len(mpm.multiBar.Bars) <= workerID+1 {
+		return nil
+	}
+
+	// Store which file this worker is downloading
+	mpm.workerFiles[workerID] = filename
+
+	workerBar := mpm.multiBar.Bars[workerID+1]
+
+	// Update the worker's display name to show current file
+	shortFilename := filename
+	if len(shortFilename) > 25 {
+		shortFilename = shortFilename[:22] + "..."
+	}
+
+	return &ConcurrentProgressBar{
+		bar:         workerBar,
+		total:       size,
+		manager:     mpm,
+		workerID:    workerID,
+		filename:    filename,
+		description: fmt.Sprintf("Worker %d: %s", workerID, shortFilename),
+		startTime:   time.Now(),
+	}
+}
+
+// UpdateWorkerFile updates which file a worker is currently downloading
+func (mpm *MultiProgressManager) UpdateWorkerFile(workerID int, filename string) {
+	mpm.mutex.Lock()
+	defer mpm.mutex.Unlock()
+	mpm.workerFiles[workerID] = filename
+}
+
+// RemoveWorkerProgressBar completes a worker's progress bar
+func (mpm *MultiProgressManager) RemoveWorkerProgressBar(workerID int) {
+	if !mpm.enabled || workerID >= mpm.maxWorkers {
+		return
+	}
+
+	mpm.mutex.Lock()
+	defer mpm.mutex.Unlock()
+
+	if len(mpm.multiBar.Bars) > workerID+1 {
+		workerBar := mpm.multiBar.Bars[workerID+1]
+		workerBar.Progress(100.0)
+	}
+
+	delete(mpm.workerFiles, workerID)
+}
+
+// GetActiveWorkerCount returns the number of active workers
+func (mpm *MultiProgressManager) GetActiveWorkerCount() int {
+	mpm.mutex.RLock()
+	defer mpm.mutex.RUnlock()
+	return len(mpm.workerFiles)
+}
+
+// Shutdown gracefully shuts down the multi-progress manager
+func (mpm *MultiProgressManager) Shutdown() {
+	if mpm.enabled && mpm.multiBar != nil {
+		mpm.multiBar.End()
+		fmt.Println("\n🎉 All downloads completed!")
+	}
+}
+
+// ConcurrentProgressBar wraps fortio/progressbar with download speed tracking
+type ConcurrentProgressBar struct {
+	bar         *fortiopb.Bar
+	total       int64
+	current     int64
+	manager     *MultiProgressManager
+	workerID    int // -1 for overall bar
+	filename    string
+	description string
+	startTime   time.Time
+	lastUpdate  time.Time
+	mutex       sync.Mutex
+}
+
+func (cpb *ConcurrentProgressBar) Add(n int) error {
+	cpb.mutex.Lock()
+	defer cpb.mutex.Unlock()
+
+	cpb.current += int64(n)
+
+	if cpb.total > 0 {
+		percentage := float64(cpb.current) / float64(cpb.total) * 100
+
+		// Update progress with speed info for worker bars
+		if cpb.workerID >= 0 && cpb.current > 0 {
+			elapsed := time.Since(cpb.startTime)
+			now := time.Now()
+
+			// Only update display every 500ms to avoid flickering
+			if now.Sub(cpb.lastUpdate) > 500*time.Millisecond || cpb.current == cpb.total {
+				if elapsed > 0 {
+					speed := float64(cpb.current) / elapsed.Seconds()
+					shortFilename := truncateFilename(cpb.filename, 15)
+
+					// Use WriteAbove to display current status without interfering with progress bar
+					cpb.bar.WriteAbove(fmt.Sprintf("Worker %d: %s - %s/s (%.1f%%)",
+						cpb.workerID,
+						shortFilename,
+						formatSize(int64(speed)),
+						percentage))
+				}
+				cpb.lastUpdate = now
+			}
+		}
+
+		cpb.bar.Progress(percentage)
+	}
+
+	return nil
+}
+
+func (cpb *ConcurrentProgressBar) Finish() error {
+	cpb.mutex.Lock()
+	defer cpb.mutex.Unlock()
+
+	if cpb.workerID >= 0 {
+		// Show final completion status
+		elapsed := time.Since(cpb.startTime)
+		if elapsed > 0 && cpb.total > 0 {
+			avgSpeed := float64(cpb.total) / elapsed.Seconds()
+			shortFilename := truncateFilename(cpb.filename, 15)
+			cpb.bar.WriteAbove(fmt.Sprintf("Worker %d: %s ✅ DONE (%s/s)",
+				cpb.workerID,
+				shortFilename,
+				formatSize(int64(avgSpeed))))
+		}
+	}
+
+	cpb.bar.Progress(100.0)
+	return nil
+}
+
+func (cpb *ConcurrentProgressBar) Current() int64 {
+	cpb.mutex.Lock()
+	defer cpb.mutex.Unlock()
+	return cpb.current
+}
+
+func (cpb *ConcurrentProgressBar) SetTotal(total int64, wontAdd ...bool) error {
+	cpb.mutex.Lock()
+	defer cpb.mutex.Unlock()
+
+	cpb.total = total
+	if len(wontAdd) > 0 && wontAdd[0] {
+		cpb.bar.Progress(100.0)
+	}
+	return nil
 }
 
 // NewProgressManager creates a new progress manager
@@ -25,213 +255,115 @@ func NewProgressManager(logger logging.Interface, enableBars, enableLogs bool) *
 	}
 }
 
-// CreateFileProgressBar creates a progress bar for a single file download
-func (pm *ProgressManager) CreateFileProgressBar(filename string, size int64) *progressbar.ProgressBar {
-	if !pm.enableProgressBars {
-		return nil
+// InitializeMultiProgress initializes multi-progress support for concurrent downloads
+func (pm *ProgressManager) InitializeMultiProgress(maxWorkers int) {
+	if pm.enableProgressBars && maxWorkers > 1 {
+		pm.multiProgress = NewMultiProgressManager(maxWorkers, true)
 	}
+}
 
-	description := fmt.Sprintf("📄 %s", filename)
-	if len(description) > 50 {
-		description = description[:47] + "..."
+// ProgressBar interface for different progress bar implementations
+type ProgressBar interface {
+	Add(int) error
+	Finish() error
+	Current() int64
+	SetTotal(total int64, wontAdd ...bool) error
+}
+
+// CreateWorkerFileProgressBar creates a progress bar for a worker-specific file download
+func (pm *ProgressManager) CreateWorkerFileProgressBar(workerID int, filename string, size int64) ProgressBar {
+	if pm.multiProgress != nil {
+		return pm.multiProgress.CreateWorkerProgressBar(workerID, filename, size)
 	}
+	return pm.CreateFileProgressBar(filename, size)
+}
 
-	bar := progressbar.NewOptions64(size,
-		progressbar.OptionSetDescription(description),
-		progressbar.OptionSetWidth(30),
-		progressbar.OptionShowBytes(true),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "█",
-			SaucerHead:    "█",
-			SaucerPadding: "░",
-			BarStart:      "▐",
-			BarEnd:        "▌",
-		}),
-		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionShowCount(),
-		progressbar.OptionOnCompletion(func() {
-			fmt.Printf("\n✅ %s completed\n", filename)
-		}),
-		progressbar.OptionThrottle(100*time.Millisecond),
-	)
-
-	return bar
+// CompleteWorkerProgress handles completion of worker progress
+func (pm *ProgressManager) CompleteWorkerProgress(workerID int) {
+	if pm.multiProgress != nil {
+		pm.multiProgress.RemoveWorkerProgressBar(workerID)
+	}
 }
 
 // CreateSnapshotProgressBar creates a progress bar for snapshot downloads
-func (pm *ProgressManager) CreateSnapshotProgressBar(totalFiles int, totalSize int64) *progressbar.ProgressBar {
+func (pm *ProgressManager) CreateSnapshotProgressBar(totalFiles int, totalSize int64) ProgressBar {
 	if !pm.enableProgressBars {
 		return nil
 	}
 
-	description := fmt.Sprintf("📦 Downloading %d files (%s)", totalFiles, formatSize(totalSize))
+	if pm.multiProgress != nil {
+		return pm.multiProgress.CreateSnapshotProgressBar(totalFiles, totalSize)
+	}
 
-	bar := progressbar.NewOptions(totalFiles,
-		progressbar.OptionSetDescription(description),
-		progressbar.OptionSetWidth(40),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "▓",
-			SaucerHead:    "▓",
-			SaucerPadding: "░",
-			BarStart:      "▐",
-			BarEnd:        "▌",
-		}),
-		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionShowCount(),
-		progressbar.OptionOnCompletion(func() {
-			fmt.Print("\n🎉 Snapshot download completed!\n")
-		}),
-		progressbar.OptionThrottle(500*time.Millisecond),
+	// Fallback to single progress bar
+	description := fmt.Sprintf("📦 Downloading %d files (%s)", totalFiles, formatSize(totalSize))
+	bar := schollzpb.NewOptions(totalFiles,
+		schollzpb.OptionSetDescription(description),
+		schollzpb.OptionSetWidth(40),
+		schollzpb.OptionShowCount(),
+		schollzpb.OptionEnableColorCodes(true),
 	)
 
-	return bar
+	return &SingleProgressBar{bar: bar}
+}
+
+// CreateFileProgressBar creates a progress bar for a single file download
+func (pm *ProgressManager) CreateFileProgressBar(filename string, size int64) ProgressBar {
+	if !pm.enableProgressBars {
+		return nil
+	}
+
+	description := fmt.Sprintf("📄 %s", truncateFilename(filename, 40))
+	bar := schollzpb.NewOptions64(size,
+		schollzpb.OptionSetDescription(description),
+		schollzpb.OptionSetWidth(30),
+		schollzpb.OptionShowBytes(true),
+		schollzpb.OptionShowCount(),
+		schollzpb.OptionEnableColorCodes(true),
+	)
+
+	return &SingleProgressBar{bar: bar}
 }
 
 // CreateSpinner creates a spinner for unknown progress operations
-func (pm *ProgressManager) CreateSpinner(description string) *progressbar.ProgressBar {
+func (pm *ProgressManager) CreateSpinner(description string) *schollzpb.ProgressBar {
 	if !pm.enableProgressBars {
 		return nil
 	}
 
-	return progressbar.NewOptions(-1,
-		progressbar.OptionSetDescription(description),
-		progressbar.OptionSetWidth(10),
-		progressbar.OptionSpinnerType(14),
-		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionThrottle(100*time.Millisecond),
+	return schollzpb.NewOptions(-1,
+		schollzpb.OptionSetDescription(description),
+		schollzpb.OptionSetWidth(10),
+		schollzpb.OptionSpinnerType(14),
+		schollzpb.OptionEnableColorCodes(true),
 	)
 }
 
-// LogDownloadStart logs the start of a download operation
-func (pm *ProgressManager) LogDownloadStart(repoID, filename string, size int64) {
-	if pm.logger == nil {
-		return
-	}
+// SingleProgressBar wraps schollz/progressbar for single downloads
+type SingleProgressBar struct {
+	bar *schollzpb.ProgressBar
+}
 
-	fields := map[string]interface{}{
-		"repo_id":  repoID,
-		"filename": filename,
-		"size":     size,
-	}
+func (spb *SingleProgressBar) Add(n int) error                             { return spb.bar.Add(n) }
+func (spb *SingleProgressBar) Finish() error                               { return spb.bar.Finish() }
+func (spb *SingleProgressBar) Current() int64                              { return spb.bar.State().CurrentNum }
+func (spb *SingleProgressBar) SetTotal(total int64, wontAdd ...bool) error { return spb.bar.Finish() }
 
-	if pm.enableDetailedLogs {
-		logger := pm.logger
-		for k, v := range fields {
-			logger = logger.WithField(k, v)
-		}
-		logger.Info("Starting file download")
-	} else {
-		pm.logger.WithField("repo_id", repoID).Info("Starting download")
+// Shutdown gracefully shuts down the progress manager
+func (pm *ProgressManager) Shutdown() {
+	if pm.multiProgress != nil {
+		pm.multiProgress.Shutdown()
 	}
 }
 
-// LogDownloadComplete logs the completion of a download
-func (pm *ProgressManager) LogDownloadComplete(repoID, filename string, duration time.Duration, size int64) {
-	if pm.logger == nil {
-		return
+// Helper functions
+func truncateFilename(filename string, maxLen int) string {
+	if len(filename) <= maxLen {
+		return filename
 	}
-
-	speed := float64(size) / duration.Seconds()
-	fields := map[string]interface{}{
-		"repo_id":     repoID,
-		"filename":    filename,
-		"duration_ms": duration.Milliseconds(),
-		"size":        size,
-		"speed_bps":   speed,
-	}
-
-	if pm.enableDetailedLogs {
-		logger := pm.logger
-		for k, v := range fields {
-			logger = logger.WithField(k, v)
-		}
-		logger.Info("Download completed successfully")
-	} else {
-		pm.logger.WithField("repo_id", repoID).Info("Download completed")
-	}
+	return filename[:maxLen-3] + "..."
 }
 
-// LogSnapshotStart logs the start of a snapshot download
-func (pm *ProgressManager) LogSnapshotStart(repoID string, fileCount int, totalSize int64) {
-	if pm.logger == nil {
-		return
-	}
-
-	logger := pm.logger.
-		WithField("repo_id", repoID).
-		WithField("file_count", fileCount).
-		WithField("total_size", totalSize).
-		WithField("operation", "snapshot_download")
-	logger.Info("Starting snapshot download")
-}
-
-// LogSnapshotComplete logs the completion of a snapshot download
-func (pm *ProgressManager) LogSnapshotComplete(repoID string, fileCount int, duration time.Duration, totalSize int64) {
-	if pm.logger == nil {
-		return
-	}
-
-	avgSpeed := float64(totalSize) / duration.Seconds()
-	logger := pm.logger.
-		WithField("repo_id", repoID).
-		WithField("file_count", fileCount).
-		WithField("duration_ms", duration.Milliseconds()).
-		WithField("total_size", totalSize).
-		WithField("avg_speed", avgSpeed).
-		WithField("operation", "snapshot_download")
-	logger.Info("Snapshot download completed successfully")
-}
-
-// LogError logs an error with appropriate context
-func (pm *ProgressManager) LogError(operation, repoID string, err error) {
-	if pm.logger == nil {
-		return
-	}
-
-	logger := pm.logger.
-		WithField("operation", operation).
-		WithField("repo_id", repoID).
-		WithError(err)
-	logger.Error("Operation failed")
-}
-
-// LogRepoListing logs repository file listing operations
-func (pm *ProgressManager) LogRepoListing(repoID string, fileCount int) {
-	if pm.logger == nil {
-		return
-	}
-
-	logger := pm.logger.
-		WithField("repo_id", repoID).
-		WithField("file_count", fileCount).
-		WithField("operation", "list_files")
-	logger.Info("Repository files listed successfully")
-}
-
-// ProgressWriter wraps a progress bar as an io.Writer for seamless integration
-type ProgressWriter struct {
-	bar    *progressbar.ProgressBar
-	writer io.Writer
-}
-
-// NewProgressWriter creates a new progress writer
-func NewProgressWriter(bar *progressbar.ProgressBar, writer io.Writer) *ProgressWriter {
-	return &ProgressWriter{
-		bar:    bar,
-		writer: writer,
-	}
-}
-
-// Write implements io.Writer interface
-func (pw *ProgressWriter) Write(p []byte) (n int, err error) {
-	n, err = pw.writer.Write(p)
-	if err == nil && pw.bar != nil {
-		_ = pw.bar.Add(n) // Ignore error from progress bar update
-	}
-	return n, err
-}
-
-// formatSize formats bytes into human readable format
 func formatSize(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -243,4 +375,66 @@ func formatSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// ProgressWriter wraps a progress bar as an io.Writer
+type ProgressWriter struct {
+	bar    ProgressBar
+	writer io.Writer
+}
+
+func NewProgressWriter(bar ProgressBar, writer io.Writer) *ProgressWriter {
+	return &ProgressWriter{bar: bar, writer: writer}
+}
+
+func (pw *ProgressWriter) Write(p []byte) (n int, err error) {
+	n, err = pw.writer.Write(p)
+	if err == nil && pw.bar != nil {
+		_ = pw.bar.Add(n)
+	}
+	return n, err
+}
+
+// Logging methods (simplified)
+func (pm *ProgressManager) LogDownloadStart(repoID, filename string, size int64) {
+	if pm.logger != nil {
+		pm.logger.WithField("repo_id", repoID).WithField("filename", filename).Info("Starting download")
+	}
+}
+
+func (pm *ProgressManager) LogDownloadComplete(repoID, filename string, duration time.Duration, size int64) {
+	if pm.logger != nil {
+		speed := float64(size) / duration.Seconds()
+		pm.logger.WithField("repo_id", repoID).WithField("filename", filename).
+			WithField("speed_bps", speed).Info("Download completed")
+	}
+}
+
+func (pm *ProgressManager) LogSnapshotStart(repoID string, fileCount int, totalSize int64) {
+	if pm.logger != nil {
+		pm.logger.WithField("repo_id", repoID).WithField("file_count", fileCount).
+			WithField("total_size", totalSize).Info("Starting snapshot download")
+	}
+}
+
+func (pm *ProgressManager) LogSnapshotComplete(repoID string, fileCount int, duration time.Duration, totalSize int64) {
+	if pm.logger != nil {
+		avgSpeed := float64(totalSize) / duration.Seconds()
+		pm.logger.WithField("repo_id", repoID).WithField("file_count", fileCount).
+			WithField("avg_speed", avgSpeed).Info("Snapshot download completed")
+	}
+}
+
+func (pm *ProgressManager) LogError(operation, repoID string, err error) {
+	if pm.logger != nil {
+		pm.logger.WithField("operation", operation).WithField("repo_id", repoID).
+			WithError(err).Error("Operation failed")
+	}
+}
+
+func (pm *ProgressManager) LogRepoListing(repoID string, fileCount int) {
+	if pm.logger != nil {
+		pm.logger.WithField("repo_id", repoID).WithField("file_count", fileCount).
+			Info("Repository files listed")
+	}
 }

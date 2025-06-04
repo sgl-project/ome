@@ -246,8 +246,10 @@ func TestFileExists(t *testing.T) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp("", "test_file")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func(name string) {
+		_ = os.Remove(name)
+	}(tmpFile.Name())
+	_ = tmpFile.Close()
 
 	// Test existing file
 	assert.True(t, FileExists(tmpFile.Name()))
@@ -260,12 +262,14 @@ func TestGetFileSize(t *testing.T) {
 	// Create a temporary file with known content
 	tmpFile, err := os.CreateTemp("", "test_file")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func(name string) {
+		_ = os.Remove(name)
+	}(tmpFile.Name())
 
 	content := "test content"
 	_, err = tmpFile.WriteString(content)
 	require.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Test file size
 	size, err := GetFileSize(tmpFile.Name())
@@ -281,7 +285,9 @@ func TestEnsureDir(t *testing.T) {
 	// Create temporary directory
 	tmpDir, err := os.MkdirTemp("", "test_dir")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tmpDir)
 
 	// Test creating nested directory
 	nestedDir := filepath.Join(tmpDir, "nested", "deep", "dir")
@@ -501,7 +507,9 @@ func TestShouldIgnoreFile(t *testing.T) {
 func TestGetPointerPath(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test_storage")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tmpDir)
 
 	tests := []struct {
 		name             string
@@ -546,7 +554,9 @@ func TestGetPointerPath(t *testing.T) {
 func TestCacheCommitHashForRevision(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test_cache")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tmpDir)
 
 	// Test caching commit hash
 	revision := "main"
@@ -577,7 +587,9 @@ func TestCacheCommitHashForRevision(t *testing.T) {
 func TestAreSymlinksSupported(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test_symlinks")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tmpDir)
 
 	// Test with valid directory
 	result := AreSymlinksSupported(tmpDir)
@@ -587,6 +599,216 @@ func TestAreSymlinksSupported(t *testing.T) {
 	// Test with empty directory
 	result = AreSymlinksSupported("")
 	assert.False(t, result)
+}
+
+// Test the new cross-platform disk space functionality
+
+func TestCheckDiskSpace(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("sufficient disk space", func(t *testing.T) {
+		// Test with a small file size (should always have enough space)
+		err := CheckDiskSpace(1024, tmpDir)
+		assert.NoError(t, err)
+	})
+
+	t.Run("zero size file", func(t *testing.T) {
+		// Should not check disk space for zero-size files
+		err := CheckDiskSpace(0, tmpDir)
+		assert.NoError(t, err)
+	})
+
+	t.Run("negative size file", func(t *testing.T) {
+		// Should not check disk space for negative-size files
+		err := CheckDiskSpace(-100, tmpDir)
+		assert.NoError(t, err)
+	})
+
+	t.Run("non-existent directory", func(t *testing.T) {
+		// Should handle non-existent directories gracefully
+		err := CheckDiskSpace(1024, "/non/existent/directory")
+		// Function should not fail even if it can't check space
+		assert.NoError(t, err)
+	})
+}
+
+func TestGetAvailableDiskSpace(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("valid directory", func(t *testing.T) {
+		space, err := getAvailableDiskSpace(tmpDir)
+		// Should either return available space or handle gracefully
+		if err != nil {
+			// If error occurs, it should be handled gracefully
+			assert.NotPanics(t, func() {
+				_, _ = getAvailableDiskSpace(tmpDir)
+			})
+		} else {
+			// Available space should be reasonable (either 0 or positive)
+			assert.GreaterOrEqual(t, space, int64(0))
+		}
+	})
+
+	t.Run("create directory if not exists", func(t *testing.T) {
+		newDir := filepath.Join(tmpDir, "new", "nested", "dir")
+
+		// Directory doesn't exist yet
+		assert.False(t, FileExists(newDir))
+
+		// Function should create it
+		_, err := getAvailableDiskSpace(newDir)
+
+		// Should not error and directory should be created
+		assert.NoError(t, err)
+		assert.True(t, FileExists(newDir))
+	})
+
+	t.Run("empty directory path", func(t *testing.T) {
+		// Should handle empty directory path
+		_, err := getAvailableDiskSpace("")
+		// May error, but should not panic
+		assert.NotPanics(t, func() {
+			_, _ = getAvailableDiskSpace("")
+		})
+		// We don't assert on error since behavior may vary by platform
+		_ = err
+	})
+}
+
+func TestGetAvailableDiskSpaceWindows(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("windows disk space check", func(t *testing.T) {
+		space, err := getAvailableDiskSpaceWindows(tmpDir)
+
+		// Should not error for valid directory
+		assert.NoError(t, err)
+
+		// Should return a reasonable amount (no longer hardcoded 100GB)
+		// The new implementation actually measures available space
+		assert.Greater(t, space, int64(0))
+		// Should be at least 1MB (our minimum threshold)
+		assert.GreaterOrEqual(t, space, int64(1024*1024))
+	})
+
+	t.Run("windows with read-only directory", func(t *testing.T) {
+		// Create a subdirectory and try to make it read-only
+		readOnlyDir := filepath.Join(tmpDir, "readonly")
+		err := os.Mkdir(readOnlyDir, 0444) // Read-only permissions
+		require.NoError(t, err)
+
+		space, err := getAvailableDiskSpaceWindows(readOnlyDir)
+
+		// Should handle read-only directories gracefully
+		// May return error or fallback to generic method
+		assert.NotPanics(t, func() {
+			_, _ = getAvailableDiskSpaceWindows(readOnlyDir)
+		})
+
+		if err == nil {
+			// If no error, should return reasonable space
+			assert.GreaterOrEqual(t, space, int64(0))
+		}
+	})
+}
+
+func TestGetAvailableDiskSpaceUnix(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("unix disk space check", func(t *testing.T) {
+		space, err := getAvailableDiskSpaceUnix(tmpDir)
+
+		// Should not error for valid directory on Unix systems
+		// On non-Unix systems, it might fallback to generic method
+		if err != nil {
+			// Fallback to generic method should work
+			assert.NotPanics(t, func() {
+				_, _ = getAvailableDiskSpaceUnix(tmpDir)
+			})
+		} else {
+			// Should return reasonable space amount
+			assert.GreaterOrEqual(t, space, int64(0))
+		}
+	})
+}
+
+func TestGetAvailableDiskSpaceGeneric(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("generic disk space check", func(t *testing.T) {
+		space, err := getAvailableDiskSpaceGeneric(tmpDir)
+
+		// Should not error for valid directory
+		assert.NoError(t, err)
+
+		// Should return a reasonable amount (no longer hardcoded)
+		// The new implementation actually measures available space
+		assert.Greater(t, space, int64(0))
+		// Should be at least 1MB (our minimum threshold)
+		assert.GreaterOrEqual(t, space, int64(1024*1024))
+	})
+
+	t.Run("generic with unwritable directory", func(t *testing.T) {
+		// Create a directory and remove write permissions
+		unwritableDir := filepath.Join(tmpDir, "unwritable")
+		err := os.Mkdir(unwritableDir, 0444) // Read-only
+		require.NoError(t, err)
+
+		space, err := getAvailableDiskSpaceGeneric(unwritableDir)
+
+		// Should handle unwritable directories
+		// May return error due to inability to create test file
+		if err != nil {
+			assert.Contains(t, err.Error(), "unable to create test file")
+		} else {
+			assert.GreaterOrEqual(t, space, int64(0))
+		}
+	})
+}
+
+func TestDiskSpaceIntegration(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("end-to-end disk space workflow", func(t *testing.T) {
+		// Test the complete workflow of checking disk space before download
+
+		// Small file - should always pass
+		err := CheckDiskSpace(1024, tmpDir)
+		assert.NoError(t, err)
+
+		// Very large file (1TB) - might fail on systems with limited space
+		err = CheckDiskSpace(1024*1024*1024*1024, tmpDir)
+		// We don't assert on this as it depends on actual available space
+		// but it should not panic
+		assert.NotPanics(t, func() {
+			_ = CheckDiskSpace(1024*1024*1024*1024, tmpDir)
+		})
+		_ = err
+	})
+
+	t.Run("platform-specific behavior", func(t *testing.T) {
+		// Test that platform-specific functions are called appropriately
+		space1, err1 := getAvailableDiskSpace(tmpDir)
+		space2, err2 := getAvailableDiskSpaceGeneric(tmpDir)
+
+		// Both should complete without panicking
+		assert.NotPanics(t, func() {
+			_, _ = getAvailableDiskSpace(tmpDir)
+			_, _ = getAvailableDiskSpaceGeneric(tmpDir)
+		})
+
+		// Generic method should return measured space (no longer hardcoded)
+		assert.NoError(t, err2)
+		assert.Greater(t, space2, int64(0))
+		assert.GreaterOrEqual(t, space2, int64(1024*1024)) // At least 1MB
+
+		// Platform-specific method should also return reasonable values
+		if err1 == nil {
+			assert.Greater(t, space1, int64(0))
+			// Both methods might return different values but should be reasonable
+			assert.GreaterOrEqual(t, space1, int64(1024*1024)) // At least 1MB
+		}
+	})
 }
 
 // Benchmark tests

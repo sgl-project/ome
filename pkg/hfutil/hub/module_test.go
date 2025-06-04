@@ -21,14 +21,15 @@ func TestNewHubClient(t *testing.T) {
 		{
 			name: "valid config",
 			config: &HubConfig{
-				Token:           "test-token",
-				Endpoint:        DefaultEndpoint,
-				CacheDir:        "/tmp/test-cache",
-				Logger:          logger,
-				UserAgent:       "test-agent",
-				RequestTimeout:  DefaultRequestTimeout,
-				EtagTimeout:     DefaultEtagTimeout,
-				DownloadTimeout: DownloadTimeout,
+				Token:               "test-token",
+				Endpoint:            DefaultEndpoint,
+				CacheDir:            "/tmp/test-cache",
+				Logger:              logger,
+				UserAgent:           "test-agent",
+				RequestTimeout:      DefaultRequestTimeout,
+				EtagTimeout:         DefaultEtagTimeout,
+				DownloadTimeout:     DownloadTimeout,
+				DisableProgressBars: true,
 			},
 			wantErr: false,
 		},
@@ -70,18 +71,19 @@ func TestNewHubClient(t *testing.T) {
 func TestHubClientGetConfig(t *testing.T) {
 	logger := logging.Discard()
 	config := &HubConfig{
-		Token:           "test-token",
-		Endpoint:        DefaultEndpoint,
-		CacheDir:        "/tmp/test-cache",
-		Logger:          logger,
-		UserAgent:       "test-agent",
-		RequestTimeout:  DefaultRequestTimeout,
-		EtagTimeout:     DefaultEtagTimeout,
-		DownloadTimeout: DownloadTimeout,
-		MaxWorkers:      4,
-		ChunkSize:       DefaultChunkSize,
-		MaxRetries:      DefaultMaxRetries,
-		RetryInterval:   DefaultRetryInterval,
+		Token:               "test-token",
+		Endpoint:            DefaultEndpoint,
+		CacheDir:            "/tmp/test-cache",
+		Logger:              logger,
+		UserAgent:           "test-agent",
+		RequestTimeout:      DefaultRequestTimeout,
+		EtagTimeout:         DefaultEtagTimeout,
+		DownloadTimeout:     DownloadTimeout,
+		MaxWorkers:          4,
+		ChunkSize:           DefaultChunkSize,
+		MaxRetries:          DefaultMaxRetries,
+		RetryInterval:       DefaultRetryInterval,
+		DisableProgressBars: true,
 	}
 
 	client, err := NewHubClient(config)
@@ -94,18 +96,19 @@ func TestHubClientGetConfig(t *testing.T) {
 func TestHubClientDownloadValidation(t *testing.T) {
 	logger := logging.Discard()
 	config := &HubConfig{
-		Token:           "test-token",
-		Endpoint:        DefaultEndpoint,
-		CacheDir:        "/tmp/test-cache",
-		Logger:          logger,
-		UserAgent:       "test-agent",
-		RequestTimeout:  DefaultRequestTimeout,
-		EtagTimeout:     DefaultEtagTimeout,
-		DownloadTimeout: DownloadTimeout,
-		MaxWorkers:      4,
-		ChunkSize:       DefaultChunkSize,
-		MaxRetries:      DefaultMaxRetries,
-		RetryInterval:   DefaultRetryInterval,
+		Token:               "test-token",
+		Endpoint:            DefaultEndpoint,
+		CacheDir:            "/tmp/test-cache",
+		Logger:              logger,
+		UserAgent:           "test-agent",
+		RequestTimeout:      DefaultRequestTimeout,
+		EtagTimeout:         DefaultEtagTimeout,
+		DownloadTimeout:     DownloadTimeout,
+		MaxWorkers:          4,
+		ChunkSize:           DefaultChunkSize,
+		MaxRetries:          DefaultMaxRetries,
+		RetryInterval:       DefaultRetryInterval,
+		DisableProgressBars: true,
 	}
 
 	client, err := NewHubClient(config)
@@ -127,18 +130,19 @@ func TestHubClientDownloadValidation(t *testing.T) {
 func TestHubClientSnapshotDownloadValidation(t *testing.T) {
 	logger := logging.Discard()
 	config := &HubConfig{
-		Token:           "test-token",
-		Endpoint:        DefaultEndpoint,
-		CacheDir:        "/tmp/test-cache",
-		Logger:          logger,
-		UserAgent:       "test-agent",
-		RequestTimeout:  DefaultRequestTimeout,
-		EtagTimeout:     DefaultEtagTimeout,
-		DownloadTimeout: DownloadTimeout,
-		MaxWorkers:      4,
-		ChunkSize:       DefaultChunkSize,
-		MaxRetries:      DefaultMaxRetries,
-		RetryInterval:   DefaultRetryInterval,
+		Token:               "test-token",
+		Endpoint:            DefaultEndpoint,
+		CacheDir:            "/tmp/test-cache",
+		Logger:              logger,
+		UserAgent:           "test-agent",
+		RequestTimeout:      DefaultRequestTimeout,
+		EtagTimeout:         DefaultEtagTimeout,
+		DownloadTimeout:     DownloadTimeout,
+		MaxWorkers:          4,
+		ChunkSize:           DefaultChunkSize,
+		MaxRetries:          DefaultMaxRetries,
+		RetryInterval:       DefaultRetryInterval,
+		DisableProgressBars: true,
 	}
 
 	client, err := NewHubClient(config)
@@ -155,18 +159,19 @@ func TestHubClientSnapshotDownloadValidation(t *testing.T) {
 func TestHubClientListFilesValidation(t *testing.T) {
 	logger := logging.Discard()
 	config := &HubConfig{
-		Token:           "test-token",
-		Endpoint:        DefaultEndpoint,
-		CacheDir:        "/tmp/test-cache",
-		Logger:          logger,
-		UserAgent:       "test-agent",
-		RequestTimeout:  DefaultRequestTimeout,
-		EtagTimeout:     DefaultEtagTimeout,
-		DownloadTimeout: DownloadTimeout,
-		MaxWorkers:      4,
-		ChunkSize:       DefaultChunkSize,
-		MaxRetries:      DefaultMaxRetries,
-		RetryInterval:   DefaultRetryInterval,
+		Token:               "test-token",
+		Endpoint:            DefaultEndpoint,
+		CacheDir:            "/tmp/test-cache",
+		Logger:              logger,
+		UserAgent:           "test-agent",
+		RequestTimeout:      DefaultRequestTimeout,
+		EtagTimeout:         DefaultEtagTimeout,
+		DownloadTimeout:     DownloadTimeout,
+		MaxWorkers:          4,
+		ChunkSize:           DefaultChunkSize,
+		MaxRetries:          DefaultMaxRetries,
+		RetryInterval:       DefaultRetryInterval,
+		DisableProgressBars: true,
 	}
 
 	client, err := NewHubClient(config)
@@ -270,7 +275,7 @@ func TestDownloadConfigConversion(t *testing.T) {
 		MaxRetries:          5,
 		RetryInterval:       DefaultRetryInterval,
 		EnableSymlinks:      true,
-		DisableProgressBars: false,
+		DisableProgressBars: true,
 		EnableDetailedLogs:  false,
 		LogLevel:            "info",
 	}
@@ -289,18 +294,19 @@ func TestDownloadConfigConversion(t *testing.T) {
 func BenchmarkNewHubClient(b *testing.B) {
 	logger := logging.Discard()
 	config := &HubConfig{
-		Token:           "test-token",
-		Endpoint:        DefaultEndpoint,
-		CacheDir:        "/tmp/test-cache",
-		Logger:          logger,
-		UserAgent:       "test-agent",
-		RequestTimeout:  DefaultRequestTimeout,
-		EtagTimeout:     DefaultEtagTimeout,
-		DownloadTimeout: DownloadTimeout,
-		MaxWorkers:      4,
-		ChunkSize:       DefaultChunkSize,
-		MaxRetries:      DefaultMaxRetries,
-		RetryInterval:   DefaultRetryInterval,
+		Token:               "test-token",
+		Endpoint:            DefaultEndpoint,
+		CacheDir:            "/tmp/test-cache",
+		Logger:              logger,
+		UserAgent:           "test-agent",
+		RequestTimeout:      DefaultRequestTimeout,
+		EtagTimeout:         DefaultEtagTimeout,
+		DownloadTimeout:     DownloadTimeout,
+		MaxWorkers:          4,
+		ChunkSize:           DefaultChunkSize,
+		MaxRetries:          DefaultMaxRetries,
+		RetryInterval:       DefaultRetryInterval,
+		DisableProgressBars: true,
 	}
 
 	b.ResetTimer()
