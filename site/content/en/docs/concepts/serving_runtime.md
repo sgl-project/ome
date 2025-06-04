@@ -24,9 +24,13 @@ metadata:
 spec:
   supportedModelFormats:
     - name: safetensors
-      modelType: transformer
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelFramework:
+        name: transformer
+        version: "4.0"
       modelArchitecture: LlamaForCausalLM
-      version: "1"
       autoSelect: true
       priority: 1
   protocolVersions:
@@ -34,8 +38,8 @@ spec:
   modelSizeRange:
     max: 128B
     min: 60B
-  containers:
-    - name: ome-container
+  engineConfig:
+    runner:
       image: official-vllm-openai:0.5.3
       resources:
         requests:
@@ -46,63 +50,144 @@ spec:
           cpu: 128
           memory: 216Gi
           nvidia.com/gpu: 8
+    minReplicas: 1
+    maxReplicas: 3
 ```
 
 Several out-of-the-box _ClusterServingRuntimes_ are provided with OME so that users can quickly deploy common models without having to define the runtimes themselves.
 
-| Name                                | Supported Model Types | Supported Model Architecture   | Supported Model Format |
-|-------------------------------------|-----------------------|--------------------------------|------------------------|
-| vllm-mistral-7b-instruct            | safetensors           | MistralForCausalLM             | Transformer            |
-| vllm-e5-mistral-7b-instruct         | safetensors           | MistralModel                   | Transformer            |
-| vllm-llama-3-1-70b-instruct         | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-llama-3-1-405b-instruct-fp8    | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-llama-3-2-1b                   | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-llama-3-2-3b                   | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-llama-3-2-11b                  | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-llama-3-2-90b-vision-fp8       | safetensors           | MllamaForConditionalGeneration | Transformer            |
-| vllm-llama-3-3-70b-instruct         | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-deepseek-v3                    | safetensors           | DeepseekV3ForCausalLM          | Transformer            |
-| vllm-deepseek-v3-rdma               | safetensors           | DeepseekV3ForCausalLM          | Transformer            |
-| vllm-multi-node-llama-3-1-405b      | safetensors           | LlamaForCausalLM               | Transformer            |
-| vllm-multi-node-llama-3-1-405b-rdma | safetensors           | LlamaForCausalLM               | Transformer            |
-| command-r-plus                      | tensorrtllm          | CohereForCausalLM              | TensorRTLLM            |
-| sglang-small                        | safetensors           | LlamaForCausalLM               | Transformer            |
-| sglang-xsmall                       | safetensors           | LlamaForCausalLM               | Transformer            |
+### SRT (SGLang) Runtimes
+
+> **Note:** SRT (SGLang) is our flagship supporting runtime, offering the latest serving engine with the most optimal performance. It provides cutting-edge features including multi-node serving capabilities, prefill-decode disaggregated serving, and Large-scale Cross-node Expert Parallelism (EP) for optimal performance at scale.
+
+| Name                                       | Model Framework | Model Format | Model Architecture             |
+|--------------------------------------------|-----------------|--------------|--------------------------------|
+| srt-deepseek-pd-rdma                       | transformers    | safetensors  | DeepseekV3ForCausalLM          |
+| srt-deepseek-rdma                          | transformers    | safetensors  | DeepseekV3ForCausalLM          |
+| srt-e5-7b-mistral-instruct                 | transformers    | safetensors  | MistralModel                   |
+| srt-llama-3-1-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
+| srt-llama-3-1-405b-instruct-fp8            | transformers    | safetensors  | LlamaForCausalLM               |
+| srt-llama-3-2-1b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
+| srt-llama-3-2-3b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
+| srt-llama-3-2-11b-vision-instruct          | transformers    | safetensors  | MllamaForConditionalGeneration |
+| srt-llama-3-2-90b-vision-instruct-fp8      | transformers    | safetensors  | MllamaForConditionalGeneration |
+| srt-llama-3-3-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
+| srt-llama-4-maverick-17b-128e-instruct-fp8 | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| srt-llama-4-scout-17b-16e-instruct         | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| srt-mistral-7b-instruct                    | transformers    | safetensors  | MistralForCausalLM             |
+| srt-mmixtral-8x7b-instruct                 | transformers    | safetensors  | MixtralForCausalLM             |
+
+### VLLM Runtimes
+
+| Name                                        | Model Framework | Model Format | Model Architecture             |
+|---------------------------------------------|-----------------|--------------|--------------------------------|
+| vllm-ray-multi-node-deepseek-v3-rdma        | transformers    | safetensors  | DeepseekV3ForCausalLM          |
+| vllm-e5-mistral-7b-instruct                 | transformers    | safetensors  | MistralModel                   |
+| vllm-llama-3-1-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-1-405b-instruct-fp8            | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-1-nemotron-nano-8b-v1          | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-1-nemotron-ultra-253b-v1       | transformers    | safetensors  | DeciLMForCausalLM              |
+| vllm-llama-3-2-1b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-2-3b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-2-11b-vision-instruct          | transformers    | safetensors  | MllamaForConditionalGeneration |
+| vllm-llama-3-2-90b-vision-instruct-fp8      | transformers    | safetensors  | MllamaForConditionalGeneration |
+| vllm-llama-3-3-70b-instruct-fp8-dynamic     | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-3-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-3-3-nemotron-super-49b-v1        | transformers    | safetensors  | DeciLMForCausalLM              |
+| vllm-llama-3-70b-instruct                   | transformers    | safetensors  | LlamaForCausalLM               |
+| vllm-llama-4-maverick-17b-128e-instruct-fp8 | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| vllm-llama-4-scout-17b-16e-instruct         | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| vllm-mistral-7b-instruct                    | transformers    | safetensors  | MistralForCausalLM             |
+| vllm-mixtral-8x7b-instruct                  | transformers    | safetensors  | MixtralForCausalLM             |
+| vllm-phi-3-vision-128k-instruct             | transformers    | safetensors  | Phi3VForCausalLM               |
 
 ## Spec Attributes
 
 Available attributes in the `ServingRuntime` spec:
 
-| Attribute                                    | Description                                                                                                                                                                                                                                                                                                                                                                                                          |
-|----------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `disabled`                                   | Disables this runtime                                                                                                                                                                                                                                                                                                                                                                                                |
-| `containers`                                 | List of containers associated with the runtime                                                                                                                                                                                                                                                                                                                                                                       |
-| `containers[ ].image`                        | The container image for the current container                                                                                                                                                                                                                                                                                                                                                                        |
-| `containers[ ].command`                      | Executable command found in the provided image                                                                                                                                                                                                                                                                                                                                                                       |
-| `containers[ ].args`                         | List of command line arguments as strings                                                                                                                                                                                                                                                                                                                                                                            |
-| `containers[ ].resources`                    | Kubernetes [limits or requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#requests-and-limits)                                                                                                                                                                                                                                                                                  |
-| `containers[ ].env `                         | List of environment variables to pass to the container                                                                                                                                                                                                                                                                                                                                                               |
-| `containers[ ].imagePullPolicy`              | The container image pull policy                                                                                                                                                                                                                                                                                                                                                                                      |
-| `containers[ ].workingDir`                   | The working directory for current container                                                                                                                                                                                                                                                                                                                                                                          |
-| `containers[ ].livenessProbe`                | Probe for checking container liveness                                                                                                                                                                                                                                                                                                                                                                                |
-| `containers[ ].readinessProbe`               | Probe for checking container readiness                                                                                                                                                                                                                                                                                                                                                                               |
-| `supportedModelFormats`                      | List of model format, architecture, and type supported by the current runtime                                                                                                                                                                                                                                                                                                                                        |
-| `supportedModelFormats[ ].name`              | Name of the model format                                                                                                                                                                                                                                                                                                                                                                                             |
-| `supportedModelFormats[ ].modelArchitecture` | Name of the model architecture, used in validating that a model is supported by a runtime.                                                                                                                                                                                                                                                                                                                           |
-| `supportedModelFormats[ ].modelType`         | Name of the mode type, such as `Transformer`, `BERT`, and `TensorRTLLM`                                                                                                                                                                                                                                                                                                                                              |
-| `supportedModelFormats[ ].version`           | Version of the model format. Used in validating that a model is supported by a runtime. It is recommended to include only the major version here, for example "1" rather than "1.15.4"                                                                                                                                                                                                                               |
-| `supportedModelFormats[ ].autoselect`        | Set to true to allow the ServingRuntime to be used for automatic model placement if this model is specified with no explicit runtime. The default value is false.                                                                                                                                                                                                                                                    |
-| `supportedModelFormats[ ].priority`          | Priority of this serving runtime for auto selection. This is used to select the serving runtime if more than one serving runtime supports the same model format. <br/>The value should be greater than zero. The higher the value, the higher the priority. Priority is not considered if AutoSelect is either false or not specified. Priority can be overridden by specifying the runtime in the InferenceService. |
-| `nodeSelector`                               | Influence Kubernetes scheduling to [assign pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/)                                                                                                                                                                                                                                                                                  |
-| `affinity`                                   | Influence Kubernetes scheduling to [assign pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity)                                                                                                                                                                                                                                                       |
-| `tolerations`                                | Allow pods to be scheduled onto nodes [with matching taints](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration)                                                                                                                                                                                                                                                                           |
-| `modelSizeRange`                             | Model size range is the range of model sizes supported by this runtime                                                                                                                                                                                                                                                                                                                                               |
+### Core Configuration
+
+| Attribute                                         | Description                                                                                                                                                                                                                                                                                                                                                                                                          |
+|---------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `disabled`                                        | Disables this runtime                                                                                                                                                                                                                                                                                                                                                                                                |
+| `supportedModelFormats`                           | List of model format, architecture, and type supported by the current runtime                                                                                                                                                                                                                                                                                                                                        |
+| `supportedModelFormats[ ].name`                   | Name of the model format (deprecated, use `modelFormat.name` instead)                                                                                                                                                                                                                                                                                                                                                |
+| `supportedModelFormats[ ].modelFormat`            | ModelFormat specification including name and version                                                                                                                                                                                                                                                                                                                                                                 |
+| `supportedModelFormats[ ].modelFormat.name`       | Name of the model format, e.g., "safetensors", "ONNX", "TensorFlow SavedModel"                                                                                                                                                                                                                                                                                                                                       |
+| `supportedModelFormats[ ].modelFormat.version`    | Version of the model format. Used in validating that a runtime supports a model. It Can be "major", "major.minor" or "major.minor.patch"                                                                                                                                                                                                                                                                             |
+| `supportedModelFormats[ ].modelFramework`         | ModelFramework specification including name and version                                                                                                                                                                                                                                                                                                                                                              |
+| `supportedModelFormats[ ].modelFramework.name`    | Name of the library, e.g., "transformer", "TensorFlow", "PyTorch", "ONNX", "TensorRTLLM"                                                                                                                                                                                                                                                                                                                             |
+| `supportedModelFormats[ ].modelFramework.version` | Version of the framework library                                                                                                                                                                                                                                                                                                                                                                                     |
+| `supportedModelFormats[ ].modelArchitecture`      | Name of the model architecture, used in validating that a model is supported by a runtime, e.g., "LlamaForCausalLM", "GemmaForCausalLM"                                                                                                                                                                                                                                                                              |
+| `supportedModelFormats[ ].quantization`           | Quantization scheme applied to the model, e.g., "fp8", "fbgemm_fp8", "int4"                                                                                                                                                                                                                                                                                                                                          |
+| `supportedModelFormats[ ].autoSelect`             | Set to true to allow the ServingRuntime to be used for automatic model placement if this model is specified with no explicit runtime. The default value is false.                                                                                                                                                                                                                                                    |
+| `supportedModelFormats[ ].priority`               | Priority of this serving runtime for auto selection. This is used to select the serving runtime if more than one serving runtime supports the same model format. <br/>The value should be greater than zero. The higher the value, the higher the priority. Priority is not considered if AutoSelect is either false or not specified. Priority can be overridden by specifying the runtime in the InferenceService. |
+| `protocolVersions`                                | Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)                                                                                                                                                                                                                                                                                                                          |
+| `modelSizeRange`                                  | Model size range is the range of model sizes supported by this runtime                                                                                                                                                                                                                                                                                                                                               |
+| `modelSizeRange.min`                              | Minimum size of the model in bytes                                                                                                                                                                                                                                                                                                                                                                                   |
+| `modelSizeRange.max`                              | Maximum size of the model in bytes                                                                                                                                                                                                                                                                                                                                                                                   |
+
+### Component Configuration
+
+The ServingRuntime spec supports three main component configurations:
+
+#### Engine Configuration
+
+| Attribute                       | Description                                                                                                                         |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `engineConfig`                  | Engine configuration for model serving                                                                                              |
+| `engineConfig.runner`           | Container specification for the main engine container                                                                               |
+| `engineConfig.runner.image`     | Container image for the engine                                                                                                      |
+| `engineConfig.runner.resources` | Kubernetes [limits or requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#requests-and-limits) |
+| `engineConfig.runner.env`       | List of environment variables to pass to the container                                                                              |
+| `engineConfig.minReplicas`      | Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero                                               |
+| `engineConfig.maxReplicas`      | Maximum number of replicas for autoscaling                                                                                          |
+| `engineConfig.scaleTarget`      | Integer target value for the autoscaler metric                                                                                      |
+| `engineConfig.scaleMetric`      | Scaling metric type (concurrency, rps, cpu, memory)                                                                                 |
+| `engineConfig.volumes`          | List of volumes that can be mounted by containers                                                                                   |
+| `engineConfig.nodeSelector`     | Node selector for pod scheduling                                                                                                    |
+| `engineConfig.affinity`         | Affinity rules for pod scheduling                                                                                                   |
+| `engineConfig.tolerations`      | Tolerations for pod scheduling                                                                                                      |
+| `engineConfig.leader`           | Leader configuration for multi-node deployments                                                                                     |
+| `engineConfig.worker`           | Worker configuration for multi-node deployments                                                                                     |
+
+#### Router Configuration
+
+| Attribute                  | Description                                        |
+|----------------------------|----------------------------------------------------|
+| `routerConfig`             | Router configuration for request routing           |
+| `routerConfig.runner`      | Container specification for the router container   |
+| `routerConfig.config`      | Additional configuration parameters for the router |
+| `routerConfig.minReplicas` | Minimum number of router replicas                  |
+| `routerConfig.maxReplicas` | Maximum number of router replicas                  |
+
+#### Decoder Configuration
+
+| Attribute                   | Description                                                             |
+|-----------------------------|-------------------------------------------------------------------------|
+| `decoderConfig`             | Decoder configuration for PD (Prefill-Decode) disaggregated deployments |
+| `decoderConfig.runner`      | Container specification for the decoder container                       |
+| `decoderConfig.minReplicas` | Minimum number of decoder replicas                                      |
+| `decoderConfig.maxReplicas` | Maximum number of decoder replicas                                      |
+| `decoderConfig.leader`      | Leader configuration for multi-node decoder deployments                 |
+| `decoderConfig.worker`      | Worker configuration for multi-node decoder deployments                 |
+
+#### Multi-Node Configuration
+
+For both `engineConfig` and `decoderConfig`, multi-node deployments are supported:
+
+| Attribute       | Description                                                       |
+|-----------------|-------------------------------------------------------------------|
+| `leader`        | Leader node configuration for coordinating distributed processing |
+| `leader.runner` | Container specification for the leader node                       |
+| `worker`        | Worker nodes configuration for distributed processing             |
+| `worker.size`   | Number of worker pod instances                                    |
+| `worker.runner` | Container specification for worker nodes                          |
+
 
 >**Note:** `ClusterServingRuntime` support the use of template variables of the form `{{.Variable}}` inside the container spec. These should map to fields inside an
 InferenceService's [metadata object](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta). The primary use of this is for passing in
 InferenceService-specific information, such as a name, to the runtime environment.
-
->**Note:** The container name must be `ome-container` for the runtime to be recognized by the OME controller. The controller will ignore any other containers defined in the runtime. For the `MultiNodeRayVLLM` deployment mode, multiple containers are not supported, and the distinction between head and worker nodes cannot be specified.
 
 ## Using ClusterServingRuntimes
 
@@ -115,13 +200,13 @@ metadata:
   name: llama-3-1-70b
   namespace: llama-3-1-70b
 spec:
-  predictor:
-    model:
-      baseModel: llama-3-1-70b
-      protocolVersion: openAI
-      runtime: vllm-text-generation
+  engine:
     minReplicas: 1
     maxReplicas: 1
+  model:
+    name: llama-3-1-70b
+  runtime:
+    name: vllm-text-generation
 ```
 
 Here, the runtime specified is `vllm-text-generation`, so the OME controller will first search the namespace for a ServingRuntime with that name. If
@@ -135,27 +220,67 @@ metadata:
   name: llama-3-1-70b
   namespace: llama-3-1-70b
 spec:
-  predictor:
-    model:
-      baseModel: llama-3-1-70b
-      protocolVersion: openAI
+  engine:
     minReplicas: 1
     maxReplicas: 1
+  model:
+    name: llama-3-1-70b
 ```
+
+## Runtime Selection Logic
+
+The OME controller uses an enhanced runtime selection algorithm to automatically choose the best runtime for a given model. The selection process includes several steps:
+
+### Runtime Discovery
+
+The controller searches for compatible runtimes in the following order:
+1. **Namespace-scoped ServingRuntimes** in the same namespace as the InferenceService
+2. **Cluster-scoped ClusterServingRuntimes** available across the cluster
+
+### Enabled Status
+
+The runtime must not be disabled. Runtimes can be disabled by setting the `disabled` field to `true` in the ServingRuntime spec.
+
+### Model Format Support
+
+The runtime must support the model's complete format specification, which includes several components:
+
+- **Model Format**: The storage format of the model (e.g., "safetensors", "ONNX", "TensorFlow SavedModel")
+- **Model Format Version**: The version of the model format (e.g., "1", "2.0")
+- **Model Framework**: The underlying framework or library (e.g., "transformer", "TensorFlow", "PyTorch", "ONNX", "TensorRTLLM")
+- **Model Framework Version**: The version of the framework library (e.g., "4.0", "2.1")
+- **Model Architecture**: The specific model implementation (e.g., "LlamaForCausalLM", "GemmaForCausalLM", "MistralForCausalLM")
+- **Quantization**: The quantization scheme applied to the model (e.g., "fp8", "fbgemm_fp8", "int4")
+
+All these attributes must match between the model and the runtime's `supportedModelFormats` for the runtime to be considered compatible.
 
 ### Model Size Range
 
 The `modelSizeRange` field defines the minimum and maximum model sizes that the runtime can support. This field is optional, but when provided, it helps the controller identify a runtime that matches the model size within the specified range. If multiple runtimes meet the size requirement, the controller will choose the runtime with the range closest to the model size.
 
+### Protocol Version Support
+
+The runtime must support the requested protocol version. Protocol versions include:
+- `openAI`: OpenAI-compatible API format
+- `cohere`: Cohere API format
+- `openInference-v1`: Open Inference Protocol version 1
+- `openInference-v2`: Open Inference Protocol version 2
+
+If no protocol version is specified in the InferenceService, the controller defaults to `openInference-v2`.
+
+### Auto-Selection
+
+The runtime must have `autoSelect` enabled for at least one supported format. This ensures that only runtimes explicitly marked for automatic selection are considered during the selection process.
+
 ### Priority
 
-If more than one serving runtime supports the same model `architecture`, `type`,`format`, `protocolVersion`,
+If more than one serving runtime supports the same model `architecture`, `format`, `framework`, `quantization`,
 and `size range` with same `version`, then we can optionally specify `priority` for the serving runtime.
 Based on the `priority` the runtime is automatically selected if no runtime is explicitly specified. Note that, `priority` is valid only if `autoSelect` is `true`. Higher value means higher priority.
 
 For example, let's consider the serving runtimes `vllm-text-generation` and `vllm-text-generation-2`.
 Both the serving runtimes support the `LlamaForCausalLM` model architecture,
-`transformer` model type, `safetensors` model format,  version `1` and both supports
+`transformer` model framework, `safetensors` model format, version `1` and both supports
 the `protocolVersion` openAI. Also note that `autoSelect` is enabled in both the serving runtimes.
 
 ```yaml
@@ -166,9 +291,13 @@ metadata:
 spec:
   supportedModelFormats:
     - name: safetensors
-      modelType: transformer
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelFramework:
+        name: transformer
+        version: "4.0"
       modelArchitecture: LlamaForCausalLM
-      version: "1"
       autoSelect: true
       priority: 1
   protocolVersions:
@@ -176,8 +305,8 @@ spec:
   modelSizeRange:
     max: 128B
     min: 60B
-  containers:
-    - name: ome-container
+  engineConfig:
+    runner:
       image: official-vllm-openai:0.5.3
       resources:
         requests:
@@ -199,19 +328,23 @@ metadata:
 spec:
   supportedModelFormats:
     - name: safetensors
-      modelType: transformer
+      modelFormat:
+        name: safetensors
+        version: "1"
+      modelFramework:
+        name: transformer
+        version: "4.0"
       modelArchitecture: LlamaForCausalLM
-      version: "1"
       autoSelect: true
-      priority: 1
+      priority: 2
   protocolVersions:
     - openAI
   modelSizeRange:
     max: 128B
     min: 60B
-  containers:
-    - name: ome-container
-      image: official-vllm-openai:0.5.3
+  engineConfig:
+    runner:
+      image: official-vllm-openai:0.6.0
       resources:
         requests:
           cpu: 128
