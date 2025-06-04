@@ -124,6 +124,7 @@ var (
 	FTServingWithMergedWeightsAnnotationKey  = OMEAPIGroupName + "/fine-tuned-serving-with-merged-weights"
 	ServiceType                              = OMEAPIGroupName + "/service-type"
 	LoadBalancerIP                           = OMEAPIGroupName + "/load-balancer-ip"
+	EntrypointComponent                      = OMEAPIGroupName + "/entrypoint-component"
 	ContainerPrometheusPortKey               = "prometheus.ome.io/port"
 	ContainerPrometheusPathKey               = "prometheus.ome.io/path"
 	PrometheusPortAnnotationKey              = "prometheus.io/port"
@@ -188,6 +189,8 @@ const (
 	NetworkVisibility      = "networking.ome.io/visibility"
 	ClusterLocalVisibility = "cluster-local"
 	ClusterLocalDomain     = "svc.cluster.local"
+	IsvcNameHeader         = "OMe-Isvc-Name"
+	IsvcNamespaceHeader    = "OME-Isvc-Namespace"
 )
 
 // StorageSpec Constants
@@ -277,6 +280,11 @@ const (
 	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
 )
 
+// ModelConfig Constants
+const (
+	ModelConfigKey = "models.json"
+)
+
 type InferenceServiceComponent string
 
 type InferenceServiceVerb string
@@ -298,6 +306,9 @@ var (
 // InferenceService Component enums
 const (
 	Predictor InferenceServiceComponent = "predictor"
+	Router    InferenceServiceComponent = "router"
+	Engine    InferenceServiceComponent = "engine"
+	Decoder   InferenceServiceComponent = "decoder"
 )
 
 // InferenceService protocol enums
@@ -464,6 +475,8 @@ const (
 	KEDAScaledObjectKind    = "ScaledObject"
 	VolcanoJobKind          = "Job"
 	LWSKind                 = "LeaderWorkerSet"
+	GatewayKind             = "Gateway"
+	ServiceKind             = "Service"
 )
 
 // Volcano Job Labels
@@ -608,6 +621,31 @@ func DefaultPredictorServiceName(name string) string {
 
 func PredictorServiceName(name string) string {
 	return name
+}
+
+func DefaultRouterServiceName(name string) string {
+	return name + "-" + string(Router) + "-" + InferenceServiceDefault
+}
+
+func RouterServiceName(name string) string {
+	return name
+}
+
+func DecoderServiceName(name string) string {
+	return name
+}
+
+func DecoderPrefix() string {
+	return "^/v1/.*$"
+}
+
+func PathBasedExplainPrefix() string {
+	return "(/v1/.*)$"
+}
+
+// FallbackPrefix returns the regex pattern to match any path
+func FallbackPrefix() string {
+	return "^/.*$"
 }
 
 // Should only match 1..65535, but for simplicity it matches 0-99999.

@@ -4,35 +4,6 @@ metadata:
   name: vllm-ray-multi-node-deepseek-v3-rdma
 spec:
   disabled: false
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
-    prometheus.io/path: "/metrics"
-  labels:
-    logging-forward: enabled
-  tolerations:
-    - key: "nvidia.com/gpu"
-      operator: "Exists"
-      effect: "NoSchedule"
-  dnsPolicy: ClusterFirstWithHostNet
-  hostNetwork: true
-  nodeSelector:
-    oci.oraclecloud.com/rdma.authenticated: "16"
-    oci.oraclecloud.com/rdma.mlx_issues: "0"
-    oke.oraclecloud.com/pool.mode: cluster-network
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: node.kubernetes.io/instance-type
-                operator: In
-                values:
-                  - BM.GPU.H100.8
-  pipelineParallelism: true
-  modelSizeRange:
-    min: 650B
-    max: 700B
   supportedModelFormats:
     - modelFormat:
         name: safetensors
@@ -43,20 +14,50 @@ spec:
       modelArchitecture: DeepseekV3ForCausalLM
       autoSelect: false
       priority: 1
-
-  volumes:
-    - name: dshm
-      emptyDir:
-        medium: Memory
-    - hostPath:
-        path: /dev/infiniband
-      name: devinf
-    - emptyDir: { }
-      name: log-volume
+  modelSizeRange:
+    min: 650B
+    max: 700B
   protocolVersions:
     - openAI
-  containers:
-    - name: ome-container
+  engineConfig:
+
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    dnsPolicy: ClusterFirstWithHostNet
+    hostNetwork: true
+    nodeSelector:
+      oci.oraclecloud.com/rdma.authenticated: "16"
+      oci.oraclecloud.com/rdma.mlx_issues: "0"
+      oke.oraclecloud.com/pool.mode: cluster-network
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.kubernetes.io/instance-type
+                  operator: In
+                  values:
+                    - BM.GPU.H100.8
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      - hostPath:
+          path: /dev/infiniband
+        name: devinf
+      - emptyDir: { }
+        name: log-volume
+
+    runner:
+      name: ome-container
       image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.6.post1.328841d
       env:
         - name: NCCL_NET_PLUGIN

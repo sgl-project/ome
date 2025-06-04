@@ -10,7 +10,6 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/json-iterator/go v1.1.12
 	github.com/kedacore/keda/v2 v2.12.1
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
@@ -47,6 +46,7 @@ require (
 	knative.dev/pkg v0.0.0-20231115001034-97c7258e3a98
 	knative.dev/serving v0.39.3
 	sigs.k8s.io/controller-runtime v0.19.4
+	sigs.k8s.io/gateway-api v1.2.0
 	sigs.k8s.io/kueue v0.10.1
 	sigs.k8s.io/lws v0.4.2
 	sigs.k8s.io/scheduler-plugins v0.30.6
@@ -110,6 +110,7 @@ require (
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect

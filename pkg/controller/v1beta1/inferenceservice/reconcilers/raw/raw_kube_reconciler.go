@@ -1,12 +1,12 @@
 package raw
 
 import (
-	"fmt"
-
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
-
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/deployment"
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,11 +14,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	autoscaler "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
-	deployment "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/deployment"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
-	service "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 // RawKubeReconciler reconciles the Native K8S Resources
@@ -36,10 +31,10 @@ func NewRawKubeReconciler(client client.Client,
 	clientset kubernetes.Interface,
 	scheme *runtime.Scheme,
 	componentMeta metav1.ObjectMeta,
-	inferenceServiceSepc *v1beta1.InferenceServiceSpec,
+	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
 	podSpec *corev1.PodSpec,
 ) (*RawKubeReconciler, error) {
-	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSepc)
+	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +44,10 @@ func NewRawKubeReconciler(client client.Client,
 		return nil, err
 	}
 
-	componentExt := &inferenceServiceSepc.Predictor.ComponentExtensionSpec
+	// TODO: Remove this once we have a better way to handle the component extension spec
+	// Ensure we are using the predictor's extension spec for the component reconcilers
+	componentExt := &inferenceServiceSpec.Predictor.ComponentExtensionSpec
+
 	return &RawKubeReconciler{
 		client:     client,
 		scheme:     scheme,
@@ -65,12 +63,12 @@ func createRawURL(clientset kubernetes.Interface, metadata metav1.ObjectMeta) (*
 	if err != nil {
 		return nil, err
 	}
-
+	domainService := services.NewDomainService()
 	url := &knapis.URL{}
 	url.Scheme = "http"
-	url.Host, err = ingress.GenerateDomainName(metadata.Name, metadata, ingressConfig)
+	url.Host, err = domainService.GenerateDomainName(metadata.Name, metadata, ingressConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed creating host name: %w", err)
+		return nil, err
 	}
 
 	return url, nil

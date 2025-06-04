@@ -482,6 +482,12 @@ func (p *Predictor) determinePredictorName(isvc *v1beta1.InferenceService) (stri
 		}
 	}
 
+	// Check for entrypoint-component annotation using utility function
+	if isvcutils.IsEntrypointRouter(isvc.Annotations) && isvc.Spec.Router != nil {
+		// If router is the entrypoint, the predictor should be named with "-predictor" suffix
+		return constants.PredictorServiceName(fmt.Sprintf("%s-%s", isvc.Name, v1beta1.PredictorComponent)), nil
+	}
+
 	return constants.PredictorServiceName(isvc.Name), nil
 }
 
@@ -560,12 +566,12 @@ func (p *Predictor) findWorkerContainerIndices(isvc *v1beta1.InferenceService, s
 
 	// Find OME container in runtime worker spec
 	if sRuntime.WorkerPodSpec != nil && sRuntime.WorkerPodSpec.Containers != nil {
-		indices.runtimeIndex = isvcutils.GetOmeContainerIndex(sRuntime.WorkerPodSpec.Containers)
+		indices.runtimeIndex = isvcutils.GetContainerIndex(sRuntime.WorkerPodSpec.Containers, constants.MainContainerName)
 	}
 
 	// Find OME container in isvc worker spec
 	if isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Containers != nil {
-		indices.isvcIndex = isvcutils.GetOmeContainerIndex(isvc.Spec.Predictor.Worker.Containers)
+		indices.isvcIndex = isvcutils.GetContainerIndex(isvc.Spec.Predictor.Worker.Containers, constants.MainContainerName)
 	}
 
 	return indices, nil
@@ -841,7 +847,7 @@ func (p *Predictor) validateRuntime(isvc *v1beta1.InferenceService, sRuntime v1b
 		return ctrl.Result{}, errors.New("no container configuration found in selected serving runtime")
 	}
 
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
+	omeContainerIdx := isvcutils.GetContainerIndex(sRuntime.Containers, constants.MainContainerName)
 	if omeContainerIdx == -1 {
 		return ctrl.Result{}, errors.New("failed to find ome-container in ServingRuntime containers")
 	}
@@ -925,7 +931,7 @@ func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.
 		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, err
 	}
 
-	if *baseModel.Disabled {
+	if baseModel.Disabled != nil && *baseModel.Disabled {
 		p.updateModelTransitionStatus(isvc, v1beta1.BaseModelDisabled, "Specified base model is disabled")
 		return v1beta1.BaseModelSpec{}, metav1.ObjectMeta{}, ctrl.Result{}, fmt.Errorf("specified base model %s is disabled", *isvc.Spec.Predictor.Model.BaseModel)
 	}
@@ -998,7 +1004,7 @@ func (p *Predictor) reconcilePodSpec(
 	// find the OME container index, the container name must be ome-container; nothing else will be accepted
 	// TODO: this is a temporary solution, we need to find a better way to identify the OME container,
 	// particularly when we have multiple containers and multiple nodes in the serving runtime
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(sRuntime.Containers)
+	omeContainerIdx := isvcutils.GetContainerIndex(sRuntime.Containers, constants.MainContainerName)
 	container, err := p.createMergedContainer(isvc, sRuntime, omeContainerIdx)
 
 	if err != nil {

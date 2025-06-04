@@ -268,18 +268,18 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 		runnerSpec = d.decoderSpec.Runner
 	}
 
+	if runnerSpec != nil {
+		UpdateEnvVariables(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+	}
+
 	// Use common pod spec reconciler for base logic
 	podSpec, err := d.podSpecReconciler.ReconcilePodSpec(isvc, objectMeta, &basePodSpec, runnerSpec)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update volume mounts using common function
-	if len(podSpec.Containers) > 0 {
-		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &podSpec.Containers[0], objectMeta)
-		UpdateEnvVariables(&d.BaseComponentFields, isvc, &podSpec.Containers[0], objectMeta)
-		UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, podSpec, objectMeta)
-	}
+	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, podSpec, objectMeta)
 
 	d.Log.Info("Decoder PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
@@ -293,23 +293,21 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 	}
 
 	// Get leader runner spec if available
-	var leaderRunner *v1beta1.RunnerSpec
-	if d.decoderSpec.Leader != nil {
-		leaderRunner = d.decoderSpec.Leader.Runner
+	var workerRunner *v1beta1.RunnerSpec
+	if d.decoderSpec.Worker != nil {
+		workerRunner = d.decoderSpec.Worker.Runner
+		if workerRunner != nil {
+			UpdateVolumeMounts(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+			UpdateEnvVariables(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+		}
 	}
 
 	// Use common reconciler for worker pod spec
-	workerPodSpec, err := d.podSpecReconciler.ReconcileWorkerPodSpec(isvc, objectMeta, &d.decoderSpec.Worker.PodSpec, leaderRunner)
+	workerPodSpec, err := d.podSpecReconciler.ReconcileWorkerPodSpec(isvc, objectMeta, &d.decoderSpec.Worker.PodSpec, workerRunner)
 	if err != nil {
 		return nil, err
 	}
-
-	// Update volume mounts and env vars using common functions
-	if len(workerPodSpec.Containers) > 0 {
-		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &workerPodSpec.Containers[0], objectMeta)
-		UpdateEnvVariables(&d.BaseComponentFields, isvc, &workerPodSpec.Containers[0], objectMeta)
-		UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, workerPodSpec, objectMeta)
-	}
+	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 
 	d.Log.Info("Decoder Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil

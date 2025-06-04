@@ -440,14 +440,14 @@ func TestDecoderWorkerPodSpec(t *testing.T) {
 					},
 				},
 			},
-			expectedContainers: 2,
+			expectedContainers: 1,
 			validatePodSpec: func(ps *v1.PodSpec) {
-				// Should have merged container
+				// Should have worker container (leader runner is not merged into worker pod spec)
 				found := false
 				for _, c := range ps.Containers {
-					if c.Name == "leader-runner" {
+					if c.Name == "worker-container" {
 						found = true
-						g.Expect(c.Image).To(gomega.Equal("leader-runtime:latest"))
+						g.Expect(c.Image).To(gomega.Equal("worker:latest"))
 					}
 				}
 				g.Expect(found).To(gomega.BeTrue())

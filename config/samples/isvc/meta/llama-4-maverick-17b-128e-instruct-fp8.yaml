@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-4-maverick-17b-128e-instruct-fp8
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+  name: llama-4-maverick-17b-128e-instruct-fp8
+  namespace: llama-4-maverick-17b-128e-instruct-fp8
+spec:
+  model:
+    name: llama-4-maverick-17b-128e-instruct-fp8
+  engine:
+    minReplicas: 1
+    maxReplicas: 1

@@ -145,6 +145,7 @@ func (sr *StatusReconciler) setCondition(status *v1beta1.InferenceServiceStatus,
 func (sr *StatusReconciler) getReadyConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
 	return map[v1beta1.ComponentType]apis.ConditionType{
 		v1beta1.PredictorComponent: v1beta1.PredictorReady,
+		v1beta1.RouterComponent:    v1beta1.RouterReady,
 		v1beta1.EngineComponent:    v1beta1.EngineReady,
 		v1beta1.DecoderComponent:   v1beta1.DecoderReady,
 	}
@@ -154,6 +155,7 @@ func (sr *StatusReconciler) getReadyConditionsMap() map[v1beta1.ComponentType]ap
 func (sr *StatusReconciler) getRouteConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
 	return map[v1beta1.ComponentType]apis.ConditionType{
 		v1beta1.PredictorComponent: v1beta1.PredictorRouteReady,
+		v1beta1.RouterComponent:    v1beta1.RouterRouteReady,
 		v1beta1.EngineComponent:    v1beta1.EngineRouteReady,
 		v1beta1.DecoderComponent:   v1beta1.DecoderRouteReady,
 	}
@@ -163,6 +165,7 @@ func (sr *StatusReconciler) getRouteConditionsMap() map[v1beta1.ComponentType]ap
 func (sr *StatusReconciler) getConfigurationConditionsMap() map[v1beta1.ComponentType]apis.ConditionType {
 	return map[v1beta1.ComponentType]apis.ConditionType{
 		v1beta1.PredictorComponent: v1beta1.PredictorConfigurationReady,
+		v1beta1.RouterComponent:    v1beta1.RouterConfigurationReady,
 		v1beta1.EngineComponent:    v1beta1.EngineConfigurationReady,
 		v1beta1.DecoderComponent:   v1beta1.DecoderConfigurationReady,
 	}

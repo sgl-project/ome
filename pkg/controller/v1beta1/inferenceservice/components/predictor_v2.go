@@ -261,7 +261,7 @@ func (p *PredictorV2) validateRuntime(runtime v1beta1.ServingRuntimeSpec) error 
 		return errors.New("no container configuration found in selected serving runtime")
 	}
 
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(runtime.Containers)
+	omeContainerIdx := isvcutils.GetContainerIndex(runtime.Containers, constants.MainContainerName)
 	if omeContainerIdx == -1 {
 		return errors.New("failed to find ome-container in ServingRuntime containers")
 	}
@@ -507,7 +507,7 @@ func (p *PredictorV2) determinePredictorName(isvc *v1beta1.InferenceService) (st
 // reconcilePodSpec creates the pod spec for the predictor component
 func (p *PredictorV2) reconcilePodSpec(isvc *v1beta1.InferenceService, runtime v1beta1.ServingRuntimeSpec, objectMeta *metav1.ObjectMeta) (*v1.PodSpec, error) {
 	// Find the ome-container index
-	omeContainerIdx := isvcutils.GetOmeContainerIndex(runtime.Containers)
+	omeContainerIdx := isvcutils.GetContainerIndex(runtime.Containers, constants.MainContainerName)
 	if omeContainerIdx == -1 {
 		return nil, errors.New("failed to find ome-container in ServingRuntime containers")
 	}
@@ -696,11 +696,11 @@ func (p *PredictorV2) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, run
 	isvcOmeIdx := -1
 
 	if runtime.WorkerPodSpec != nil && runtime.WorkerPodSpec.Containers != nil {
-		runtimeOmeIdx = isvcutils.GetOmeContainerIndex(runtime.WorkerPodSpec.Containers)
+		runtimeOmeIdx = isvcutils.GetContainerIndex(runtime.WorkerPodSpec.Containers, constants.MainContainerName)
 	}
 
 	if isvc.Spec.Predictor.Worker != nil && isvc.Spec.Predictor.Worker.Containers != nil {
-		isvcOmeIdx = isvcutils.GetOmeContainerIndex(isvc.Spec.Predictor.Worker.Containers)
+		isvcOmeIdx = isvcutils.GetContainerIndex(isvc.Spec.Predictor.Worker.Containers, constants.MainContainerName)
 	}
 
 	// If no OME container found in either spec, return empty PodSpec

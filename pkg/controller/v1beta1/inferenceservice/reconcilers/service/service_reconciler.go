@@ -34,7 +34,8 @@ func NewServiceReconciler(client client.Client,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
-	Selector map[string]string) *ServiceReconciler {
+	Selector map[string]string,
+) *ServiceReconciler {
 	return &ServiceReconciler{
 		client:       client,
 		scheme:       scheme,
@@ -52,6 +53,8 @@ func determineServiceType(meta metav1.ObjectMeta) corev1.ServiceType {
 			serviceType = corev1.ServiceTypeLoadBalancer
 		case "NodePort":
 			serviceType = corev1.ServiceTypeNodePort
+		case "ClusterIP":
+			serviceType = corev1.ServiceTypeClusterIP
 		}
 	}
 	return serviceType
@@ -62,7 +65,8 @@ func buildServiceWithLoadBalancer(
 	componentMeta metav1.ObjectMeta,
 	serviceType corev1.ServiceType,
 	servicePorts []corev1.ServicePort,
-	selector map[string]string) *corev1.Service {
+	selector map[string]string,
+) *corev1.Service {
 
 	var loadBalancerIP string
 	if loadBalancerIPAnnotation, ok := componentMeta.Annotations[constants.LoadBalancerIP]; ok {
@@ -88,7 +92,8 @@ func buildServiceWithLoadBalancer(
 // buildService constructs a Service object from the given specifications
 func buildService(componentMeta metav1.ObjectMeta, componentExt *v1beta1.ComponentExtensionSpec,
 	podSpec *corev1.PodSpec,
-	selector map[string]string) *corev1.Service {
+	selector map[string]string,
+) *corev1.Service {
 
 	servicePorts := buildServicePorts(podSpec)
 	serviceType := determineServiceType(componentMeta)
@@ -182,6 +187,8 @@ func (r *ServiceReconciler) checkServiceState() (constants.CheckResultType, *cor
 	return constants.CheckResultUpdate, existingService, nil
 }
 
+// semanticServiceEquals compares the desired service spec with the existing one,
+// focusing on fields that might require an update.
 func semanticServiceEquals(desired, existing *corev1.Service) bool {
 	return equality.Semantic.DeepEqual(desired.Spec.Ports, existing.Spec.Ports) &&
 		equality.Semantic.DeepEqual(desired.Spec.Selector, existing.Spec.Selector)
@@ -193,12 +200,15 @@ func (r *ServiceReconciler) handleReconcileAction(checkResult constants.CheckRes
 
 	switch checkResult {
 	case constants.CheckResultCreate:
+		log.Info("Creating Service", "namespace", r.Service.Namespace, "name", r.Service.Name)
 		if err := r.client.Create(ctx, r.Service); err != nil {
+			log.Error(err, "Failed to create Service", "namespace", r.Service.Namespace, "name", r.Service.Name)
 			return nil, err
 		}
 		return r.Service, nil
 	case constants.CheckResultUpdate:
 		if err := r.client.Update(ctx, r.Service); err != nil {
+			log.Error(err, "Failed to update Service", "namespace", r.Service.Namespace, "name", r.Service.Name)
 			return nil, err
 		}
 		return r.Service, nil
