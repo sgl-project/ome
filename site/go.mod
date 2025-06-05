@@ -1,4 +1,4 @@
-module sigs.k8s.io/kueue/site
+module github.com/sgl-project/sgl-ome/site
 
 go 1.21
 

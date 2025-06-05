@@ -20,7 +20,7 @@ The following is an example of a ClusterServingRuntime:
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-text-generation
+  name: srt-mistral-7b-instruct
 spec:
   supportedModelFormats:
     - name: safetensors
@@ -28,28 +28,28 @@ spec:
         name: safetensors
         version: "1"
       modelFramework:
-        name: transformer
-        version: "4.0"
-      modelArchitecture: LlamaForCausalLM
+        name: transformers
+        version: "4.36.2"
+      modelArchitecture: MistralForCausalLM
       autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
   modelSizeRange:
-    max: 128B
-    min: 60B
+    max: 9B
+    min: 5B
   engineConfig:
     runner:
-      image: official-vllm-openai:0.5.3
+      image: lmsysorg/sglang:v0.4.6.post6
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 2
         limits:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 2
     minReplicas: 1
     maxReplicas: 3
 ```
@@ -197,19 +197,19 @@ When users define predictor in their InferenceService, they can explicitly speci
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: llama-3-1-70b
-  namespace: llama-3-1-70b
+  name: mistral-7b-instruct
+  namespace: mistral-7b-instruct
 spec:
   engine:
     minReplicas: 1
     maxReplicas: 1
   model:
-    name: llama-3-1-70b
+    name: mistral-7b-instruct
   runtime:
-    name: vllm-text-generation
+    name: srt-mistral-7b-instruct
 ```
 
-Here, the runtime specified is `vllm-text-generation`, so the OME controller will first search the namespace for a ServingRuntime with that name. If
+Here, the runtime specified is `srt-mistral-7b-instruct`, so the OME controller will first search the namespace for a ServingRuntime with that name. If
 none exist, the controller will then search the list of ClusterServingRuntimes.
 
 Users can also implicitly specify the runtime by setting the `autoSelect` field to `true` in the `supportedModelFormats` field of the _ClusterServingRuntime_.
@@ -217,14 +217,14 @@ Users can also implicitly specify the runtime by setting the `autoSelect` field 
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: llama-3-1-70b
-  namespace: llama-3-1-70b
+  name: mistral-7b-instruct
+  namespace: mistral-7b-instruct
 spec:
   engine:
     minReplicas: 1
     maxReplicas: 1
   model:
-    name: llama-3-1-70b
+    name: mistral-7b-instruct
 ```
 
 ## Runtime Selection Logic
@@ -262,11 +262,10 @@ The `modelSizeRange` field defines the minimum and maximum model sizes that the 
 
 The runtime must support the requested protocol version. Protocol versions include:
 - `openAI`: OpenAI-compatible API format
-- `cohere`: Cohere API format
 - `openInference-v1`: Open Inference Protocol version 1
 - `openInference-v2`: Open Inference Protocol version 2
 
-If no protocol version is specified in the InferenceService, the controller defaults to `openInference-v2`.
+If no protocol version is specified in the InferenceService, the controller defaults to `openAI`.
 
 ### Auto-Selection
 
@@ -278,16 +277,16 @@ If more than one serving runtime supports the same model `architecture`, `format
 and `size range` with same `version`, then we can optionally specify `priority` for the serving runtime.
 Based on the `priority` the runtime is automatically selected if no runtime is explicitly specified. Note that, `priority` is valid only if `autoSelect` is `true`. Higher value means higher priority.
 
-For example, let's consider the serving runtimes `vllm-text-generation` and `vllm-text-generation-2`.
-Both the serving runtimes support the `LlamaForCausalLM` model architecture,
-`transformer` model framework, `safetensors` model format, version `1` and both supports
+For example, let's consider the serving runtimes `srt-mistral-7b-instruct` and `srt-mistral-7b-instruct-2`.
+Both the serving runtimes support the `MistralForCausalLM` model architecture,
+`transformers` model framework, `safetensors` model format, version `1` and both supports
 the `protocolVersion` openAI. Also note that `autoSelect` is enabled in both the serving runtimes.
 
 ```yaml
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-text-generation
+  name: srt-mistral-7b-instruct
 spec:
   supportedModelFormats:
     - name: safetensors
@@ -295,36 +294,37 @@ spec:
         name: safetensors
         version: "1"
       modelFramework:
-        name: transformer
-        version: "4.0"
-      modelArchitecture: LlamaForCausalLM
+        name: transformers
+        version: "4.36.2"
+      modelArchitecture: MistralForCausalLM
       autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
   modelSizeRange:
-    max: 128B
-    min: 60B
+    max: 9B
+    min: 5B
   engineConfig:
     runner:
-      image: official-vllm-openai:0.5.3
+      image: lmsysorg/sglang:v0.4.6.post6
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 2
         limits:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 2
+    minReplicas: 1
+    maxReplicas: 3
 ```
-
 
 ```yaml
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-text-generation-2
+  name: srt-mistral-7b-instruct-2
 spec:
   supportedModelFormats:
     - name: safetensors
@@ -332,28 +332,28 @@ spec:
         name: safetensors
         version: "1"
       modelFramework:
-        name: transformer
-        version: "4.0"
-      modelArchitecture: LlamaForCausalLM
+        name: transformers
+        version: "4.36.2"
+      modelArchitecture: MistralForCausalLM
       autoSelect: true
       priority: 2
   protocolVersions:
     - openAI
   modelSizeRange:
-    max: 128B
-    min: 60B
+    max: 9B
+    min: 5B
   engineConfig:
     runner:
-      image: official-vllm-openai:0.6.0
+      image: lmsysorg/sglang:v0.4.6.post6
       resources:
         requests:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 2
         limits:
-          cpu: 128
-          memory: 216Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 2
 ```
 
 **Constraints of priority**
@@ -368,3 +368,4 @@ spec:
 !!! Warning
 If multiple runtimes list the same format and/or version as auto-selectable and the priority is not specified, the runtime is selected based on the `creationTimestamp` i.e. the most recently created runtime is selected. So there is no guarantee _which_ runtime will be selected.
 So users and cluster-administrators should enable `autoSelect` with care.
+```

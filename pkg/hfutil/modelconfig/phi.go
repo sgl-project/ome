@@ -44,12 +44,12 @@ type PhiModelConfig struct {
 func LoadPhiModelConfig(path string) (*PhiModelConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read Phi config file '%s': %w", path, err)
 	}
 
 	var cfg PhiModelConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config JSON: %v", err)
+		return nil, fmt.Errorf("failed to parse Phi config JSON from '%s': %w", path, err)
 	}
 
 	cfg.ConfigPath = path
@@ -116,10 +116,9 @@ func (c *PhiModelConfig) HasVision() bool {
 	return false
 }
 
-// Update the LoadModelConfig function to include Phi models
+// Register the Phi model handler
 func init() {
-	// Register the Phi model handler in LoadModelConfig function
-	modelLoaders["phi"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("phi", func(configPath string) (HuggingFaceModel, error) {
 		return LoadPhiModelConfig(configPath)
-	}
+	})
 }

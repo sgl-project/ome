@@ -62,7 +62,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124
+        image: docker.io/lmsysorg/sglang:deepep
         env:
           - name: NCCL_NET_PLUGIN
             value: none
@@ -184,7 +184,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.2.post1.35b88e65-cu121
+        image: docker.io/lmsysorg/sglang:deepep
         command:
           - sh
           - -c
@@ -278,7 +278,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124
+        image: docker.io/lmsysorg/sglang:deepep
         env:
           - name: NCCL_NET_PLUGIN
             value: none
@@ -400,7 +400,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.2.post1.35b88e65-cu121
+        image: docker.io/lmsysorg/sglang:deepep
         command:
           - sh
           - -c

@@ -45,12 +45,12 @@ type Qwen2Config struct {
 func LoadQwen2Config(configPath string) (*Qwen2Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read Qwen2 config file '%s': %w", configPath, err)
 	}
 
 	var config Qwen2Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse Qwen2 config: %v", err)
+		return nil, fmt.Errorf("failed to parse Qwen2 config JSON from '%s': %w", configPath, err)
 	}
 
 	config.ConfigPath = configPath
@@ -109,7 +109,7 @@ func (c *Qwen2Config) HasVision() bool {
 
 // Register the Qwen2 model handler
 func init() {
-	modelLoaders["qwen2"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("qwen2", func(configPath string) (HuggingFaceModel, error) {
 		return LoadQwen2Config(configPath)
-	}
+	})
 }

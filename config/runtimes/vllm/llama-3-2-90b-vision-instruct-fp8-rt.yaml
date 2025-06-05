@@ -46,7 +46,7 @@ spec:
                     - BM.GPU.H100.8
     runner:
       name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
+      image: docker.io/vllm/vllm-openai:v0.9.0.1
       ports:
         - containerPort: 8080
           name: http1

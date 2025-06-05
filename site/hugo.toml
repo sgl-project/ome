@@ -97,7 +97,7 @@ ignoreFiles = []
 
   # A link to latest version of the docs. Used in the "version-banner" partial to
   # point people to the main doc site.
-  url_latest_version = "https://sigs.k8s.io/kueue/docs"
+  url_latest_version = "https://docs.sgl-ome.ai/"
 
   # A variable used in various docs to determine URLs for config files etc.
   # To find occurrences, search the repo for 'params "githubbranch"'.
@@ -131,8 +131,8 @@ ignoreFiles = []
       [params.ui.feedback]
         enable = true
         # The responses that the user sees after clicking "yes" (the page was helpful) or "no" (the page was not helpful).
-        yes = 'Glad to hear it! Please <a href="https://github.com/kubernetes-sigs/kueue/issues/new">tell us how we can improve</a>.'
-        no = 'Sorry to hear that. Please <a href="https://github.com/kubernetes-sigs/kueue/issues/new">tell us how we can improve</a>.'
+        yes = 'Glad to hear it! Please <a href="https://github.com/sgl-project/sgl-ome/issues/new">tell us how we can improve</a>.'
+        no = 'Sorry to hear that. Please <a href="https://github.com/sgl-project/sgl-ome/issues/new">tell us how we can improve</a>.'
 
 [params.links]
 # End user relevant links. These will show up on left side of footer and in the community page if you have one.

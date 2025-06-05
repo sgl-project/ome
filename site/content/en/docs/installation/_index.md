@@ -3,7 +3,7 @@ title: "Installation"
 linkTitle: "Installation"
 weight: 2
 description: >
-  Installing Kueue to a Kubernetes Cluster
+  Installing OME to a Kubernetes Cluster
 ---
 
 <!-- toc -->
