@@ -65,13 +65,17 @@ type TextConfig struct {
 	RouterAuxLossCoef  float64 `json:"router_aux_loss_coef"`
 	OutputRouterLogits bool    `json:"output_router_logits"`
 
+	// Missing fields from test data
+	InitializerRange   float64 `json:"initializer_range"`
+	NoRopeLayers       []int   `json:"no_rope_layers,omitempty"`
+	ForLLMCompressor   bool    `json:"for_llm_compressor"`
+	AttnImplementation bool    `json:"_attn_implementation_autoset"`
+
 	// Misc options
-	ModelType          string            `json:"model_type"`
-	UseCache           bool              `json:"use_cache"`
-	UseQKNorm          bool              `json:"use_qk_norm"`
-	RopeScaling        RopeScalingConfig `json:"rope_scaling"`
-	ForLLMCompressor   bool              `json:"for_llm_compressor"`
-	AttnImplementation bool              `json:"_attn_implementation_autoset"`
+	ModelType   string            `json:"model_type"`
+	UseCache    bool              `json:"use_cache"`
+	UseQKNorm   bool              `json:"use_qk_norm"`
+	RopeScaling RopeScalingConfig `json:"rope_scaling"`
 }
 
 // VisionConfig defines the vision model part of Llama4
@@ -229,10 +233,11 @@ func (c *Llama4Config) GetModelSizeBytes() int64 {
 
 func (c *Llama4Config) GetTorchDtype() string {
 	if c.QuantizationConfig != nil && c.QuantizationConfig.Format == "float-quantized" {
-		// For FP8 models, return "float8"
-		group0 := c.QuantizationConfig.ConfigGroups["group_0"]
-		if group0.Weights.NumBits == 8 && group0.Weights.Type == "float" {
-			return "float8"
+		// Safe access to avoid nil pointer dereference
+		if group0, exists := c.QuantizationConfig.ConfigGroups["group_0"]; exists {
+			if group0.Weights != nil && group0.Weights.NumBits == 8 && group0.Weights.Type == "float" {
+				return "float8"
+			}
 		}
 	}
 	return c.TorchDtype
@@ -260,7 +265,7 @@ func estimateMoEParamCount(hiddenSize, layers, intermediateSize, numExperts, exp
 
 // Register the Llama4 model handler
 func init() {
-	modelLoaders["llama4"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("llama4", func(configPath string) (HuggingFaceModel, error) {
 		return LoadLlama4Config(configPath)
-	}
+	})
 }

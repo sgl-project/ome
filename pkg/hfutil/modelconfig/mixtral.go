@@ -46,16 +46,51 @@ type MixtralConfig struct {
 func LoadMixtralConfig(configPath string) (*MixtralConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read Mixtral config file '%s': %w", configPath, err)
 	}
 
 	var config MixtralConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse Mixtral config: %v", err)
+		return nil, fmt.Errorf("failed to parse Mixtral config JSON from '%s': %w", configPath, err)
 	}
 
 	config.ConfigPath = configPath
+
+	// Validate the configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Mixtral configuration in '%s': %w", configPath, err)
+	}
+
 	return &config, nil
+}
+
+// Validate checks if the Mixtral configuration is valid
+func (c *MixtralConfig) Validate() error {
+	if c.HiddenSize <= 0 {
+		return fmt.Errorf("hidden_size must be positive, got %d", c.HiddenSize)
+	}
+	if c.NumHiddenLayers <= 0 {
+		return fmt.Errorf("num_hidden_layers must be positive, got %d", c.NumHiddenLayers)
+	}
+	if c.NumAttentionHeads <= 0 {
+		return fmt.Errorf("num_attention_heads must be positive, got %d", c.NumAttentionHeads)
+	}
+	if c.NumKeyValueHeads <= 0 {
+		return fmt.Errorf("num_key_value_heads must be positive, got %d", c.NumKeyValueHeads)
+	}
+	if c.VocabSize <= 0 {
+		return fmt.Errorf("vocab_size must be positive, got %d", c.VocabSize)
+	}
+	if c.MaxPositionEmbeddings <= 0 {
+		return fmt.Errorf("max_position_embeddings must be positive, got %d", c.MaxPositionEmbeddings)
+	}
+	if c.NumLocalExperts <= 0 {
+		return fmt.Errorf("num_local_experts must be positive, got %d", c.NumLocalExperts)
+	}
+	if c.NumExpertsPerTok <= 0 {
+		return fmt.Errorf("num_experts_per_tok must be positive, got %d", c.NumExpertsPerTok)
+	}
+	return nil
 }
 
 // Implementation of the HuggingFaceModel interface
@@ -122,7 +157,7 @@ func (c *MixtralConfig) HasVision() bool {
 
 // Register the Mixtral model handler
 func init() {
-	modelLoaders["mixtral"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("mixtral", func(configPath string) (HuggingFaceModel, error) {
 		return LoadMixtralConfig(configPath)
-	}
+	})
 }
