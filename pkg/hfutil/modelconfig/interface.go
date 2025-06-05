@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 )
 
 // HuggingFaceModel defines the common interface for all Hugging Face model configurations
@@ -189,8 +190,37 @@ func EstimateModelSizeBytes(paramCount int64, dtype string) int64 {
 	return int64(float64(paramCount) * sizePerParam)
 }
 
-// Map of model type to model loader functions
-var modelLoaders = map[string]func(string) (HuggingFaceModel, error){}
+// Map of model type to model loader functions with thread-safe access
+var (
+	modelLoadersMu sync.RWMutex
+	modelLoaders   = make(map[string]func(string) (HuggingFaceModel, error))
+)
+
+// RegisterModelLoader safely registers a model loader function for a given model type
+func RegisterModelLoader(modelType string, loader func(string) (HuggingFaceModel, error)) {
+	if modelType == "" {
+		panic("model type cannot be empty")
+	}
+	if loader == nil {
+		panic("loader function cannot be nil")
+	}
+
+	modelLoadersMu.Lock()
+	defer modelLoadersMu.Unlock()
+	modelLoaders[modelType] = loader
+}
+
+// GetSupportedModelTypes returns a list of all supported model types
+func GetSupportedModelTypes() []string {
+	modelLoadersMu.RLock()
+	defer modelLoadersMu.RUnlock()
+
+	types := make([]string, 0, len(modelLoaders))
+	for modelType := range modelLoaders {
+		types = append(types, modelType)
+	}
+	return types
+}
 
 // LoadModelConfig loads a model configuration from a config.json file
 // and returns the appropriate model implementation based on the "model_type" field.
@@ -210,10 +240,14 @@ var modelLoaders = map[string]func(string) (HuggingFaceModel, error){}
 // The function automatically detects the model type and returns the appropriate
 // implementation that satisfies the HuggingFaceModel interface.
 func LoadModelConfig(configPath string) (HuggingFaceModel, error) {
+	if configPath == "" {
+		return nil, fmt.Errorf("config path cannot be empty")
+	}
+
 	// Read the config file to determine model type
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read model config file '%s': %w", configPath, err)
 	}
 
 	// Extract the model_type field
@@ -222,20 +256,28 @@ func LoadModelConfig(configPath string) (HuggingFaceModel, error) {
 	}
 
 	if err := json.Unmarshal(data, &baseConfig); err != nil {
-		return nil, fmt.Errorf("failed to parse config JSON: %v", err)
+		return nil, fmt.Errorf("failed to parse model config JSON from '%s': %w", configPath, err)
 	}
 
-	// Load using registered model loaders
-	if loader, ok := modelLoaders[baseConfig.ModelType]; ok {
-		return loader(configPath)
+	if baseConfig.ModelType == "" {
+		return nil, fmt.Errorf("model_type field is missing or empty in config file '%s'", configPath)
 	}
 
-	// Get list of supported model types for better error message
-	supportedTypes := make([]string, 0, len(modelLoaders))
-	for modelType := range modelLoaders {
-		supportedTypes = append(supportedTypes, modelType)
+	// Load using registered model loaders (thread-safe access)
+	modelLoadersMu.RLock()
+	loader, exists := modelLoaders[baseConfig.ModelType]
+	modelLoadersMu.RUnlock()
+
+	if !exists {
+		supportedTypes := GetSupportedModelTypes()
+		return nil, fmt.Errorf("unsupported model type '%s' in config file '%s'. Supported types are: %v",
+			baseConfig.ModelType, configPath, supportedTypes)
 	}
 
-	return nil, fmt.Errorf("unsupported model type: %q. Supported types are: %v",
-		baseConfig.ModelType, supportedTypes)
+	model, err := loader(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load %s model from '%s': %w", baseConfig.ModelType, configPath, err)
+	}
+
+	return model, nil
 }

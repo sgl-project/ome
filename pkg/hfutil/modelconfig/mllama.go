@@ -85,12 +85,12 @@ type MLlamaVisionConfig struct {
 func LoadMLlamaConfig(configPath string) (*MLlamaConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read MLlama config file '%s': %w", configPath, err)
 	}
 
 	var config MLlamaConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse MLlama config: %v", err)
+		return nil, fmt.Errorf("failed to parse MLlama config JSON from '%s': %w", configPath, err)
 	}
 
 	config.ConfigPath = configPath
@@ -185,7 +185,7 @@ func (c *MLlamaConfig) HasVision() bool {
 
 // Register the MLlama model handler
 func init() {
-	modelLoaders["mllama"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("mllama", func(configPath string) (HuggingFaceModel, error) {
 		return LoadMLlamaConfig(configPath)
-	}
+	})
 }

@@ -44,12 +44,12 @@ type Phi3VConfig struct {
 func LoadPhi3VConfig(configPath string) (*Phi3VConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read Phi3V config file '%s': %w", configPath, err)
 	}
 
 	var config Phi3VConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse Phi3V config: %v", err)
+		return nil, fmt.Errorf("failed to parse Phi3V config JSON from '%s': %w", configPath, err)
 	}
 
 	config.ConfigPath = configPath
@@ -117,7 +117,7 @@ func estimateModelParams(hiddenSize, numLayers, intermediateSize, vocabSize int)
 
 // Register the Phi3V model handler
 func init() {
-	modelLoaders["phi3_v"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("phi3_v", func(configPath string) (HuggingFaceModel, error) {
 		return LoadPhi3VConfig(configPath)
-	}
+	})
 }

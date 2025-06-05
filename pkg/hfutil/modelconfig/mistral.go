@@ -22,6 +22,7 @@ type MistralConfig struct {
 	// Special tokens
 	BosTokenId int `json:"bos_token_id"`
 	EosTokenId int `json:"eos_token_id"`
+	PadTokenId int `json:"pad_token_id,omitempty"`
 
 	// Attention related
 	HiddenAct        string      `json:"hidden_act"`
@@ -40,16 +41,45 @@ type MistralConfig struct {
 func LoadMistralConfig(configPath string) (*MistralConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read Mistral config file '%s': %w", configPath, err)
 	}
 
 	var config MistralConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse Mistral config: %v", err)
+		return nil, fmt.Errorf("failed to parse Mistral config JSON from '%s': %w", configPath, err)
 	}
 
 	config.ConfigPath = configPath
+
+	// Validate the configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Mistral configuration in '%s': %w", configPath, err)
+	}
+
 	return &config, nil
+}
+
+// Validate checks if the Mistral configuration is valid
+func (c *MistralConfig) Validate() error {
+	if c.HiddenSize <= 0 {
+		return fmt.Errorf("hidden_size must be positive, got %d", c.HiddenSize)
+	}
+	if c.NumHiddenLayers <= 0 {
+		return fmt.Errorf("num_hidden_layers must be positive, got %d", c.NumHiddenLayers)
+	}
+	if c.NumAttentionHeads <= 0 {
+		return fmt.Errorf("num_attention_heads must be positive, got %d", c.NumAttentionHeads)
+	}
+	if c.NumKeyValueHeads <= 0 {
+		return fmt.Errorf("num_key_value_heads must be positive, got %d", c.NumKeyValueHeads)
+	}
+	if c.VocabSize <= 0 {
+		return fmt.Errorf("vocab_size must be positive, got %d", c.VocabSize)
+	}
+	if c.MaxPositionEmbeddings <= 0 {
+		return fmt.Errorf("max_position_embeddings must be positive, got %d", c.MaxPositionEmbeddings)
+	}
+	return nil
 }
 
 // Implementation of HuggingFaceModel interface
@@ -112,7 +142,7 @@ func (c *MistralConfig) HasVision() bool {
 
 // Register the Mistral model handler
 func init() {
-	modelLoaders["mistral"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("mistral", func(configPath string) (HuggingFaceModel, error) {
 		return LoadMistralConfig(configPath)
-	}
+	})
 }

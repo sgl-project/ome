@@ -23,13 +23,17 @@ type LlamaConfig struct {
 	BosTokenId interface{} `json:"bos_token_id"`
 	EosTokenId interface{} `json:"eos_token_id"`
 
+	// Missing fields from test data
+	HeadDim       int  `json:"head_dim,omitempty"`
+	MLPBias       bool `json:"mlp_bias,omitempty"`
+	PretrainingTP int  `json:"pretraining_tp,omitempty"`
+
 	// Attention related
 	HiddenAct        string  `json:"hidden_act"`
 	RmsNormEps       float64 `json:"rms_norm_eps"`
 	RopeTheta        float64 `json:"rope_theta"`
 	AttentionDropout float64 `json:"attention_dropout"`
 	AttentionBias    bool    `json:"attention_bias"`
-	MLPBias          bool    `json:"mlp_bias,omitempty"`
 
 	// RoPE scaling for Llama-3 and Llama-3.1
 	RopeScaling RopeScalingConfig `json:"rope_scaling"`
@@ -42,25 +46,59 @@ type LlamaConfig struct {
 	} `json:"quantization_config,omitempty"`
 
 	// Misc options
-	PretrainingTP    int     `json:"pretraining_tp"`
-	InitializerRange float64 `json:"initializer_range"`
-	UseCache         bool    `json:"use_cache"`
+	InitializerRange  float64 `json:"initializer_range"`
+	UseCache          bool    `json:"use_cache"`
+	TieWordEmbeddings bool    `json:"tie_word_embeddings"`
 }
 
 // LoadLlamaConfig loads a Llama model configuration from a JSON file
 func LoadLlamaConfig(configPath string) (*LlamaConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read Llama config file '%s': %w", configPath, err)
 	}
 
 	var config LlamaConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse Llama config: %v", err)
+		return nil, fmt.Errorf("failed to parse Llama config JSON from '%s': %w", configPath, err)
 	}
 
 	config.ConfigPath = configPath
+
+	// Validate the configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Llama configuration in '%s': %w", configPath, err)
+	}
+
 	return &config, nil
+}
+
+// Validate checks if the Llama configuration is valid
+func (c *LlamaConfig) Validate() error {
+	if c.HiddenSize <= 0 {
+		return fmt.Errorf("hidden_size must be positive, got %d", c.HiddenSize)
+	}
+	if c.NumHiddenLayers <= 0 {
+		return fmt.Errorf("num_hidden_layers must be positive, got %d", c.NumHiddenLayers)
+	}
+	if c.NumAttentionHeads <= 0 {
+		return fmt.Errorf("num_attention_heads must be positive, got %d", c.NumAttentionHeads)
+	}
+	if c.NumKeyValueHeads <= 0 {
+		return fmt.Errorf("num_key_value_heads must be positive, got %d", c.NumKeyValueHeads)
+	}
+	if c.VocabSize <= 0 {
+		return fmt.Errorf("vocab_size must be positive, got %d", c.VocabSize)
+	}
+	if c.MaxPositionEmbeddings <= 0 {
+		return fmt.Errorf("max_position_embeddings must be positive, got %d", c.MaxPositionEmbeddings)
+	}
+	// Validate that KV heads is not more than attention heads
+	if c.NumKeyValueHeads > c.NumAttentionHeads {
+		return fmt.Errorf("num_key_value_heads (%d) cannot be greater than num_attention_heads (%d)",
+			c.NumKeyValueHeads, c.NumAttentionHeads)
+	}
+	return nil
 }
 
 // Implementation of HuggingFaceModel interface
@@ -172,7 +210,7 @@ func (c *LlamaConfig) HasVision() bool {
 
 // Register the Llama model handler
 func init() {
-	modelLoaders["llama"] = func(configPath string) (HuggingFaceModel, error) {
+	RegisterModelLoader("llama", func(configPath string) (HuggingFaceModel, error) {
 		return LoadLlamaConfig(configPath)
-	}
+	})
 }
