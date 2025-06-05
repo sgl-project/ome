@@ -38,14 +38,6 @@ type InferenceServiceListerExpansion interface{}
 // InferenceServiceNamespaceLister.
 type InferenceServiceNamespaceListerExpansion interface{}
 
-// ReplicationJobListerExpansion allows custom methods to be added to
-// ReplicationJobLister.
-type ReplicationJobListerExpansion interface{}
-
-// ReplicationJobNamespaceListerExpansion allows custom methods to be added to
-// ReplicationJobNamespaceLister.
-type ReplicationJobNamespaceListerExpansion interface{}
-
 // ServingRuntimeListerExpansion allows custom methods to be added to
 // ServingRuntimeLister.
 type ServingRuntimeListerExpansion interface{}
