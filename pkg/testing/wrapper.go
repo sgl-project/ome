@@ -201,16 +201,21 @@ func (j *JobSetWrapper) NumNodes(numNodes int32) *JobSetWrapper {
 }
 
 func (j *JobSetWrapper) Labels(key, value string) *JobSetWrapper {
-	j.SetLabels(map[string]string{
-		key: value,
-	})
+	labels := j.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[key] = value
+	j.SetLabels(labels)
 	return j
 }
 
 func (j *JobSetWrapper) LabelsTrainer(key, value string) *JobSetWrapper {
 	for i, rJob := range j.Spec.ReplicatedJobs {
 		if rJob.Name == constants.JobTrainerNode {
-			j.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels = make(map[string]string)
+			if j.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels == nil {
+				j.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels = make(map[string]string)
+			}
 			j.Spec.ReplicatedJobs[i].Template.Spec.Template.Labels[key] = value
 		}
 	}

@@ -65,10 +65,6 @@ func GetDedicatedAIClusterResource(cl client.Client, dedicatedAIClusterRef *v1.O
 		return nil, err
 	}
 
-	if dedicatedAiCluster.Status.DacLifecycleState != v1beta1.ACTIVE {
-		return nil, fmt.Errorf("dedicatedAiCluster %s is not in a Active life cycle state", dedicatedAIClusterRef.Name)
-	}
-
 	return dedicatedAiCluster, nil
 }
 

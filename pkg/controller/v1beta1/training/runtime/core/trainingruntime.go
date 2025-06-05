@@ -72,13 +72,15 @@ func (r *TrainingRuntime) NewObjects(ctx context.Context, trainJob *omev1beta1.T
 func (r *TrainingRuntime) buildObjects(
 	ctx context.Context, trainJob *omev1beta1.TrainingJob, jobSetTemplateSpec omev1beta1.JobSetTemplateSpec, mlPolicy *omev1beta1.MLPolicy, podGroupPolicy *omev1beta1.PodGroupPolicy, vendor *string, affinity *corev1.Affinity) ([]client.Object, error) {
 	propagationLabels := jobSetTemplateSpec.Labels
-	if propagationLabels == nil && trainJob.Spec.Labels != nil {
-		propagationLabels = make(map[string]string, len(trainJob.Spec.Labels))
+	if propagationLabels == nil {
+		propagationLabels = make(map[string]string)
 	}
 	for k, v := range trainJob.Spec.Labels {
 		// The JobSetTemplateSpec labels are overridden by the TrainJob Labels (.spec.labels).
 		propagationLabels[k] = v
 	}
+	propagationLabels["logging-forward"] = "enabled"
+
 	propagationAnnotations := jobSetTemplateSpec.Annotations
 	if propagationAnnotations == nil && trainJob.Spec.Annotations != nil {
 		propagationAnnotations = make(map[string]string, len(trainJob.Spec.Annotations))

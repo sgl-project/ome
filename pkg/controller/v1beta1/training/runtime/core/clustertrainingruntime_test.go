@@ -69,6 +69,8 @@ func TestClusterTrainingRuntimeNewObjects(t *testing.T) {
 						},
 					}).
 					NumNodes(100).
+					Labels("logging-forward", "enabled").
+					LabelsTrainer("logging-forward", "enabled").
 					Labels(schedulerpluginsv1alpha1.PodGroupLabel, "test-job").
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
 					Suspend(true).

@@ -238,7 +238,7 @@ func (tsi *TrainingSidecarInjector) getCohereEnvVars(trainingName string, pod *v
 
 	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
 		Name:  constants.CohereTrainingSidecarNameEnvVarKey,
-		Value: trainingName,
+		Value: fineTunedModelName,
 	})
 
 	cohereEnvVars = append(cohereEnvVars, v1.EnvVar{
@@ -374,8 +374,9 @@ func (tsi *TrainingSidecarInjector) getPeftEnvVars(pod *v1.Pod) []v1.EnvVar {
 	})
 
 	peftEnvVars = append(peftEnvVars, v1.EnvVar{
-		Name:  constants.PeftTrainingDataSetFileEnvVarKey,
-		Value: pod.ObjectMeta.Annotations[constants.TrainingDataFileNameConfigKey],
+		Name: constants.PeftTrainingDataSetFileEnvVarKey,
+		// Peft training container expects the data file name without prefix. gdata/file_name.txt -> file_name.txt
+		Value: utils.ExtractModelNameFromObjectStorageUri(pod.ObjectMeta.Annotations[constants.TrainingDataFileNameConfigKey]),
 	})
 
 	peftEnvVars = append(peftEnvVars, v1.EnvVar{

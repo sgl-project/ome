@@ -72,6 +72,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 					ContainerTrainer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					AnnotationsTrainer("conflictAnnotation", "override").
 					LabelsTrainer("conflictLabel", "override").
+					LabelsTrainer("logging-forward", "enabled").
 					Suspend(true).
 					Volumes("meta").
 					InitContainerModelInitializerEnv([]corev1.EnvVar{
@@ -81,6 +82,7 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 						},
 					}).
 					Label("conflictLabel", "override").
+					Label("logging-forward", "enabled").
 					Annotation("conflictAnnotation", "override").
 					ControllerReference(omev1beta1.SchemeGroupVersion.WithKind(omev1beta1.TrainingJobKind), "test-job", "uid").
 					Obj(),
@@ -150,6 +152,8 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					NumNodes(100).
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
+					Label("logging-forward", "enabled").
+					LabelsTrainer("logging-forward", "enabled").
 					ContainerTrainerEnv(
 						[]corev1.EnvVar{
 							{
@@ -229,6 +233,8 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					NumNodes(100).
+					Label("logging-forward", "enabled").
+					LabelsTrainer("logging-forward", "enabled").
 					ContainerTrainer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					InitContainerDatasetModelInitializer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					InitContainerDatasetInitializerEnv([]corev1.EnvVar{
@@ -312,6 +318,8 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					NumNodes(30).
+					Label("logging-forward", "enabled").
+					LabelsTrainer("logging-forward", "enabled").
 					ContainerTrainer("test:runtime", []string{"runtime"}, []string{"runtime"}, resRequests).
 					ContainerTrainerPorts([]corev1.ContainerPort{{ContainerPort: constants.ContainerTrainerPort}}).
 					ContainerTrainerEnv(
@@ -413,6 +421,8 @@ func TestTrainingRuntimeNewObjects(t *testing.T) {
 			wantObjs: []client.Object{
 				testing2.MakeJobSetWrapper(metav1.NamespaceDefault, "test-job").
 					NumNodes(100).
+					Label("logging-forward", "enabled").
+					LabelsTrainer("logging-forward", "enabled").
 					ContainerTrainer("test:trainjob", []string{"trainjob"}, []string{"trainjob"}, resRequests).
 					ContainerTrainerPorts([]corev1.ContainerPort{{ContainerPort: constants.ContainerTrainerPort}}).
 					ContainerTrainerEnv(
