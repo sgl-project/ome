@@ -79,6 +79,12 @@ all: test ## 🎯 Run all tests
 help: ## 📖 Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\n📚 Usage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+.PHONY: generate-apiref
+generate-apiref: genref ## 📚 Generate API reference documentation
+	@echo "📚 Generating API reference documentation..."
+	@cd $(PROJECT_DIR)/hack/genref/ && $(GENREF) -o $(PROJECT_DIR)/site/content/en/docs/reference
+	@echo "✅ API reference documentation generated"
+
 include Makefile-deps.mk
 
 ##@ 🛠️  Development
@@ -557,3 +563,10 @@ integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."
 	go test -v ./integration_tests/... -ginkgo.v -ginkgo.trace
 	@echo "✅ Integration tests passed"
+
+
+.PHONY: site-server
+site-server: hugo ## 🌐 Start Hugo development server
+	@echo "🌐 Starting Hugo development server..."
+	@cd site && $(HUGO) server
+	@echo "✅ Hugo server started"

@@ -14,6 +14,4 @@ type FineTunedWeightExpansion interface{}
 
 type InferenceServiceExpansion interface{}
 
-type ReplicationJobExpansion interface{}
-
 type ServingRuntimeExpansion interface{}

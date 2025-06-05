@@ -20,6 +20,7 @@ HELM_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m -f '
 HELM_DOCS_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m -f '{{.Version}}' github.com/norwoodj/helm-docs)
 HUGO_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m -f '{{.Version}}' github.com/gohugoio/hugo)
 MDTOC_VERSION ?= $(shell cd $(TOOLS_DIR) && GO111MODULE=on $(GO_CMD) list -m -f '{{.Version}}' sigs.k8s.io/mdtoc)
+GENREF_VERSION ?= v0.28.0
 
 ##@ 📦 Tools
 
@@ -115,4 +116,11 @@ GOIMPORTS = $(PROJECT_DIR)/bin/goimports
 install-goimports: fix-tools-gomod ## 📦 Install goimports if not present
 	@echo "📦 Installing goimports..."
 	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install golang.org/x/tools/cmd/goimports@latest
+	@echo "✅ Installation complete"
+
+GENREF = $(PROJECT_DIR)/bin/genref
+.PHONY: genref
+genref: ## 📚 Download genref locally if necessary
+	@echo "📚 Installing genref..."
+	@GOBIN=$(PROJECT_DIR)/bin $(GO_CMD) install github.com/kubernetes-sigs/reference-docs/genref@$(GENREF_VERSION)
 	@echo "✅ Installation complete"

@@ -253,3 +253,147 @@ div.feature-state-notice {
     margin-right: 2em;
     max-width: 80%;
   }
+
+// --------------------------------------------------
+// API Reference Styling
+// --------------------------------------------------
+
+// Section headers
+.td-content h2 {
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 0.5rem;
+}
+
+// "Appears in" section styling
+.td-content strong {
+  font-weight: 600;
+}
+
+.td-content ul li {
+  margin-bottom: 0.25rem;
+}
+
+// Table styling
+.td-content table.table {
+  margin-bottom: 2.5rem;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+  
+  th, td {
+    border: 1px solid #dee2e6;
+    padding: 0.75rem;
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  
+  th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+    color: #495057;
+    font-size: 0.875rem;
+  }
+  
+  tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.025);
+  }
+  
+  tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+  }
+  
+  // Field column styling
+  td:first-child {
+    width: 30%;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    
+    code {
+      font-weight: 600;
+      background-color: transparent;
+      color: #d63384;
+      font-size: 0.875em;
+      padding: 0;
+    }
+    
+    // Required badge styling
+    B {
+      color: #dc3545;
+      font-size: 0.75em;
+      margin-left: 0.25rem;
+      font-weight: 700;
+    }
+  }
+  
+  // Description column styling  
+  td:last-child {
+    width: 70%;
+    
+    // Code blocks in descriptions
+    code {
+      background-color: #f8f9fa;
+      color: #495057;
+      padding: 0.125rem 0.25rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+      border: 1px solid #e9ecef;
+    }
+    
+    // Links in type references
+    a code {
+      color: #0056b3;
+      text-decoration: none;
+      background-color: #e3f2fd;
+      border-color: #bbdefb;
+      
+      &:hover {
+        text-decoration: underline;
+        background-color: #bbdefb;
+      }
+    }
+    
+    // Muted text for missing descriptions
+    .text-muted {
+      color: #6c757d;
+      font-style: italic;
+      font-size: 0.875em;
+    }
+    
+    // Embedded type descriptions
+    p {
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+    
+    // Improve list formatting in descriptions
+    ul, ol {
+      margin-bottom: 0.5rem;
+      padding-left: 1.25rem;
+      
+      li {
+        margin-bottom: 0.25rem;
+      }
+    }
+  }
+}
+
+// Resource Types list styling
+.td-content ul {
+  li {
+    margin-bottom: 0.25rem;
+    
+    a {
+      text-decoration: none;
+      
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+}

@@ -36,10 +36,6 @@ func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceSe
 	return &FakeInferenceServices{c, namespace}
 }
 
-func (c *FakeOmeV1beta1) ReplicationJobs(namespace string) v1beta1.ReplicationJobInterface {
-	return &FakeReplicationJobs{c, namespace}
-}
-
 func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntimeInterface {
 	return &FakeServingRuntimes{c, namespace}
 }

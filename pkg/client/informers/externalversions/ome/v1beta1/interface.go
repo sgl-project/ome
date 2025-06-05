@@ -20,8 +20,6 @@ type Interface interface {
 	FineTunedWeights() FineTunedWeightInformer
 	// InferenceServices returns a InferenceServiceInformer.
 	InferenceServices() InferenceServiceInformer
-	// ReplicationJobs returns a ReplicationJobInformer.
-	ReplicationJobs() ReplicationJobInformer
 	// ServingRuntimes returns a ServingRuntimeInformer.
 	ServingRuntimes() ServingRuntimeInformer
 }
@@ -65,11 +63,6 @@ func (v *version) FineTunedWeights() FineTunedWeightInformer {
 // InferenceServices returns a InferenceServiceInformer.
 func (v *version) InferenceServices() InferenceServiceInformer {
 	return &inferenceServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// ReplicationJobs returns a ReplicationJobInformer.
-func (v *version) ReplicationJobs() ReplicationJobInformer {
-	return &replicationJobInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ServingRuntimes returns a ServingRuntimeInformer.
