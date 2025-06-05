@@ -10,6 +10,8 @@ type contextKey string
 const (
 	// HubConfigKey is the context key for storing HubConfig
 	HubConfigKey contextKey = "hubConfig"
+	// WorkerIDKey is the context key for storing worker ID in concurrent downloads
+	WorkerIDKey contextKey = "workerID"
 )
 
 // HfFileMetadata contains information about a file versioned on the Hub

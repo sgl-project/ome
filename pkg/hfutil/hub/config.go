@@ -273,11 +273,18 @@ func (c *HubConfig) ValidateConfig() error {
 
 // CreateProgressManager creates a progress manager from the configuration
 func (c *HubConfig) CreateProgressManager() *ProgressManager {
-	return NewProgressManager(
+	pm := NewProgressManager(
 		c.Logger,
 		!c.DisableProgressBars,
 		c.EnableDetailedLogs,
 	)
+
+	// Initialize multi-progress support for concurrent downloads
+	if c.MaxWorkers > 1 {
+		pm.InitializeMultiProgress(c.MaxWorkers)
+	}
+
+	return pm
 }
 
 // ToDownloadConfig converts HubConfig to DownloadConfig for backward compatibility
