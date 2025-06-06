@@ -208,10 +208,27 @@ If you don't want to install cert manager, you can set the `ENABLE_SELF_SIGNED_C
 export ENABLE_SELF_SIGNED_CA=true
 ```
 
-After that, you can run the following command to deploy `OME`. You can skip the above step if cert manager is already installed.
+After that, you can deploy `OME` using one of the following approaches. You can skip the above step if cert manager is already installed.
+
+#### Option 1: Full Installation (Controller and Cluster Resources)
 ```bash
 make install
 ```
+This command installs both the OME controller and cluster-scoped resources (runtimes and models).
+
+#### Option 2: Split Installation (Recommended)
+
+Install only the OME controller components first:
+```bash
+make install-ome
+```
+
+Once the controller is running, you can optionally install the cluster-scoped resources:
+```bash
+make install-ome-cluster-resources
+```
+
+**⚠️ WARNING**: Installing cluster-scoped resources will deploy runtimes and models to your cluster. Models will be downloaded under paths defined in the model specifications. Please ensure your cluster and nodes are configured properly with sufficient storage before proceeding with this step.
 
 Success "Expected Output"
 ```bash
@@ -240,14 +257,26 @@ ome-model-agent-daemonset-9gv6f   1/1     Running   0              3d6h
 
 ### Deploy OME with Your Own Version
 
-Run the following command to deploy `OME` controller with your local change.
+Run the following commands to deploy `OME` controller with your local change.
 ```bash
 make push-manager-image;
 make patch-manager-dev;
-make install
 ```
 
-**Note:** `make push-manager-image` builds the image from your local code, publishes to `REGISTRY`. `make patch-manager-dev` patches the `ome-controller-manager` image in the deployment configuration digest to your cluster for testing. `make install` installs the `ome-controller-manager` to your cluster. Please also ensure you are logged in to `REGISTRY` from your client machine.
+Then choose one of the following installation options:
+
+```bash
+# Option 1: Install only the OME controller (recommended)
+make install-ome
+
+# Option 2: Install both OME controller and cluster resources
+make install
+
+# Option 3: Install cluster resources separately (after controller is running)
+make install-ome-cluster-resources
+```
+
+**Note:** `make push-manager-image` builds the image from your local code, publishes to `REGISTRY`. `make patch-manager-dev` patches the `ome-controller-manager` image in the deployment configuration digest to your cluster for testing. `make install-ome` installs only the `ome-controller-manager` to your cluster, while `make install` installs both controller and cluster resources. Please also ensure you are logged in to `REGISTRY` from your client machine.
 
 ### Running OME Manager Locally
 
@@ -337,5 +366,14 @@ As you make changes to the code-base, there are two special cases to be aware of
 * **If you want to upgrade the dependency**, then you run the go get command, e.g., `go get golang.org/x/text` to upgrade to the latest version, `go get golang.org/x/text@v0.3.0` to upgrade to a specific version.
 
 ```shell
+# Install only the OME controller
+make install-ome
+
+# Or, to install both the controller and cluster resources
 make install
+
+# To install cluster resources separately (after controller is running)
+make install-ome-cluster-resources
 ```
+
+**Remember:** Installing cluster-scoped resources will deploy runtimes and models which may require significant storage and resources.

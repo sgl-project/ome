@@ -392,11 +392,14 @@ delete-webhooks: ## 🧹 Delete validation/mutation webhook configurations
 	@echo "\nWebhook cleanup completed with clear status!"
 
 .PHONY: install
-install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+install: install-ome install-ome-cluster-resources ## 🚀 Deploy controller and cluster resources in the configured Kubernetes cluster
+
+.PHONY: install-ome
+install-ome: kustomize ## 🚀 Deploy OME controller in the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "\n📦 OME Deployment Process Starting..."
 	@echo "Current KUBECONFIG: $(KUBECONFIG)"
 	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
-	@echo "Are you really sure you want to completely re-install in [$(value KUBECONFIG)] environment ?"
+	@echo "Are you really sure you want to install OME in [$(value KUBECONFIG)] environment ?"
 	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
 	@read -p "Press enter to continue"
 	
@@ -424,25 +427,51 @@ install: kustomize ## 🚀 Deploy controller in the configured Kubernetes cluste
 		kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s; \
 	fi
 	
-	@echo "\n🔄 Step 4: Applying cluster resources..."
-	kubectl apply --server-side --force-conflicts -k config/clusterresources
-	
-	@echo "\n🧹 Step 5: Cleanup..."
+	@echo "\n🧹 Step 4: Cleanup..."
 	@git checkout HEAD -- config/certmanager/certificate.yaml
 	@echo "✅ Cleanup complete"
 	
-	@echo "\n🎉 OME deployment completed successfully!\n"
-
-.PHONY: uninstall
-uninstall: kustomize ## 🧹 Uninstall controller from the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	@echo "\n🎉 OME installation completed successfully!\n"
+	
+.PHONY: install-ome-cluster-resources
+install-ome-cluster-resources: kustomize ## 🚀 Deploy OME cluster-scoped resources (runtimes and models)
+	@echo "\n⚠️  WARNING: CLUSTER-SCOPED RESOURCES INSTALLATION ⚠️"
 	@echo "Current KUBECONFIG: $(KUBECONFIG)"
 	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
-	@echo "Are you really sure you want to completely destroy [$(value KUBECONFIG)] environment ?"
+	@echo "⚠️  This will deploy runtimes and models to your cluster"
+	@echo "⚠️  Models will be downloaded under paths defined in model specs"
+	@echo "⚠️  Please ensure your cluster and nodes are configured properly with sufficient storage"
+	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
+	@read -p "Press enter to continue with cluster resource installation"
+	
+	@echo "\n🔄 Applying cluster resources..."
+	kubectl apply --server-side --force-conflicts -k config/clusterresources
+	
+	@echo "\n🎉 OME cluster resources installation completed successfully!\n"
+
+.PHONY: uninstall
+uninstall: uninstall-ome-cluster-resources uninstall-ome ## 🧹 Uninstall controller and cluster resources from the configured Kubernetes cluster
+
+.PHONY: uninstall-ome
+uninstall-ome: kustomize ## 🧹 Uninstall OME controller from the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	@echo "Current KUBECONFIG: $(KUBECONFIG)"
+	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
+	@echo "Are you really sure you want to uninstall OME from [$(value KUBECONFIG)] environment ?"
 	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
 	@read -p "Press enter to continue"
 	kubectl delete --ignore-not-found=$(ignore-not-found) -k config/default
+	@echo "✅ OME controller uninstalled"
+
+.PHONY: uninstall-ome-cluster-resources
+uninstall-ome-cluster-resources: kustomize ## 🧹 Uninstall OME cluster-scoped resources (runtimes and models)
+	@echo "\n⚠️  WARNING: UNINSTALLING CLUSTER-SCOPED RESOURCES ⚠️"
+	@echo "Current KUBECONFIG: $(KUBECONFIG)"
+	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
+	@echo "⚠️  This will uninstall all runtimes and models from your cluster"
+	@echo "## 💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥💥 ##"
+	@read -p "Press enter to continue with cluster resources uninstallation"
 	kubectl delete --ignore-not-found=$(ignore-not-found) -k config/clusterresources
-	@echo "✅ Controller uninstalled"
+	@echo "✅ OME cluster resources uninstalled"
 
 .PHONY: kustomize-validate
 kustomize-validate: kustomize ## 🔍 Validate kustomize configuration without applying to cluster
