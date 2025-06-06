@@ -28,7 +28,7 @@ ignoreFiles = []
     name = "GitHub"
     weight = 99
     pre = "<i class='fab fa-github pr-2'></i>"
-    url = "https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/ome/browse"
+    url = "https://github.com/sgl-project/sgl-ome"
 
 ###############################################################################
 # Docsy - Goldmark markdown parser
@@ -70,12 +70,12 @@ ignoreFiles = []
 # Docsy - Site Parameters
 ###############################################################################
 [params]
-  github_repo = "https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/ome/browse"
-  github_project_repo = "https://bitbucket.oci.oraclecorp.com/projects/GENAICORE/repos/ome/browse"
+  github_repo = "https://github.com/sgl-project/sgl-ome"
+github_project_repo = "https://github.com/sgl-project/sgl-ome"
   github_subdir = "site"
   RSSLink = "/index.xml"
   author = "Oracle" # add your company name
-  github = "GenAICore" # add your github profile name
+  github = "sgl-project" # add your github profile name
 
   copyright = "OCI Generative AI Service"
   trademark_link = "https://www.linuxfoundation.org/legal/trademark-usage"

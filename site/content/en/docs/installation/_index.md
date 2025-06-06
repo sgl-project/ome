@@ -117,9 +117,9 @@ To check out this repository:
 1. Clone it to your machine:
 
 ```shell
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gen
-cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gen
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/gen/ome.git
+mkdir -p ${GOPATH}/src/github.com/sgl-project
+cd ${GOPATH}/src/github.com/sgl-project
+git clone https://github.com/sgl-project/sgl-ome.git
 cd ome
 ```
 

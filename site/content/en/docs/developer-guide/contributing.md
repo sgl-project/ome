@@ -45,9 +45,6 @@ Set up these environment variables (add them to your `.bashrc` or `.zshrc`):
 export GOPATH=<your-go-workspace>
 export PATH=$GOPATH/bin:$PATH
 
-# Oracle private repositories
-export GONOPROXY="oracle.com/oci,bitbucket.oci.oraclecorp.com"
-export GOPRIVATE="oracle.com/oci,bitbucket.oci.oraclecorp.com"
 
 # Container registry
 export REGISTRY="fra.ocir.io/idqj093njucb"  # Adjust to your registry
@@ -61,9 +58,9 @@ export ARCH="linux/arm64"  # Only needed for Apple Silicon
 Clone OME to the correct location in your GOPATH:
 
 ```bash
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
-cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/genaicore/ome.git
+mkdir -p ${GOPATH}/src/github.com/sgl-project
+cd ${GOPATH}/src/github.com/sgl-project
+git clone https://github.com/sgl-project/sgl-ome.git
 cd ome
 ```
 
