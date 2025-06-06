@@ -22,68 +22,106 @@ OME provides two types of model resources:
 
 Both types use exactly the same specification format - the only difference is their visibility scope.
 
-## How the Model Agent Works
+## Basic Example
 
-OME deploys a component called the **Model Agent** as a DaemonSet, which means it runs on every single node in your Kubernetes cluster. This agent is the workhorse that handles all model operations.
+Here's a simple BaseModel to get you started:
 
-Here's what happens when you create a BaseModel:
+```yaml
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-3-70b-instruct
+spec:
+  vendor: meta
+  version: "3.1"
+  disabled: false
+  modelType: llama
+  modelArchitecture: LlamaForCausalLM
+  modelParameterSize: "70B"
+  maxTokens: 8192
+  modelCapabilities:
+    - text-to-text
+  modelFormat:
+    name: safetensors
+    version: "1"
+  modelFramework:
+    name: transformers
+    version: "4.36.0"
+  storage:
+    storageUri: oci://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/
+    path: /raid/models/llama-3.1-70b-instruct
+    storageKey: oci-credentials
+    parameters:
+      region: us-phoenix-1
+      auth_type: InstancePrincipal
+    nodeSelector:
+      node.kubernetes.io/instance-type: GPU.A100.4
+```
 
-1. **Discovery**: The Model Agent on each node watches for new BaseModel and ClusterBaseModel resources using Kubernetes informers. When you create a new model resource, every agent immediately knows about it.
+## Specification Reference
 
-2. **Node Selection**: The agent checks if the current node should download this model based on node selectors and affinity rules you've configured. Not every node needs every model - you might want large models only on GPU nodes, for example.
+Available attributes in the BaseModel/ClusterBaseModel spec:
 
-3. **Download Process**: If the node is selected, the agent starts downloading the model from your specified storage location. This happens in parallel across all selected nodes.
+| Attribute                      | Type              | Description                                                              |
+|--------------------------------|-------------------|--------------------------------------------------------------------------|
+| **Core Configuration**         |                   |                                                                          |
+| `vendor`                       | string            | Vendor of the model (e.g., "meta", "mistral", "openai")                  |
+| `version`                      | string            | Version of the model (e.g., "3.1", "1.0")                                |
+| `disabled`                     | boolean           | Whether the model is disabled. Defaults to false                         |
+| `displayName`                  | string            | User-friendly name of the model                                          |
+| **Model Identification**       |                   |                                                                          |
+| `modelType`                    | string            | Architecture family (e.g., "llama", "mistral", "deepseek_v3")            |
+| `modelArchitecture`            | string            | Specific implementation (e.g., "LlamaForCausalLM", "MistralForCausalLM") |
+| `modelParameterSize`           | string            | Human-readable parameter count (e.g., "7B", "70B", "405B")               |
+| `maxTokens`                    | int32             | Maximum number of tokens the model can process                           |
+| `modelCapabilities`            | []string          | Model capabilities (see Model Capabilities)                              |
+| **Model Format and Framework** |                   |                                                                          |
+| `modelFormat.name`             | string            | Format name (e.g., "safetensors", "onnx", "pytorch")                     |
+| `modelFormat.version`          | string            | Format version (e.g., "1", "2.0")                                        |
+| `modelFramework.name`          | string            | Framework name (e.g., "transformers", "onnx", "tensorrt")                |
+| `modelFramework.version`       | string            | Framework version (e.g., "4.36.0", "1.14.0")                             |
+| `quantization`                 | string            | Quantization scheme (see [Quantization Types](#quantization-types))      |
+| **Storage Configuration**      |                   |                                                                          |
+| `storage.storageUri`           | string            | Source URI of the model                                                  |
+| `storage.path`                 | string            | Local path where model will be stored on nodes                           |
+| `storage.schemaPath`           | string            | Path to model schema or configuration within storage                     |
+| `storage.storageKey`           | string            | Name of Kubernetes Secret containing storage credentials                 |
+| `storage.parameters`           | map[string]string | Storage-specific parameters (region, auth_type, etc.)                    |
+| `storage.nodeSelector`         | map[string]string | Node labels that must match for model placement                          |
+| `storage.nodeAffinity`         | NodeAffinity      | Advanced node selection rules                                            |
+| **Serving Configuration**      |                   |                                                                          |
+| `modelConfiguration`           | RawExtension      | Model-specific configuration as JSON                                     |
+| `additionalMetadata`           | map[string]string | Additional key-value metadata                                            |
 
-4. **Parsing and Validation**: Once downloaded, the agent looks for a `config.json` file in the model directory and automatically parses it to understand the model's architecture, capabilities, and requirements.
+## Storage Backends
 
-5. **Status Updates**: The agent updates the model's status to reflect whether the download succeeded or failed, and labels the node to indicate model availability.
-
-6. **Monitoring**: The agent continuously monitors the model's health and can re-download if files become corrupted.
-
-## Storage: Where Your Models Live
-
-OME supports multiple storage backends because different organizations have different infrastructure setups. Let's explore each option in detail.
+OME supports multiple storage backends to work with your existing infrastructure:
 
 ### Oracle Cloud Infrastructure (OCI) Object Storage
 
-OCI Object Storage is Oracle's cloud storage service, similar to Amazon S3. If your models are stored in OCI, you'll use URIs that follow this specific format:
-
+Store your models in OCI Object Storage using this URI format:
 ```
 oci://n/{namespace}/b/{bucket}/o/{object_path}
 ```
 
-Let's break this down:
-- `oci://` - This tells OME you're using OCI Object Storage
-- `n/{namespace}` - The OCI tenancy namespace (not to be confused with Kubernetes namespaces)
-- `b/{bucket}` - The storage bucket name where your model files live
-- `o/{object_path}` - The path within the bucket to your model files
-
-Here's a real example:
-
+Example:
 ```yaml
 storage:
-  storageUri: "oci://n/mycompany/b/ai-models/o/llama/llama-3-70b-instruct/"
+  storageUri: "oci://n/mycompany/b/ai-models/o/llama/llama-3-70b/"
   path: "/raid/models/llama-3-70b-instruct"
   parameters:
     region: "us-phoenix-1"
-  storageKey: "oci-credentials"
+    auth_type: "InstancePrincipal"
 ```
-
-The `path` field specifies where on each node's local filesystem the model should be stored. The `parameters` section lets you specify OCI-specific settings like the region. The `storageKey` references a Kubernetes Secret containing your OCI credentials.
 
 ### Hugging Face Hub
 
-Hugging Face Hub is the most popular repository for open-source AI models. If you want to use models directly from Hugging Face, OME can download them automatically.
-
-The URI format is:
+Download models directly from Hugging Face Hub:
 ```
 hf://{model-id}[@{branch}]
 ```
 
-Examples:
-- `hf://meta-llama/Llama-3.3-70B-Instruct` - Downloads from the main branch
-- `hf://microsoft/Phi-3-vision-128k-instruct@v1.0` - Downloads from a specific branch/tag
-
+Example:
 ```yaml
 storage:
   storageUri: "hf://meta-llama/Llama-3.3-70B-Instruct"
@@ -91,93 +129,46 @@ storage:
   storageKey: "huggingface-token"
 ```
 
-The Model Agent uses the Hugging Face Hub API to download all model files, including weights, tokenizer files, and configuration. If the model is private or gated, you'll need to provide a Hugging Face access token in the `storageKey` secret.
+#### Hugging Face Parameters
+
+| Parameter   | Description              | Example         |
+|-------------|--------------------------|-----------------|
+| `revision`  | Git revision to download | `main`, `v1.0`  |
+| `cache_dir` | Local cache directory    | `/tmp/hf_cache` |
 
 ### Persistent Volume Claims (PVC)
 
-If your models are already stored in Kubernetes persistent volumes, you can reference them directly:
-
+Reference models already stored in Kubernetes persistent volumes:
 ```
 pvc://{pvc-name}/{sub-path}
 ```
 
+Example:
 ```yaml
 storage:
   storageUri: "pvc://model-storage/llama-models/llama-3-70b"
   path: "/local/models/llama-3-70b"
 ```
 
-This tells OME to copy the model from the specified path within the PVC to the local path on each node. This is useful when you have a shared storage system like NFS or when you've pre-loaded models into persistent volumes.
-
 ### Vendor Storage
 
 For proprietary or vendor-specific storage systems:
-
 ```
 vendor://{vendor-name}/{resource-type}/{resource-path}
 ```
 
+Example:
 ```yaml
 storage:
   storageUri: "vendor://nvidia/models/llama-70b-tensorrt"
   path: "/opt/models/llama-70b-tensorrt"
 ```
 
-This is an extensible format that allows integration with vendor-specific model repositories.
+## Node Selection
 
-## Authentication: Securing Access to Your Models
+Control which nodes download and store your models using node selectors and affinity rules:
 
-Different storage backends require different authentication methods. OME supports multiple authentication strategies to work with your existing security infrastructure.
-
-### OCI Authentication
-
-For OCI Object Storage, OME supports four authentication methods:
-
-**Instance Principal** is the simplest method when running on OCI compute instances. The compute instance itself has an identity that can access OCI services without storing credentials. You just specify:
-
-```yaml
-storage:
-  storageUri: "oci://n/mycompany/b/models/o/llama-70b/"
-  parameters:
-    auth_type: "InstancePrincipal"
-```
-
-**User Principal** uses specific user credentials stored in a Kubernetes Secret:
-
-```yaml
-storage:
-  storageUri: "oci://n/mycompany/b/models/o/llama-70b/"
-  storageKey: "oci-user-credentials"
-  parameters:
-    auth_type: "UserPrincipal"
-```
-
-The secret would contain your OCI user's API key, tenancy OCID, user OCID, and private key.
-
-**Resource Principal** is used when running in OCI Container Engine for Kubernetes (OKE) with resource principals enabled.
-
-**OKE Workload Identity** is the newest method that uses Kubernetes service accounts mapped to OCI identities.
-
-### Hugging Face Authentication
-
-For Hugging Face models, especially private or gated models, you need an access token:
-
-```yaml
-storage:
-  storageUri: "hf://meta-llama/Llama-3.3-70B-Instruct"
-  storageKey: "hf-token"
-```
-
-The secret should contain a key named `token` with your Hugging Face access token as the value.
-
-## Node Affinity: Controlling Where Models Go
-
-Not every model needs to be on every node. Large language models can be hundreds of gigabytes, and you might have different types of nodes in your cluster. Node affinity lets you control precisely which nodes should download and store each model.
-
-### Simple Node Selection with nodeSelector
-
-The simplest way to control model placement is with `nodeSelector`, which requires nodes to have specific labels:
-
+### Simple Node Selection
 ```yaml
 storage:
   storageUri: "oci://n/mycompany/b/models/o/llama-70b/"
@@ -186,15 +177,22 @@ storage:
     models.ome.io/storage-tier: "fast-ssd"
 ```
 
-This means the model will only be downloaded to nodes that have both labels: the instance type must be "GPU.A100.4" AND the storage tier must be "fast-ssd". If a node is missing either label, it won't get the model.
-
 ### Advanced Node Affinity
 
-For more complex scenarios, use `nodeAffinity` with match expressions:
+The `nodeAffinity` field supports standard Kubernetes node affinity with these operators:
 
+| Operator       | Description                              |
+|----------------|------------------------------------------|
+| `In`           | Node label value must be in the list     |
+| `NotIn`        | Node label value must not be in the list |
+| `Exists`       | Node must have the label key             |
+| `DoesNotExist` | Node must not have the label key         |
+| `Gt`           | Numeric value must be greater than       |
+| `Lt`           | Numeric value must be less than          |
+
+Example:
 ```yaml
 storage:
-  storageUri: "oci://n/mycompany/b/models/o/large-model/"
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
       nodeSelectorTerms:
@@ -207,130 +205,45 @@ storage:
           values: ["500Gi"]
 ```
 
-This configuration means: "Download this model to nodes that have either GPU.A100.4 OR GPU.H100.8 instance types, AND have more than 500Gi of available storage."
+## Automatic Model Discovery
 
-The supported operators are:
-- **In**: The node's label value must be one of the listed values
-- **NotIn**: The node's label value must NOT be one of the listed values
-- **Exists**: The node must have this label key (value doesn't matter)
-- **DoesNotExist**: The node must NOT have this label key
-- **Gt**: For numeric values, the node's value must be greater than the specified value
-- **Lt**: For numeric values, the node's value must be less than the specified value
+OME automatically analyzes your models to extract important metadata. When the Model Agent downloads a model, it looks for a `config.json` file and uses specialized parsers for different model architectures.
 
-### Real-World Node Affinity Examples
+### Supported Model Types
 
-**GPU-Specific Models**: Ensure large language models only go to nodes with appropriate GPUs:
-```yaml
-nodeSelector:
-  accelerator: "nvidia-a100"
-  gpu-memory: "80gb"
-```
+OME currently supports automatic parsing for:
 
-**Storage Requirements**: Target nodes with sufficient fast storage:
-```yaml
-nodeAffinity:
-  requiredDuringSchedulingIgnoredDuringExecution:
-    nodeSelectorTerms:
-    - matchExpressions:
-      - key: "storage.ome.io/nvme-capacity"
-        operator: Gt
-        values: ["1000Gi"]
-```
+- **Llama Family Models** (Llama 3, 3.1, 3.2, and 4)
+- **DeepSeek Models** (including DeepSeek V3 with MoE architecture)
+- **Mistral and Mixtral** (standard and mixture-of-experts models)
+- **Microsoft Phi Models** (including Phi-3 Vision for multimodal)
+- **Qwen Models** (Qwen2 family)
+- **Multimodal Models** (MLlama Vision models)
 
-**Geographic Distribution**: Control model placement across regions:
-```yaml
-nodeSelector:
-  topology.kubernetes.io/region: "us-west-2"
-  topology.kubernetes.io/zone: "us-west-2a"
-```
+### What Gets Detected
 
-## Automatic Model Discovery and Parsing
+The system automatically determines:
+- **Model Type**: Architecture family (e.g., "llama", "mistral")
+- **Model Architecture**: Specific implementation (e.g., "LlamaForCausalLM")
+- **Parameter Count**: Total number of parameters
+- **Context Length**: Maximum input context length
+- **Framework Information**: AI framework and version
+- **Data Type**: Model precision (float16, bfloat16, etc.)
+- **Capabilities**: What the model can do (text generation, embeddings, vision)
 
-One of OME's most powerful features is its ability to automatically understand your models. When the Model Agent downloads a model, it doesn't just copy files - it intelligently parses the model's configuration to extract important metadata.
+### Quantization Types
 
-### How Model Parsing Works
+Valid values for `quantization`:
 
-After downloading model files, the Model Agent looks for a `config.json` file in the model directory. This file, standard in most modern AI models, contains crucial information about the model's architecture, capabilities, and requirements.
-
-The agent uses specialized parsers for different model architectures. Currently supported model types include:
-
-**Llama Family Models** (including Llama 3, 3.1, 3.2, and 4): The agent recognizes various Llama configurations, from the 1B parameter Llama 3.2 models up to the massive 405B parameter Llama 3.1 models. It automatically detects whether it's a base model or an instruct-tuned variant.
-
-**DeepSeek Models**: Including the latest DeepSeek V3 with its mixture-of-experts architecture. The agent understands the complex MoE configuration and correctly calculates the effective parameter count.
-
-**Mistral and Mixtral**: Both the standard Mistral models and the mixture-of-experts Mixtral models are supported, with automatic detection of the expert configuration.
-
-**Microsoft Phi Models**: Including both text-only Phi models and the multimodal Phi-3 Vision models that can process both text and images.
-
-**Qwen Models**: The Qwen2 family with various parameter sizes and context lengths.
-
-**Multimodal Models**: Models that can process both text and images, like MLlama (Llama Vision) models.
-
-### What Information Gets Extracted
-
-From the `config.json` file and model structure analysis, the Model Agent automatically determines:
-
-**Model Type**: The fundamental architecture family (e.g., "llama", "mistral", "deepseek_v3"). This helps OME understand how to work with the model.
-
-**Model Architecture**: The specific implementation class (e.g., "LlamaForCausalLM", "MistralForCausalLM"). This tells OME exactly which code path to use when loading the model.
-
-**Parameter Count**: The agent tries to get an accurate count by parsing SafeTensors files, which contain the actual model weights. If that fails, it estimates based on the architecture configuration. This is crucial for resource planning.
-
-**Context Length**: The maximum number of tokens the model can process in a single request. This varies widely - some models handle 4K tokens, others can handle 128K or more. The agent also detects RoPE scaling configurations for extended context.
-
-**Framework Information**: Which AI framework the model uses (usually "transformers") and what version. This ensures compatibility.
-
-**Data Type**: Whether the model uses float32, float16, bfloat16, int8, int4, or other numeric formats. This affects memory usage and performance calculations.
-
-**Quantization**: If the model has been quantized (compressed) to use less memory, the agent detects the quantization method (fp8, int4, etc.).
-
-
-### SafeTensors Integration for Accurate Analysis
-
-OME includes sophisticated SafeTensors parsing capabilities that provide highly accurate model analysis:
-
-**Precise Parameter Counting:**
-Instead of relying on potentially incorrect configuration files, the Model Agent can parse SafeTensors files directly to count parameters precisely. This is especially important for:
-
-### Hugging Face Integration Features
-
-The Model Agent provides deep integration with Hugging Face Hub, going beyond simple file downloads:
-
-**Repository Analysis:**
-- **Branch detection**: Automatically detects and uses the correct branch (main, fp16, gguf, etc.)
-- **File filtering**: Downloads only necessary files based on model format requirements
-- **Revision handling**: Supports specific commits, tags, or branch heads
-- **LFS support**: Seamlessly handles Git LFS files without user intervention
-
-**Progress Monitoring:**
-For Hugging Face downloads, the agent provides detailed progress tracking:
-
-```
-Downloading model files: [████████████████████████████████████████] 100%
-├── config.json: 2.1 KB [✓]
-├── tokenizer.json: 17.2 MB [✓]
-├── pytorch_model-00001-of-00008.bin: 9.9 GB [✓]
-├── pytorch_model-00002-of-00008.bin: 9.9 GB [✓]
-└── ... (continuing for all model shards)
-Total: 76.3 GB downloaded
-```
-
-**Authentication and Rate Limiting:**
-- Respects Hugging Face API rate limits
-- Supports authentication tokens for private repositories
-- Implements exponential backoff for transient failures
-- Handles quota exhaustion gracefully with informative error messages
-
-**Model Card Integration:**
-The agent can optionally download and parse model cards (README.md files) to extract additional metadata like:
-- Model description and intended use cases
-- Training data information
-- Performance benchmarks
-- License information
+| Type         | Description                       |
+|--------------|-----------------------------------|
+| `fp8`        | 8-bit floating point quantization |
+| `fbgemm_fp8` | Facebook GEMM FP8 quantization    |
+| `int4`       | 4-bit integer quantization        |
 
 ### Disabling Automatic Parsing
 
-Sometimes you might want to specify model information manually, perhaps because you have a custom model format or want to override the detected values. You can disable automatic parsing with an annotation:
+If you need to specify model information manually:
 
 ```yaml
 apiVersion: ome.io/v1beta1
@@ -348,199 +261,80 @@ spec:
     - TEXT_GENERATION
 ```
 
-## Model Status and Lifecycle Management
-
-OME provides comprehensive tracking of model status across your cluster. Understanding this system helps you monitor model availability and troubleshoot issues.
+## Model Status and Lifecycle
 
 ### Model States
 
-Each model on each node goes through a lifecycle with these states:
+Each model on each node goes through these states:
 
-**Ready**: The model has been successfully downloaded, validated, and is available for use. Workloads can now use this model on this node.
+- **Ready**: Successfully downloaded and available for use
+- **Updating**: Currently being downloaded or updated
+- **Failed**: Download or validation failed
+- **Deleted**: Removed from the node
 
-**Updating**: The model is currently being downloaded or updated. This might take several minutes or hours depending on model size and network speed.
+### Status Fields
 
-**Failed**: Something went wrong during download, validation, or parsing. Check the Model Agent logs for details about what failed.
+The BaseModel status contains these fields:
 
-**Deleted**: The model was removed from this node, either because the BaseModel resource was deleted or because node affinity rules changed.
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | string | Overall model state (Creating, Ready, Failed) |
+| `lifecycle` | string | Lifecycle stage of the model |
+| `nodesReady` | []string | List of nodes where model is ready |
+| `nodesFailed` | []string | List of nodes where model failed |
 
-### Node Status Tracking with ConfigMaps
-
-OME stores detailed model status information in Kubernetes ConfigMaps, one per node. These ConfigMaps are created in the same namespace where the Model Agent runs (typically "ome").
-
-Here's what a status ConfigMap looks like:
-
+Example status:
 ```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: worker-node-1
-  namespace: ome
-  labels:
-    models.ome/basemodel-status: "true"
-data:
-  "default_llama-70b": |
-    {
-      "name": "llama-70b",
-      "status": "Ready",
-      "config": {
-        "modelType": "llama",
-        "modelArchitecture": "LlamaForCausalLM",
-        "modelParameterSize": "70B",
-        "maxTokens": 4096,
-        "modelCapabilities": ["TEXT_GENERATION", "CHAT"]
-      }
-    }
-  "team-a_custom-model": |
-    {
-      "name": "custom-model",
-      "status": "Failed",
-      "config": null
-    }
+status:
+  state: Ready
+  lifecycle: Ready
+  nodesReady:
+    - worker-node-1
+    - worker-node-2
+  nodesFailed: []
 ```
 
-The ConfigMap key format is `{namespace}_{model-name}` for BaseModels, or just `{model-name}` for ClusterBaseModels. This allows you to see exactly which models are available on each node and their current status.
+### Checking Model Status
 
-### Node Labels for Quick Discovery
-
-In addition to ConfigMaps, OME automatically labels nodes to indicate model availability. Each model gets a unique label based on its UID:
+View model status across your cluster:
 
 ```bash
-kubectl get nodes -l "models.ome/12345678-1234-1234-1234-123456789abc=Ready"
+# Check all models
+kubectl get clusterbasemodels
+
+# Check model status on specific nodes
+kubectl get configmaps -n ome -l models.ome/basemodel-status=true
+
+# Find nodes with a specific model ready
+kubectl get nodes -l "models.ome/model-uid=Ready"
 ```
 
-This shows all nodes where the model with that UID is in "Ready" state. This labeling system allows workload schedulers to quickly find nodes with specific models without parsing ConfigMaps.
+## Authentication
 
-## Advanced Features and Performance
+### OCI Authentication Methods
 
-### Model Agent Configuration
+- **Instance Principal**: Uses the compute instance's identity (recommended for OCI)
+- **User Principal**: Uses specific user credentials stored in secrets
+- **Resource Principal**: For OKE with resource principals
+- **OKE Workload Identity**: Service account-based authentication
 
-The Model Agent can be configured with several performance and reliability parameters:
+### Hugging Face Authentication
 
-**Download Configuration:**
-- `--download-retry` (default: 3): Number of retry attempts for failed downloads
-- `--concurrency` (default: 4): Number of concurrent file downloads per model
-- `--multipart-concurrency` (default: 4): Number of concurrent chunks for large file downloads
-- `--num-download-worker` (default: 5): Number of parallel download workers across all models
+For private or gated models, provide an access token:
 
-**Node and Storage Configuration:**
-- `--models-root-dir` (default: `/mnt/models`): Root directory for storing models on nodes
-- `--node-label-retry` (default: 5): Number of retries for updating node labels
-- `--port` (default: 8080): HTTP port for health checks and metrics
-
-**Logging and Monitoring:**
-- `--log-level` (default: "info"): Log verbosity (debug, info, warn, error)
-- `--namespace` (default: "ome"): Kubernetes namespace for ConfigMaps and status tracking
-
-### Advanced Download and Verification
-
-**Bulk Download with Optimization:**
-For OCI Object Storage, the Model Agent uses sophisticated bulk download strategies:
-
-- **Concurrent file downloads**: Multiple files are downloaded simultaneously based on the `concurrency` setting
-- **Multipart downloads**: Large files (>200MB) are split into chunks and downloaded in parallel
-- **Resume capability**: Interrupted downloads automatically resume from the last successfully downloaded chunk
-- **Prefix stripping**: Object prefixes are automatically stripped to create clean local directory structures
-
-**Comprehensive Integrity Verification:**
-Every downloaded file undergoes rigorous verification:
-
-1. **Size verification**: Actual file size is compared against expected size from object metadata
-2. **Checksum verification**: MD5 hashes are computed and verified against object storage metadata
-3. **Atomic operations**: Files are downloaded to temporary locations and only moved to final destinations after successful verification
-4. **Automatic retry**: Failed verifications trigger automatic re-download of corrupted files
-
-The verification process is tracked with detailed metrics, including verification duration and failure rates.
-
-### Thread Safety and Concurrent Operations
-
-The Model Agent is designed for safe concurrent operations across multiple models and nodes:
-
-**ConfigMap Coordination:**
-A sophisticated mutex-based locking system ensures that ConfigMap updates (which track model status across nodes) are thread-safe. This prevents race conditions when multiple models are being processed simultaneously on the same node.
-
-**Model Update Handling:**
-When an existing model is updated, the agent intelligently handles the transition:
-
-1. **Change Detection**: Uses deep comparison to detect actual changes in model specifications
-2. **Graceful Updates**: Sets model status to "Updating" before starting the new download
-3. **Override Downloads**: Uses `DownloadOverride` tasks to replace existing models
-4. **Rollback Safety**: Maintains previous model versions until new downloads are verified
-
-### Model Lifecycle Management
-
-**Task Types:**
-The Model Agent processes three types of operations:
-
-1. **Download**: Initial download of a new model
-2. **DownloadOverride**: Replace an existing model with an updated version
-3. **Delete**: Remove a model from the node and clean up storage
-
-**State Transitions:**
-Models progress through well-defined states:
-
-- `Updating` → `Ready`: Successful download and verification
-- `Updating` → `Failed`: Download or verification failure
-- `Ready` → `Updating`: Model update initiated
-- `Ready` → `Deleted`: Model removal requested
-
-### Health Checks and Monitoring
-
-**Health Check Endpoints:**
-The Model Agent exposes HTTP endpoints for cluster health monitoring:
-
-- `/healthz`: General health check that verifies model root directory accessibility
-- `/livez`: Kubernetes liveness probe endpoint
-- `/metrics`: Prometheus metrics endpoint for detailed operational metrics
-
-**Comprehensive Metrics:**
-The agent provides detailed metrics for production monitoring:
-
+```yaml
+# Create a secret with your Hugging Face token
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hf-token
+data:
+  token: <base64-encoded-token>
 ```
-# Download metrics
-model_agent_downloads_success_total{model_type, namespace, name}
-model_agent_downloads_failed_total{model_type, namespace, name}
-model_agent_download_duration_seconds{model_type, namespace, name}
-
-# Verification metrics  
-model_agent_verifications_total{model_type, namespace, name, result}
-model_agent_verification_duration_seconds
-model_agent_md5_checksum_failed_total{model_type, namespace, name}
-
-# Transfer metrics
-model_agent_download_bytes_total{model_type, namespace, name}
-
-# Runtime metrics
-go_goroutines_current
-go_memory_alloc_bytes
-go_gc_pause_duration_seconds_custom
-```
-
-All metrics are labeled with model identifiers, enabling detailed dashboards and alerting.
-
-### Data Type and Quantization Support
-
-OME automatically detects and handles various model data types and quantization schemes:
-
-**Supported Data Types:**
-- `float32`/`float` (4 bytes per parameter)
-- `bfloat16`/`bf16` (2 bytes per parameter) 
-- `float16`/`fp16`/`half` (2 bytes per parameter)
-- `int8` (1 byte per parameter)
-- `fp8`/`float8`/`e4m3` (1 byte per parameter)
-- `int4`/`4bit` (0.5 bytes per parameter)
-
-**Quantization Detection:**
-The system automatically detects quantization schemes from model configurations:
-- FP8 quantization for memory-efficient inference
-- INT4 quantization for extreme compression
-- Custom quantization configurations from various frameworks
-
-This information is used for accurate memory usage estimation and model size calculations.
 
 ## Complete Configuration Example
 
-Here's a comprehensive example showing all the features working together:
+Here's a comprehensive BaseModel configuration showing all available options:
 
 ```yaml
 apiVersion: ome.io/v1beta1
@@ -551,146 +345,177 @@ metadata:
     vendor: "meta"
     model-family: "llama"
     parameter-size: "70b"
+  annotations:
+    ome.io/skip-config-parsing: "false"
 spec:
   # Basic model information
   vendor: "meta"
   version: "3.1"
   disabled: false
+  displayName: "Llama 3.1 70B Instruct"
   
-  # Model capabilities (these will be auto-detected from config.json)
+  # Model identification
   modelType: "llama"
   modelArchitecture: "LlamaForCausalLM"
   modelParameterSize: "70B"
   maxTokens: 8192
   modelCapabilities:
-    - TEXT_GENERATION
-    - CHAT
+    - text-to-text
   
-  # Model format and framework information
+  # Model format and framework
   modelFormat:
     name: "safetensors"
-    version: "1.0.0"
+    version: "1"
   modelFramework:
     name: "transformers"
     version: "4.36.0"
+  quantization: "fp8"
   
   # Storage configuration
   storage:
-    # Where to download the model from
     storageUri: "oci://n/ai-models/b/llm-store/o/meta/llama-3.1-70b-instruct/"
-    
-    # Where to store it locally on each node
     path: "/raid/models/llama-3.1-70b-instruct"
-    
-    # Secret containing OCI credentials
+    schemaPath: "config.json"
     storageKey: "oci-model-credentials"
     
-    # OCI-specific parameters
     parameters:
       region: "us-phoenix-1"
       auth_type: "InstancePrincipal"
     
-    # Only download to nodes with appropriate hardware
+    # Target appropriate hardware
     nodeSelector:
       node.kubernetes.io/instance-type: "GPU.A100.4"
       models.ome.io/storage-tier: "nvme"
     
-    # Advanced node selection rules
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
         - matchExpressions:
-          # Must have either A100 or H100 GPUs
           - key: "accelerator.nvidia.com/gpu-product"
             operator: In
             values: ["A100-SXM4-80GB", "H100-SXM5-80GB"]
-          # Must have at least 200GB available storage
           - key: "models.ome.io/available-storage"
             operator: Gt
             values: ["200Gi"]
-          # Must be in the correct availability zone
-          - key: "topology.kubernetes.io/zone"
-            operator: In
-            values: ["us-phoenix-1a", "us-phoenix-1b"]
   
-  # How the model can be served
-  servingMode:
-    - "On-demand"
-    - "Dedicated"
+  # Model-specific configuration
+  modelConfiguration: |
+    {
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "max_new_tokens": 2048
+    }
   
-  # Additional metadata for organization
+  # Additional metadata
   additionalMetadata:
     license: "Llama 3.1 Community License"
-    description: "Meta Llama 3.1 70B Instruct model optimized for chat and instruction following"
-    use_cases: "chat,assistant,instruction_following,code_generation"
+    description: "Meta Llama 3.1 70B Instruct model for chat and instruction following"
+    use_cases: "chat,assistant,instruction_following"
     cost_center: "ai-research"
     owner: "ml-platform-team"
 ```
 
-## Troubleshooting Common Issues
+## Fine-Tuned Models
 
-### Authentication Problems
+### FineTunedWeight Specification
 
-**Symptom**: Downloads fail with "403 Forbidden" or "401 Unauthorized" errors.
+FineTunedWeight resources reference BaseModels and add fine-tuning specific configuration:
 
-**Solution**: Verify your storage credentials. For OCI, ensure your Instance Principal or User Principal has the necessary permissions to read from the specified bucket. For Hugging Face, verify your access token is valid and has permission to access the model.
+```yaml
+apiVersion: ome.io/v1beta1
+kind: FineTunedWeight
+metadata:
+  name: llama-70b-finance-lora
+spec:
+  # Reference to base model
+  baseModelRef:
+    name: llama-3-70b-instruct
+    namespace: default
+  
+  # Fine-tuning configuration
+  modelType: LoRA
+  hyperParameters: |
+    {
+      "lora_rank": 16,
+      "lora_alpha": 32,
+      "learning_rate": 1e-4
+    }
+  
+  # Storage for fine-tuned weights
+  storage:
+    storageUri: oci://n/mycompany/b/fine-tuned/o/llama-70b-finance-lora/
+    path: /raid/fine-tuned/llama-70b-finance-lora
+  
+  # Training job reference
+  trainingJobRef:
+    name: llama-finance-training-job
+    namespace: training
+```
 
-### Node Selection Issues
+### FineTunedWeight Spec Attributes
 
-**Symptom**: Models never download, or only download to some nodes.
+| Attribute         | Type            | Description                                  |
+|-------------------|-----------------|----------------------------------------------|
+| `baseModelRef`    | ObjectReference | Reference to the base model                  |
+| `modelType`       | string          | Fine-tuning method (e.g., "LoRA", "Adapter") |
+| `hyperParameters` | RawExtension    | Fine-tuning hyperparameters as JSON          |
+| `configuration`   | RawExtension    | Additional configuration as JSON             |
+| `storage`         | StorageSpec     | Storage configuration for fine-tuned weights |
+| `trainingJobRef`  | ObjectReference | Reference to the training job                |
 
-**Solution**: Check your nodeSelector and nodeAffinity rules. Use `kubectl get nodes --show-labels` to see what labels your nodes actually have. Make sure at least some nodes match your selection criteria.
-
-### Storage Space Problems
-
-**Symptom**: Downloads fail with "no space left on device" errors.
-
-**Solution**: Ensure nodes have sufficient disk space. Large models can be 100GB or more. Consider using node affinity rules to target nodes with adequate storage.
-
-### Network Connectivity
-
-**Symptom**: Downloads timeout or fail with network errors.
-
-**Solution**: Verify that nodes can reach your storage endpoints. For OCI Object Storage, ensure nodes can reach the OCI API endpoints. For Hugging Face, ensure access to huggingface.co.
-
-### Model Format Issues
-
-**Symptom**: Models download but parsing fails.
-
-**Solution**: Verify the model directory contains a valid `config.json` file. If you have a custom model format, consider disabling automatic parsing and specifying metadata manually.
-
-## Best Practices for Production
-
-### Storage Strategy
-
-Use fast local storage (NVMe SSDs) for the model path to ensure quick model loading. Network storage can be slow and create bottlenecks during inference.
-
-Consider using OCI Object Storage or similar cloud storage for centralized model management, then cache locally on nodes for performance.
-
-### Security
-
-Store all credentials in Kubernetes Secrets, never in plain text in your YAML files. Use appropriate RBAC to control who can create and modify BaseModel resources.
-
-Consider using workload identity or instance principals instead of long-lived API keys when possible.
-
-### Resource Planning
-
-Large language models require significant storage and memory. Plan your node capacity accordingly. A 70B parameter model in float16 format requires about 140GB of storage and similar amounts of memory when loaded.
-
-Use node affinity to ensure models only go to nodes that can handle them. Don't put a 70B model on a node with only 32GB of RAM.
-
-### Monitoring
-
-Set up monitoring for the Model Agent metrics to track download success rates, duration, and failures. Create alerts for persistent download failures.
-
-Monitor node storage usage to ensure you don't run out of space as you add more models.
+## Best Practices
 
 ### Model Organization
 
-Use consistent naming conventions for your models. Include version information and parameter size in the name when helpful.
+- Use consistent naming conventions including version and parameter size
+- Use labels to organize models by team, use case, or model family
+- Use ClusterBaseModels for widely-used models, BaseModels for team-specific models
 
-Use labels and annotations to organize models by team, use case, or other relevant categories.
+### Resource Planning
 
-Consider using ClusterBaseModels for widely-used models and BaseModels for team-specific or experimental models.
+- Ensure nodes have sufficient storage (large models can be 100GB+)
+- Use node affinity to target appropriate hardware
+- Consider using fast local storage (NVMe SSDs) for model paths
 
-This comprehensive guide should give you everything you need to understand and effectively use OME's model management capabilities. The system is designed to handle the complexity of modern AI model deployment while providing the flexibility to work with your existing infrastructure and security requirements.
+### Security
+
+- Store all credentials in Kubernetes Secrets
+- Use workload identity or instance principals when possible
+- Implement appropriate RBAC for model resource management
+
+### Labels and Annotations
+
+- Use labels for filtering and organization
+- Use annotations for metadata that doesn't affect selection
+- Consider using `ome.io/skip-config-parsing` for custom models
+
+### Storage Configuration
+
+- Use appropriate storage backends for your infrastructure
+- Configure node selectors to target appropriate hardware
+- Set reasonable storage paths with sufficient capacity
+
+## Using Models in InferenceServices
+
+Once your BaseModel is ready, reference it in an InferenceService:
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-chat
+spec:
+  model:
+    name: llama-3-70b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 3
+```
+
+## Next Steps
+
+- [Deploy an Inference Service](/docs/tasks/run-workloads/deploy-inference-service/) using your BaseModel
+- [Model Agent Administration](/docs/administration/model-agent/) for operational details
+- [Advanced Storage Configuration](/docs/administration/storage/) for complex storage setups
+
+For detailed technical and operational information, see the [Administration](/docs/administration/) section.
