@@ -1,4 +1,4 @@
-module sigs.k8s.io/kueue/site
+module bitbucket.oci.oraclecorp.com/genaicore/ome/docs
 
 go 1.21
 

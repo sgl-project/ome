@@ -1,5 +1,5 @@
 {{ $valid_states := "alpha, beta, deprecated, stable" }}
-{{ $project := .Get "project" | default "Kueue" }}
+{{ $project := .Get "project" | default "OME" }}
 {{ $state := .Get "state" }}
 {{ $for_version := .Get "for_version" | default (.Page.Param "version")}}
 {{ $is_valid := strings.Contains $valid_states $state }}

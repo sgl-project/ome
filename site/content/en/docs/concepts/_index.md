@@ -3,7 +3,7 @@ title: "Concepts"
 linkTitle: "Concepts"
 weight: 4
 description: >
-  Core Kueue Concepts
+  Core OME Concepts
 no_list: true
 ---
 
