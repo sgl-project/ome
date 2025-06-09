@@ -52,7 +52,7 @@ spec:
         args: ["--host", "0.0.0.0", "--port", "8080"]
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.6.post5.b8dffec-cu124
       ports:
         - containerPort: 8080
           name: http1
@@ -68,11 +68,13 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp 4 \
+          --tp=4 \
           --mem-frac=0.95 \
-          --context-length=128000 \
-          --chat-template llama-4 \
-          --attention-backend fa3 \
+          --context-length=196608 \
+          --enable-multimodal \
+          --tool-call-parser=pythonic \
+          --chat-template=sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
+          --attention-backend=fa3 \
           --log-requests
       volumeMounts:
         - mountPath: /dev/shm
