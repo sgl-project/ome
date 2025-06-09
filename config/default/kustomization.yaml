@@ -14,7 +14,6 @@ resources:
 - ../manager
 - ../webhook
 - ../certmanager
-- ../model-controller
 - ../model-agent
 - ../resources
 
@@ -175,7 +174,6 @@ replacements:
 
 patches:
 - path: manager_image_patch.yaml
-- path: model_controller_image_patch.yaml
 - path: model_agent_image_patch.yaml
 - path: manager_auth_proxy_patch.yaml
 - path: isvc_mutatingwebhook_cainjection_patch.yaml

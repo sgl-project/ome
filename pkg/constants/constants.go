@@ -74,6 +74,8 @@ var (
 	DedicatedAiClusterFinalizer         = "dedicatedaiclusters.ome.io/finalizer"
 	ClusterCapacityReservationFinalizer = "clustercapacityreservations.ome.io/finalizer"
 	ReplicationJobFinalizer             = "replicationjobs.ome.io/finalizer"
+	BaseModelFinalizer                  = "basemodels.ome.io/finalizer"
+	ClusterBaseModelFinalizer           = "clusterbasemodels.ome.io/finalizer"
 )
 
 // OME Agent Constants
@@ -677,10 +679,15 @@ const (
 // Model Agent & Model Controller
 var (
 	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"
-	ModelsLabelPrefix         = "models.ome/"
+	ModelsLabelPrefix         = "models.ome/" // Legacy UID-based prefix (deprecated)
 	TargetInstanceShapes      = "models.ome.io/target-instance-shapes"
 	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
 	ObjectStorageUrlPrefix    = "oci://"
+
+	// New deterministic labeling system
+	ModelLabelDomain          = "models.ome.io"
+	ClusterBaseModelLabelType = "clusterbasemodel"
+	BaseModelLabelType        = "basemodel"
 )
 
 type TrainingStrategy string
@@ -988,6 +995,28 @@ func (c CheckResultType) String() string {
 
 func GetModelsLabelWithUid(uid types.UID) string {
 	return ModelsLabelPrefix + string(uid)
+}
+
+// GetClusterBaseModelLabel returns the deterministic label key for ClusterBaseModel
+// Format: models.ome.io/clusterbasemodel.{model_name}
+func GetClusterBaseModelLabel(modelName string) string {
+	return fmt.Sprintf("%s/%s.%s", ModelLabelDomain, ClusterBaseModelLabelType, modelName)
+}
+
+// GetBaseModelLabel returns the deterministic label key for BaseModel
+// Format: models.ome.io/{namespace_name}.basemodel.{model_name}
+func GetBaseModelLabel(namespace, modelName string) string {
+	return fmt.Sprintf("%s/%s.%s.%s", ModelLabelDomain, namespace, BaseModelLabelType, modelName)
+}
+
+// GetModelConfigMapKey returns the deterministic ConfigMap key for models
+// For ClusterBaseModel: clusterbasemodel.{model_name}
+// For BaseModel: {namespace}.basemodel.{model_name}
+func GetModelConfigMapKey(namespace, modelName string, isClusterBaseModel bool) string {
+	if isClusterBaseModel {
+		return fmt.Sprintf("%s.%s", ClusterBaseModelLabelType, modelName)
+	}
+	return fmt.Sprintf("%s.%s.%s", namespace, BaseModelLabelType, modelName)
 }
 
 // GetRawServiceLabel generate native service label

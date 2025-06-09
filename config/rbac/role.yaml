@@ -329,6 +329,7 @@ rules:
   - ome.io
   resources:
   - capacityreservations/finalizers
+  - clusterbasemodels/finalizers
   - clustercapacityreservations/finalizers
   - dedicatedaiclusters/finalizers
   verbs:

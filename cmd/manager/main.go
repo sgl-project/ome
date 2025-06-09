@@ -12,6 +12,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/project"
 	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/serviceaccount"
+	v1beta1basemodelcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/basemodel"
 	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
 	v1beta1capacityreservationcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/capacityreservation"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
@@ -379,6 +380,33 @@ func main() {
 		Recorder:  serviceAccountEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create ServiceAccount controller")
+		os.Exit(1)
+	}
+
+	// Setup BaseModel and ClusterBaseModel controllers with the manager
+	baseModelEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up BaseModel controller")
+	baseModelEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("BaseModel"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: baseModelEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create BaseModel controller")
+		os.Exit(1)
+	}
+
+	clusterBaseModelEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up ClusterBaseModel controller")
+	clusterBaseModelEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("ClusterBaseModel"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: clusterBaseModelEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create ClusterBaseModel controller")
 		os.Exit(1)
 	}
 

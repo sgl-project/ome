@@ -99,11 +99,21 @@ func (m *ModelConfigUpdater) getOrNewConfigMap() (*corev1.ConfigMap, bool, error
 		data := make(map[string]string)
 		labels := make(map[string]string)
 		labels[constants.ModelStatusConfigMapLabel] = "true"
+
+		// Add node name as label for easier querying
+		labels["node"] = m.nodeName
+
+		annotations := make(map[string]string)
+		// Add annotation to track which node this ConfigMap belongs to
+		annotations["models.ome.io/node-name"] = m.nodeName
+		annotations["models.ome.io/managed-by"] = "model-agent"
+
 		return &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      m.nodeName,
-				Namespace: m.namespace,
-				Labels:    labels,
+				Name:        m.nodeName,
+				Namespace:   m.namespace,
+				Labels:      labels,
+				Annotations: annotations,
 			},
 			Data: data,
 		}, true, nil
@@ -115,25 +125,39 @@ func (m *ModelConfigUpdater) getOrNewConfigMap() (*corev1.ConfigMap, bool, error
 // createOrUpdateConfigMap creates or updates the ConfigMap with model configuration data
 func (m *ModelConfigUpdater) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *ModelConfigOp, needCreate bool) error {
 	var modelName, namespace, modelInfo string
+	var isClusterBaseModel bool
 
 	// Get the model name and namespace based on the model type
 	if op.BaseModel != nil {
 		modelName = op.BaseModel.Name
 		namespace = op.BaseModel.Namespace
 		modelInfo = fmt.Sprintf("BaseModel %s/%s", namespace, modelName)
+		isClusterBaseModel = false
 	} else {
 		modelName = op.ClusterBaseModel.Name
 		namespace = ""
 		modelInfo = fmt.Sprintf("ClusterBaseModel %s", modelName)
+		isClusterBaseModel = true
 	}
 
-	// Get the unique key for this model
-	key := GetModelKey(namespace, modelName)
-	m.logger.Debugf("Using key '%s' for %s", key, modelInfo)
+	// Get the new deterministic key for this model
+	key := constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
+	m.logger.Debugf("Using new deterministic key '%s' for %s", key, modelInfo)
 
 	if configMap.Data == nil {
 		m.logger.Debugf("ConfigMap Data is nil, initializing it for %s", modelInfo)
 		configMap.Data = make(map[string]string)
+	}
+
+	// Check if there's already an entry for this model using the old format
+	// Support backward compatibility during transition
+	oldKey := GetModelKey(namespace, modelName)
+	if oldKey != key {
+		if oldData, exists := configMap.Data[oldKey]; exists {
+			m.logger.Infof("Migrating model entry from old key '%s' to new key '%s' for %s", oldKey, key, modelInfo)
+			configMap.Data[key] = oldData
+			delete(configMap.Data, oldKey)
+		}
 	}
 
 	// First, check if there's already an entry for this model
@@ -228,18 +252,25 @@ func (m *ModelConfigUpdater) DeleteModelConfig(op *ModelConfigOp) error {
 
 	// Get the model name and namespace based on the model type
 	var modelName, namespace string
+	var isClusterBaseModel bool
+
 	if op.BaseModel != nil {
 		modelName = op.BaseModel.Name
 		namespace = op.BaseModel.Namespace
+		isClusterBaseModel = false
 	} else {
 		modelName = op.ClusterBaseModel.Name
 		namespace = ""
+		isClusterBaseModel = true
 	}
 
-	// Get the unique key for this model
-	key := GetModelKey(namespace, modelName)
+	// Get the new deterministic key for this model
+	key := constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
 
-	// Check if the key exists in the ConfigMap
+	// Also check for the old key format for backward compatibility
+	oldKey := GetModelKey(namespace, modelName)
+
+	// Try the new key first
 	if existingData, exists := existingConfigMap.Data[key]; exists {
 		// If the entry exists in the new format, keep the status but remove the config
 		var modelEntry ModelEntry
@@ -266,6 +297,42 @@ func (m *ModelConfigUpdater) DeleteModelConfig(op *ModelConfigOp) error {
 		}
 
 		m.logger.Debugf("Updated/deleted ConfigMap data[%s] for %s", key, modelInfo)
+	} else if oldKey != key && len(oldKey) > 0 {
+		// Check if it exists under the old key format
+		if existingData, exists := existingConfigMap.Data[oldKey]; exists {
+			// Migrate and process the old key
+			m.logger.Infof("Found model under old key '%s', migrating to new key '%s' for %s", oldKey, key, modelInfo)
+
+			// Try to process as new format
+			var modelEntry ModelEntry
+			if err := json.Unmarshal([]byte(existingData), &modelEntry); err == nil {
+				// Entry is in JSON format, just remove the config
+				modelEntry.Config = nil
+				if modelEntry.Status == "" {
+					modelEntry.Status = ModelStatusDeleted
+				}
+
+				updatedJSON, err := json.Marshal(modelEntry)
+				if err != nil {
+					m.logger.Errorf("Failed to marshal updated model entry for %s: %v", modelInfo, err)
+					return err
+				}
+
+				existingConfigMap.Data[key] = string(updatedJSON)
+			} else {
+				// Old string format, delete it
+				existingConfigMap.Data[key] = string(ModelStatusDeleted)
+			}
+
+			// Remove the old key
+			delete(existingConfigMap.Data, oldKey)
+
+			m.logger.Debugf("Migrated and updated/deleted ConfigMap data from old key '%s' to new key '%s' for %s", oldKey, key, modelInfo)
+		} else {
+			// Key doesn't exist in either format, nothing to do
+			m.logger.Debugf("No entry found for %s under either old or new key format, nothing to delete", modelInfo)
+			return nil
+		}
 	} else {
 		// Key doesn't exist, nothing to do
 		m.logger.Debugf("No entry found for %s, nothing to delete", modelInfo)

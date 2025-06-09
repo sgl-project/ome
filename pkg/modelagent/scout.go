@@ -166,6 +166,19 @@ func (w *Scount) downloadBaseModel(obj interface{}) {
 			return
 		}
 
+		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
+
+		// Update node label and ConfigMap to show "Updating" status before starting download
+		nodeLabelOp := &NodeLabelOp{
+			ModelStateOnNode: Updating,
+			BaseModel:        baseModel,
+		}
+		err = w.nodeLabeler.LabelNode(nodeLabelOp)
+		if err != nil {
+			w.logger.Fatalf("Error labeling node for BaseModels {%s in namespace %s}: %s", baseModel.Name, baseModel.Namespace, err.Error())
+			return
+		}
+
 		IsTensorrtLLMModel := baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
 		modelType := string(constants.ServingBaseModel)
@@ -173,7 +186,6 @@ func (w *Scount) downloadBaseModel(obj interface{}) {
 			modelType = modelTypeFromMetadata
 		}
 
-		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 		gopherTask := &GopherTask{
 			TaskType:  Download,
 			BaseModel: baseModel,
@@ -211,6 +223,17 @@ func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 		}
 
 		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
+
+		// Update node label and ConfigMap to show "Updating" status before starting download
+		nodeLabelOp := &NodeLabelOp{
+			ModelStateOnNode: Updating,
+			ClusterBaseModel: clusterBaseModel,
+		}
+		err = w.nodeLabeler.LabelNode(nodeLabelOp)
+		if err != nil {
+			w.logger.Fatalf("Error labeling node for ClusterBaseModels {%s}: %s", clusterBaseModel.Name, err.Error())
+			return
+		}
 
 		IsTensorrtLLMModel := clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
