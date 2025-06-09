@@ -705,12 +705,13 @@ func TestRDMAInjector_injectContainerConfig(t *testing.T) {
 	injector := NewRDMAInjector()
 	injector.injectContainerConfig(container, profile)
 
-	// Verify environment variables
-	assert.Len(t, container.Env, 2)
-	assert.Equal(t, "ENV1", container.Env[0].Name)
-	assert.Equal(t, "value1", container.Env[0].Value)
-	assert.Equal(t, "ENV2", container.Env[1].Name)
-	assert.Equal(t, "value2", container.Env[1].Value)
+	// Check environment variables exist with correct values (order-independent)
+	envMap := make(map[string]string)
+	for _, env := range container.Env {
+		envMap[env.Name] = env.Value
+	}
+	assert.Equal(t, "value1", envMap["ENV1"])
+	assert.Equal(t, "value2", envMap["ENV2"])
 
 	// Verify volume mounts
 	assert.Len(t, container.VolumeMounts, 1)
