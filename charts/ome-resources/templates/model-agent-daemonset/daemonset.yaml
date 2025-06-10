@@ -44,14 +44,6 @@ spec:
         - --num-download-worker
         - '2'
         env:
-        - name: REGION
-          value: {{ .Values.ome.ociETC.region }}
-        - name: REALM
-          value: {{ .Values.ome.ociETC.realm }}
-        - name: COMPARTMENTID
-          value: {{ .Values.ome.ociETC.serviceCompartmentId }}
-        - name: COMPARTMENT_ID
-          value: {{ .Values.ome.ociETC.serviceCompartmentId }}
         - name: NODE_NAME
           valueFrom:
             fieldRef:

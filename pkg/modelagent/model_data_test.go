@@ -8,50 +8,6 @@ import (
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 )
 
-func TestGetModelKey(t *testing.T) {
-	tests := []struct {
-		name        string
-		namespace   string
-		modelName   string
-		expectedKey string
-	}{
-		{
-			name:        "BaseModel case",
-			namespace:   "default",
-			modelName:   "llama-7b",
-			expectedKey: "default_llama-7b",
-		},
-		{
-			name:        "ClusterBaseModel case",
-			namespace:   "",
-			modelName:   "llama-70b",
-			expectedKey: "llama-70b",
-		},
-		{
-			name:        "Special characters in name",
-			namespace:   "ai-models",
-			modelName:   "mistral-7b-v0.1",
-			expectedKey: "ai-models_mistral-7b-v0.1",
-		},
-		{
-			name:        "Special characters in namespace",
-			namespace:   "user-123",
-			modelName:   "phi-2",
-			expectedKey: "user-123_phi-2",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			key := GetModelKey(tc.namespace, tc.modelName)
-			if key != tc.expectedKey {
-				t.Errorf("GetModelKey(%s, %s) = %s, want %s",
-					tc.namespace, tc.modelName, key, tc.expectedKey)
-			}
-		})
-	}
-}
-
 func TestConvertMetadataToModelConfig(t *testing.T) {
 	// Helper to create a string pointer
 	strPtr := func(s string) *string {

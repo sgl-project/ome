@@ -11,6 +11,7 @@ import (
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
+	v1beta1basemodelcontroller "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/basemodel"
 	v1beta1benchmarkjobcontroller "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/benchmark"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1isvccontroller "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice"
@@ -248,6 +249,33 @@ func main() {
 		Recorder:  eventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr, deployConfig, ingressConfig); err != nil {
 		setupLog.Error(err, "Failed to create InferenceService controller")
+		os.Exit(1)
+	}
+
+	// Setup BaseModel and ClusterBaseModel controllers with the manager
+	baseModelEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up BaseModel controller")
+	baseModelEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1basemodelcontroller.BaseModelReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("BaseModel"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: baseModelEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create BaseModel controller")
+		os.Exit(1)
+	}
+
+	clusterBaseModelEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up ClusterBaseModel controller")
+	clusterBaseModelEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1basemodelcontroller.ClusterBaseModelReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("ClusterBaseModel"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: clusterBaseModelEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create ClusterBaseModel controller")
 		os.Exit(1)
 	}
 

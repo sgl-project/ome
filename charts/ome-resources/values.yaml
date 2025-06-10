@@ -70,15 +70,6 @@ ome:
     vllmMedium:
       image: fra.ocir.io/idqj093njucb/official-vllm-openai
       tag: e3c664b
-  modelController:
-    serviceAccount: ome-model-controller
-    replicaCount: 3
-    nodeSelector: {}
-    tolerations: []
-    topologySpreadConstraints: []
-    affinity: {}
-    image: ord.ocir.io/idqj093njucb/model-controller
-    tag: *defaultVersion
   dac:
     reconcileWithKueue: true
     image: us-chicago-1.ocir.io/axoxdievda5j/genai-dac-dummy-image
@@ -89,8 +80,8 @@ ome:
     tag: *defaultVersion
 
     authType: InstancePrincipal
-    compartmentId: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
-    vaultId: ocid1.vault.oc1.ap-osaka-1.fzsn2sguaahse.abvwsljrmzc5vt7ya6qpzlormzkwzxsw45fa2fgtp7dqfgjbxib32z62f5pq
+    compartmentId: ocid1.compartment.oc1..dummy-compartment
+    vaultId: ocid1.vault.oc1.ap-osaka-1.dummy.dummy-vault
     region: ap-osaka-1
     modelInit:
       memoryRequest: 150Gi

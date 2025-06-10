@@ -119,14 +119,3 @@ func ConvertMetadataToModelConfig(metadata ModelMetadata) *ModelConfig {
 		Quantization:              quantization,
 	}
 }
-
-// GetModelKey returns a unique key for a model based on its namespace and name
-// This generates consistent keys for both BaseModel and ClusterBaseModel types
-func GetModelKey(namespace, name string) string {
-	if namespace == "" {
-		// For ClusterBaseModel, just use the name
-		return name
-	}
-	// For BaseModel, use namespace_name format
-	return namespace + "_" + name
-}

@@ -82,16 +82,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        - name: REGION
-          value: eu-frankfurt-1
-        - name: REALM
-          value: OC1
-        - name: COMPARTMENTID
-          value: >-
-            ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq
-        - name: COMPARTMENT_ID
-          value: >-
-            ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq
         volumeMounts:
         - name: host-models
           readOnly: false

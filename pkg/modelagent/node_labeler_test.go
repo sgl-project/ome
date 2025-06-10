@@ -2,7 +2,7 @@ package modelagent
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -71,25 +71,40 @@ func (m *MockNodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
 
 // Implements createOrUpdateConfigMap for testing
 func (m *MockNodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *NodeLabelOp, needCreate bool) error {
-	var key string
+	// Get the model name and namespace based on the model type
+	var modelName, namespace string
+	var isClusterBaseModel bool
+
 	if op.BaseModel != nil {
-		// '_' is not allowed in object namespace and name, so we can use it as a separator
-		key = fmt.Sprintf("%s_%s", op.BaseModel.Namespace, op.BaseModel.Name)
+		modelName = op.BaseModel.Name
+		namespace = op.BaseModel.Namespace
+		isClusterBaseModel = false
 	} else if op.ClusterBaseModel != nil {
-		key = op.ClusterBaseModel.Name
+		modelName = op.ClusterBaseModel.Name
+		namespace = ""
+		isClusterBaseModel = true
 	}
+
+	// Get the new deterministic key for this model
+	key := constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
 
 	if configMap.Data == nil {
 		configMap.Data = make(map[string]string)
 	}
 
 	switch op.ModelStateOnNode {
-	case Ready:
-		configMap.Data[key] = string(Ready)
-	case Updating:
-		configMap.Data[key] = string(Updating)
-	case Failed:
-		configMap.Data[key] = string(Failed)
+	case Ready, Updating, Failed:
+		// Create model entry with the new format
+		modelEntry := ModelEntry{
+			Name:   modelName,
+			Status: convertModelStateToStatus(op.ModelStateOnNode),
+			Config: nil,
+		}
+		entryJSON, err := json.Marshal(modelEntry)
+		if err != nil {
+			return err
+		}
+		configMap.Data[key] = string(entryJSON)
 	case Deleted:
 		delete(configMap.Data, key)
 	}
@@ -127,9 +142,9 @@ func TestLabelNode(t *testing.T) {
 				},
 			},
 			configMapExists:       false,
-			expectedNodeLabel:     constants.GetModelsLabelWithUid("test-uid"),
+			expectedNodeLabel:     constants.GetClusterBaseModelLabel("test-model"),
 			expectedNodeValue:     string(Ready),
-			expectedConfigMapData: map[string]string{"test-model": string(Ready)},
+			expectedConfigMapData: map[string]string{constants.GetModelConfigMapKey("", "test-model", true): `{"name":"test-model","status":"Ready"}`},
 		},
 		{
 			name: "Add Ready label with existing ConfigMap",
@@ -144,11 +159,11 @@ func TestLabelNode(t *testing.T) {
 			},
 			configMapExists:       true,
 			existingConfigMapData: map[string]string{"existing-model": string(Ready)},
-			expectedNodeLabel:     constants.GetModelsLabelWithUid("test-uid"),
+			expectedNodeLabel:     constants.GetClusterBaseModelLabel("test-model"),
 			expectedNodeValue:     string(Ready),
 			expectedConfigMapData: map[string]string{
 				"existing-model": string(Ready),
-				"test-model":     string(Ready),
+				constants.GetModelConfigMapKey("", "test-model", true): `{"name":"test-model","status":"Ready"}`,
 			},
 		},
 		{
@@ -165,11 +180,11 @@ func TestLabelNode(t *testing.T) {
 			},
 			configMapExists:       true,
 			existingConfigMapData: map[string]string{"existing-model": string(Ready)},
-			expectedNodeLabel:     constants.GetModelsLabelWithUid("test-uid"),
+			expectedNodeLabel:     constants.GetBaseModelLabel("test-namespace", "test-model"),
 			expectedNodeValue:     string(Updating),
 			expectedConfigMapData: map[string]string{
-				"existing-model":            string(Ready),
-				"test-namespace_test-model": string(Updating),
+				"existing-model": string(Ready),
+				constants.GetModelConfigMapKey("test-namespace", "test-model", false): `{"name":"test-model","status":"Updating"}`,
 			},
 		},
 		{
@@ -185,11 +200,11 @@ func TestLabelNode(t *testing.T) {
 			},
 			configMapExists:       true,
 			existingConfigMapData: map[string]string{"existing-model": string(Ready)},
-			expectedNodeLabel:     constants.GetModelsLabelWithUid("test-uid"),
+			expectedNodeLabel:     constants.GetClusterBaseModelLabel("test-model"),
 			expectedNodeValue:     string(Failed),
 			expectedConfigMapData: map[string]string{
 				"existing-model": string(Ready),
-				"test-model":     string(Failed),
+				constants.GetModelConfigMapKey("", "test-model", true): `{"name":"test-model","status":"Failed"}`,
 			},
 		},
 		{
@@ -206,13 +221,13 @@ func TestLabelNode(t *testing.T) {
 			configMapExists: true,
 			existingConfigMapData: map[string]string{
 				"existing-model": string(Ready),
-				"test-model":     string(Ready),
+				constants.GetModelConfigMapKey("", "test-model", true): `{"name":"test-model","status":"Ready"}`,
 			},
-			expectedNodeLabel: constants.GetModelsLabelWithUid("test-uid"),
+			expectedNodeLabel: constants.GetClusterBaseModelLabel("test-model"),
 			// No expected value since label should be removed
 			expectedConfigMapData: map[string]string{
 				"existing-model": string(Ready),
-				// "test-model" key should be removed
+				// model entry should be removed for Deleted state
 			},
 		},
 	}
@@ -307,7 +322,7 @@ func TestGetPatchPayloadBytes(t *testing.T) {
 					},
 				},
 			},
-			expectedBytes: `[{"op":"add","path":"/metadata/labels/models.ome~1test-uid","value":"Ready"}]`,
+			expectedBytes: `[{"op":"add","path":"/metadata/labels/models.ome.io~1clusterbasemodel.test-model","value":"Ready"}]`,
 		},
 		{
 			name: "Updating state with BaseModel",
@@ -321,7 +336,7 @@ func TestGetPatchPayloadBytes(t *testing.T) {
 					},
 				},
 			},
-			expectedBytes: `[{"op":"add","path":"/metadata/labels/models.ome~1test-uid","value":"Updating"}]`,
+			expectedBytes: `[{"op":"add","path":"/metadata/labels/models.ome.io~1test-namespace.basemodel.test-model","value":"Updating"}]`,
 		},
 		{
 			name: "Failed state with ClusterBaseModel",
@@ -334,7 +349,7 @@ func TestGetPatchPayloadBytes(t *testing.T) {
 					},
 				},
 			},
-			expectedBytes: `[{"op":"add","path":"/metadata/labels/models.ome~1test-uid","value":"Failed"}]`,
+			expectedBytes: `[{"op":"add","path":"/metadata/labels/models.ome.io~1clusterbasemodel.test-model","value":"Failed"}]`,
 		},
 		{
 			name: "Deleted state with ClusterBaseModel",
@@ -347,34 +362,7 @@ func TestGetPatchPayloadBytes(t *testing.T) {
 					},
 				},
 			},
-			expectedBytes: `[{"op":"remove","path":"/metadata/labels/models.ome~1test-uid"}]`,
-		},
-		{
-			name: "Empty UID in ClusterBaseModel",
-			op: &NodeLabelOp{
-				ModelStateOnNode: Ready,
-				ClusterBaseModel: &v1beta1.ClusterBaseModel{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-model",
-						// Empty UID
-					},
-				},
-			},
-			expectedErrMsg: "node labeler get ClusterBaseModel test-model with empty UID",
-		},
-		{
-			name: "Empty UID in BaseModel",
-			op: &NodeLabelOp{
-				ModelStateOnNode: Ready,
-				BaseModel: &v1beta1.BaseModel{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-model",
-						Namespace: "test-namespace",
-						// Empty UID
-					},
-				},
-			},
-			expectedErrMsg: "node labeler get BaseModel test-model in namespace test-namespace with empty UID",
+			expectedBytes: `[{"op":"remove","path":"/metadata/labels/models.ome.io~1clusterbasemodel.test-model"}]`,
 		},
 		{
 			name: "No models provided",
