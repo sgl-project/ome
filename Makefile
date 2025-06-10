@@ -248,12 +248,6 @@ ome-manager: ## 🏗️  Build ome-manager binary.
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/manager ./cmd/manager
 	@echo "✅ Build complete"
 
-.PHONY: model-controller
-model-controller: ## 🎮 Build model-controller binary.
-	@echo "🎮 Building model-controller..."
-	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-controller ./cmd/model-controller
-	@echo "✅ Build complete"
-
 .PHONY: model-agent
 model-agent: ## 🤖 Build model-agent binary.
 	@echo "🤖 Building model-agent..."
@@ -277,11 +271,6 @@ run-ome-manager: manifests generate fmt vet ## Run ome-manager binary from local
 	@echo "🏃‍♂️ Running ome-manager..."
 	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/manager/main.go
 
-.PHONY: run-model-controller
-run-model-controller: fmt vet ## Run model-controller binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
-	@echo "🏃‍♂️ Running model-controller..."
-	$(GO_BUILD_ENV) $(GO_CMD) run ./cmd/model-controller/main.go
-
 .PHONY: run-model-agent
 run-model-agent: fmt vet ## Run model-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
 	@echo "🏃‍♂️ Running model-agent..."
@@ -303,18 +292,10 @@ run-ome-agent-fine-tuned-adapter: fmt vet ome-agent ## Run ome-agent binary from
 	@echo "🏃‍♂️ Running ome-agent fine-tuned-adapter..."
 	bin/ome-agent fine-tuned-adapter -d -c config/ome-agent/ome-agent.yaml
 
-
-
 .PHONY: ome-image
 ome-image: fmt vet ## Build ome-manager image.
 	@echo "🚀 Building ome-manager image..."
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
-	@echo "✅ Image built"
-
-.PHONY: model-controller-image
-model-controller-image: fmt vet ## Build model-controller image.
-	@echo "🚀 Building model-controller image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/model-controller.Dockerfile -t $(REGISTRY)/model-controller:$(TAG)
 	@echo "✅ Image built"
 
 .PHONY: model-agent-image
@@ -426,12 +407,6 @@ push-manager-image: ome-image ## Push manager image to registry.
 	$(DOCKER_BUILD_CMD) push $(MANAGER_IMG)
 	@echo "✅ Image pushed"
 
-.PHONY: push-model-controller-image
-push-model-controller-image: model-controller-image ## Push model-controller image to registry.
-	@echo "🚀 Pushing model-controller image to registry..."
-	$(DOCKER_BUILD_CMD) push $(REGISTRY)/model-controller:$(TAG)
-	@echo "✅ Image pushed"
-
 .PHONY: push-model-agent-image
 push-model-agent-image: model-agent-image ## Push model-agent image to registry.
 	@echo "🚀 Pushing model-agent image to registry..."
@@ -455,13 +430,6 @@ patch-manager-dev: push-manager-image ## Deploy manager image to dev cluster.
 	@echo "🔄 Patching manager image to dev cluster..."
 	echo "Patch manager image to dev: $(MANAGER_IMG)"
 	./hack/patch_image_dev.sh $(MANAGER_IMG) manager
-	@echo "✅ Patch complete"
-
-.PHONY: patch-model-controller-dev
-patch-model-controller-dev: push-model-controller-image ## Deploy model-controller image to dev cluster.
-	@echo "🔄 Patching model-controller image to dev cluster..."
-	echo "Patch model-controller image to dev: $(REGISTRY)/model-controller:$(TAG)"
-	./hack/patch_image_dev.sh $(REGISTRY)/model-controller:$(TAG) model_controller
 	@echo "✅ Patch complete"
 
 .PHONY: patch-model-agent-dev
