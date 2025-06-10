@@ -204,7 +204,7 @@ func TestChunkUnit(t *testing.T) {
 	})
 
 	t.Run("maxPartRetries constant", func(t *testing.T) {
-		assert.Equal(t, 3, maxPartRetries)
+		assert.Equal(t, 5, maxPartRetries)
 	})
 }
 

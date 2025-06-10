@@ -1,7 +1,7 @@
 package replica
 
 import (
-	"path/filepath"
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -50,7 +50,7 @@ func (r *ReplicaAgent) Start() error {
 
 	startTime := time.Now()
 	totalObjects := len(sourceObjs)
-	results := r.replicateObjects(sourceObjs, totalObjects)
+	results := r.replicateObjects(sourceObjs)
 
 	successCount, errorCount := 0, 0
 	for result := range results {
@@ -78,7 +78,7 @@ func (r *ReplicaAgent) listSourceObjects() ([]objectstorage.ObjectSummary, error
 	return sourceObjs, nil
 }
 
-func (r *ReplicaAgent) replicateObjects(objects []objectstorage.ObjectSummary, totalObjects int) chan *ReplicationResult {
+func (r *ReplicaAgent) replicateObjects(objects []objectstorage.ObjectSummary) chan *ReplicationResult {
 	r.logger.Info("Starting replication to target")
 
 	objChan := r.prepareObjectChannel(objects)
@@ -89,7 +89,7 @@ func (r *ReplicaAgent) replicateObjects(objects []objectstorage.ObjectSummary, t
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processObjectReplication(objChan, resultChan, totalObjects)
+			r.processObjectReplication(objChan, resultChan)
 		}()
 	}
 
@@ -101,12 +101,11 @@ func (r *ReplicaAgent) replicateObjects(objects []objectstorage.ObjectSummary, t
 	return resultChan
 }
 
-func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.ObjectSummary, results chan<- *ReplicationResult, totalObjects int) {
+func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.ObjectSummary, results chan<- *ReplicationResult) {
 	for obj := range objects {
 		if *obj.Name == r.Config.SourceObjectStoreURI.Prefix {
 			continue
 		}
-
 		srcObj := ociobjectstore.ObjectURI{
 			Namespace:  r.Config.SourceObjectStoreURI.Namespace,
 			BucketName: r.Config.SourceObjectStoreURI.BucketName,
@@ -114,53 +113,20 @@ func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.Obj
 		}
 		result := ReplicationResult{source: srcObj}
 
-		downloadStart := time.Now()
-		err := r.downloadObject(srcObj, &obj)
-		downloadDuration := time.Since(downloadStart)
-		if err != nil {
-			result.error = err
-			results <- &result
-			continue
-		}
-		r.logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
-
 		targetObj := r.getTargetObjectURI(*obj.Name)
 		result.target = targetObj
 
-		uploadStart := time.Now()
-		err = r.uploadObject(targetObj, *obj.Name)
-		uploadDuration := time.Since(uploadStart)
+		copyStart := time.Now()
+		err := r.Config.ObjectStorageDataStore.CopyObjectAndWait(context.Background(), srcObj, targetObj, nil, nil)
+		copyDuration := time.Since(copyStart)
 		if err != nil {
 			result.error = err
 		} else {
-			r.logger.Infof("Uploaded object to %s in %v", targetObj.ObjectName, uploadDuration)
+			r.logger.Infof("Copied object from %s to %s in %v",
+				srcObj.ObjectName, targetObj.ObjectName, copyDuration)
 		}
 		results <- &result
 	}
-}
-
-func (r *ReplicaAgent) downloadObject(srcObj ociobjectstore.ObjectURI, obj *objectstorage.ObjectSummary) error {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	err := r.Config.ObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
-		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
-		ociobjectstore.WithThreads(DefaultDownloadThreads))
-	if err != nil {
-		r.logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
-		return err
-	}
-	return nil
-}
-
-func (r *ReplicaAgent) uploadObject(targetObj ociobjectstore.ObjectURI, objName string) error {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
-	curFilePath := filepath.Join(r.Config.LocalPath, objName)
-
-	err := r.Config.ObjectStorageDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
-	if err != nil {
-		r.logger.Errorf("Failed to upload object %s: %+v", targetObj.ObjectName, err)
-		return err
-	}
-	return nil
 }
 
 func (r *ReplicaAgent) prepareObjectChannel(objects []objectstorage.ObjectSummary) chan objectstorage.ObjectSummary {
@@ -180,6 +146,7 @@ func (r *ReplicaAgent) getTargetObjectURI(objName string) ociobjectstore.ObjectU
 		Namespace:  r.Config.TargetObjectStoreURI.Namespace,
 		BucketName: r.Config.TargetObjectStoreURI.BucketName,
 		ObjectName: targetObjName,
+		Region:     r.Config.TargetObjectStoreURI.Region,
 	}
 }
 

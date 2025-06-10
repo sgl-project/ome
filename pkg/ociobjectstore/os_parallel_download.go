@@ -19,7 +19,7 @@ type ChunkUnit int
 
 const (
 	MB             ChunkUnit = 1000000
-	maxPartRetries int       = 3
+	maxPartRetries int       = 5
 )
 
 // PrepareDownloadPart holds just the info needed to construct a GetObjectRequest at download time

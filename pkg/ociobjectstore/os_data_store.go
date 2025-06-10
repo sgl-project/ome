@@ -54,6 +54,9 @@ const (
 	maxRetries         = 3
 	retryDelay         = 2 * time.Second
 	defaultThresholdMB = 100
+	MaxInterval        = 30 * time.Second
+	MaxElapsedTime     = 0
+	defaultTimeout     = 120 * time.Minute
 )
 
 func DefaultDownloadOptions() DownloadOptions {

@@ -39,6 +39,7 @@ type PredictorExtensionSpec struct {
 	// +optional
 	RuntimeVersion *string `json:"runtimeVersion,omitempty"`
 	// Protocol version to use by the predictor (i.e. v1 or v2 or grpc-v1 or grpc-v2)
+	// +kubebuilder:default="openAI"
 	// +optional
 	ProtocolVersion *constants.InferenceServiceProtocol `json:"protocolVersion,omitempty"`
 	// Container enables overrides for the predictor.
