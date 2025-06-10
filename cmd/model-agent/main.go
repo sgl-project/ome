@@ -76,12 +76,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 
 	_ = v.BindPFlags(rootCmd.PersistentFlags())
-
 	v.AutomaticEnv()
-	// Finally, add any explicit bindings
-	_ = v.BindEnv("region", "REGION") // Note: use lowercase keys for consistency
-	_ = v.BindEnv("compartment_id", "COMPARTMENT_ID")
-	_ = v.BindEnv("realm", "REALM")
 }
 
 // initConfig validates required environment variables

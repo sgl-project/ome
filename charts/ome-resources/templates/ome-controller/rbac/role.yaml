@@ -213,6 +213,12 @@ rules:
   - patch
   - update
 - apiGroups:
+  - ome.io
+  resources:
+  - clusterbasemodels/finalizers
+  verbs:
+  - update
+- apiGroups:
   - ray.io
   resources:
   - rayclusters

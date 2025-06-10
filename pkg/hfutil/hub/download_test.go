@@ -682,12 +682,12 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-// blockingReader blocks indefinitely to test context cancellation
+// blockingReader blocks long enough to test context cancellation
 type blockingReader struct{}
 
 func (r *blockingReader) Read(p []byte) (n int, err error) {
-	// Block indefinitely by sleeping
-	time.Sleep(1 * time.Hour)
+	// Block long enough to allow context to timeout but not hang tests
+	time.Sleep(50 * time.Millisecond)
 	return 0, io.EOF
 }
 

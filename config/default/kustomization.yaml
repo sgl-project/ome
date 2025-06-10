@@ -14,9 +14,7 @@ resources:
 - ../manager
 - ../webhook
 - ../certmanager
-- ../model-controller
 - ../model-agent
-- ../resources
 
 generatorOptions:
   disableNameSuffixHash: true
