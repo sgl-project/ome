@@ -611,13 +611,6 @@ concurrency(https://knative.dev/docs/serving/autoscaling/concurrency).</p>
    <p>CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision</p>
 </td>
 </tr>
-<tr><td><code>logger</code><br/>
-<a href="#ome-io-v1beta1-LoggerSpec"><code>LoggerSpec</code></a>
-</td>
-<td>
-   <p>Activate request/response logging and logger configurations</p>
-</td>
-</tr>
 <tr><td><code>labels</code><br/>
 <code>map[string]string</code>
 </td>
@@ -1414,61 +1407,6 @@ Provides fine-grained control over the container that executes the leader node's
 
 
 <p>LifeCycleState enum</p>
-
-
-
-
-## `LoggerSpec`     {#ome-io-v1beta1-LoggerSpec}
-    
-
-**Appears in:**
-
-- [ComponentExtensionSpec](#ome-io-v1beta1-ComponentExtensionSpec)
-
-
-<p>LoggerSpec specifies optional payload logging available for all components
-Configures how request and response payloads are logged for auditing and debugging.</p>
-
-
-<table class="table">
-<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
-<tbody>
-  
-<tr><td><code>url</code><br/>
-<code>string</code>
-</td>
-<td>
-   <p>URL to send logging events
-The endpoint where log data will be sent for external processing or storage.</p>
-</td>
-</tr>
-<tr><td><code>mode</code><br/>
-<a href="#ome-io-v1beta1-LoggerType"><code>LoggerType</code></a>
-</td>
-<td>
-   <p>Specifies the scope of the loggers. <!-- raw HTML omitted -->
-Valid values are: <!-- raw HTML omitted --></p>
-<ul>
-<li>&quot;all&quot; (default): log both request and response; <!-- raw HTML omitted --></li>
-<li>&quot;request&quot;: log only request; <!-- raw HTML omitted --></li>
-<li>&quot;response&quot;: log only response <!-- raw HTML omitted --></li>
-</ul>
-</td>
-</tr>
-</tbody>
-</table>
-
-## `LoggerType`     {#ome-io-v1beta1-LoggerType}
-    
-(Alias of `string`)
-
-**Appears in:**
-
-- [LoggerSpec](#ome-io-v1beta1-LoggerSpec)
-
-
-<p>LoggerType controls the scope of log publishing
-Determines which parts of the request-response cycle are logged.</p>
 
 
 
@@ -2650,20 +2588,6 @@ Provides complete Kubernetes container configuration for the primary execution c
 
 
 
-## `ServerType`     {#ome-io-v1beta1-ServerType}
-    
-(Alias of `string`)
-
-**Appears in:**
-
-- [ServingAdapter](#ome-io-v1beta1-ServingAdapter)
-
-
-<p>ServerType constant for specifying the runtime name</p>
-
-
-
-
 ## `ServiceMetadata`     {#ome-io-v1beta1-ServiceMetadata}
     
 
@@ -2708,44 +2632,6 @@ Supported values: &quot;H100&quot;, &quot;A100&quot;, &quot;MI300&quot;, &quot;A
 </td>
 <td>
    <p>GpuCount indicates the number of GPU cards available on the model server.</p>
-</td>
-</tr>
-</tbody>
-</table>
-
-## `ServingAdapter`     {#ome-io-v1beta1-ServingAdapter}
-    
-
-**Appears in:**
-
-- [ServingRuntimeSpec](#ome-io-v1beta1-ServingRuntimeSpec)
-
-
-
-<table class="table">
-<thead><tr><th width="30%">Field</th><th>Description</th></tr></thead>
-<tbody>
-  
-<tr><td><code>serverType</code> <B>[Required]</B><br/>
-<a href="#ome-io-v1beta1-ServerType"><code>ServerType</code></a>
-</td>
-<td>
-   <p>ServerType must be one of the supported built-in types such as &quot;triton&quot; or &quot;mlserver&quot;,
-and the runtime's container must have the same name</p>
-</td>
-</tr>
-<tr><td><code>modelLoadingTimeoutMillis</code> <B>[Required]</B><br/>
-<code>int</code>
-</td>
-<td>
-   <p>Timeout for model loading operations in milliseconds</p>
-</td>
-</tr>
-<tr><td><code>env</code> <B>[Required]</B><br/>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core"><code>[]k8s.io/api/core/v1.EnvVar</code></a>
-</td>
-<td>
-   <p>Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)</p>
 </td>
 </tr>
 </tbody>
@@ -2995,13 +2881,6 @@ are hammered out.</p>
 </td>
 <td>
    <p>WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster</p>
-</td>
-</tr>
-<tr><td><code>servingAdapter</code><br/>
-<a href="#ome-io-v1beta1-ServingAdapter"><code>ServingAdapter</code></a>
-</td>
-<td>
-   <p>Provide the details about built-in runtime adapter</p>
 </td>
 </tr>
 </tbody>

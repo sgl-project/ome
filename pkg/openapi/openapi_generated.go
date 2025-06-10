@@ -41,7 +41,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":     schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig":                 schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LeaderSpec":                 schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
-		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec":                 schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelCopies":                schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":         schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelFormat":                schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
@@ -60,7 +59,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
-		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingAdapter":             schema_pkg_apis_ome_v1beta1_ServingAdapter(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
 		"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":      schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
@@ -873,12 +871,6 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -926,7 +918,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec", "k8s.io/api/apps/v1.DeploymentStrategy"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "k8s.io/api/apps/v1.DeploymentStrategy"},
 	}
 }
 
@@ -1534,12 +1526,6 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -1605,7 +1591,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -2197,12 +2183,6 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -2268,7 +2248,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -3348,33 +3328,6 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_LoggerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LoggerSpec specifies optional payload logging available for all components Configures how request and response payloads are logged for auditing and debugging.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"url": {
-						SchemaProps: spec.SchemaProps{
-							Description: "URL to send logging events The endpoint where log data will be sent for external processing or storage.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"mode": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specifies the scope of the loggers. <br /> Valid values are: <br /> - \"all\" (default): log both request and response; <br /> - \"request\": log only request; <br /> - \"response\": log only response <br />",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
 	}
 }
 
@@ -5588,12 +5541,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -5647,7 +5594,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -6175,12 +6122,6 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -6250,7 +6191,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.LoggerSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -6595,53 +6536,6 @@ func schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref common.ReferenceCallback) c
 				Required: []string{"engine", "version", "gpuType", "gpuCount"},
 			},
 		},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_ServingAdapter(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"serverType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"modelLoadingTimeoutMillis": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Timeout for model loading operations in milliseconds",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"env": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/api/core/v1.EnvVar"},
 	}
 }
 
@@ -7218,17 +7112,11 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerPodSpec"),
 						},
 					},
-					"servingAdapter": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Provide the details about built-in runtime adapter",
-							Ref:         ref("github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingAdapter"),
-						},
-					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ServingAdapter", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 

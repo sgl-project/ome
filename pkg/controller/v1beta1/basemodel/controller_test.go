@@ -561,10 +561,7 @@ func TestMapConfigMapToModelRequests(t *testing.T) {
 			keyPrefix:     "basemodel",
 			isNamespaced:  true,
 			expectedCount: 2,
-			expectedFirst: &types.NamespacedName{
-				Namespace: "default",
-				Name:      "my-model",
-			},
+			expectedFirst: nil, // Don't check specific order since map iteration is random
 		},
 		{
 			name: "ClusterBaseModel mapping",
@@ -637,6 +634,25 @@ func TestMapConfigMapToModelRequests(t *testing.T) {
 
 			if tt.expectedFirst != nil && len(requests) > 0 {
 				g.Expect(requests[0].NamespacedName).To(gomega.Equal(*tt.expectedFirst))
+			} else if tt.expectedCount > 0 {
+				// Instead of checking order, verify that all expected requests are present
+				// For BaseModel mapping case
+				if tt.name == "BaseModel mapping" {
+					foundDefault := false
+					foundTestNs := false
+
+					for _, req := range requests {
+						if req.NamespacedName.Namespace == "default" && req.NamespacedName.Name == "my-model" {
+							foundDefault = true
+						}
+						if req.NamespacedName.Namespace == "test-ns" && req.NamespacedName.Name == "other-model" {
+							foundTestNs = true
+						}
+					}
+
+					g.Expect(foundDefault).To(gomega.BeTrue(), "Should find default.my-model")
+					g.Expect(foundTestNs).To(gomega.BeTrue(), "Should find test-ns.other-model")
+				}
 			}
 		})
 	}

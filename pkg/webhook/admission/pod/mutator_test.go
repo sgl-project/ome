@@ -57,14 +57,6 @@ func TestMutator_Handle(t *testing.T) {
 				},
 				Immutable: nil,
 				Data: map[string]string{
-					LoggerConfigMapKeyName: `{
-        				"image" : "ome/agent:latest",
-        				"memoryRequest": "100Mi",
-        				"memoryLimit": "1Gi",
-        				"cpuRequest": "100m",
-        				"cpuLimit": "1",
-        				"defaultUrl": "http://default-broker"
-    				}`,
 					constants.AgentConfigMapKeyName: `{
         				"image" : "ome/agent:latest",
         				"memoryRequest": "100Mi",
@@ -148,14 +140,6 @@ func TestMutator_Handle(t *testing.T) {
 				},
 				Immutable: nil,
 				Data: map[string]string{
-					LoggerConfigMapKeyName: `{
-        				"image" : "ome/agent:latest",
-        				"memoryRequest": "100Mi",
-        				"memoryLimit": "1Gi",
-        				"cpuRequest": "100m",
-        				"cpuLimit": "1",
-        				"defaultUrl": "http://default-broker"
-    				}`,
 					constants.AgentConfigMapKeyName: `{
         				"image" : "ome/agent:latest",
         				"memoryRequest": "100Mi",
@@ -257,14 +241,6 @@ func TestMutator_Handle(t *testing.T) {
 				},
 				Immutable: nil,
 				Data: map[string]string{
-					LoggerConfigMapKeyName: `{
-        				"image" : "ome/agent:latest",
-        				"memoryRequest": "100Mi",
-        				"memoryLimit": "1Gi",
-        				"cpuRequest": "100m",
-        				"cpuLimit": "1",
-        				"defaultUrl": "http://default-broker"
-    				}`,
 					constants.AgentConfigMapKeyName: `{
         				"image" : "ome/agent:latest",
         				"memoryRequest": "100Mi",

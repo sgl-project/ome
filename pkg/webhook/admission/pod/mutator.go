@@ -74,21 +74,6 @@ func (mutator *Mutator) Handle(ctx context.Context, req admission.Request) admis
 
 func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 
-	loggerConfig, err := getLoggerConfigs(configMap)
-	if err != nil {
-		return err
-	}
-
-	agentConfig, err := getAgentConfigs(configMap)
-	if err != nil {
-		return err
-	}
-
-	agentInjector := &AgentInjector{
-		agentConfig:  agentConfig,
-		loggerConfig: loggerConfig,
-	}
-
 	metricsAggregator, err := newMetricsAggregator(configMap)
 	if err != nil {
 		return err
@@ -103,7 +88,6 @@ func (mutator *Mutator) mutate(pod *v1.Pod, configMap *v1.ConfigMap) error {
 	rdmaInjector := NewRDMAInjector()
 
 	mutators := []func(pod *v1.Pod) error{
-		agentInjector.InjectAgent,
 		metricsAggregator.InjectMetricsAggregator,
 		modelInitInjector.InjectModelInit,
 		fineTunedAdapterInjector.InjectFineTunedAdapter,

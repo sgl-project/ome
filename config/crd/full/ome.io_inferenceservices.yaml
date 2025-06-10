@@ -6239,17 +6239,6 @@ spec:
                             - name
                           x-kubernetes-list-type: map
                       type: object
-                    logger:
-                      properties:
-                        mode:
-                          enum:
-                            - all
-                            - request
-                            - response
-                          type: string
-                        url:
-                          type: string
-                      type: object
                     maxReplicas:
                       type: integer
                     minReplicas:
@@ -18404,17 +18393,6 @@ spec:
                             - name
                           x-kubernetes-list-type: map
                       type: object
-                    logger:
-                      properties:
-                        mode:
-                          enum:
-                            - all
-                            - request
-                            - response
-                          type: string
-                        url:
-                          type: string
-                      type: object
                     maxReplicas:
                       type: integer
                     minReplicas:
@@ -26336,17 +26314,6 @@ spec:
                       additionalProperties:
                         type: string
                       type: object
-                    logger:
-                      properties:
-                        mode:
-                          enum:
-                            - all
-                            - request
-                            - response
-                          type: string
-                        url:
-                          type: string
-                      type: object
                     maxReplicas:
                       type: integer
                     minReplicas:
@@ -34255,17 +34222,6 @@ spec:
                     labels:
                       additionalProperties:
                         type: string
-                      type: object
-                    logger:
-                      properties:
-                        mode:
-                          enum:
-                            - all
-                            - request
-                            - response
-                          type: string
-                        url:
-                          type: string
                       type: object
                     maxReplicas:
                       type: integer
