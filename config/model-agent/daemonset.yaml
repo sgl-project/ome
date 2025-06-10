@@ -73,8 +73,6 @@ spec:
         - /raid/models
         - --num-download-worker
         - '2'
-        - --download-auth-type
-        - 'InstancePrincipal'
         - --concurrency
         - '2'
         env:
