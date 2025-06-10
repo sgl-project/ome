@@ -143,21 +143,15 @@ func getModelOpInfo(op *NodeLabelOp) string {
 
 func getPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
 	var labelKey string
-	if op.ClusterBaseModel != nil && len(op.ClusterBaseModel.UID) > 0 {
-		labelKey = constants.GetModelsLabelWithUid(op.ClusterBaseModel.UID)
-	} else if op.BaseModel != nil && len(op.BaseModel.UID) > 0 {
-		labelKey = constants.GetModelsLabelWithUid(op.BaseModel.UID)
+
+	// Use the new deterministic labeling system
+	if op.ClusterBaseModel != nil {
+		labelKey = constants.GetClusterBaseModelLabel(op.ClusterBaseModel.Name)
+	} else if op.BaseModel != nil {
+		labelKey = constants.GetBaseModelLabel(op.BaseModel.Namespace, op.BaseModel.Name)
 	}
 
 	if len(labelKey) == 0 {
-		if op.ClusterBaseModel != nil && len(op.ClusterBaseModel.UID) == 0 {
-			return []byte{}, fmt.Errorf("node labeler get ClusterBaseModel %s with empty UID", op.ClusterBaseModel.Name)
-		}
-
-		if op.BaseModel != nil && len(op.BaseModel.UID) == 0 {
-			return []byte{}, fmt.Errorf("node labeler get BaseModel %s in namespace %s with empty UID", op.BaseModel.Name, op.BaseModel.Namespace)
-		}
-
 		if op.ClusterBaseModel == nil && op.BaseModel == nil {
 			return []byte{}, fmt.Errorf("node labeler get empty op without any models")
 		}
@@ -215,11 +209,21 @@ func (n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
 		data := make(map[string]string)
 		labels := make(map[string]string)
 		labels[constants.ModelStatusConfigMapLabel] = "true"
+
+		// Add node name as label for easier querying
+		labels["node"] = n.nodeName
+
+		annotations := make(map[string]string)
+		// Add annotation to track which node this ConfigMap belongs to
+		annotations["models.ome.io/node-name"] = n.nodeName
+		annotations["models.ome.io/managed-by"] = "model-agent"
+
 		return &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      n.nodeName,
-				Namespace: n.namespace,
-				Labels:    labels,
+				Name:        n.nodeName,
+				Namespace:   n.namespace,
+				Labels:      labels,
+				Annotations: annotations,
 			},
 			Data: data,
 		}, true, nil
@@ -231,19 +235,23 @@ func (n *NodeLabeler) getOrNewConfigMap() (*corev1.ConfigMap, bool, error) {
 func (n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *NodeLabelOp, needCreate bool) error {
 	// Get the model name and namespace based on the model type
 	var modelName, namespace, modelInfo string
+	var isClusterBaseModel bool
+
 	if op.BaseModel != nil {
 		modelName = op.BaseModel.Name
 		namespace = op.BaseModel.Namespace
 		modelInfo = fmt.Sprintf("BaseModel %s/%s", namespace, modelName)
+		isClusterBaseModel = false
 	} else {
 		modelName = op.ClusterBaseModel.Name
 		namespace = ""
 		modelInfo = fmt.Sprintf("ClusterBaseModel %s", modelName)
+		isClusterBaseModel = true
 	}
 
-	// Get the unique key for this model
-	key := GetModelKey(namespace, modelName)
-	n.logger.Debugf("Using key '%s' for %s", key, modelInfo)
+	// Get the new deterministic key for this model
+	key := constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
+	n.logger.Debugf("Using new deterministic key '%s' for %s", key, modelInfo)
 
 	if configMap.Data == nil {
 		n.logger.Debugf("ConfigMap Data is nil, initializing it for %s", modelInfo)

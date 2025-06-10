@@ -1,6 +1,8 @@
 package constants
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"regexp"
@@ -45,6 +47,8 @@ var (
 	InferenceServiceConfigMapName    = "inferenceservice-config"
 	DedicatedAIClusterConfigMapName  = "dedicatedaicluster-config"
 	CapacityReservationConfigMapName = "capacityreservation-config"
+	BaseModelFinalizer               = "basemodels.ome.io/finalizer"
+	ClusterBaseModelFinalizer        = "clusterbasemodels.ome.io/finalizer"
 )
 
 // OME Agent Constants
@@ -497,6 +501,10 @@ var (
 	ModelsLabelPrefix         = "models.ome/"
 	TargetInstanceShapes      = "models.ome.io/target-instance-shapes"
 	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
+
+	ModelLabelDomain          = "models.ome.io"
+	ClusterBaseModelLabelType = "clusterbasemodel"
+	BaseModelLabelType        = "basemodel"
 )
 
 type TrainingStrategy string
@@ -674,4 +682,182 @@ func optional(regexp string) string {
 
 func DefaultRayHeadServiceName(name string, index int) string {
 	return rayutils.CheckName(fmt.Sprintf("%s-%d", name, index))
+}
+
+// Kubernetes naming constraints
+const (
+	// Maximum length for label names (after domain/)
+	MaxLabelNameLength = 49 // 63 - 13 - 1 (ModelLabelDomain length)
+	// Maximum length for ConfigMap keys
+	MaxConfigMapKeyLength = 253
+	// Length of hash prefix when truncating
+	HashPrefixLength = 8
+)
+
+// truncateWithHash truncates a string to maxLength, taking suffix and adding hash prefix for uniqueness
+// If the original string fits within maxLength, it's returned as-is
+// Otherwise, it returns: {hash_prefix}-{suffix}
+func truncateWithHash(original string, maxLength int) string {
+	if len(original) <= maxLength {
+		return original
+	}
+
+	// Generate hash of the original string
+	hasher := sha256.New()
+	hasher.Write([]byte(original))
+	hashBytes := hasher.Sum(nil)
+	hashPrefix := hex.EncodeToString(hashBytes)[:HashPrefixLength]
+
+	// Calculate available space for suffix (minus hash prefix and separator)
+	suffixLength := maxLength - HashPrefixLength - 1
+	if suffixLength <= 0 {
+		// If maxLength is too small, just return hash
+		return hashPrefix[:maxLength]
+	}
+
+	// Take suffix from original string
+	suffix := original[len(original)-suffixLength:]
+
+	return fmt.Sprintf("%s-%s", hashPrefix, suffix)
+}
+
+// truncateModelName truncates a model name to fit within the given constraints
+func truncateModelName(modelName string, maxLength int) string {
+	return truncateWithHash(modelName, maxLength)
+}
+
+// truncateNamespace truncates a namespace name to fit within the given constraints
+func truncateNamespace(namespace string, maxLength int) string {
+	return truncateWithHash(namespace, maxLength)
+}
+
+// GetClusterBaseModelLabel returns the deterministic label key for ClusterBaseModel
+// Format: models.ome.io/clusterbasemodel.{model_name}
+// Handles long model names by truncating with hash for uniqueness
+func GetClusterBaseModelLabel(modelName string) string {
+	// Available space: MaxLabelNameLength - "clusterbasemodel." = 49 - 17 = 32
+	maxModelNameLength := MaxLabelNameLength - len(ClusterBaseModelLabelType) - 1
+	if len(modelName) <= maxModelNameLength {
+		// No truncation needed
+		return fmt.Sprintf("%s/%s.%s", ModelLabelDomain, ClusterBaseModelLabelType, modelName)
+	}
+	truncatedModelName := truncateModelName(modelName, maxModelNameLength)
+	return fmt.Sprintf("%s/%s.%s", ModelLabelDomain, ClusterBaseModelLabelType, truncatedModelName)
+}
+
+// GetBaseModelLabel returns the deterministic label key for BaseModel
+// Format: models.ome.io/{namespace}.basemodel.{model_name}
+// Handles long names by truncating with hash for uniqueness
+func GetBaseModelLabel(namespace, modelName string) string {
+	// Available space: MaxLabelNameLength - "basemodel." = 49 - 10 = 39
+	// Need to split between namespace and modelName
+	baseLength := len(BaseModelLabelType) + 1             // "basemodel."
+	availableSpace := MaxLabelNameLength - baseLength - 1 // -1 for separator between namespace and basemodel
+
+	// Check if both namespace and model name fit without truncation
+	totalNeeded := len(namespace) + len(modelName)
+	if totalNeeded <= availableSpace {
+		// No truncation needed
+		return fmt.Sprintf("%s/%s.%s.%s", ModelLabelDomain, namespace, BaseModelLabelType, modelName)
+	}
+
+	// Truncation needed - split available space, giving priority to model name
+	minLength := 8
+	var namespaceMaxLength, modelNameMaxLength int
+
+	if availableSpace < minLength*2 {
+		// If total space is too small, truncate both equally
+		namespaceMaxLength = availableSpace / 2
+		modelNameMaxLength = availableSpace - namespaceMaxLength
+	} else {
+		// Give model name more space, but ensure namespace gets at least minLength
+		if len(namespace) <= minLength {
+			// Namespace is short enough, give remaining space to model name
+			namespaceMaxLength = len(namespace)
+			modelNameMaxLength = availableSpace - namespaceMaxLength
+		} else {
+			// Namespace needs truncation, allocate minimum to namespace
+			namespaceMaxLength = minLength
+			modelNameMaxLength = availableSpace - namespaceMaxLength
+		}
+	}
+
+	truncatedNamespace := truncateNamespace(namespace, namespaceMaxLength)
+	truncatedModelName := truncateModelName(modelName, modelNameMaxLength)
+
+	return fmt.Sprintf("%s/%s.%s.%s", ModelLabelDomain, truncatedNamespace, BaseModelLabelType, truncatedModelName)
+}
+
+// GetModelConfigMapKey returns the deterministic ConfigMap key for models
+// For ClusterBaseModel: clusterbasemodel.{model_name}
+// For BaseModel: {namespace}.basemodel.{model_name}
+// Handles long names by truncating with hash for uniqueness
+func GetModelConfigMapKey(namespace, modelName string, isClusterBaseModel bool) string {
+	if isClusterBaseModel {
+		// Available space: MaxConfigMapKeyLength - "clusterbasemodel." = 253 - 17 = 236
+		maxModelNameLength := MaxConfigMapKeyLength - len(ClusterBaseModelLabelType) - 1
+		if len(modelName) <= maxModelNameLength {
+			// No truncation needed
+			return fmt.Sprintf("%s.%s", ClusterBaseModelLabelType, modelName)
+		}
+		truncatedModelName := truncateModelName(modelName, maxModelNameLength)
+		return fmt.Sprintf("%s.%s", ClusterBaseModelLabelType, truncatedModelName)
+	}
+
+	// For BaseModel: {namespace}.basemodel.{model_name}
+	// Available space: MaxConfigMapKeyLength - "basemodel." = 253 - 10 = 243
+	baseLength := len(BaseModelLabelType) + 1                // "basemodel."
+	availableSpace := MaxConfigMapKeyLength - baseLength - 1 // -1 for separator between namespace and basemodel
+
+	// Check if both namespace and model name fit without truncation
+	totalNeeded := len(namespace) + len(modelName)
+	if totalNeeded <= availableSpace {
+		// No truncation needed
+		return fmt.Sprintf("%s.%s.%s", namespace, BaseModelLabelType, modelName)
+	}
+
+	// Truncation needed - split available space between namespace and model name
+	minLength := 8
+	var namespaceMaxLength, modelNameMaxLength int
+
+	if availableSpace < minLength*2 {
+		namespaceMaxLength = availableSpace / 2
+		modelNameMaxLength = availableSpace - namespaceMaxLength
+	} else {
+		// Give model name priority
+		if len(namespace) <= minLength {
+			// Namespace is short enough, give remaining space to model name
+			namespaceMaxLength = len(namespace)
+			modelNameMaxLength = availableSpace - namespaceMaxLength
+		} else {
+			// Namespace needs truncation, allocate minimum to namespace
+			namespaceMaxLength = minLength
+			modelNameMaxLength = availableSpace - namespaceMaxLength
+		}
+	}
+
+	truncatedNamespace := truncateNamespace(namespace, namespaceMaxLength)
+	truncatedModelName := truncateModelName(modelName, modelNameMaxLength)
+
+	return fmt.Sprintf("%s.%s.%s", truncatedNamespace, BaseModelLabelType, truncatedModelName)
+}
+
+// ParseModelInfoFromConfigMapKey attempts to parse model information from a ConfigMap key
+// Returns namespace, modelName, isClusterBaseModel, and whether parsing was successful
+func ParseModelInfoFromConfigMapKey(configMapKey string) (namespace, modelName string, isClusterBaseModel bool, success bool) {
+	// Try to parse as ClusterBaseModel
+	if strings.HasPrefix(configMapKey, ClusterBaseModelLabelType+".") {
+		modelName = strings.TrimPrefix(configMapKey, ClusterBaseModelLabelType+".")
+		return "", modelName, true, true
+	}
+
+	// Try to parse as BaseModel: {namespace}.basemodel.{modelName}
+	if strings.Contains(configMapKey, "."+BaseModelLabelType+".") {
+		parts := strings.SplitN(configMapKey, "."+BaseModelLabelType+".", 2)
+		if len(parts) == 2 {
+			return parts[0], parts[1], false, true
+		}
+	}
+
+	return "", "", false, false
 }
