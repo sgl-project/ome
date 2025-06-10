@@ -14,25 +14,16 @@ import (
 )
 
 const (
-	OCIConfigName                                = "ociEtc"
-	IngressConfigKeyName                         = "ingress"
-	DeployConfigName                             = "deploy"
-	DacReconcilePolicyConfigName                 = "dacReconcilePolicy"
-	CapacityReservationReconcilePolicyConfigName = "capacityReservationReconcilePolicy"
-	DacReservationJobConfigName                  = "reservationJob"
-	MultiNodeProberName                          = "multinodeProber"
-	BenchmarkJobConfigName                       = "benchmarkjob"
-	AIPlatformSecretConfigName                   = "aiplatform-config"
+	IngressConfigKeyName   = "ingress"
+	DeployConfigName       = "deploy"
+	MultiNodeProberName    = "multinodeProber"
+	BenchmarkJobConfigName = "benchmarkjob"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
 
 	DefaultUrlScheme = "http"
 )
-
-type AIPlatformConfig struct {
-	SecretConfig SecretConfig `json:"secretConfig"`
-}
 
 type SecretConfig struct {
 	WriteToCommonNamespace bool   `json:"writeToCommonNamespace"`
@@ -55,8 +46,6 @@ type PodConfig struct {
 
 // +kubebuilder:object:generate=false
 type InferenceServicesConfig struct {
-	// OCIConfig contains all OCI Configuration
-	OCIConfig OCIConfig `json:"ociEtc"`
 	// MultiNodeProber contains all MultiNodeProber Configuration
 	MultiNodeProber MultiNodeProberConfig `json:"multinodeProber"`
 }
@@ -95,52 +84,8 @@ type MultiNodeProberConfig struct {
 }
 
 // +kubebuilder:object:generate=false
-type OCIConfig struct {
-	// Region for all applications
-	Region string `json:"region"`
-	// service tenancy OCID, this is defaulted to the tenancy OCID in agent service configMap
-	ServiceTenancyId string `json:"serviceTenancyId"`
-	// compartment OCID, this is defaulted to the compartment OCID in agent service configMap
-	ServiceCompartmentId string `json:"serviceCompartmentId"`
-	// Realm for all applications
-	Realm string `json:"realm"`
-	// Stage for all applications
-	Stage string `json:"stage"`
-	// ApplicationStage for all applications
-	ApplicationStage string `json:"applicationStage"`
-	// InternalDomainName for all applications
-	InternalDomainName string `json:"internalDomainName"`
-	// PublicDomainName for all applications
-	PublicDomainName string `json:"publicDomainName"`
-	// AirportCode for all applications
-	AirportCode string `json:"airportCode"`
-	// AdNumberName for all applications
-	AdNumberName string `json:"adNumberName"`
-	// Namespace for service tenancy
-	Namespace string `json:"namespace"`
-}
-
-// +kubebuilder:object:generate=false
 type DeployConfig struct {
 	DefaultDeploymentMode string `json:"defaultDeploymentMode,omitempty"`
-}
-
-// +kubebuilder:object:generate=false
-type DacReconcilePolicyConfig struct {
-	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
-	ReconcileWithKueue            bool `json:"reconcileWithKueue,omitempty"`
-}
-
-// +kubebuilder:object:generate=false
-type CapacityReservationReconcilePolicyConfig struct {
-	ReconcileFailedLifecycleState bool `json:"reconcileFailedLifecycleState,omitempty"`
-}
-
-// +kubebuilder:object:generate=false
-type DacReservationWorkloadConfig struct {
-	Image                             string `json:"image"`
-	CreationFailedTimeThresholdSecond int    `json:"creationFailedTimeThresholdSecond"`
-	SchedulerName                     string `json:"schedulerName"`
 }
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {
@@ -150,7 +95,6 @@ func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServi
 	}
 	icfg := &InferenceServicesConfig{}
 	for _, err := range []error{
-		getComponentConfig(OCIConfigName, configMap, &icfg.OCIConfig),
 		getComponentConfig(MultiNodeProberName, configMap, &icfg.MultiNodeProber),
 	} {
 		if err != nil {
@@ -240,71 +184,6 @@ func NewDeployConfig(clientset kubernetes.Interface) (*DeployConfig, error) {
 	return deployConfig, nil
 }
 
-func NewOciConfig(clientset kubernetes.Interface) (*OCIConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	ociConfig := &OCIConfig{}
-	for _, err := range []error{
-		getComponentConfig(OCIConfigName, configMap, &ociConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ociConfig, nil
-}
-
-func NewDacReconcilePolicyConfig(clientset kubernetes.Interface) (*DacReconcilePolicyConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.DedicatedAIClusterConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	dacPolicyConfig := &DacReconcilePolicyConfig{}
-	for _, err := range []error{
-		getComponentConfig(DacReconcilePolicyConfigName, configMap, &dacPolicyConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return dacPolicyConfig, nil
-}
-
-func NewCapacityReservationReconcilePolicyConfig(clientset kubernetes.Interface) (*CapacityReservationReconcilePolicyConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.CapacityReservationConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	capacityReservationPolicyConfig := &CapacityReservationReconcilePolicyConfig{}
-	for _, err := range []error{
-		getComponentConfig(CapacityReservationReconcilePolicyConfigName, configMap, &capacityReservationPolicyConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return capacityReservationPolicyConfig, nil
-}
-
-func NewDacReservationWorkloadConfig(clientset kubernetes.Interface) (*DacReservationWorkloadConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.DedicatedAIClusterConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	dacReservationWorkloadConfig := &DacReservationWorkloadConfig{}
-	for _, err := range []error{
-		getComponentConfig(DacReservationJobConfigName, configMap, &dacReservationWorkloadConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return dacReservationWorkloadConfig, nil
-}
-
 func NewMultiNodeProberConfig(clientset kubernetes.Interface) (*MultiNodeProberConfig, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
 	if err != nil {
@@ -335,20 +214,4 @@ func NewBenchmarkJobConfig(clientset kubernetes.Interface) (*BenchmarkJobConfig,
 		}
 	}
 	return benchmarkJobConfig, nil
-}
-
-func NewAIPlatformConfig(clientset kubernetes.Interface) (*AIPlatformConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.AIPlatformConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	aiPlatformConfig := &AIPlatformConfig{}
-	for _, err := range []error{
-		getComponentConfig(AIPlatformSecretConfigName, configMap, &aiPlatformConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return aiPlatformConfig, nil
 }

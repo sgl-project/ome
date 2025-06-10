@@ -34,21 +34,14 @@ var (
 	BenchmarkJobConfigMapName = "benchmarkjob-config"
 )
 
-// AI Platform Constants
-var (
-	AIPlatformConfigMapName = "aiplatform-config"
-)
-
 // InferenceService Constants
 var (
-	InferenceServiceName             = "inferenceservice"
-	InferenceServiceAPIName          = "inferenceservices"
-	InferenceServicePodLabelKey      = OMEAPIGroupName + "/" + InferenceServiceName
-	InferenceServiceConfigMapName    = "inferenceservice-config"
-	DedicatedAIClusterConfigMapName  = "dedicatedaicluster-config"
-	CapacityReservationConfigMapName = "capacityreservation-config"
-	BaseModelFinalizer               = "basemodels.ome.io/finalizer"
-	ClusterBaseModelFinalizer        = "clusterbasemodels.ome.io/finalizer"
+	InferenceServiceName          = "inferenceservice"
+	InferenceServiceAPIName       = "inferenceservices"
+	InferenceServicePodLabelKey   = OMEAPIGroupName + "/" + InferenceServiceName
+	InferenceServiceConfigMapName = "inferenceservice-config"
+	BaseModelFinalizer            = "basemodels.ome.io/finalizer"
+	ClusterBaseModelFinalizer     = "clusterbasemodels.ome.io/finalizer"
 )
 
 // OME Agent Constants
@@ -91,11 +84,7 @@ var (
 
 // Model agent Constants
 const (
-	AgentContainerName    = "agent"
 	AgentConfigMapKeyName = "agent"
-	AgentEnableFlag       = "--enable-puller"
-	AgentConfigDirArgName = "--config-dir"
-	AgentModelDirArgName  = "--model-dir"
 	TensorRTLLM           = "tensorrtllm"
 )
 
@@ -178,14 +167,6 @@ var (
 var (
 	InferenceServiceInternalAnnotationsPrefix        = "internal." + OMEAPIGroupName
 	StorageInitializerSourceUriInternalAnnotationKey = InferenceServiceInternalAnnotationsPrefix + "/storage-initializer-sourceuri"
-	LoggerInternalAnnotationKey                      = InferenceServiceInternalAnnotationsPrefix + "/logger"
-	LoggerSinkUrlInternalAnnotationKey               = InferenceServiceInternalAnnotationsPrefix + "/logger-sink-url"
-	LoggerModeInternalAnnotationKey                  = InferenceServiceInternalAnnotationsPrefix + "/logger-mode"
-	BatcherInternalAnnotationKey                     = InferenceServiceInternalAnnotationsPrefix + "/batcher"
-	AgentShouldInjectAnnotationKey                   = InferenceServiceInternalAnnotationsPrefix + "/agent"
-	AgentModelConfigVolumeNameAnnotationKey          = InferenceServiceInternalAnnotationsPrefix + "/configVolumeName"
-	AgentModelConfigMountPathAnnotationKey           = InferenceServiceInternalAnnotationsPrefix + "/configMountPath"
-	AgentModelDirAnnotationKey                       = InferenceServiceInternalAnnotationsPrefix + "/modelDir"
 )
 
 // ome networking constants

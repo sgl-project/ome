@@ -132,8 +132,6 @@ type ServingRuntimePodSpec struct {
 	// +k8s:conversion-gen=false
 	// +optional
 	HostNetwork bool `json:"hostNetwork,omitempty" protobuf:"varint,11,opt,name=hostNetwork"`
-
-	// Possibly other things here
 }
 
 // ServingRuntimeSpec defines the desired state of ServingRuntime. This spec is currently provisional
@@ -175,10 +173,6 @@ type ServingRuntimeSpec struct {
 	// WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster
 	// +optional
 	WorkerPodSpec *WorkerPodSpec `json:"workers,omitempty"`
-
-	// Provide the details about built-in runtime adapter
-	// +optional
-	ServingAdapter *ServingAdapter `json:"servingAdapter,omitempty"`
 }
 
 type WorkerPodSpec struct {
@@ -206,36 +200,6 @@ type ModelSizeRangeSpec struct {
 // ServingRuntimeStatus defines the observed state of ServingRuntime
 // +k8s:openapi-gen=true
 type ServingRuntimeStatus struct {
-}
-
-// ServerType constant for specifying the runtime name
-// +k8s:openapi-gen=true
-type ServerType string
-
-// Built-in ServerTypes (others may be supported)
-const (
-	// Triton model server
-	Triton ServerType = "triton"
-	// VLLM model server
-	VLLM ServerType = "vllm"
-	// TGI Model server
-	TGI ServerType = "tgi"
-	// NIM model server
-	NIM ServerType = "nim"
-	// Cohere model server
-	Cohere ServerType = "cohere"
-)
-
-// +k8s:openapi-gen=true
-type ServingAdapter struct {
-	// ServerType must be one of the supported built-in types such as "triton" or "mlserver",
-	// and the runtime's container must have the same name
-	ServerType ServerType `json:"serverType,omitempty"`
-	// Timeout for model loading operations in milliseconds
-	ModelLoadingTimeoutMillis int `json:"modelLoadingTimeoutMillis,omitempty"`
-	// Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)
-	// +listType=atomic
-	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // ServingRuntime is the Schema for the servingruntimes API

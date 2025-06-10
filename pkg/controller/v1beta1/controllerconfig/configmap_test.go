@@ -55,19 +55,7 @@ func TestNewInferenceServicesConfig(t *testing.T) {
 		{
 			name: "valid config",
 			configMapData: map[string]string{
-				OCIConfigName: `{
-					"region": "us-phoenix-1",
-					"serviceTenancyId": "ocid1.tenancy.oc1..example",
-					"serviceCompartmentId": "ocid1.compartment.oc1..example",
-					"realm": "oc1",
-					"stage": "dev",
-					"applicationStage": "dev",
-					"internalDomainName": "internal.example.com",
-					"publicDomainName": "example.com",
-					"airportCode": "PHX",
-					"adNumberName": "ad1",
-					"namespace": "test"
-				}`,
+
 				MultiNodeProberName: `{
 					"image": "test-image",
 					"cpuRequest": "100m",
@@ -83,8 +71,6 @@ func TestNewInferenceServicesConfig(t *testing.T) {
 			},
 			expectedError: false,
 			validateConfig: func(t *testing.T, cfg *InferenceServicesConfig) {
-				assert.Equal(t, "us-phoenix-1", cfg.OCIConfig.Region)
-				assert.Equal(t, "ocid1.tenancy.oc1..example", cfg.OCIConfig.ServiceTenancyId)
 				assert.Equal(t, "test-image", cfg.MultiNodeProber.Image)
 				assert.Equal(t, "100m", cfg.MultiNodeProber.CPURequest)
 			},
@@ -92,21 +78,6 @@ func TestNewInferenceServicesConfig(t *testing.T) {
 		{
 			name:          "missing configmap",
 			configMapData: nil,
-			expectedError: true,
-		},
-		{
-			name: "invalid oci config json",
-			configMapData: map[string]string{
-				OCIConfigName: `invalid json`,
-			},
-			expectedError: true,
-		},
-		{
-			name: "invalid multinodeprober config json",
-			configMapData: map[string]string{
-				OCIConfigName:       `{"region": "us-phoenix-1"}`,
-				MultiNodeProberName: `invalid json`,
-			},
 			expectedError: true,
 		},
 	}

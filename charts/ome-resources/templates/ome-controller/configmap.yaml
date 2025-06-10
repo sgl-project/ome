@@ -30,41 +30,6 @@ data:
         "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }}
     }
 
-  logger: |-
-    {
-        "image" : "ome/agent:latest",
-        "memoryRequest": "100Mi",
-        "memoryLimit": "1Gi",
-        "cpuRequest": "100m",
-        "cpuLimit": "1",
-        "defaultUrl": "http://default-broker"
-    }
-
-  agent: |-
-    {
-        "image" : "ome/agent:latest",
-        "memoryRequest": "100Mi",
-        "memoryLimit": "1Gi",
-        "cpuRequest": "100m",
-        "cpuLimit": "1"
-    }
-
-  ociEtc: |-
-    {
-        "region" : "{{ .Values.ome.ociETC.region }}",
-        "serviceCompartmentId": "{{ .Values.ome.ociETC.serviceCompartmentId }}",
-        "serviceTenancyId": "{{ .Values.ome.ociETC.serviceTenancyId }}",
-        "stage": "{{ .Values.ome.ociETC.stage }}",
-        "realm": "{{ .Values.ome.ociETC.realm }}",
-        "applicationStage": "{{ .Values.ome.ociETC.applicationStage }}",
-        "publicDomainName": "{{ .Values.ome.ociETC.publicDomainName }}",
-        "internalDomainName": "{{ .Values.ome.ociETC.internalDomainName }}",
-        "airportCode": "{{ .Values.ome.ociETC.airportCode }}",
-        "adNumberName": "{{ .Values.ome.ociETC.adNumberName }}",
-        "namespace": "{{ .Values.ome.ociETC.namespace }}"
-    }
-
-
   deploy: |-
     {
       "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"
@@ -122,41 +87,6 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dedicatedaicluster-config
-  namespace: ome
-data:
-  reservationJob: |-
-    {
-      "image": "{{ .Values.ome.dac.image }}:{{ .Values.ome.dac.tag }}",
-      "creationFailedTimeThresholdSecond" : 60,
-      "schedulerName" : "{{ .Values.ome.dac.schedulerName }}"
-    }
-  dacReconcilePolicy: |-
-    {
-      "reconcileFailedLifecycleState": true,
-      "reconcileWithKueue": {{.Values.ome.dac.reconcileWithKueue}}
-    }
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: capacityreservation-config
-  namespace: ome
-data:
-  clusterQueue: |-
-    {
-      "creationFailedTimeThresholdSecond" : 30
-    }
-  capacityreservationReconcilePolicy: |-
-    {
-      "reconcileFailedLifecycleState": false
-    }
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
   name: benchmarkjob-config
   namespace: ome
 data:
@@ -168,20 +98,5 @@ data:
         "memoryRequest": "{{ .Values.ome.benchmarkJob.memoryRequest }}",
         "cpuLimit": "{{ .Values.ome.benchmarkJob.cpuLimit }}",
         "memoryLimit": "{{ .Values.ome.benchmarkJob.memoryLimit }}"
-      }
-    }
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: aiplatform-config
-  namespace: ome
-data:
-  aiplatform-config: |
-    {
-      "secretConfig": {
-        "writeToCommonNamespace": {{.Values.ome.aiPlatformSecretConfig.writeToCommonNamespace}},
-        "namespace": "{{.Values.ome.aiPlatformSecretConfig.namespace}}",
-        "secretName": "{{.Values.ome.aiPlatformSecretConfig.secretName}}"
       }
     }

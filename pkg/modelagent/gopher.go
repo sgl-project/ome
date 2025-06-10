@@ -16,7 +16,9 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/hfutil/hub"
+	"github.com/sgl-project/sgl-ome/pkg/logging"
 	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+	"github.com/sgl-project/sgl-ome/pkg/principals"
 	"github.com/sgl-project/sgl-ome/pkg/utils/storage"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +48,6 @@ type Gopher struct {
 	concurrency          int
 	multipartConcurrency int
 	modelRootDir         string
-	casperDataStore      *ociobjectstore.OCIOSDataStore
 	hubClient            *hub.HubClient
 	kubeClient           kubernetes.Interface
 	gopherChan           <-chan *GopherTask
@@ -63,7 +64,6 @@ const (
 func NewGopher(
 	modelConfigParser *ModelConfigParser,
 	modelConfigUpdater *ModelConfigUpdater,
-	casperDataStore *ociobjectstore.OCIOSDataStore,
 	hubClient *hub.HubClient,
 	kubeClient kubernetes.Interface,
 	concurrency int,
@@ -74,10 +74,6 @@ func NewGopher(
 	nodeLabeler *NodeLabeler,
 	metrics *Metrics,
 	logger *zap.SugaredLogger) (*Gopher, error) {
-
-	if casperDataStore == nil {
-		return nil, fmt.Errorf("ociobjectstore data store cannot be nil")
-	}
 
 	if hubClient == nil {
 		return nil, fmt.Errorf("hugging face hub client cannot be nil")
@@ -90,7 +86,6 @@ func NewGopher(
 		concurrency:          concurrency,
 		multipartConcurrency: multipartConcurrency,
 		modelRootDir:         modelRootDir,
-		casperDataStore:      casperDataStore,
 		hubClient:            hubClient,
 		kubeClient:           kubeClient,
 		gopherChan:           gopherChan,
@@ -214,14 +209,14 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		downloadStartTime := time.Now()
 		switch storageType {
 		case storage.StorageTypeOCI:
-			casperUri, err := getTargetDirPath(&baseModelSpec)
+			osUri, err := getTargetDirPath(&baseModelSpec)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 			if err != nil {
 				s.logger.Errorf("Failed to get target directory path for model %s: %v", modelInfo, err)
 				return err
 			}
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-				downloadErr := s.downloadModel(casperUri, destPath, task)
+				downloadErr := s.downloadModel(osUri, destPath, task)
 				if downloadErr != nil {
 					s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
 						modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
@@ -423,14 +418,70 @@ func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*ociobjectstore.ObjectU
 
 }
 
+// createOCIOSDataStore creates an OCIOSDataStore client based on storage parameters in the model spec
+func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*ociobjectstore.OCIOSDataStore, error) {
+	// Default auth type is InstancePrincipal if not specified
+	authType := principals.InstancePrincipal
+
+	// Check if auth type is specified in the storage parameters
+	if baseModelSpec.Storage.Parameters != nil {
+		if authTypeStr, ok := (*baseModelSpec.Storage.Parameters)["auth"]; ok && authTypeStr != "" {
+			// Convert string to AuthenticationType
+			authType = principals.AuthenticationType(authTypeStr)
+			s.logger.Infof("Using auth type from model parameters: %s", authType)
+		}
+	}
+
+	// Create OCI Object Store config with a proper logger adapter
+	osConfig, err := ociobjectstore.NewConfig(
+		ociobjectstore.WithAnotherLog(logging.ForZap(s.logger.Desugar())),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ociobjectstore config: %w", err)
+	}
+
+	// Set auth type
+	osConfig.AuthType = &authType
+
+	// Check for additional parameters like region
+	if baseModelSpec.Storage.Parameters != nil {
+		if region, ok := (*baseModelSpec.Storage.Parameters)["region"]; ok && region != "" {
+			osConfig.Region = region
+			s.logger.Infof("Using region from model parameters: %s", region)
+		}
+	}
+
+	// Create OCIOSDataStore
+	ociOSDS, err := ociobjectstore.NewOCIOSDataStore(osConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ociobjectstore data store: %w", err)
+	}
+
+	return ociOSDS, nil
+}
+
 func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
 	startTime := time.Now()
 	defer func() {
 		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
 	}()
 
-	s.logger.Infof("Making call to object storage with endpoint %s", s.casperDataStore.Client.Endpoint())
-	objects, err := s.casperDataStore.ListObjects(*uri)
+	// Get the model spec
+	var baseModelSpec v1beta1.BaseModelSpec
+	if task.BaseModel != nil {
+		baseModelSpec = task.BaseModel.Spec
+	} else {
+		baseModelSpec = task.ClusterBaseModel.Spec
+	}
+
+	// Create oci object storage data store client for this task
+	ociOSDataStore, err := s.createOCIOSDataStore(baseModelSpec)
+	if err != nil {
+		return fmt.Errorf("failed to create object storage client: %w", err)
+	}
+
+	s.logger.Infof("Making call to object storage with endpoint %s", ociOSDataStore.Client.Endpoint())
+	objects, err := ociOSDataStore.ListObjects(*uri)
 	if err != nil {
 		return fmt.Errorf("failed to list objects: %w", err)
 	}
@@ -477,7 +528,7 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 		})
 	}
 
-	errs := s.casperDataStore.BulkDownload(objectUris, destPath, s.concurrency,
+	errs := ociOSDataStore.BulkDownload(objectUris, destPath, s.concurrency,
 		ociobjectstore.WithThreads(s.multipartConcurrency),
 		ociobjectstore.WithChunkSize(BigFileSizeInMB),
 		ociobjectstore.WithSizeThreshold(BigFileSizeInMB),
@@ -490,7 +541,7 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 	// Perform final verification of all downloaded files
 	s.logger.Info("Performing final integrity verification of all downloaded files...")
 	verificationStartTime := time.Now()
-	verificationErrors := s.verifyDownloadedFiles(objectUris, destPath)
+	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectUris, destPath)
 	verificationDuration := time.Since(verificationStartTime)
 
 	// Record verification duration
@@ -510,7 +561,7 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 	return nil
 }
 
-func (s *Gopher) verifyDownloadedFiles(uris []ociobjectstore.ObjectURI, destPath string) map[string]error {
+func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataStore, uris []ociobjectstore.ObjectURI, destPath string) map[string]error {
 	errors := make(map[string]error)
 	for _, obj := range uris {
 		relativeName := filepath.Join(destPath, ociobjectstore.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
@@ -519,7 +570,7 @@ func (s *Gopher) verifyDownloadedFiles(uris []ociobjectstore.ObjectURI, destPath
 			relativeName = obj.ObjectName
 		}
 
-		valid, err := s.casperDataStore.IsLocalCopyValid(obj, relativeName)
+		valid, err := ociOSDataStore.IsLocalCopyValid(obj, relativeName)
 		if err != nil {
 			errors[obj.ObjectName] = err
 			continue

@@ -18,41 +18,6 @@ data:
         "disableIngressCreation": false
     }
 
-  logger: |-
-    {
-        "image" : "ome/agent:latest",
-        "memoryRequest": "100Mi",
-        "memoryLimit": "1Gi",
-        "cpuRequest": "100m",
-        "cpuLimit": "1",
-        "defaultUrl": "http://default-broker"
-    }
-
-  agent: |-
-    {
-        "image" : "ome/agent:latest",
-        "memoryRequest": "100Mi",
-        "memoryLimit": "1Gi",
-        "cpuRequest": "100m",
-        "cpuLimit": "1"
-    }
-
-  ociEtc: |-
-    {
-        "region" : "us-chicago-1",
-        "serviceCompartmentId": "ocid1.compartment.oc1..aaaaaaaarncfmdarfvbvhfj2oknyuvvftcp4p6ra77xlswftk67kcffmm2xq",
-        "serviceTenancyId": "ocid1.tenancy.oc1..aaaaaaaaygke5qlnho2slsj5kx645ve3z63k5ykxrticzaxebkuei2iqom6a",
-        "stage": "prod",
-        "realm": "oc1",
-        "applicationStage": "prod",
-        "publicDomainName": "oraclecloud.com",
-        "internalDomainName": "oracleiaas.com",
-        "airportCode": "ORD",
-        "adNumberName": "ad2",
-        "namespace": "idlsnvn0f2is"
-    }
-
-
   deploy: |-
     {
       "defaultDeploymentMode": "RawDeployment"

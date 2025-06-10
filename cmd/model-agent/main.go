@@ -15,8 +15,6 @@ import (
 	"github.com/sgl-project/sgl-ome/pkg/hfutil/hub"
 	"github.com/sgl-project/sgl-ome/pkg/logging"
 	"github.com/sgl-project/sgl-ome/pkg/modelagent"
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
-	"github.com/sgl-project/sgl-ome/pkg/principals"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -70,7 +68,6 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&cfg.downloadRetry, "download-retry", 3, "Number of retries for downloading")
 	rootCmd.PersistentFlags().IntVar(&cfg.concurrency, "concurrency", 4, "Number of concurrent download workers per gopher")
 	rootCmd.PersistentFlags().IntVar(&cfg.multipartConcurrency, "multipart-concurrency", 4, "Number of concurrent multipart download workers per gopher")
-	rootCmd.PersistentFlags().StringVar(&cfg.downloadAuthType, "download-auth-type", "InstancePrincipal", "Auth type for downloading models")
 	rootCmd.PersistentFlags().IntVar(&cfg.numDownloadWorker, "num-download-worker", 5, "Number of download workers")
 	rootCmd.PersistentFlags().StringVar(&cfg.namespace, "namespace", "ome", "Kubernetes namespace to use")
 	rootCmd.PersistentFlags().StringVar(&cfg.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
@@ -197,28 +194,8 @@ func initializeComponents(
 	// Create node labeler for labeling the node based on model status
 	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry, logger)
 
-	// Set up an authentication type from Viper
-	authType := principals.AuthenticationType(v.GetString("download-auth-type"))
-
 	// Convert sugared logger back to a regular zap logger to use ForZap
 	zapLogger := logger.Desugar()
-
-	// Create Casper config with a proper logger adapter
-	casperConfig, err := ociobjectstore.NewConfig(
-		ociobjectstore.WithAnotherLog(logging.ForZap(zapLogger)),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create ociobjectstore config: %w", err)
-	}
-
-	// Set auth type (needs to be a pointer)
-	casperConfig.AuthType = &authType
-
-	// Create OCIOSDataStore
-	casperDS, err := ociobjectstore.NewOCIOSDataStore(casperConfig)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create ociobjectstore data store: %w", err)
-	}
 
 	// Create a ModelConfigParser instance
 	modelConfigParser := modelagent.NewModelConfigParser(omeClient, logger)
@@ -265,7 +242,6 @@ func initializeComponents(
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
 		modelConfigUpdater,
-		casperDS, // Pass the ociobjectstore data store directly
 		hfHubClient,
 		kubeClient, // Pass the Kubernetes client for secret access
 		cfg.concurrency,

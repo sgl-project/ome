@@ -230,37 +230,6 @@ type ServingRuntimeRef struct {
 	APIGroup *string `json:"apiGroup,omitempty"`
 }
 
-// LoggerType controls the scope of log publishing
-// Determines which parts of the request-response cycle are logged.
-// +kubebuilder:validation:Enum=all;request;response
-type LoggerType string
-
-// LoggerType Enum
-const (
-	// Logger mode to log both request and response
-	LogAll LoggerType = "all"
-	// Logger mode to log only request
-	LogRequest LoggerType = "request"
-	// Logger mode to log only response
-	LogResponse LoggerType = "response"
-)
-
-// LoggerSpec specifies optional payload logging available for all components
-// Configures how request and response payloads are logged for auditing and debugging.
-type LoggerSpec struct {
-	// URL to send logging events
-	// The endpoint where log data will be sent for external processing or storage.
-	// +optional
-	URL *string `json:"url,omitempty"`
-	// Specifies the scope of the loggers. <br />
-	// Valid values are: <br />
-	// - "all" (default): log both request and response; <br />
-	// - "request": log only request; <br />
-	// - "response": log only response <br />
-	// +optional
-	Mode LoggerType `json:"mode,omitempty"`
-}
-
 // InferenceService is the Schema for the InferenceServices API
 // +k8s:openapi-gen=true
 // +genclient
