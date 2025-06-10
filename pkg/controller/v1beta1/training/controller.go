@@ -67,6 +67,16 @@ const (
 	CreateObjectFailed          ObjectOperationState = "CreateObjectFailed"
 	UpdateObjectFailed          ObjectOperationState = "UpdateObjectFailed"
 	CreateFinetuneWeightsFailed ObjectOperationState = "CreateFinetuneWeightsFailed"
+	FailedToGetTrainingJob      ObjectOperationState = "CreateFinetuneWeightsFailed"
+	FailedToGetBaseModel        ObjectOperationState = "FailedToGetBaseModel"
+	FailedToGetConfigMap        ObjectOperationState = "FailedToGetConfigMap"
+	FailedToGetTrainingRuntime  ObjectOperationState = "FailedToGetTrainingRuntime"
+	FailedToGetDAC              ObjectOperationState = "FailedToGetDAC"
+	FailedToGetDACProfile       ObjectOperationState = "FailedToGetDACProfile"
+	FailedToGetFinetuneWeights  ObjectOperationState = "FailedToGetDACProfile"
+	PVPVCReconciliationError    ObjectOperationState = "PVPVCReconciliationError"
+	TrainingJobFailure          ObjectOperationState = "TrainingJobFailure"
+	FailedToPrepareTrainingJob  ObjectOperationState = "FailedToPrepareTrainingJob"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
@@ -82,6 +92,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			r.Log.Error(err, "TrainingJob not found", "namespace", req.NamespacedName, "name", trainJob.Name)
 			return ctrl.Result{}, nil
 		}
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetTrainingJob))
 		r.Log.Error(err, "Error getting TrainingJob", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -90,36 +101,43 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	r.Log.Info("Getting base model for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
 	baseModel, err := utils.GetClusterBaseModel(r.Client, *trainJob.Spec.ModelConfig.InputModel)
-
 	if err != nil {
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetBaseModel))
 		r.Log.Error(err, "Error getting model", "namespace", req.NamespacedName, "name", trainJob.Name, "basemodel", trainJob.Spec.ModelConfig.InputModel)
 		return ctrl.Result{}, nil
 	}
 
+	r.Log.Info("Getting configmap for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
 	configMap, err := r.Clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
 	if err != nil {
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetConfigMap))
 		r.Log.Error(err, "Failed to find config map", "name", constants.InferenceServiceConfigMapName)
 		return ctrl.Result{}, nil
 	}
 
+	r.Log.Info("Getting training runtime for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
 	trainingRuntime, err := utils.GetTrainingRuntime(r.Client, trainJob.Spec.RuntimeRef.Name, trainJob.Namespace)
 	if err != nil {
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetTrainingRuntime))
 		r.Log.Error(err, "Error getting training runtime", "namespace", req.NamespacedName, "name", trainJob.Name, "training runtime", trainJob.Spec.RuntimeRef.Name)
 		return ctrl.Result{}, nil
 	}
 
+	r.Log.Info("Getting DAC for training job", "namespace", req.NamespacedName, "name", trainJob.Name)
 	var affinity *corev1.Affinity
 	// Set node affinity from DAC if necessary
 	dedicatedAiClusterResource, err := utils.GetDedicatedAIClusterResource(r.Client, &corev1.ObjectReference{
 		Name: trainJob.Namespace,
 	})
 	if err == nil && dedicatedAiClusterResource != nil {
+		r.Log.Info("Getting DAC profile for training job", "namespace", req.NamespacedName, "dac_name", trainJob.Namespace)
 		profile := &omev1beta1.DedicatedAIClusterProfile{}
 		if err = r.Client.Get(context.TODO(), types.NamespacedName{Name: dedicatedAiClusterResource.Spec.Profile}, profile); err != nil {
 			if apierr.IsNotFound(err) {
 				r.Log.Error(err, "Error: DAC profile not found in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
 				return ctrl.Result{}, nil
 			}
+			utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetDACProfile))
 			r.Log.Error(err, "Error: failed to get DAC profile in DAC scheduling injector", "DAC profile name", dedicatedAiClusterResource.Spec.Profile)
 			return ctrl.Result{}, nil
 		}
@@ -128,11 +146,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			affinity = profile.Spec.Affinity.DeepCopy()
 		}
 	} else {
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetDAC))
 		r.Log.Error(err, "Error: Failed to get DAC", "DAC name", trainJob.Namespace)
 		return ctrl.Result{}, nil
 	}
 
 	if affinity == nil {
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetDACProfile))
 		r.Log.Error(err, "Error: Affinity is nil, re-queueing", "DAC name", trainJob.Namespace)
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -149,6 +169,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				} else {
 					r.Log.Error(err, "Failed to create Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
 					updateCreatedCondition(trainJob, CreateFinetuneWeightsFailed)
+					utils.EmitMetricsWhenFailed(trainJob, string(CreateFinetuneWeightsFailed))
 					return ctrl.Result{}, err
 				}
 			} else {
@@ -159,6 +180,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			}
 		} else {
+			utils.EmitMetricsWhenFailed(trainJob, string(FailedToGetFinetuneWeights))
 			r.Log.Error(err, "Failed to get Finetune weights", "tjob", trainJob.Name, "model", finetuneWeights.Name)
 			return ctrl.Result{}, err
 		}
@@ -167,11 +189,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if isTrainJobFinished(trainJob) {
 		r.Log.Info("TrainJob has finished, updating FineTuneWeights", "namespace", req.NamespacedName, "name", trainJob.Name, "FineTuneWeights", finetuneWeights)
 		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobFailed) {
+			utils.EmitMetricsWhenFailed(trainJob, string(TrainingJobFailure))
 			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateFailed)
 			return ctrl.Result{}, err
 		}
 
 		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobComplete) {
+			utils.EmitMetricsWhenSucceeded(trainJob)
 			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateReady)
 			if err != nil {
 				return ctrl.Result{}, err
@@ -181,11 +205,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if result, err := r.reconcilePVPVC(trainJob, baseModel.Spec); err != nil {
+		utils.EmitMetricsWhenFailed(trainJob, string(PVPVCReconciliationError))
 		r.Log.Error(err, "Error reconciling PV/PVC for train job", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return result, err
 	}
 
 	if err := r.prepareJobAnnotations(trainJob, baseModel, trainingRuntime); err != nil {
+		utils.EmitMetricsWhenFailed(trainJob, string(FailedToPrepareTrainingJob))
 		r.Log.Error(err, "Error preparing training job annotations", "namespace", req.NamespacedName, "name", trainJob.Name)
 		return ctrl.Result{}, nil
 	}

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/metrics"
 	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -153,4 +155,21 @@ func GetShortTrainJobName(name string) string {
 // IsCommandRFTWeightMerged check if it is command-r finetune weight merged.
 func IsCommandRFTWeightMerged(trainingStrategy string, tensorParallel string) bool {
 	return trainingStrategy == "tfew" || (trainingStrategy == "lora" && tensorParallel == "1")
+}
+
+// EmitMetricsWhenSucceeded emits training_job_success_total when training job completed successfully
+func EmitMetricsWhenSucceeded(trainingJob *v1beta1.TrainingJob) {
+	baseModelRefName := trainingJob.Spec.ModelConfig.InputModel
+	modelName := GetFineTunedModelName(trainingJob.Name)
+	metrics.TrainingJobSuccessTotal.WithLabelValues(trainingJob.Namespace, *baseModelRefName, modelName).Inc()
+	metrics.TrainingJobTimeDurationMins.WithLabelValues(trainingJob.Namespace, *baseModelRefName, v1beta1.TrainJobComplete, modelName).Add(time.Since(trainingJob.CreationTimestamp.Time).Minutes())
+}
+
+// EmitMetricsWhenFailed emits training_job_failure_total when training job failed
+func EmitMetricsWhenFailed(trainingJob *v1beta1.TrainingJob, reason string) {
+	baseModelRefName := trainingJob.Spec.ModelConfig.InputModel
+	modelName := GetFineTunedModelName(trainingJob.Name)
+
+	metrics.TrainingJobFailureTotal.WithLabelValues(trainingJob.Namespace, *baseModelRefName, modelName, reason).Inc()
+	metrics.TrainingJobTimeDurationMins.WithLabelValues(trainingJob.Namespace, *baseModelRefName, v1beta1.TrainJobFailed, modelName).Add(time.Since(trainingJob.CreationTimestamp.Time).Minutes())
 }
