@@ -72,7 +72,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.JobStatus":                        schema_pkg_apis_ome_v1beta1_JobStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig":                       schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec":                       schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec":                       schema_pkg_apis_ome_v1beta1_LoggerSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicy":                         schema_pkg_apis_ome_v1beta1_MLPolicy(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MLPolicyConfig":                   schema_pkg_apis_ome_v1beta1_MLPolicyConfig(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.MPIMLPolicyConfig":                schema_pkg_apis_ome_v1beta1_MPIMLPolicyConfig(ref),
@@ -120,7 +119,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceAccountSpec":               schema_pkg_apis_ome_v1beta1_ServiceAccountSpec(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceAccountStatus":             schema_pkg_apis_ome_v1beta1_ServiceAccountStatus(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServiceMetadata":                  schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
-		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingAdapter":                   schema_pkg_apis_ome_v1beta1_ServingAdapter(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntime":                   schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":               schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
 		"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":            schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
@@ -1551,12 +1549,6 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -1604,7 +1596,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "k8s.io/api/apps/v1.DeploymentStrategy"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "k8s.io/api/apps/v1.DeploymentStrategy"},
 	}
 }
 
@@ -2259,12 +2251,6 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -2330,7 +2316,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -3371,12 +3357,6 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -3442,7 +3422,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LeaderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -5097,33 +5077,6 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
-	}
-}
-
-func schema_pkg_apis_ome_v1beta1_LoggerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LoggerSpec specifies optional payload logging available for all components Configures how request and response payloads are logged for auditing and debugging.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"url": {
-						SchemaProps: spec.SchemaProps{
-							Description: "URL to send logging events The endpoint where log data will be sent for external processing or storage.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"mode": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specifies the scope of the loggers. <br /> Valid values are: <br /> - \"all\" (default): log both request and response; <br /> - \"request\": log only request; <br /> - \"response\": log only response <br />",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
 	}
 }
 
@@ -7701,12 +7654,6 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -7760,7 +7707,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -8920,12 +8867,6 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 							Format:      "int64",
 						},
 					},
-					"logger": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Activate request/response logging and logger configurations",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec"),
-						},
-					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
@@ -8995,7 +8936,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.LoggerSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.KedaConfig", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -9624,53 +9565,6 @@ func schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref common.ReferenceCallback) c
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_ServingAdapter(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Type: []string{"object"},
-				Properties: map[string]spec.Schema{
-					"serverType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"modelLoadingTimeoutMillis": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Timeout for model loading operations in milliseconds",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"env": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/api/core/v1.EnvVar"},
-	}
-}
-
 func schema_pkg_apis_ome_v1beta1_ServingRuntime(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -10245,18 +10139,12 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec"),
 						},
 					},
-					"servingAdapter": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Provide the details about built-in runtime adapter",
-							Ref:         ref("bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingAdapter"),
-						},
-					},
 				},
 				Required: []string{"containers"},
 			},
 		},
 		Dependencies: []string{
-			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RouterSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ServingAdapter", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.DecoderSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.EngineSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.RouterSpec", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 
@@ -10280,13 +10168,6 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 					"path": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Path is the absolute path where the model will be downloaded and stored on the node.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"schemaPath": {
-						SchemaProps: spec.SchemaProps{
-							Description: "SchemaPath is the path to the model schema or configuration file within the storage system. This can be used to validate the model or customize how it's loaded.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

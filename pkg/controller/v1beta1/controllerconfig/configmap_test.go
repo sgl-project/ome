@@ -2,7 +2,6 @@ package controllerconfig
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
@@ -11,38 +10,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
-)
-
-const (
-	DefaultModelLocalMountPath = "/mnt/models"
-	DefaultHTTPPort            = 8080
-	DefaultGRPCPort            = 9000
-	DefaultWorkers             = 1
-	DefaultTimeout             = 60
-	IngressGateway             = "knative-ingress-gateway.knative-serving"
-	IngressService             = "istio-ingressgateway.istio-system.svc.cluster.local"
-	LocalGateway               = "knative-local-gateway.knative-serving"
-	LocalGatewayService        = "knative-local-gateway.istio-system.svc.cluster.local"
-	Domain                     = "example.com"
-	IngressClassName           = "nginx"
-	AdditionalDomain           = "additional-example.com"
-	AdditionalDomainExtra      = "additional-example-extra.com"
-)
-
-var (
-	IngressConfigData = fmt.Sprintf(`{
-		"ingressGateway":"%s",
-		"ingressService":"%s",
-		"localGateway":"%s",
-		"localGatewayService":"%s",
-		"ingressDomain":"%s",
-		"ingressClassName":"%s",
-		"additionalIngressDomains":["%s","%s"]
-	}`,
-		IngressGateway, IngressService,
-		LocalGateway, LocalGatewayService,
-		Domain, IngressClassName,
-		AdditionalDomain, AdditionalDomainExtra)
 )
 
 func TestNewInferenceServicesConfig(t *testing.T) {

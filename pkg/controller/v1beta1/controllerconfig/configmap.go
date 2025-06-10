@@ -248,22 +248,6 @@ func NewDeployConfig(clientset kubernetes.Interface) (*DeployConfig, error) {
 	return deployConfig, nil
 }
 
-func NewOciConfig(clientset kubernetes.Interface) (*OCIConfig, error) {
-	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.InferenceServiceConfigMapName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	ociConfig := &OCIConfig{}
-	for _, err := range []error{
-		getComponentConfig(OCIConfigName, configMap, &ociConfig),
-	} {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ociConfig, nil
-}
-
 func NewDacReconcilePolicyConfig(clientset kubernetes.Interface) (*DacReconcilePolicyConfig, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.DedicatedAIClusterConfigMapName, metav1.GetOptions{})
 	if err != nil {

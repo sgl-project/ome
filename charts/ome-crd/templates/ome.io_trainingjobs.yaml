@@ -151,8 +151,6 @@ spec:
                     type: object
                   path:
                     type: string
-                  schemaPath:
-                    type: string
                   storageUri:
                     type: string
                 required:
@@ -316,8 +314,6 @@ spec:
                           type: string
                         type: object
                       path:
-                        type: string
-                      schemaPath:
                         type: string
                       storageUri:
                         type: string

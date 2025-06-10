@@ -580,11 +580,6 @@ func (t *TrainJobDatasetConfigWrapper) Parameters(params map[string]string) *Tra
 	return t
 }
 
-func (t *TrainJobDatasetConfigWrapper) SchemaPath(schemaPath string) *TrainJobDatasetConfigWrapper {
-	t.StorageSpec.SchemaPath = &schemaPath
-	return t
-}
-
 func (t *TrainJobDatasetConfigWrapper) Obj() *omev1beta1.StorageSpec {
 	return &t.StorageSpec
 }

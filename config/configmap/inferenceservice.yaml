@@ -18,25 +18,6 @@ data:
         "disableIngressCreation": false
     }
 
-  logger: |-
-    {
-        "image" : "ome/agent:latest",
-        "memoryRequest": "100Mi",
-        "memoryLimit": "1Gi",
-        "cpuRequest": "100m",
-        "cpuLimit": "1",
-        "defaultUrl": "http://default-broker"
-    }
-
-  agent: |-
-    {
-        "image" : "ome/agent:latest",
-        "memoryRequest": "100Mi",
-        "memoryLimit": "1Gi",
-        "cpuRequest": "100m",
-        "cpuLimit": "1"
-    }
-
   ociEtc: |-
     {
         "region" : "us-chicago-1",

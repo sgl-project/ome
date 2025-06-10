@@ -33,11 +33,6 @@ type StorageSpec struct {
 	// +optional
 	Path *string `json:"path,omitempty"`
 
-	// SchemaPath is the path to the model schema or configuration file within the storage system.
-	// This can be used to validate the model or customize how it's loaded.
-	// +optional
-	SchemaPath *string `json:"schemaPath,omitempty"`
-
 	// Parameters contain key-value pairs to override default storage credentials or configuration.
 	// These values are typically used to configure access to object storage or mount options.
 	// +optional

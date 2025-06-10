@@ -810,10 +810,6 @@
             "default": ""
           }
         },
-        "logger": {
-          "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/v1beta1.LoggerSpec"
-        },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
@@ -1063,10 +1059,6 @@
         "leader": {
           "description": "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed token generation in multi-node deployments.",
           "$ref": "#/definitions/v1beta1.LeaderSpec"
-        },
-        "logger": {
-          "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/v1beta1.LoggerSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -1696,10 +1688,6 @@
         "leader": {
           "description": "Leader node configuration (only used for MultiNode deployment) Defines the pod and container spec for the leader node that coordinates distributed inference in multi-node deployments.",
           "$ref": "#/definitions/v1beta1.LeaderSpec"
-        },
-        "logger": {
-          "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/v1beta1.LoggerSpec"
         },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
@@ -2842,20 +2830,6 @@
           "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
-        }
-      }
-    },
-    "v1beta1.LoggerSpec": {
-      "description": "LoggerSpec specifies optional payload logging available for all components Configures how request and response payloads are logged for auditing and debugging.",
-      "type": "object",
-      "properties": {
-        "mode": {
-          "description": "Specifies the scope of the loggers. \u003cbr /\u003e Valid values are: \u003cbr /\u003e - \"all\" (default): log both request and response; \u003cbr /\u003e - \"request\": log only request; \u003cbr /\u003e - \"response\": log only response \u003cbr /\u003e",
-          "type": "string"
-        },
-        "url": {
-          "description": "URL to send logging events The endpoint where log data will be sent for external processing or storage.",
-          "type": "string"
         }
       }
     },
@@ -4136,10 +4110,6 @@
             "default": ""
           }
         },
-        "logger": {
-          "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/v1beta1.LoggerSpec"
-        },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
@@ -4856,10 +4826,6 @@
             "default": ""
           }
         },
-        "logger": {
-          "description": "Activate request/response logging and logger configurations",
-          "$ref": "#/definitions/v1beta1.LoggerSpec"
-        },
         "maxReplicas": {
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
@@ -5401,29 +5367,6 @@
         }
       }
     },
-    "v1beta1.ServingAdapter": {
-      "type": "object",
-      "properties": {
-        "env": {
-          "description": "Environment variables used to control other aspects of the built-in adapter's behavior (uncommon)",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1.EnvVar"
-          },
-          "x-kubernetes-list-type": "atomic"
-        },
-        "modelLoadingTimeoutMillis": {
-          "description": "Timeout for model loading operations in milliseconds",
-          "type": "integer",
-          "format": "int32"
-        },
-        "serverType": {
-          "description": "ServerType must be one of the supported built-in types such as \"triton\" or \"mlserver\", and the runtime's container must have the same name",
-          "type": "string"
-        }
-      }
-    },
     "v1beta1.ServingRuntime": {
       "description": "ServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
@@ -5707,10 +5650,6 @@
           "description": "If specified, the pod will be dispatched by specified scheduler. If not specified, the pod will be dispatched by default scheduler.",
           "type": "string"
         },
-        "servingAdapter": {
-          "description": "Provide the details about built-in runtime adapter",
-          "$ref": "#/definitions/v1beta1.ServingAdapter"
-        },
         "supportedModelFormats": {
           "description": "Model formats and version supported by this runtime",
           "type": "array",
@@ -5786,10 +5725,6 @@
         },
         "path": {
           "description": "Path is the absolute path where the model will be downloaded and stored on the node.",
-          "type": "string"
-        },
-        "schemaPath": {
-          "description": "SchemaPath is the path to the model schema or configuration file within the storage system. This can be used to validate the model or customize how it's loaded.",
           "type": "string"
         },
         "storageUri": {
