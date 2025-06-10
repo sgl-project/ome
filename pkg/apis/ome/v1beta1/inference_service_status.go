@@ -228,7 +228,6 @@ type FailureInfo struct {
 var conditionSet = apis.NewLivingConditionSet(
 	PredictorReady,
 	IngressReady,
-	RouterReady,
 )
 
 var _ apis.ConditionsAccessor = (*InferenceServiceStatus)(nil)
