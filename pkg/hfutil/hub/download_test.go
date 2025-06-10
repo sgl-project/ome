@@ -613,13 +613,10 @@ func TestContextReader(t *testing.T) {
 		defer cancel()
 
 		// Create a reader that will block, allowing context to timeout
-		reader := &blockingReader{}
+		reader := &blockingReader{ctx: ctx}
 		contextReader := &contextReader{ctx: ctx, r: reader}
 
 		buf := make([]byte, 10)
-
-		// Wait for context to timeout
-		time.Sleep(20 * time.Millisecond)
 
 		_, err := contextReader.Read(buf)
 
@@ -683,11 +680,12 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 }
 
 // blockingReader blocks long enough to test context cancellation
-type blockingReader struct{}
+type blockingReader struct {
+	ctx context.Context
+}
 
 func (r *blockingReader) Read(p []byte) (n int, err error) {
-	// Block long enough to allow context to timeout but not hang tests
-	time.Sleep(50 * time.Millisecond)
+	<-r.ctx.Done()
 	return 0, io.EOF
 }
 

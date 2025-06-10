@@ -743,12 +743,28 @@ type contextReader struct {
 	r   io.Reader
 }
 
-func (cr *contextReader) Read(p []byte) (n int, err error) {
+func (cr *contextReader) Read(p []byte) (int, error) {
+	type readResult struct {
+		n   int
+		err error
+	}
+	ch := make(chan readResult, 1)
+
+	go func() {
+		n, err := cr.r.Read(p)
+		ch <- readResult{n, err}
+	}()
+
 	select {
 	case <-cr.ctx.Done():
 		return 0, cr.ctx.Err()
-	default:
-		return cr.r.Read(p)
+	case res := <-ch:
+		// If the context timed out/canceled while read was in progress,
+		// still prefer the context error!
+		if cr.ctx.Err() != nil {
+			return 0, cr.ctx.Err()
+		}
+		return res.n, res.err
 	}
 }
 
