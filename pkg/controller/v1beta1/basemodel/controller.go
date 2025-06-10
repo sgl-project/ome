@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -399,35 +398,26 @@ func mapConfigMapToModelRequests(obj client.Object, keyPrefix string, log logr.L
 		var request reconcile.Request
 		var shouldProcess bool
 
-		if isNamespaced {
-			// For BaseModel: "namespace.basemodel.modelname"
-			if strings.Contains(key, "."+keyPrefix+".") {
-				keyParts := strings.Split(key, ".")
-				if len(keyParts) >= 3 {
-					namespace := keyParts[0]
-					modelName := strings.Join(keyParts[2:], ".")
+		// Parse using the centralized parsing function
+		namespace, modelName, isClusterBaseModel, success := constants.ParseModelInfoFromConfigMapKey(key)
+		if success {
+			// Check if this matches the expected model type
+			if (isNamespaced && !isClusterBaseModel) || (!isNamespaced && isClusterBaseModel) {
+				if isNamespaced {
 					request = reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Namespace: namespace,
 							Name:      modelName,
 						},
 					}
-					shouldProcess = true
-				}
-			}
-		} else {
-			// For ClusterBaseModel: "clusterbasemodel.modelname"
-			if strings.HasPrefix(key, keyPrefix+".") {
-				keyParts := strings.Split(key, ".")
-				if len(keyParts) >= 2 {
-					modelName := strings.Join(keyParts[1:], ".")
+				} else {
 					request = reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Name: modelName,
 						},
 					}
-					shouldProcess = true
 				}
+				shouldProcess = true
 			}
 		}
 

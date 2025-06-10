@@ -149,17 +149,6 @@ func (m *ModelConfigUpdater) createOrUpdateConfigMap(configMap *corev1.ConfigMap
 		configMap.Data = make(map[string]string)
 	}
 
-	// Check if there's already an entry for this model using the old format
-	// Support backward compatibility during transition
-	oldKey := GetModelKey(namespace, modelName)
-	if oldKey != key {
-		if oldData, exists := configMap.Data[oldKey]; exists {
-			m.logger.Infof("Migrating model entry from old key '%s' to new key '%s' for %s", oldKey, key, modelInfo)
-			configMap.Data[key] = oldData
-			delete(configMap.Data, oldKey)
-		}
-	}
-
 	// First, check if there's already an entry for this model
 	var modelEntry ModelEntry
 	if existingData, exists := configMap.Data[key]; exists {
@@ -267,15 +256,12 @@ func (m *ModelConfigUpdater) DeleteModelConfig(op *ModelConfigOp) error {
 	// Get the new deterministic key for this model
 	key := constants.GetModelConfigMapKey(namespace, modelName, isClusterBaseModel)
 
-	// Also check for the old key format for backward compatibility
-	oldKey := GetModelKey(namespace, modelName)
-
-	// Try the new key first
+	// Check if entry exists
 	if existingData, exists := existingConfigMap.Data[key]; exists {
-		// If the entry exists in the new format, keep the status but remove the config
+		// If the entry exists, keep the status but remove the config
 		var modelEntry ModelEntry
 		if err := json.Unmarshal([]byte(existingData), &modelEntry); err == nil {
-			// Entry is in the new format, just remove the config
+			// Entry is in JSON format, just remove the config
 			modelEntry.Config = nil
 
 			// If status is not set, mark as Deleted
@@ -292,47 +278,11 @@ func (m *ModelConfigUpdater) DeleteModelConfig(op *ModelConfigOp) error {
 
 			existingConfigMap.Data[key] = string(updatedJSON)
 		} else {
-			// Old format or unrecognized, just delete the entry
+			// Unrecognized format, just delete the entry
 			delete(existingConfigMap.Data, key)
 		}
 
 		m.logger.Debugf("Updated/deleted ConfigMap data[%s] for %s", key, modelInfo)
-	} else if oldKey != key && len(oldKey) > 0 {
-		// Check if it exists under the old key format
-		if existingData, exists := existingConfigMap.Data[oldKey]; exists {
-			// Migrate and process the old key
-			m.logger.Infof("Found model under old key '%s', migrating to new key '%s' for %s", oldKey, key, modelInfo)
-
-			// Try to process as new format
-			var modelEntry ModelEntry
-			if err := json.Unmarshal([]byte(existingData), &modelEntry); err == nil {
-				// Entry is in JSON format, just remove the config
-				modelEntry.Config = nil
-				if modelEntry.Status == "" {
-					modelEntry.Status = ModelStatusDeleted
-				}
-
-				updatedJSON, err := json.Marshal(modelEntry)
-				if err != nil {
-					m.logger.Errorf("Failed to marshal updated model entry for %s: %v", modelInfo, err)
-					return err
-				}
-
-				existingConfigMap.Data[key] = string(updatedJSON)
-			} else {
-				// Old string format, delete it
-				existingConfigMap.Data[key] = string(ModelStatusDeleted)
-			}
-
-			// Remove the old key
-			delete(existingConfigMap.Data, oldKey)
-
-			m.logger.Debugf("Migrated and updated/deleted ConfigMap data from old key '%s' to new key '%s' for %s", oldKey, key, modelInfo)
-		} else {
-			// Key doesn't exist in either format, nothing to do
-			m.logger.Debugf("No entry found for %s under either old or new key format, nothing to delete", modelInfo)
-			return nil
-		}
 	} else {
 		// Key doesn't exist, nothing to do
 		m.logger.Debugf("No entry found for %s, nothing to delete", modelInfo)

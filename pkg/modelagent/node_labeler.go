@@ -258,17 +258,6 @@ func (n *NodeLabeler) createOrUpdateConfigMap(configMap *corev1.ConfigMap, op *N
 		configMap.Data = make(map[string]string)
 	}
 
-	// Check if there's already an entry for this model using the old format
-	// Support backward compatibility during transition
-	oldKey := GetModelKey(namespace, modelName)
-	if oldKey != key {
-		if oldData, exists := configMap.Data[oldKey]; exists {
-			n.logger.Infof("Migrating model entry from old key '%s' to new key '%s' for %s", oldKey, key, modelInfo)
-			configMap.Data[key] = oldData
-			delete(configMap.Data, oldKey)
-		}
-	}
-
 	// Check if there's already an entry for this model
 	var modelEntry ModelEntry
 	if existingData, exists := configMap.Data[key]; exists {
