@@ -37,7 +37,7 @@ func TestBaseModelReconcile(t *testing.T) {
 		name       string
 		baseModel  *v1beta1.BaseModel
 		setupMocks func(client.Client)
-		validate   func(*testing.T, client.Client, *v1beta1.BaseModel)
+		validate   func(*testing.T, client.Client, *v1beta1.BaseModel, ctrl.Result, error)
 		wantErr    bool
 	}{
 		{
@@ -59,7 +59,7 @@ func TestBaseModelReconcile(t *testing.T) {
 			setupMocks: func(c client.Client) {
 				// No setup needed for this test
 			},
-			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel) {
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
 				// Fetch the updated BaseModel
 				updated := &v1beta1.BaseModel{}
 				err := c.Get(context.TODO(), types.NamespacedName{
@@ -131,7 +131,7 @@ func TestBaseModelReconcile(t *testing.T) {
 				err = c.Create(context.TODO(), configMap)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 			},
-			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel) {
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
 				// Fetch the updated BaseModel
 				updated := &v1beta1.BaseModel{}
 				err := c.Get(context.TODO(), types.NamespacedName{
@@ -218,7 +218,7 @@ func TestBaseModelReconcile(t *testing.T) {
 					g.Expect(err).NotTo(gomega.HaveOccurred())
 				}
 			},
-			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel) {
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
 				updated := &v1beta1.BaseModel{}
 				err := c.Get(context.TODO(), types.NamespacedName{
 					Name:      baseModel.Name,
@@ -235,10 +235,10 @@ func TestBaseModelReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "BaseModel deletion removes finalizer",
+			name: "BaseModel deletion removes finalizer when no ConfigMaps exist",
 			baseModel: &v1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "delete-me",
+					Name:              "delete-me-no-configmaps",
 					Namespace:         "default",
 					Finalizers:        []string{constants.BaseModelFinalizer},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
@@ -250,11 +250,16 @@ func TestBaseModelReconcile(t *testing.T) {
 				},
 			},
 			setupMocks: func(c client.Client) {
-				// No setup needed
+				// Create ome namespace but no ConfigMaps
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
 			},
-			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel) {
-				// For deletion tests, the object should still exist but without finalizer
-				// The fake client doesn't actually delete the object, it just sets DeletionTimestamp
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
 				updated := &v1beta1.BaseModel{}
 				err := c.Get(context.TODO(), types.NamespacedName{
 					Name:      baseModel.Name,
@@ -269,6 +274,231 @@ func TestBaseModelReconcile(t *testing.T) {
 					// If object is not found, that's also acceptable as it means deletion completed
 					g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
 				}
+			},
+		},
+		{
+			name: "BaseModel deletion waits when ConfigMap entries exist but are not deleted",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "deletion-waiting-model",
+					Namespace:         "default",
+					Finalizers:        []string{constants.BaseModelFinalizer},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "pytorch",
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create nodes
+				for _, nodeName := range []string{"node-1", "node-2"} {
+					node := &corev1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+						},
+					}
+					err := c.Create(context.TODO(), node)
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+
+				// Create ConfigMaps with entries not yet deleted
+				for _, nodeName := range []string{"node-1", "node-2"} {
+					modelEntry := modelagent.ModelEntry{
+						Status: modelagent.ModelStatusReady, // Not marked for deletion
+					}
+					entryData, _ := json.Marshal(modelEntry)
+
+					configMap := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      nodeName,
+							Namespace: constants.OMENamespace,
+							Labels: map[string]string{
+								constants.ModelStatusConfigMapLabel: "true",
+							},
+						},
+						Data: map[string]string{
+							"default.basemodel.deletion-waiting-model": string(entryData),
+						},
+					}
+					err := c.Create(context.TODO(), configMap)
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				updated := &v1beta1.BaseModel{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Finalizer should still be present since deletion is waiting for ConfigMaps to be cleared
+				g.Expect(updated.Finalizers).To(gomega.ContainElement(constants.BaseModelFinalizer))
+
+				// The reconciler should have set a requeue delay when waiting for ConfigMaps to be cleared
+				g.Expect(result.RequeueAfter).To(gomega.Equal(time.Second * 30))
+			},
+		},
+		{
+			name: "BaseModel deletion removes finalizer when ConfigMap entries are marked as deleted",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "deletion-complete-model",
+					Namespace:         "default",
+					Finalizers:        []string{constants.BaseModelFinalizer},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "onnx",
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create nodes
+				for _, nodeName := range []string{"node-1", "node-2"} {
+					node := &corev1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+						},
+					}
+					err := c.Create(context.TODO(), node)
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+
+				// Create ConfigMaps with entries marked as deleted
+				for _, nodeName := range []string{"node-1", "node-2"} {
+					modelEntry := modelagent.ModelEntry{
+						Status: modelagent.ModelStatusDeleted, // Marked for deletion
+					}
+					entryData, _ := json.Marshal(modelEntry)
+
+					configMap := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      nodeName,
+							Namespace: constants.OMENamespace,
+							Labels: map[string]string{
+								constants.ModelStatusConfigMapLabel: "true",
+							},
+						},
+						Data: map[string]string{
+							"default.basemodel.deletion-complete-model": string(entryData),
+						},
+					}
+					err := c.Create(context.TODO(), configMap)
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				updated := &v1beta1.BaseModel{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+
+				// Finalizer should be removed since all entries are marked as deleted
+				if err == nil {
+					g.Expect(updated.Finalizers).NotTo(gomega.ContainElement(constants.BaseModelFinalizer))
+				} else {
+					g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
+				}
+			},
+		},
+		{
+			name: "BaseModel deletion with mix of deleted and active entries waits",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "mixed-deletion-model",
+					Namespace:         "default",
+					Finalizers:        []string{constants.BaseModelFinalizer},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create nodes
+				for _, nodeName := range []string{"node-1", "node-2", "node-3"} {
+					node := &corev1.Node{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: nodeName,
+						},
+					}
+					err := c.Create(context.TODO(), node)
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+
+				// Create ConfigMaps with mixed deletion status
+				statuses := map[string]modelagent.ModelStatus{
+					"node-1": modelagent.ModelStatusDeleted, // Marked for deletion
+					"node-2": modelagent.ModelStatusReady,   // Not deleted
+					"node-3": modelagent.ModelStatusFailed,  // Not deleted
+				}
+
+				for nodeName, status := range statuses {
+					modelEntry := modelagent.ModelEntry{
+						Status: status,
+					}
+					entryData, _ := json.Marshal(modelEntry)
+
+					configMap := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      nodeName,
+							Namespace: constants.OMENamespace,
+							Labels: map[string]string{
+								constants.ModelStatusConfigMapLabel: "true",
+							},
+						},
+						Data: map[string]string{
+							"default.basemodel.mixed-deletion-model": string(entryData),
+						},
+					}
+					err := c.Create(context.TODO(), configMap)
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				updated := &v1beta1.BaseModel{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Finalizer should still be present since not all entries are marked for deletion
+				g.Expect(updated.Finalizers).To(gomega.ContainElement(constants.BaseModelFinalizer))
 			},
 		},
 		{
@@ -307,7 +537,7 @@ func TestBaseModelReconcile(t *testing.T) {
 				err := c.Create(context.TODO(), configMap)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 			},
-			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel) {
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
 				updated := &v1beta1.BaseModel{}
 				err := c.Get(context.TODO(), types.NamespacedName{
 					Name:      baseModel.Name,
@@ -325,49 +555,42 @@ func TestBaseModelReconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create fake client
+			t.Parallel()
+
+			// Create client
 			c := ctrlclientfake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.baseModel).
 				WithStatusSubresource(tt.baseModel).
 				Build()
 
-			// Setup mocks
-			if tt.setupMocks != nil {
-				tt.setupMocks(c)
-			}
+			// Setup test mocks
+			tt.setupMocks(c)
 
 			// Create recorder
 			recorder := record.NewFakeRecorder(10)
 
-			// Create reconciler
+			// Run reconciliation
 			reconciler := &BaseModelReconciler{
 				Client:   c,
-				Log:      ctrl.Log.WithName("test"),
-				Scheme:   scheme,
+				Scheme:   c.Scheme(),
 				Recorder: recorder,
 			}
 
-			// Reconcile
-			req := ctrl.Request{
+			result, err := reconciler.Reconcile(context.TODO(), ctrl.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      tt.baseModel.Name,
 					Namespace: tt.baseModel.Namespace,
+					Name:      tt.baseModel.Name,
 				},
-			}
-			result, err := reconciler.Reconcile(context.TODO(), req)
-
+			})
 			if tt.wantErr {
 				g.Expect(err).To(gomega.HaveOccurred())
 			} else {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
-				g.Expect(result).To(gomega.Equal(ctrl.Result{}))
-
-				// Run validations
-				if tt.validate != nil {
-					tt.validate(t, c, tt.baseModel)
-				}
 			}
+
+			// Run validation
+			tt.validate(t, c, tt.baseModel, result, err)
 		})
 	}
 }

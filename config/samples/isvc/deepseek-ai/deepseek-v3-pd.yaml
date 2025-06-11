@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: deepseek-v3-pd
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-v3
+  namespace: deepseek-v3-pd
+spec:
+  model:
+    name: deepseek-v3
+  runtime:
+    name: srt-deepseek-pd-rdma
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  decoder:
+    minReplicas: 1
+    maxReplicas: 1

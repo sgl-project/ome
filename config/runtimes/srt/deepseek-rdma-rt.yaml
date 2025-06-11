@@ -106,12 +106,10 @@ spec:
             value: '1'
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: VLLM_PORT
-            value: "9000"
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
+          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes ${LWS_GROUP_SIZE} --node-rank ${LWS_WORKER_INDEX} --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -150,8 +148,8 @@ spec:
             port: 8080
           failureThreshold: 300
           successThreshold: 1
-          periodSeconds: 6
-          initialDelaySeconds: 60
+          periodSeconds: 10
+          initialDelaySeconds: 300
           timeoutSeconds: 30
     worker:
       size: 1
@@ -184,11 +182,11 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: lmsysorg/sglang:v0.4.6.post5
+        image: docker.io/lmsysorg/sglang:v0.4.6.post5-cu124
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-reasoning --reasoning-parser DeepSeek-R1 --enable-metrics"
+          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 -nnodes ${LWS_GROUP_SIZE} --node-rank ${LWS_WORKER_INDEX} --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
         resources:
           limits:
             nvidia.com/gpu: "8"

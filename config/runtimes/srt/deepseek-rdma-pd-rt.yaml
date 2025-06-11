@@ -106,12 +106,41 @@ spec:
             value: '1'
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: VLLM_PORT
-            value: "9000"
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
+          - >
+            MC_TE_METRIC=true;
+            SGLANG_TBO_DEBUG=1;
+            pip install mooncake-transfer-engine;
+            python3 -m sglang.launch_server
+            --model-path ${MODEL_PATH}
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --disaggregation-mode prefill
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --port 30000
+            --tp-size 32
+            --dp-size 32
+            --enable-dp-attention
+            --decode-log-interval 1
+            --enable-deepep-moe
+            --page-size 1
+            --host 0.0.0.0
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --enable-dp-lm-head
+            --disable-radix-cache
+            --watchdog-timeout 1000000
+            --deepep-mode normal
+            --mem-fraction-static 0.85
+            --chunked-prefill-size 524288
+            --max-running-requests 8192
+            --max-total-tokens 131072
+            --context-length 8192
+            --ep-num-redundant-experts 32
+            --ep-dispatch-algorithm dynamic
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -150,11 +179,11 @@ spec:
             port: 8080
           failureThreshold: 300
           successThreshold: 1
-          periodSeconds: 6
-          initialDelaySeconds: 60
+          periodSeconds: 10
+          initialDelaySeconds: 600
           timeoutSeconds: 30
     worker:
-      size: 1
+      size: 3
       nodeSelector:
         oci.oraclecloud.com/rdma.authenticated: "16"
         oci.oraclecloud.com/rdma.mlx_issues: "0"
@@ -188,7 +217,38 @@ spec:
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-reasoning --reasoning-parser DeepSeek-R1 --enable-metrics"
+          - >
+            MC_TE_METRIC=true;
+            SGLANG_TBO_DEBUG=1;
+            pip install mooncake-transfer-engine;
+            python3 -m sglang.launch_server
+            --model-path ${MODEL_PATH}
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --disaggregation-mode prefill
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --port 30000
+            --tp-size 32
+            --dp-size 32
+            --enable-dp-attention
+            --decode-log-interval 1
+            --enable-deepep-moe
+            --page-size 1
+            --host 0.0.0.0
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --enable-dp-lm-head
+            --disable-radix-cache
+            --watchdog-timeout 1000000
+            --deepep-mode normal
+            --mem-fraction-static 0.85
+            --chunked-prefill-size 524288
+            --max-running-requests 8192
+            --max-total-tokens 131072
+            --context-length 8192
+            --ep-num-redundant-experts 32
+            --ep-dispatch-algorithm dynamic
         resources:
           limits:
             nvidia.com/gpu: "8"
@@ -322,12 +382,40 @@ spec:
             value: '1'
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: VLLM_PORT
-            value: "9000"
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 0 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
+          - >
+            MC_TE_METRIC=true;
+            SGLANG_TBO_DEBUG=1;
+            pip install mooncake-transfer-engine;
+            python3 -m sglang.launch_server
+            --model-path ${MODEL_PATH}
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9
+            --disaggregation-mode decode
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --port 30001
+            --base-gpu-id 0
+            --node-rank ${LWS_WORKER_INDEX}
+            --tp-size 72
+            --dp-size 72
+            --enable-dp-attention
+            --decode-log-interval 1
+            --enable-deepep-moe
+            --page-size 1
+            --host 0.0.0.0
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --enable-dp-lm-head
+            --disable-radix-cache
+            --watchdog-timeout 1000000
+            --deepep-mode low_latency
+            --mem-fraction-static 0.835
+            --max-running-requests 18432
+            --context-length 4500
+            --ep-num-redundant-experts 32
+            --cuda-graph-bs 256
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -366,11 +454,11 @@ spec:
             port: 8080
           failureThreshold: 300
           successThreshold: 1
-          periodSeconds: 6
-          initialDelaySeconds: 60
+          periodSeconds: 10
+          initialDelaySeconds: 600
           timeoutSeconds: 30
     worker:
-      size: 1
+      size: 8
       nodeSelector:
         oci.oraclecloud.com/rdma.authenticated: "16"
         oci.oraclecloud.com/rdma.mlx_issues: "0"
@@ -404,7 +492,36 @@ spec:
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes 2 --node-rank 1 --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --enable-reasoning --reasoning-parser DeepSeek-R1 --enable-metrics"
+          - >
+            MC_TE_METRIC=true;
+            SGLANG_TBO_DEBUG=1;
+            pip install mooncake-transfer-engine;
+            python3 -m sglang.launch_server
+            --model-path ${MODEL_PATH}
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9
+            --disaggregation-mode decode
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --port 30001
+            --tp-size 72
+            --dp-size 72
+            --enable-dp-attention
+            --decode-log-interval 1
+            --enable-deepep-moe
+            --page-size 1
+            --host 0.0.0.0
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --enable-dp-lm-head
+            --disable-radix-cache
+            --watchdog-timeout 1000000
+            --deepep-mode low_latency
+            --mem-fraction-static 0.835
+            --max-running-requests 18432
+            --context-length 4500
+            --ep-num-redundant-experts 32
+            --cuda-graph-bs 256
         resources:
           limits:
             nvidia.com/gpu: "8"
