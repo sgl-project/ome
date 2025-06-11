@@ -9,7 +9,7 @@ metadata:
     genai-model-on-demand-retired-date: "{{ index .Values "cohere-embed-v4-0" "timeOnDemandRetired" }}"
     genai-model-dedicated-retired-date: "{{ index .Values "cohere-embed-v4-0" "timeDedicatedRetired" }}"
   annotations:
-    models.ome.io/runtime: "cohere-embed-v4"
+    models.ome.io/runtime: "cohere-embed-multi-modal"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "cohere-embed-v4-0" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "cohere-embed-v4-0" "isInternal" }}"

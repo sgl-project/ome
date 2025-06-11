@@ -5,7 +5,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "cohere-embed-v4"
+    models.ome.io/runtime: "cohere-embed-multi-modal"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "false"
     models.ome.io/internal: "false"

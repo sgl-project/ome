@@ -6,7 +6,7 @@ metadata:
 spec:
   predictor:
     model:
-      runtime: cohere-embed-v4
+      runtime: cohere-embed-multi-modal
       baseModel: embed-v4
       protocolVersion: cohere
     minReplicas: 1
