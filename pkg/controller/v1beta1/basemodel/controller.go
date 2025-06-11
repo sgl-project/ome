@@ -155,12 +155,94 @@ func (r *ClusterBaseModelReconciler) handleDeletion(ctx context.Context, cluster
 
 // handleModelDeletion is a shared utility function for handling model deletion
 func handleModelDeletion(ctx context.Context, kubeClient client.Client, obj client.Object, finalizer string) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
-		// Perform cleanup if needed
+		// Before removing the finalizer, make sure all entries are cleared from ConfigMaps
+		// This prevents orphaned models when nodes are down or agents aren't running
+
+		// Determine model name, namespace and if it's cluster-scoped
+		modelName := obj.GetName()
+		var modelNamespace string
+		var isClusterScope bool
+
+		// Set namespace and scope based on object type
+		switch typedObj := obj.(type) {
+		case *v1beta1.BaseModel:
+			modelNamespace = typedObj.Namespace
+			isClusterScope = false
+		case *v1beta1.ClusterBaseModel:
+			modelNamespace = ""
+			isClusterScope = true
+		default:
+			log.Error(fmt.Errorf("unknown model type"), "Invalid model type for deletion handler")
+			return ctrl.Result{}, fmt.Errorf("unknown model type for deletion")
+		}
+
+		// Get the model's ConfigMap key
+		modelKey := constants.GetModelConfigMapKey(modelNamespace, modelName, isClusterScope)
+
+		// List all ConfigMaps with model status label in the ome namespace
+		configMaps := &corev1.ConfigMapList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(constants.OMENamespace),
+			client.MatchingLabels{constants.ModelStatusConfigMapLabel: "true"},
+		}
+
+		if err := kubeClient.List(ctx, configMaps, listOpts...); err != nil {
+			log.Error(err, "Failed to list ConfigMaps during model deletion")
+			return ctrl.Result{RequeueAfter: time.Second * 10}, err
+		}
+
+		// Check if any ConfigMap still has an entry for this model
+		var modelsNotDeleted []string
+		nodesWithModel := 0
+
+		for _, configMap := range configMaps.Items {
+			// Check if the model exists in this ConfigMap
+			if data, exists := configMap.Data[modelKey]; exists {
+				nodesWithModel++
+
+				// Check if it's already marked for deletion
+				var modelEntry modelagent.ModelEntry
+				if err := json.Unmarshal([]byte(data), &modelEntry); err == nil {
+					// If model entry is present but not marked as deleted, add it to the list
+					if modelEntry.Status != modelagent.ModelStatusDeleted {
+						modelsNotDeleted = append(modelsNotDeleted, configMap.Name)
+					}
+				} else {
+					// Can't parse the entry, consider it not deleted for safety
+					modelsNotDeleted = append(modelsNotDeleted, configMap.Name)
+				}
+			}
+		}
+
+		modelInfo := modelName
+		if !isClusterScope {
+			modelInfo = modelNamespace + "/" + modelName
+		}
+
+		// If models are still present in ConfigMaps and not deleted, requeue
+		if len(modelsNotDeleted) > 0 {
+			log.Info("Waiting for model to be cleared from ConfigMaps",
+				"model", modelInfo,
+				"nodesWithModel", nodesWithModel,
+				"nodesNotDeleted", len(modelsNotDeleted),
+				"nodes", modelsNotDeleted)
+
+			// Requeue to check again later
+			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+		}
+
+		log.Info("All model entries have been cleared or marked as deleted", "model", modelInfo)
+
+		// All entries are either cleared or marked for deletion, safe to remove finalizer
 		controllerutil.RemoveFinalizer(obj, finalizer)
 		if err := kubeClient.Update(ctx, obj); err != nil {
+			log.Error(err, "Failed to remove finalizer", "model", modelInfo)
 			return ctrl.Result{}, err
 		}
+		log.Info("Finalizer removed, deletion complete", "model", modelInfo)
 	}
 	return ctrl.Result{}, nil
 }
