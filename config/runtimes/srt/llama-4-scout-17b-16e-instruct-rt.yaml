@@ -52,7 +52,7 @@ spec:
         args: ["--host", "0.0.0.0", "--port", "8080"]
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.6.post5.b8dffec-cu124
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.6.post5.23224b0-cu124
       ports:
         - containerPort: 8080
           name: http1
