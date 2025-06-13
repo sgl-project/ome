@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
@@ -271,6 +272,7 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 	if runnerSpec != nil {
 		UpdateEnvVariables(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+		d.setParallelismEnvVarForDecoder(&runnerSpec.Container, d.getWorkerSize())
 	}
 
 	// Use common pod spec reconciler for base logic
@@ -299,6 +301,7 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 		if workerRunner != nil {
 			UpdateVolumeMounts(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			UpdateEnvVariables(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+			d.setParallelismEnvVarForDecoder(&workerRunner.Container, d.getWorkerSize())
 		}
 	}
 
@@ -311,4 +314,37 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 
 	d.Log.Info("Decoder Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
+}
+
+// setParallelismEnvVarForDecoder calculates and sets the PARALLELISM_SIZE environment variable for the decoder's container.
+func (d *Decoder) setParallelismEnvVarForDecoder(container *v1.Container, workerReplicas int) {
+	if container == nil || d.decoderSpec == nil {
+		d.Log.Info("Cannot set parallelism: container or decoderSpec is nil")
+		return
+	}
+
+	numGPUsPerPod := int64(isvcutils.GetGpuCountFromContainer(container))
+	numLeaders := int64(0)
+	numWorkers := int64(workerReplicas)
+
+	// Determine leader presence
+	if d.decoderSpec.Leader != nil {
+		numLeaders = 1
+	} else if d.decoderSpec.Runner != nil { // Raw deployment or single pod considered as leader
+		numLeaders = 1
+	}
+
+	// Only proceed if there are GPUs and some form of parallelism (leaders or workers)
+	if numGPUsPerPod > 0 && (numLeaders > 0 || numWorkers > 0) {
+		parallelismSize := numGPUsPerPod * (numLeaders + numWorkers)
+		if parallelismSize > 0 {
+			envVar := v1.EnvVar{Name: constants.ParallelismSizeEnvVarKey, Value: strconv.FormatInt(parallelismSize, 10)}
+			isvcutils.UpdateEnvVars(container, &envVar)
+			d.Log.Info("Added parallelism env variable to decoder container", "value", parallelismSize, "containerName", container.Name)
+		} else {
+			d.Log.Info("Calculated parallelism is zero, not adding env var", "containerName", container.Name)
+		}
+	} else {
+		d.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
+	}
 }
