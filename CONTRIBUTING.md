@@ -38,15 +38,6 @@ It is required to classify your PR and make the commit message concise and usefu
 
 Open source community also recommends keeping the commit message title within 52 characters and each line in the message content within 72 characters.
 
-### Best practices for PRs
-* **Create a new branch for your PR**: Start by creating a new branch from the main branch for your PR. This ensures a clean, isolated workspace for your changes.
-* **Regular commits during development**: Make incremental commits with descriptive messages as you work through your task. This creates a clear history of your development process.
-* **Rebase and squash before review**: Prior to submitting your PR for review, rebase your branch onto the latest main branch and squash your commits into 1. This keeps the commit history clean and makes the review process more efficient.
-* **Single-purpose commits**: Structure your final commit to address one logical change with a clear, descriptive message.
-* **Address feedback with commit amendments**: When addressing review comments, use `git commit --amend` to update your existing commits rather than creating new ones. This maintains a clean history.
-* **Force push with care**: After amending commits, use `git push --force-with-lease` instead of `git push --force` to avoid accidentally overwriting others' work.
-* **Keep PRs focused**: Approval will be removed after commit history is changed. Make sure you tagged the responsible party for approval after amending commits.
-
 ### OME Enhancement Proposals (OEPs)
 
 An OEP (OME Enhancement Proposal) is required for substantial changes to OME. You should create an OEP when proposing:

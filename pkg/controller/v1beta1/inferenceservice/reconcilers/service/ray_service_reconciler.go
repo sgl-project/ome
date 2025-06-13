@@ -38,7 +38,7 @@ func buildRayHeadService(componentMeta metav1.ObjectMeta, podSpec *corev1.PodSpe
 	serviceType := determineServiceType(componentMeta)
 	selector := buildRayHeadSelectorLabels(componentMeta)
 
-	return buildServiceWithLoadBalancer(componentMeta, serviceType, servicePorts, selector, false)
+	return buildServiceWithLoadBalancer(componentMeta, serviceType, servicePorts, selector)
 }
 
 // buildRayServicePorts creates service ports configuration for Ray head service
