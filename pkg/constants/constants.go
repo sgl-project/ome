@@ -263,6 +263,8 @@ const (
 
 	ModelPathEnvVarKey       = "MODEL_PATH"
 	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
+
+	ParallelismSizeEnvVarKey = "PARALLELISM_SIZE"
 )
 
 // ModelConfig Constants
