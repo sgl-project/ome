@@ -26663,7 +26663,6 @@ spec:
                             - protocol
                           x-kubernetes-list-type: map
                         protocolVersion:
-                          default: openAI
                           type: string
                         readinessProbe:
                           properties:
