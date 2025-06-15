@@ -191,8 +191,8 @@ func initializeComponents(
 	gopherTaskChan chan *modelagent.GopherTask,
 	logger *Logger,
 ) (*modelagent.Scount, *modelagent.Gopher, error) {
-	// Create node labeler for labeling the node based on model status
-	nodeLabeler := modelagent.NewNodeLabeler(cfg.nodeName, cfg.namespace, kubeClient, cfg.nodeLabelRetry, logger)
+	// Create node label reconciler for labeling the node based on model status
+	nodeLabelReconciler := modelagent.NewNodeLabelReconciler(cfg.nodeName, kubeClient, cfg.nodeLabelRetry, logger)
 
 	// Convert sugared logger back to a regular zap logger to use ForZap
 	zapLogger := logger.Desugar()
@@ -200,8 +200,8 @@ func initializeComponents(
 	// Create a ModelConfigParser instance
 	modelConfigParser := modelagent.NewModelConfigParser(omeClient, logger)
 
-	// Create a ModelConfigUpdater instance
-	modelConfigUpdater := modelagent.NewModelConfigUpdater(cfg.nodeName, cfg.namespace, kubeClient, logger)
+	// Create a ConfigMapReconciler instance
+	configMapReconciler := modelagent.NewConfigMapReconciler(cfg.nodeName, cfg.namespace, kubeClient, logger)
 
 	// Create a Scout instance
 	baseModelInformer := omeInformerFactory.Ome().V1beta1().BaseModels()
@@ -214,7 +214,6 @@ func initializeComponents(
 		omeInformerFactory,
 		gopherTaskChan,
 		kubeClient,
-		nodeLabeler,
 		logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
@@ -241,7 +240,7 @@ func initializeComponents(
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
-		modelConfigUpdater,
+		configMapReconciler,
 		hfHubClient,
 		kubeClient, // Pass the Kubernetes client for secret access
 		cfg.concurrency,
@@ -249,7 +248,7 @@ func initializeComponents(
 		cfg.downloadRetry,
 		cfg.modelsRootDir,
 		gopherTaskChan,
-		nodeLabeler,
+		nodeLabelReconciler,
 		metrics,
 		logger)
 	if err != nil {
