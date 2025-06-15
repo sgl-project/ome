@@ -2,6 +2,7 @@ package pod
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/sgl-project/sgl-ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
@@ -163,11 +164,19 @@ func (ri *RDMAInjector) injectRDMAConfig(pod *v1.Pod, profile RDMAProfile) error
 
 // injectContainerConfig adds environment variables, volume mounts, and security context to a container
 func (ri *RDMAInjector) injectContainerConfig(container *v1.Container, profile RDMAProfile) {
-	// Add environment variables
-	for name, value := range profile.EnvVars {
+	// Add environment variables in sorted order for deterministic behavior
+	var keys []string
+	for name := range profile.EnvVars {
+		keys = append(keys, name)
+	}
+	// Sort keys for stable ordering
+	sort.Strings(keys)
+
+	// Add environment variables in sorted order
+	for _, name := range keys {
 		container.Env = append(container.Env, v1.EnvVar{
 			Name:  name,
-			Value: value,
+			Value: profile.EnvVars[name],
 		})
 	}
 
