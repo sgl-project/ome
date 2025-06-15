@@ -43,7 +43,7 @@ type GopherTask struct {
 
 type Gopher struct {
 	modelConfigParser    *ModelConfigParser
-	modelConfigUpdater   *ModelConfigUpdater
+	configMapReconciler  *ConfigMapReconciler
 	downloadRetry        int
 	concurrency          int
 	multipartConcurrency int
@@ -51,10 +51,10 @@ type Gopher struct {
 	hubClient            *hub.HubClient
 	kubeClient           kubernetes.Interface
 	gopherChan           <-chan *GopherTask
-	nodeLabeler          *NodeLabeler
+	nodeLabelReconciler  *NodeLabelReconciler
 	metrics              *Metrics
 	logger               *zap.SugaredLogger
-	configMapMutex       sync.Mutex // Mutex to coordinate ConfigMap access between nodeLabeler and modelConfigUpdater
+	configMapMutex       sync.Mutex // Mutex to coordinate ConfigMap access
 }
 
 const (
@@ -63,7 +63,7 @@ const (
 
 func NewGopher(
 	modelConfigParser *ModelConfigParser,
-	modelConfigUpdater *ModelConfigUpdater,
+	configMapReconciler *ConfigMapReconciler,
 	hubClient *hub.HubClient,
 	kubeClient kubernetes.Interface,
 	concurrency int,
@@ -71,7 +71,7 @@ func NewGopher(
 	downloadRetry int,
 	modelRootDir string,
 	gopherChan <-chan *GopherTask,
-	nodeLabeler *NodeLabeler,
+	nodeLabelReconciler *NodeLabelReconciler,
 	metrics *Metrics,
 	logger *zap.SugaredLogger) (*Gopher, error) {
 
@@ -81,7 +81,7 @@ func NewGopher(
 
 	return &Gopher{
 		modelConfigParser:    modelConfigParser,
-		modelConfigUpdater:   modelConfigUpdater,
+		configMapReconciler:  configMapReconciler,
 		downloadRetry:        downloadRetry,
 		concurrency:          concurrency,
 		multipartConcurrency: multipartConcurrency,
@@ -89,7 +89,7 @@ func NewGopher(
 		hubClient:            hubClient,
 		kubeClient:           kubeClient,
 		gopherChan:           gopherChan,
-		nodeLabeler:          nodeLabeler,
+		nodeLabelReconciler:  nodeLabelReconciler,
 		metrics:              metrics,
 		logger:               logger,
 	}, nil
@@ -98,7 +98,7 @@ func NewGopher(
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
 	s.logger.Info("Starting gopher workers")
 
-	for i := 0; i < numWorker; i++ {
+	for range numWorker {
 		go wait.Until(s.runWorker, time.Second, stopCh)
 	}
 
@@ -126,13 +126,46 @@ func (s *Gopher) runWorker() {
 	}
 }
 
-// safeNodeLabelerProcessOp executes the NodeLabeler's ProcessOp method with mutex protection
+// safeNodeLabelReconciliation executes the NodeLabelReconciler's ReconcileNodeLabels method with mutex protection
 // to ensure thread-safe ConfigMap updates
-func (s *Gopher) safeNodeLabelerProcessOp(op *NodeLabelOp) error {
+func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
-	return s.nodeLabeler.ProcessOp(op)
+	// Mark the node label
+	err := s.nodeLabelReconciler.ReconcileNodeLabels(op)
+	if err != nil {
+		return err
+	}
+
+	// Also update the ConfigMap with model status
+	if op.BaseModel != nil || op.ClusterBaseModel != nil {
+		// Convert ModelStateOnNode to ModelStatus
+		var status ModelStatus
+		switch op.ModelStateOnNode {
+		case Ready:
+			status = ModelStatusReady
+		case Updating:
+			status = ModelStatusUpdating
+		case Failed:
+			status = ModelStatusFailed
+		case Deleted:
+			// For deletion, use the DeleteModelFromConfigMap method instead
+			return s.configMapReconciler.DeleteModelFromConfigMap(op.BaseModel, op.ClusterBaseModel)
+		}
+
+		// Create StatusOp for ConfigMap update
+		statusOp := &ConfigMapStatusOp{
+			ModelStatus:      status,
+			BaseModel:        op.BaseModel,
+			ClusterBaseModel: op.ClusterBaseModel,
+		}
+
+		// Update the ConfigMap with model status
+		return s.configMapReconciler.ReconcileModelStatus(statusOp)
+	}
+
+	return nil
 }
 
 // safeParseAndUpdateModelConfig executes the ModelConfigParser's ParseAndUpdateModelConfig method with mutex protection
@@ -150,15 +183,15 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 
 	// If valid metadata was found, update the ConfigMap while still holding the lock
 	if metadata != nil {
-		op := &ModelConfigOp{
+		op := &ConfigMapMetadataOp{
 			ModelMetadata:    *metadata,
 			BaseModel:        baseModel,
 			ClusterBaseModel: clusterBaseModel,
 		}
 
 		// Update the ConfigMap with model configuration
-		// Since we're holding the lock, we can call the UpdateModelConfig method directly
-		return s.modelConfigUpdater.UpdateModelConfig(op)
+		// Since we're holding the lock, we can call the ReconcileModelMetadata method directly
+		return s.configMapReconciler.ReconcileModelMetadata(op)
 	}
 
 	return nil
@@ -181,6 +214,21 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		baseModelSpec = task.BaseModel.Spec
 	} else {
 		baseModelSpec = task.ClusterBaseModel.Spec
+	}
+
+	// For Download and DownloadOverride tasks, set the node label to "Updating"
+	if task.TaskType == Download || task.TaskType == DownloadOverride {
+		s.logger.Infof("Setting model %s status to Updating before download", modelInfo)
+		nodeLabelOp := &NodeLabelOp{
+			ModelStateOnNode: Updating,
+			BaseModel:        task.BaseModel,
+			ClusterBaseModel: task.ClusterBaseModel,
+		}
+
+		if err := s.safeNodeLabelReconciliation(nodeLabelOp); err != nil {
+			s.logger.Errorf("Failed to set model %s status to Updating: %v", modelInfo, err)
+			// Continue with download anyway
+		}
 	}
 
 	storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)
@@ -279,14 +327,15 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Successfully downloaded ClusterBaseModel %s", task.ClusterBaseModel.Name)
 		}
 
-		// mark the model as Ready
+		// mark the model as Ready on both node labels and ConfigMap
 		nodeLabelOp := &NodeLabelOp{
 			ModelStateOnNode: Ready,
 			BaseModel:        task.BaseModel,
 			ClusterBaseModel: task.ClusterBaseModel,
 		}
 
-		err = s.safeNodeLabelerProcessOp(nodeLabelOp)
+		// This will update both the node label and ConfigMap status
+		err = s.safeNodeLabelReconciliation(nodeLabelOp)
 		if err != nil {
 			s.logger.Errorf("Failed to mark model %s as Ready: %v", modelInfo, err)
 			return err
@@ -308,6 +357,29 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			}
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping deletion for model %s", modelInfo)
+		case storage.StorageTypeHuggingFace:
+			s.logger.Infof("Removing Hugging Face model %s", modelInfo)
+			modelRepo := strings.TrimPrefix(*baseModelSpec.Storage.StorageUri, "hf://")
+			destPath := filepath.Join(s.modelRootDir, modelRepo)
+			err = s.deleteModel(destPath)
+			if err != nil {
+				s.logger.Errorf("Failed to delete Hugging Face model %s: %v", modelInfo, err)
+				return err
+			}
+			s.logger.Infof("Successfully deleted Hugging Face model %s", modelInfo)
+		}
+
+		// Mark the model as deleted in the node labels and remove from ConfigMap
+		nodeLabelOp := &NodeLabelOp{
+			ModelStateOnNode: Deleted,
+			BaseModel:        task.BaseModel,
+			ClusterBaseModel: task.ClusterBaseModel,
+		}
+
+		err = s.safeNodeLabelReconciliation(nodeLabelOp)
+		if err != nil {
+			s.logger.Errorf("Failed to mark model %s as deleted: %v", modelInfo, err)
+			return err
 		}
 	}
 
@@ -333,7 +405,8 @@ func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 		ClusterBaseModel: task.ClusterBaseModel,
 	}
 
-	err := s.safeNodeLabelerProcessOp(nodeLabelOp)
+	// This will update both node label and ConfigMap status
+	err := s.safeNodeLabelReconciliation(nodeLabelOp)
 	if err != nil {
 		s.logger.Errorf("Failed to mark model %s as Failed on node: %v", modelInfo, err)
 	} else {
