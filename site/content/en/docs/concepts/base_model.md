@@ -43,7 +43,7 @@ spec:
     - text-to-text
   modelFormat:
     name: safetensors
-    version: "1"
+    version: "1.0.0"
   modelFramework:
     name: transformers
     version: "4.36.0"

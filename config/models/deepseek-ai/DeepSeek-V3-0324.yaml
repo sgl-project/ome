@@ -9,7 +9,7 @@ spec:
   compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   modelFormat:
     name: safetensors
-    version: "1"
+    version: "1.0.0"
   modelFramework:
     name: transformers
     version: "4.46.3"

@@ -20,7 +20,7 @@ spec:
   version: "1.0.0"
   modelFormat:
     name: safetensors
-    version: "1"
+    version: "1.0.0"
   modelFramework:
     name: transformer
     version: "1"

@@ -12,7 +12,7 @@ spec:
     version: "4.45.1"
   modelFormat:
     name: safetensors
-    version: "1"
+    version: "1.0.0"
   modelArchitecture: DeciLMForCausalLM
   modelParameterSize: 253B
   maxTokens: 131072

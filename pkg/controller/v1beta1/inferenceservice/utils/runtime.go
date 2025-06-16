@@ -153,12 +153,13 @@ func generateLabel(mt *v1beta1.ModelFormat,
 	modelFramework *v1beta1.ModelFrameworkSpec) string {
 
 	label := "mt"
-	if mt != nil {
-		label += ":" + mt.Name
-		if mt.Version != nil {
-			label += ":" + *mt.Version
-		}
-	}
+	// disabled model format temporarily, as we will update format safetensors to 1.0.0 this time. In order to avoid downtime.
+	//if mt != nil {
+	//	label += ":" + mt.Name
+	//	if mt.Version != nil {
+	//		label += ":" + *mt.Version
+	//	}
+	//}
 	if modelArchitecture != nil {
 		label += ":" + *modelArchitecture
 	}
