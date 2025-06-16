@@ -343,7 +343,9 @@ func TestFindConfigFile(t *testing.T) {
 	// Create a temp directory structure for testing
 	tempDir, err := os.MkdirTemp("", "config-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir)
 
 	// Create a test logger
 	logger, _ := zap.NewDevelopment()
@@ -364,7 +366,7 @@ func TestFindConfigFile(t *testing.T) {
 	assert.Equal(t, configPath, resultPath)
 
 	// Case 2: Config in model subdirectory
-	os.Remove(configPath) // Remove from root
+	_ = os.Remove(configPath) // Remove from root
 	modelDir := filepath.Join(tempDir, "model")
 	err = os.Mkdir(modelDir, 0755)
 	assert.NoError(t, err)
@@ -377,7 +379,7 @@ func TestFindConfigFile(t *testing.T) {
 	assert.Equal(t, configPath, resultPath)
 
 	// Case 3: No config file
-	os.RemoveAll(tempDir)
+	_ = os.RemoveAll(tempDir)
 	err = os.Mkdir(tempDir, 0755)
 	assert.NoError(t, err)
 
@@ -499,7 +501,9 @@ func TestParseModelConfig(t *testing.T) {
 	// Create a temp directory structure for testing
 	tempDir, err := os.MkdirTemp("", "model-config-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir)
 
 	// Create a test logger
 	logger, _ := zap.NewDevelopment()
@@ -517,8 +521,8 @@ func TestParseModelConfig(t *testing.T) {
 	configPath := filepath.Join(configDir, DefaultConfigFileName)
 	configFile, err := os.Create(configPath)
 	assert.NoError(t, err)
-	configFile.WriteString("{\"model_type\": \"llama\", \"architectures\": [\"LlamaForCausalLM\"]}\n")
-	configFile.Close()
+	_, _ = configFile.WriteString("{\"model_type\": \"llama\", \"architectures\": [\"LlamaForCausalLM\"]}\n")
+	_ = configFile.Close()
 
 	// Case 1: Non-existent directory
 	metadata, err := parser.ParseModelConfig("/non-existent", nil, nil)
