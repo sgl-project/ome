@@ -22,7 +22,6 @@ import (
 	"github.com/sgl-project/sgl-ome/pkg/utils/storage"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -96,15 +95,23 @@ func NewGopher(
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
-	s.logger.Info("Starting gopher workers")
+	// Start the ConfigMap reconciliation service
+	s.configMapReconciler.StartReconciliation()
+	s.logger.Info("Started ConfigMap reconciliation service")
 
-	for range numWorker {
-		go wait.Until(s.runWorker, time.Second, stopCh)
+	// Start worker goroutines
+	for i := 0; i < numWorker; i++ {
+		go s.runWorker()
 	}
 
-	s.logger.Info("Started gopher workers")
+	// Wait for stop signal
 	<-stopCh
-	s.logger.Info("Shutting down gopher workers")
+
+	// Stop the ConfigMap reconciliation service
+	s.configMapReconciler.StopReconciliation()
+	s.logger.Info("Stopped ConfigMap reconciliation service")
+
+	s.logger.Info("Received stop signal, shutting down Gopher workers...")
 }
 
 func (s *Gopher) runWorker() {
@@ -129,6 +136,7 @@ func (s *Gopher) runWorker() {
 // safeNodeLabelReconciliation executes the NodeLabelReconciler's ReconcileNodeLabels method with mutex protection
 // to ensure thread-safe ConfigMap updates
 func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
+	ctx := context.Background()
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
@@ -151,7 +159,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 			status = ModelStatusFailed
 		case Deleted:
 			// For deletion, use the DeleteModelFromConfigMap method instead
-			return s.configMapReconciler.DeleteModelFromConfigMap(op.BaseModel, op.ClusterBaseModel)
+			return s.configMapReconciler.DeleteModelFromConfigMap(ctx, op.BaseModel, op.ClusterBaseModel)
 		}
 
 		// Create StatusOp for ConfigMap update
@@ -162,7 +170,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 		}
 
 		// Update the ConfigMap with model status
-		return s.configMapReconciler.ReconcileModelStatus(statusOp)
+		return s.configMapReconciler.ReconcileModelStatus(ctx, statusOp)
 	}
 
 	return nil
@@ -171,6 +179,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 // safeParseAndUpdateModelConfig executes the ModelConfigParser's ParseAndUpdateModelConfig method with mutex protection
 // to ensure thread-safe ConfigMap updates
 func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) error {
+	ctx := context.Background()
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
@@ -191,7 +200,7 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 
 		// Update the ConfigMap with model configuration
 		// Since we're holding the lock, we can call the ReconcileModelMetadata method directly
-		return s.configMapReconciler.ReconcileModelMetadata(op)
+		return s.configMapReconciler.ReconcileModelMetadata(ctx, op)
 	}
 
 	return nil
