@@ -12,7 +12,6 @@ metadata:
     models.ome.io/lifecycle-phase: "ACTIVE"
     models.ome.io/training-runtime: "llama-3-3-70b-instruct-ft"
 spec:
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
   displayName: meta.llama-3.3-70b-instruct
   storage:
