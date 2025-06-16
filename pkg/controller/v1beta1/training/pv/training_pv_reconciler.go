@@ -68,7 +68,7 @@ func (c *PVReconciler) reconcilePV(pvName string, trainjob *v1beta1.TrainingJob,
 				AccessModes: []corev1.PersistentVolumeAccessMode{
 					accessMode,
 				},
-				PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRecycle,
+				PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 				PersistentVolumeSource: corev1.PersistentVolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
 						Path: hostPath,
