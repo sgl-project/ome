@@ -96,39 +96,6 @@ func (p *ModelConfigParser) ParseModelConfig(modelDir string, baseModel *v1beta1
 	return &metadata, nil
 }
 
-// ParseAndUpdateModelConfig reads the config.json file from the model directory
-// and updates the Model CRD with the extracted information
-// This is a convenience method that combines ParseModelConfig and ModelConfigUpdater.UpdateModelConfig
-func (p *ModelConfigParser) ParseAndUpdateModelConfig(modelDir string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel, modelConfigUpdater *ModelConfigUpdater) error {
-	// Use the ParseModelConfig method to extract metadata
-	metadata, err := p.ParseModelConfig(modelDir, baseModel, clusterBaseModel)
-	if err != nil {
-		return err
-	}
-
-	// If no metadata was extracted or if ModelConfigUpdater is not provided, nothing else to do
-	if metadata == nil || modelConfigUpdater == nil {
-		return nil
-	}
-
-	// Create ModelConfigOp
-	op := &ModelConfigOp{
-		ModelMetadata:    *metadata,
-		BaseModel:        baseModel,
-		ClusterBaseModel: clusterBaseModel,
-	}
-
-	// Update the ConfigMap with model configuration
-	if err := modelConfigUpdater.UpdateModelConfig(op); err != nil {
-		p.logger.Errorf("Failed to update model config in ConfigMap: %v", err)
-		return err
-	}
-	p.logger.Infof("Successfully updated model config in ConfigMap")
-
-	// No need to update BaseModel and ClusterBaseModel again here
-	return nil
-}
-
 // findConfigFile searches for the config.json file in the model directory
 // It checks the root directory and common subdirectories
 func (p *ModelConfigParser) findConfigFile(modelDir string) (string, error) {
@@ -247,9 +214,6 @@ func (p *ModelConfigParser) updateBaseModel(model *v1beta1.BaseModel, metadata M
 func (p *ModelConfigParser) updateClusterBaseModel(model *v1beta1.ClusterBaseModel, metadata ModelMetadata) error {
 	return p.updateModel(model, metadata)
 }
-
-// ModelMetadata represents the extracted metadata from a model's config.json
-// ModelMetadata is now defined in model_data.go
 
 // extractModelMetadataFromHF extracts relevant metadata using the HuggingFaceModel interface
 func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.HuggingFaceModel) ModelMetadata {

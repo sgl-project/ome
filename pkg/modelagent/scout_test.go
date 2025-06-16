@@ -10,14 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NodeLabelerInterface is an interface for the NodeLabeler to support mocking
-type NodeLabelerInterface interface {
-	LabelNode(op *NodeLabelOp) error
-}
-
-// Make sure NodeLabeler implements the interface
-var _ NodeLabelerInterface = (*NodeLabeler)(nil)
-
 // Test the shouldDownloadModel function
 func TestShouldDownloadModel(t *testing.T) {
 	// Create a test logger

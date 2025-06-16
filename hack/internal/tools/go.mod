@@ -2,10 +2,11 @@ module bitbucket.oci.oraclecorp.com/genaicore/ome/hack/internal/tools
 
 
 go 1.23.0
-toolchain go1.23.3
+
+toolchain go1.24.1
 
 require (
-	github.com/gohugoio/hugo v0.147.8
+	github.com/gohugoio/hugo v0.142.0
 	github.com/golangci/golangci-lint v1.60.3
 	github.com/mikefarah/yq/v4 v4.44.3
 	github.com/norwoodj/helm-docs v1.12.0
@@ -52,7 +53,7 @@ require (
 	github.com/gomarkdown/markdown v0.0.0-20240328165702-4d01890c35c0 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
