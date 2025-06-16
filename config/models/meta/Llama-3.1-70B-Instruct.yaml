@@ -3,6 +3,7 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-1-70b-instruct
   labels:
+    ome.io/oci-compartmentid: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
     genai-managed-base-model-v1beta1: "true"
   annotations:
     models.ome.io/runtime: "vllm-llama-3-1-70b-instruct"
@@ -14,7 +15,6 @@ spec:
   vendor: meta
   disabled: false
   version: "1.0.0"
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   displayName: meta.llama-3.1-70b-instruct
   modelFramework:
     name: transformers

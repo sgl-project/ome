@@ -144,6 +144,7 @@ type ModelExtensionSpec struct {
 	Vendor *string `json:"vendor,omitempty"`
 
 	// CompartmentID is the compartment ID of the model
+	// Deprecated: Use metadata.labels["ome.io/oci-compartmentid"] instead
 	// +optional
 	CompartmentID *string `json:"compartmentID,omitempty"`
 }

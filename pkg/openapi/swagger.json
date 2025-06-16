@@ -126,7 +126,7 @@
           }
         },
         "compartmentID": {
-          "description": "CompartmentID is the compartment ID of the model",
+          "description": "CompartmentID is the compartment ID of the model Deprecated: Use metadata.labels[\"ome.io/oci-compartmentid\"] instead",
           "type": "string"
         },
         "disabled": {
@@ -1976,7 +1976,7 @@
           "$ref": "#/definitions/v1beta1.ObjectReference"
         },
         "compartmentID": {
-          "description": "CompartmentID is the compartment ID of the model",
+          "description": "CompartmentID is the compartment ID of the model Deprecated: Use metadata.labels[\"ome.io/oci-compartmentid\"] instead",
           "type": "string"
         },
         "configuration": {
@@ -2945,7 +2945,7 @@
       "type": "object",
       "properties": {
         "compartmentID": {
-          "description": "CompartmentID is the compartment ID of the model",
+          "description": "CompartmentID is the compartment ID of the model Deprecated: Use metadata.labels[\"ome.io/oci-compartmentid\"] instead",
           "type": "string"
         },
         "disabled": {
