@@ -547,7 +547,7 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 	defer func() {
 		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
 	}()
-	
+
 	// Get model type, namespace, and name for metrics outside the defer to use within function
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 
@@ -651,7 +651,7 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 	}
 	s.metrics.RecordBytesTransferred(modelType, namespace, name, totalBytes)
 
-	s.logger.Infof("All files downloaded and verified successfully (%d files, %d bytes, verification took %v)", 
+	s.logger.Infof("All files downloaded and verified successfully (%d files, %d bytes, verification took %v)",
 		len(objects), totalBytes, verificationDuration.Round(time.Millisecond))
 	return nil
 }
@@ -674,7 +674,7 @@ func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataS
 			errors[obj.ObjectName] = fmt.Errorf("MD5 or size mismatch for %s", obj.ObjectName)
 		}
 	}
-	
+
 	// Record verification result in metrics
 	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 	s.metrics.RecordVerification(modelType, namespace, name, len(errors) == 0)
@@ -684,22 +684,22 @@ func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataS
 
 func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 	startTime := time.Now()
-	
+
 	err := os.RemoveAll(destPath)
-	
+
 	// Log deletion time regardless of success or failure
 	deleteTime := time.Since(startTime)
 	s.logger.Infof("Model deletion from %s took %v", destPath, deleteTime.Round(time.Millisecond))
-	
+
 	// Record deletion in metrics if task is provided
 	if task != nil {
 		modelType, namespace, name := GetModelTypeNamespaceAndName(task)
 		// We could add a dedicated deletion metric in the future
 		// For now just log with context
-		s.logger.Infof("Completed deletion of %s model %s/%s in %v", 
+		s.logger.Infof("Completed deletion of %s model %s/%s in %v",
 			modelType, namespace, name, deleteTime.Round(time.Millisecond))
 	}
-	
+
 	return err
 }
 

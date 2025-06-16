@@ -6,7 +6,6 @@ spec:
   vendor: nvidia
   disabled: false
   version: "1.0.0"
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   displayName: nvidia.llama-3.1-nemotron-nano-8b-v1
   modelFramework:
     name: transformers
