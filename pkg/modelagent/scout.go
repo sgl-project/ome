@@ -18,6 +18,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -34,7 +35,6 @@ type Scount struct {
 	nodeInfo               *v1.Node
 	nodeShapeAlias         string
 	kubeClient             *kubernetes.Clientset
-	nodeLabeler            *NodeLabeler
 	logger                 *zap.SugaredLogger
 }
 
@@ -50,7 +50,6 @@ func NewScout(nodeName string,
 	informerFactory omev1beta1informers.SharedInformerFactory,
 	gopherChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
-	nodeLabeler *NodeLabeler,
 	logger *zap.SugaredLogger) (*Scount, error) {
 
 	// Fetch the complete node info
@@ -74,7 +73,6 @@ func NewScout(nodeName string,
 		gopherChan:             gopherChan,
 		nodeName:               nodeName,
 		kubeClient:             kubeClient,
-		nodeLabeler:            nodeLabeler,
 		logger:                 logger,
 	}
 
@@ -137,6 +135,10 @@ func (w *Scount) Run(stopCh <-chan struct{}) error {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
+	// After caches are synced, check for any pending deletions (resources with DeletionTimestamp)
+	// This ensures we catch any deletion requests that occurred while the agent was down
+	w.reconcilePendingDeletions()
+
 	<-stopCh
 	close(w.gopherChan)
 	w.logger.Info("Shutting down scout")
@@ -167,17 +169,6 @@ func (w *Scount) downloadBaseModel(obj interface{}) {
 		}
 
 		w.logger.Infof("Downloading BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
-
-		// Update node label and ConfigMap to show "Updating" status before starting download
-		nodeLabelOp := &NodeLabelOp{
-			ModelStateOnNode: Updating,
-			BaseModel:        baseModel,
-		}
-		err = w.nodeLabeler.LabelNode(nodeLabelOp)
-		if err != nil {
-			w.logger.Fatalf("Error labeling node for BaseModels {%s in namespace %s}: %s", baseModel.Name, baseModel.Namespace, err.Error())
-			return
-		}
 
 		IsTensorrtLLMModel := baseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -224,17 +215,6 @@ func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 
 		w.logger.Infof("Downloading ClusterBaseModel: %s", clusterBaseModel.Name)
 
-		// Update node label and ConfigMap to show "Updating" status before starting download
-		nodeLabelOp := &NodeLabelOp{
-			ModelStateOnNode: Updating,
-			ClusterBaseModel: clusterBaseModel,
-		}
-		err = w.nodeLabeler.LabelNode(nodeLabelOp)
-		if err != nil {
-			w.logger.Fatalf("Error labeling node for ClusterBaseModels {%s}: %s", clusterBaseModel.Name, err.Error())
-			return
-		}
-
 		IsTensorrtLLMModel := clusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
 		modelType := string(constants.ServingBaseModel)
@@ -273,7 +253,8 @@ func (w *Scount) updateBaseModel(old, new interface{}) {
 	}
 
 	if !newBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-		w.logger.Infof("ignoring because of deleting BaseModel '%s'", newBaseModel.Name)
+		w.logger.Infof("Resource has deletion timestamp: BaseModel '%s', processing delete", newBaseModel.Name)
+		w.deleteBaseModel(newBaseModel)
 		return
 	}
 
@@ -297,16 +278,6 @@ func (w *Scount) updateBaseModel(old, new interface{}) {
 
 	if hasChanges && w.shouldDownloadModel(newBaseModel.Spec.Storage) {
 		w.logger.Infof("BaseModel %s needs refresh in namespace %s", newBaseModel.GetName(), newBaseModel.GetNamespace())
-
-		nodeLabelOp := &NodeLabelOp{
-			ModelStateOnNode: Updating,
-			BaseModel:        newBaseModel,
-		}
-		err := w.nodeLabeler.LabelNode(nodeLabelOp)
-		if err != nil {
-			w.logger.Fatalf("Error labeling node for BaseModels {%s in namespace %s}: %s", newBaseModel.Name, newBaseModel.Namespace, err.Error())
-			return
-		}
 
 		IsTensorrtLLMModel := newBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -350,7 +321,8 @@ func (w *Scount) updateClusterBaseModel(old, new interface{}) {
 	}
 
 	if !newClusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
-		w.logger.Infof("ignoring because of deleting ClusterBaseModel '%s'", newClusterBaseModel.Name)
+		w.logger.Infof("Resource has deletion timestamp: ClusterBaseModel '%s', processing delete", newClusterBaseModel.Name)
+		w.deleteClusterBaseModel(newClusterBaseModel)
 		return
 	}
 
@@ -374,16 +346,6 @@ func (w *Scount) updateClusterBaseModel(old, new interface{}) {
 
 	if hasChanges && w.shouldDownloadModel(newClusterBaseModel.Spec.Storage) {
 		w.logger.Infof("ClusterBaseModel %s need refresh", newClusterBaseModel.GetName())
-
-		nodeLabelOp := &NodeLabelOp{
-			ModelStateOnNode: Updating,
-			ClusterBaseModel: newClusterBaseModel,
-		}
-		err := w.nodeLabeler.LabelNode(nodeLabelOp)
-		if err != nil {
-			w.logger.Fatalf("Error labeling node for ClusterBaseModels {%s}: %s", newClusterBaseModel.Name, err.Error())
-			return
-		}
 
 		IsTensorrtLLMModel := newClusterBaseModel.Spec.ModelFormat.Name == constants.TensorRTLLM
 
@@ -415,16 +377,6 @@ func (w *Scount) deleteBaseModel(obj interface{}) {
 
 	w.logger.Infof("Deleting BaseModel: %s in namespace %s", baseModel.Name, baseModel.Namespace)
 
-	nodeLabelOp := &NodeLabelOp{
-		ModelStateOnNode: Deleted,
-		BaseModel:        baseModel,
-	}
-	err := w.nodeLabeler.LabelNode(nodeLabelOp)
-	if err != nil {
-		w.logger.Fatalf("Error labeling node for BaseModels {%s in namespace %s}: %s", baseModel.Name, baseModel.Namespace, err.Error())
-		return
-	}
-
 	gopherTask := &GopherTask{
 		TaskType:  Delete,
 		BaseModel: baseModel,
@@ -441,22 +393,49 @@ func (w *Scount) deleteClusterBaseModel(obj interface{}) {
 	}
 
 	w.logger.Infof("Deleting ClusterBaseModel: %s", clusterBaseModel.Name)
-	nodeLabelOp := &NodeLabelOp{
-		ModelStateOnNode: Deleted,
-		ClusterBaseModel: clusterBaseModel,
-	}
-	err := w.nodeLabeler.LabelNode(nodeLabelOp)
-	if err != nil {
-		w.logger.Fatalf("Error labeling node for ClusterBaseModels {%s}: %s", clusterBaseModel.Name, err.Error())
-		return
-	}
 
 	gopherTask := &GopherTask{
 		TaskType:         Delete,
 		ClusterBaseModel: clusterBaseModel,
 	}
-
 	w.gopherChan <- gopherTask
+}
+
+// reconcilePendingDeletions checks for any resources with deletion timestamps
+// and processes them to ensure no deletions are missed if the model agent was down
+// when the deletion request was made
+func (w *Scount) reconcilePendingDeletions() {
+	w.logger.Info("Checking for pending deletions on startup...")
+
+	// Check BaseModels with deletionTimestamp
+	baseModels, err := w.baseModelLister.List(labels.Everything())
+	if err != nil {
+		w.logger.Errorf("Failed to list BaseModels during reconciliation: %v", err)
+	} else {
+		for _, baseModel := range baseModels {
+			if !baseModel.ObjectMeta.DeletionTimestamp.IsZero() {
+				w.logger.Infof("Found BaseModel with deletion timestamp during startup: %s in namespace %s",
+					baseModel.Name, baseModel.Namespace)
+				w.deleteBaseModel(baseModel)
+			}
+		}
+	}
+
+	// Check ClusterBaseModels with deletionTimestamp
+	clusterBaseModels, err := w.clusterBaseModelLister.List(labels.Everything())
+	if err != nil {
+		w.logger.Errorf("Failed to list ClusterBaseModels during reconciliation: %v", err)
+	} else {
+		for _, clusterBaseModel := range clusterBaseModels {
+			if !clusterBaseModel.ObjectMeta.DeletionTimestamp.IsZero() {
+				w.logger.Infof("Found ClusterBaseModel with deletion timestamp during startup: %s",
+					clusterBaseModel.Name)
+				w.deleteClusterBaseModel(clusterBaseModel)
+			}
+		}
+	}
+
+	w.logger.Info("Finished checking for pending deletions")
 }
 
 // shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity

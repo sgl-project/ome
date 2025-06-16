@@ -7,7 +7,6 @@ spec:
   disabled: false
   displayName: meta.llama-4-scout-17b-16e-instruct
   version: "1.0.0"
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   modelFramework:
     name: transformers
     version: "4.51.0.dev0"

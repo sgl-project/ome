@@ -6,7 +6,6 @@ spec:
   vendor: meta
   disabled: false
   version: "1.0.0"
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   modelFramework:
     name: transformers
     version: "4.43.0.dev0"

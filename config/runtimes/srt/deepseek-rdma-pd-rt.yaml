@@ -62,10 +62,8 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:deepep
+        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
         env:
-          - name: NCCL_NET_PLUGIN
-            value: none
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -81,7 +79,7 @@ spec:
           - name: NCCL_IB_GID_INDEX
             value: '3'
           - name: NCCL_IB_HCA
-            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL
@@ -112,7 +110,7 @@ spec:
           - >
             MC_TE_METRIC=true;
             SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine;
+            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
             --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
@@ -131,10 +129,8 @@ spec:
             --trust-remote-code
             --moe-dense-tp-size 1
             --enable-dp-lm-head
-            --disable-radix-cache
-            --watchdog-timeout 1000000
             --deepep-mode normal
-            --mem-fraction-static 0.85
+            --mem-fraction-static 0.75
             --chunked-prefill-size 524288
             --max-running-requests 8192
             --max-total-tokens 131072
@@ -213,14 +209,14 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:deepep
+        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
         command:
           - sh
           - -c
           - >
             MC_TE_METRIC=true;
             SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine;
+            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
             --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
@@ -239,10 +235,8 @@ spec:
             --trust-remote-code
             --moe-dense-tp-size 1
             --enable-dp-lm-head
-            --disable-radix-cache
-            --watchdog-timeout 1000000
             --deepep-mode normal
-            --mem-fraction-static 0.85
+            --mem-fraction-static 0.75
             --chunked-prefill-size 524288
             --max-running-requests 8192
             --max-total-tokens 131072
@@ -255,8 +249,6 @@ spec:
           requests:
             nvidia.com/gpu: "8"
         env:
-          - name: NCCL_NET_PLUGIN
-            value: none
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -272,7 +264,7 @@ spec:
           - name: NCCL_IB_GID_INDEX
             value: '3'
           - name: NCCL_IB_HCA
-            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL
@@ -338,10 +330,8 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:deepep
+        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
         env:
-          - name: NCCL_NET_PLUGIN
-            value: none
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -357,7 +347,7 @@ spec:
           - name: NCCL_IB_GID_INDEX
             value: '3'
           - name: NCCL_IB_HCA
-            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL
@@ -388,34 +378,33 @@ spec:
           - >
             MC_TE_METRIC=true;
             SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine;
+            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
             --disaggregation-mode decode
+            --base-gpu-id 0
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --port 30001
-            --base-gpu-id 0
             --node-rank ${LWS_WORKER_INDEX}
             --tp-size ${PARALLELISM_SIZE}
             --dp-size ${PARALLELISM_SIZE}
             --enable-dp-attention
             --decode-log-interval 1
             --enable-deepep-moe
-            --page-size 1
+            --page-size 64
+            --chunked-prefill-size 6144
             --host 0.0.0.0
             --trust-remote-code
             --moe-dense-tp-size 1
             --enable-dp-lm-head
-            --disable-radix-cache
-            --watchdog-timeout 1000000
             --deepep-mode low_latency
-            --mem-fraction-static 0.835
-            --max-running-requests 18432
-            --context-length 4500
+            --mem-fraction-static 0.75
+            --max-running-requests 4096
+            --context-length 32768
             --ep-num-redundant-experts 32
-            --cuda-graph-bs 256
+            --cuda-graph-max-bs 128
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -458,7 +447,7 @@ spec:
           initialDelaySeconds: 600
           timeoutSeconds: 30
     worker:
-      size: 8
+      size: 3
       nodeSelector:
         oci.oraclecloud.com/rdma.authenticated: "16"
         oci.oraclecloud.com/rdma.mlx_issues: "0"
@@ -488,18 +477,19 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:deepep
+        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
         command:
           - sh
           - -c
           - >
             MC_TE_METRIC=true;
             SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine;
+            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
             --disaggregation-mode decode
+            --base-gpu-id 0
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
@@ -509,27 +499,24 @@ spec:
             --enable-dp-attention
             --decode-log-interval 1
             --enable-deepep-moe
-            --page-size 1
+            --page-size 64
+            --chunked-prefill-size 6144
             --host 0.0.0.0
             --trust-remote-code
             --moe-dense-tp-size 1
             --enable-dp-lm-head
-            --disable-radix-cache
-            --watchdog-timeout 1000000
             --deepep-mode low_latency
-            --mem-fraction-static 0.835
-            --max-running-requests 18432
-            --context-length 4500
+            --mem-fraction-static 0.75
+            --max-running-requests 4096
+            --context-length 32768
             --ep-num-redundant-experts 32
-            --cuda-graph-bs 256
+            --cuda-graph-max-bs 128
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
         env:
-          - name: NCCL_NET_PLUGIN
-            value: none
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -545,7 +532,7 @@ spec:
           - name: NCCL_IB_GID_INDEX
             value: '3'
           - name: NCCL_IB_HCA
-            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL

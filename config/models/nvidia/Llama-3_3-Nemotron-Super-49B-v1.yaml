@@ -3,7 +3,6 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-3-nemotron-super-49b-v1
 spec:
-  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   disabled: false
   displayName: nvidia.llama-3_3-nemotron-super-49b-v1
   storage:
