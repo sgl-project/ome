@@ -501,7 +501,9 @@ func TestParseModelConfig(t *testing.T) {
 	// Create a temp directory structure for testing
 	tempDir, err := os.MkdirTemp("", "model-config-test")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func(path string) {
+		_ = os.RemoveAll(path)
+	}(tempDir)
 
 	// Create a test logger
 	logger, _ := zap.NewDevelopment()

@@ -22,7 +22,6 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -96,15 +95,23 @@ func NewGopher(
 }
 
 func (s *Gopher) Run(stopCh <-chan struct{}, numWorker int) {
-	s.logger.Info("Starting gopher workers")
+	// Start the ConfigMap reconciliation service
+	s.configMapReconciler.StartReconciliation()
+	s.logger.Info("Started ConfigMap reconciliation service")
 
-	for range numWorker {
-		go wait.Until(s.runWorker, time.Second, stopCh)
+	// Start worker goroutines
+	for i := 0; i < numWorker; i++ {
+		go s.runWorker()
 	}
 
-	s.logger.Info("Started gopher workers")
+	// Wait for stop signal
 	<-stopCh
-	s.logger.Info("Shutting down gopher workers")
+
+	// Stop the ConfigMap reconciliation service
+	s.configMapReconciler.StopReconciliation()
+	s.logger.Info("Stopped ConfigMap reconciliation service")
+
+	s.logger.Info("Received stop signal, shutting down Gopher workers...")
 }
 
 func (s *Gopher) runWorker() {
@@ -129,6 +136,7 @@ func (s *Gopher) runWorker() {
 // safeNodeLabelReconciliation executes the NodeLabelReconciler's ReconcileNodeLabels method with mutex protection
 // to ensure thread-safe ConfigMap updates
 func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
+	ctx := context.Background()
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
@@ -151,7 +159,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 			status = ModelStatusFailed
 		case Deleted:
 			// For deletion, use the DeleteModelFromConfigMap method instead
-			return s.configMapReconciler.DeleteModelFromConfigMap(op.BaseModel, op.ClusterBaseModel)
+			return s.configMapReconciler.DeleteModelFromConfigMap(ctx, op.BaseModel, op.ClusterBaseModel)
 		}
 
 		// Create StatusOp for ConfigMap update
@@ -162,7 +170,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 		}
 
 		// Update the ConfigMap with model status
-		return s.configMapReconciler.ReconcileModelStatus(statusOp)
+		return s.configMapReconciler.ReconcileModelStatus(ctx, statusOp)
 	}
 
 	return nil
@@ -171,6 +179,7 @@ func (s *Gopher) safeNodeLabelReconciliation(op *NodeLabelOp) error {
 // safeParseAndUpdateModelConfig executes the ModelConfigParser's ParseAndUpdateModelConfig method with mutex protection
 // to ensure thread-safe ConfigMap updates
 func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1beta1.BaseModel, clusterBaseModel *v1beta1.ClusterBaseModel) error {
+	ctx := context.Background()
 	s.configMapMutex.Lock()
 	defer s.configMapMutex.Unlock()
 
@@ -191,7 +200,7 @@ func (s *Gopher) safeParseAndUpdateModelConfig(modelPath string, baseModel *v1be
 
 		// Update the ConfigMap with model configuration
 		// Since we're holding the lock, we can call the ReconcileModelMetadata method directly
-		return s.configMapReconciler.ReconcileModelMetadata(op)
+		return s.configMapReconciler.ReconcileModelMetadata(ctx, op)
 	}
 
 	return nil
@@ -345,7 +354,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
-			err = s.deleteModel(destPath)
+			err = s.deleteModel(destPath, task)
 			if err != nil {
 				s.logger.Errorf("Failed to delete model %s: %v", modelInfo, err)
 				return err
@@ -361,7 +370,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Removing Hugging Face model %s", modelInfo)
 			modelRepo := strings.TrimPrefix(*baseModelSpec.Storage.StorageUri, "hf://")
 			destPath := filepath.Join(s.modelRootDir, modelRepo)
-			err = s.deleteModel(destPath)
+			err = s.deleteModel(destPath, task)
 			if err != nil {
 				s.logger.Errorf("Failed to delete Hugging Face model %s: %v", modelInfo, err)
 				return err
@@ -539,6 +548,9 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
 	}()
 
+	// Get model type, namespace, and name for metrics outside the defer to use within function
+	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
+
 	// Get the model spec
 	var baseModelSpec v1beta1.BaseModelSpec
 	if task.BaseModel != nil {
@@ -614,7 +626,7 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 	// Perform final verification of all downloaded files
 	s.logger.Info("Performing final integrity verification of all downloaded files...")
 	verificationStartTime := time.Now()
-	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectUris, destPath)
+	verificationErrors := s.verifyDownloadedFiles(ociOSDataStore, objectUris, destPath, task)
 	verificationDuration := time.Since(verificationStartTime)
 
 	// Record verification duration
@@ -630,11 +642,21 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 		return fmt.Errorf("integrity verification failed for %d/%d files: %s", len(verificationErrors), len(objects), strings.Join(errMsgs, "; "))
 	}
 
-	s.logger.Infof("All files downloaded and verified successfully (%d files, verification took %v)", len(objects), verificationDuration.Round(time.Millisecond))
+	// Calculate and record total bytes transferred
+	var totalBytes int64
+	for _, obj := range objects {
+		if obj.Size != nil {
+			totalBytes += *obj.Size
+		}
+	}
+	s.metrics.RecordBytesTransferred(modelType, namespace, name, totalBytes)
+
+	s.logger.Infof("All files downloaded and verified successfully (%d files, %d bytes, verification took %v)",
+		len(objects), totalBytes, verificationDuration.Round(time.Millisecond))
 	return nil
 }
 
-func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataStore, uris []ociobjectstore.ObjectURI, destPath string) map[string]error {
+func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataStore, uris []ociobjectstore.ObjectURI, destPath string, task *GopherTask) map[string]error {
 	errors := make(map[string]error)
 	for _, obj := range uris {
 		relativeName := filepath.Join(destPath, ociobjectstore.TrimObjectPrefix(obj.ObjectName, obj.Prefix))
@@ -652,11 +674,33 @@ func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataS
 			errors[obj.ObjectName] = fmt.Errorf("MD5 or size mismatch for %s", obj.ObjectName)
 		}
 	}
+
+	// Record verification result in metrics
+	modelType, namespace, name := GetModelTypeNamespaceAndName(task)
+	s.metrics.RecordVerification(modelType, namespace, name, len(errors) == 0)
+
 	return errors
 }
 
-func (s *Gopher) deleteModel(destPath string) error {
-	return os.RemoveAll(destPath)
+func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
+	startTime := time.Now()
+
+	err := os.RemoveAll(destPath)
+
+	// Log deletion time regardless of success or failure
+	deleteTime := time.Since(startTime)
+	s.logger.Infof("Model deletion from %s took %v", destPath, deleteTime.Round(time.Millisecond))
+
+	// Record deletion in metrics if task is provided
+	if task != nil {
+		modelType, namespace, name := GetModelTypeNamespaceAndName(task)
+		// We could add a dedicated deletion metric in the future
+		// For now just log with context
+		s.logger.Infof("Completed deletion of %s model %s/%s in %v",
+			modelType, namespace, name, deleteTime.Round(time.Millisecond))
+	}
+
+	return err
 }
 
 // processHuggingFaceModel handles downloading models from Hugging Face Hub.

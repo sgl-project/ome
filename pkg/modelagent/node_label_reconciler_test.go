@@ -91,6 +91,38 @@ func TestNewNodeLabelReconciler(t *testing.T) {
 	assert.NotNil(t, reconciler.logger)
 }
 
+// TestGetModelLabelKey tests the getModelLabelKey function
+func TestGetModelLabelKey(t *testing.T) {
+	// Test with BaseModel
+	baseModel := createTestBaseModel()
+	op := &NodeLabelOp{
+		BaseModel:        baseModel,
+		ClusterBaseModel: nil,
+	}
+	labelKey, err := getModelLabelKey(op)
+	assert.NoError(t, err)
+	assert.Equal(t, constants.GetBaseModelLabel(baseModel.Namespace, baseModel.Name), labelKey)
+
+	// Test with ClusterBaseModel
+	clusterBaseModel := createTestClusterBaseModel()
+	op = &NodeLabelOp{
+		BaseModel:        nil,
+		ClusterBaseModel: clusterBaseModel,
+	}
+	labelKey, err = getModelLabelKey(op)
+	assert.NoError(t, err)
+	assert.Equal(t, constants.GetClusterBaseModelLabel(clusterBaseModel.Name), labelKey)
+
+	// Test with no model (should return error)
+	op = &NodeLabelOp{
+		BaseModel:        nil,
+		ClusterBaseModel: nil,
+	}
+	_, err = getModelLabelKey(op)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "node labeler got empty op without any models")
+}
+
 // TestGetNodeLabelModelInfo tests the getNodeLabelModelInfo function
 func TestGetNodeLabelModelInfo(t *testing.T) {
 	// Test with BaseModel
@@ -316,6 +348,111 @@ func TestReconcileNodeLabels(t *testing.T) {
 	err = reconciler.ReconcileNodeLabels(op)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permanent error")
+}
+
+// TestIdempotentOperations tests idempotent operation handling
+func TestIdempotentOperations(t *testing.T) {
+	// Set up the test environment
+	reconciler, kubeClient, _ := setupTest(t)
+
+	// Create a test node with existing label for the already-applied test
+	labeledNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "labeled-node",
+			Labels: map[string]string{
+				constants.GetClusterBaseModelLabel("test-cluster-model"): string(Ready),
+			},
+		},
+	}
+	_, err := kubeClient.CoreV1().Nodes().Create(context.TODO(), labeledNode, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Prepare a ClusterBaseModel test case
+	clusterBaseModel := createTestClusterBaseModel()
+
+	// Test case 1: Idempotent Ready operation (label already exists with correct value)
+	op := &NodeLabelOp{
+		ClusterBaseModel: clusterBaseModel,
+		ModelStateOnNode: Ready,
+	}
+	reconciler.nodeName = "labeled-node" // Point to the node with existing label
+	err = reconciler.applyNodeLabelOperation(op)
+	assert.NoError(t, err)
+
+	// Test case 2: Idempotent Delete operation (label doesn't exist)
+	// First create a node without any labels
+	unlabeledNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "unlabeled-node",
+			Labels: map[string]string{},
+		},
+	}
+	_, err = kubeClient.CoreV1().Nodes().Create(context.TODO(), unlabeledNode, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Setup delete operation on a node without the label
+	op = &NodeLabelOp{
+		ClusterBaseModel: clusterBaseModel,
+		ModelStateOnNode: Deleted,
+	}
+	reconciler.nodeName = "unlabeled-node" // Point to node without label
+	err = reconciler.applyNodeLabelOperation(op)
+	assert.NoError(t, err)
+
+	// Test case 3: Empty patch payloads
+	// Create a mock NodeLabelOp that will result in an empty patch
+	emptyPatchOp := &NodeLabelOp{
+		BaseModel:        nil,
+		ClusterBaseModel: nil, // This will cause an empty patch
+		ModelStateOnNode: Ready,
+	}
+	reconciler.nodeName = "test-node"
+	err = reconciler.applyNodeLabelOperation(emptyPatchOp)
+	assert.NoError(t, err) // Should gracefully handle empty patch
+}
+
+// TestNodeLabelErrorHandling tests error handling in applyNodeLabelOperation
+func TestNodeLabelErrorHandling(t *testing.T) {
+	// Set up the test environment
+	reconciler, kubeClient, _ := setupTest(t)
+
+	// Prepare a model for tests
+	clusterBaseModel := createTestClusterBaseModel()
+	// Setup a delete operation for a label that will fail with "not found" error
+	op := &NodeLabelOp{
+		ClusterBaseModel: clusterBaseModel,
+		ModelStateOnNode: Deleted,
+	}
+
+	// Mock the patch to fail with a "not found" error
+	kubeClient.PrependReactor("patch", "nodes", func(action ktesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(ktesting.PatchAction)
+		if patchAction.GetName() == "test-node" {
+			// Return a "not found" error for delete operations
+			if string(patchAction.GetPatch()) != "" && strings.Contains(string(patchAction.GetPatch()), "remove") {
+				return true, nil, errors.New("the server rejected our request: path not found")
+			}
+		}
+		return false, nil, nil
+	})
+
+	// Run the operation - it should handle the error gracefully
+	err := reconciler.applyNodeLabelOperation(op)
+	assert.NoError(t, err) // Should return nil since we consider this non-retryable
+
+	// Mock a conflict error, which should be retryable
+	kubeClient.PrependReactor("patch", "nodes", func(action ktesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(ktesting.PatchAction)
+		if patchAction.GetName() == "test-node" {
+			return true, nil, errors.New("Operation cannot be fulfilled on nodes \"test-node\": the object has been modified")
+		}
+		return false, nil, nil
+	})
+
+	// Run the operation - it should return the error for retry
+	op.ModelStateOnNode = Ready // Change to an add operation
+	err = reconciler.applyNodeLabelOperation(op)
+	assert.Error(t, err) // Should return error for conflict to trigger retry
 }
 
 // TestDifferentModelStates tests applying different model states
