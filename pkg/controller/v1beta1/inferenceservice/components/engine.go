@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
@@ -276,6 +277,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	if runnerSpec != nil {
 		UpdateEnvVariables(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+		e.setParallelismEnvVarForEngine(&runnerSpec.Container, e.getWorkerSize())
 	}
 
 	// Use common pod spec reconciler for base logic
@@ -303,6 +305,7 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 		if workerRunner != nil {
 			UpdateVolumeMounts(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			UpdateEnvVariables(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+			e.setParallelismEnvVarForEngine(&workerRunner.Container, e.getWorkerSize())
 		}
 	}
 
@@ -314,4 +317,30 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	e.Log.Info("Engine Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
+}
+
+// setParallelismEnvVarForEngine calculates and sets the PARALLELISM_SIZE environment variable for the engine's container.
+func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerReplicas int) {
+	if container == nil || e.engineSpec == nil {
+		e.Log.Info("Cannot set parallelism: container or engineSpec is nil")
+		return
+	}
+
+	numGPUsPerPod := int64(isvcutils.GetGpuCountFromContainer(container))
+	numLeaders := int64(1) // at least one leader/pod
+	numWorkers := int64(workerReplicas)
+
+	// Only proceed if there are GPUs
+	if numGPUsPerPod > 0 {
+		parallelismSize := numGPUsPerPod * (numLeaders + numWorkers)
+		if parallelismSize > 0 {
+			envVar := v1.EnvVar{Name: constants.ParallelismSizeEnvVarKey, Value: strconv.FormatInt(parallelismSize, 10)}
+			isvcutils.UpdateEnvVars(container, &envVar)
+			e.Log.Info("Added parallelism env variable to engine container", "value", parallelismSize, "containerName", container.Name)
+		} else {
+			e.Log.Info("Calculated parallelism is zero, not adding env var", "containerName", container.Name)
+		}
+	} else {
+		e.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
+	}
 }

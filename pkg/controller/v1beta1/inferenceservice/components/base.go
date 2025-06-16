@@ -5,15 +5,14 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/sgl-ome/pkg/utils"
-
-	"github.com/go-logr/logr"
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

@@ -119,8 +119,8 @@ spec:
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
             --port 30000
-            --tp-size 32
-            --dp-size 32
+            --tp-size ${PARALLELISM_SIZE}
+            --dp-size ${PARALLELISM_SIZE}
             --enable-dp-attention
             --decode-log-interval 1
             --enable-deepep-moe
@@ -225,8 +225,8 @@ spec:
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
             --port 30000
-            --tp-size 32
-            --dp-size 32
+            --tp-size ${PARALLELISM_SIZE}
+            --dp-size ${PARALLELISM_SIZE}
             --enable-dp-attention
             --decode-log-interval 1
             --enable-deepep-moe
@@ -388,8 +388,8 @@ spec:
             --nnodes ${LWS_GROUP_SIZE}
             --port 30001
             --node-rank ${LWS_WORKER_INDEX}
-            --tp-size 32
-            --dp-size 32
+            --tp-size ${PARALLELISM_SIZE}
+            --dp-size ${PARALLELISM_SIZE}
             --enable-dp-attention
             --decode-log-interval 1
             --enable-deepep-moe
@@ -494,8 +494,8 @@ spec:
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
             --port 30001
-            --tp-size 32
-            --dp-size 32
+            --tp-size ${PARALLELISM_SIZE}
+            --dp-size ${PARALLELISM_SIZE}
             --enable-dp-attention
             --decode-log-interval 1
             --enable-deepep-moe

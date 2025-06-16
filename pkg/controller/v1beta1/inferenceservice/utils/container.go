@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 )
@@ -97,4 +98,21 @@ func GetContainerIndex(containers []v1.Container, containerName string) int {
 		}
 	}
 	return -1
+}
+
+// GetGpuCountFromContainer extracts the GPU count from container resources.
+// It checks both Limits and Requests, preferring Limits.
+func GetGpuCountFromContainer(container *v1.Container) int {
+	if container == nil {
+		return 0
+	}
+	var gpuCount int
+	resourceName := v1.ResourceName(constants.NvidiaGPUResourceType)
+
+	if quantity, ok := container.Resources.Limits[resourceName]; ok {
+		gpuCount = int(quantity.Value())
+	} else if quantity, ok := container.Resources.Requests[resourceName]; ok {
+		gpuCount = int(quantity.Value())
+	}
+	return gpuCount
 }
