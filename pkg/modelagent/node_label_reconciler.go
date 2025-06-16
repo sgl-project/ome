@@ -79,8 +79,15 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 	modelInfo := getNodeLabelModelInfo(op)
 	n.logger.Infof("Processing node label %s operation for %s in state: %s", op.ModelStateOnNode, modelInfo, op.ModelStateOnNode)
 
-	// First check if the node exists to avoid unnecessary work and clearer error handling
-	_, err := n.kubeClient.CoreV1().Nodes().Get(context.TODO(), n.nodeName, metav1.GetOptions{})
+	// Get label key for this model
+	labelKey, err := getModelLabelKey(op)
+	if err != nil {
+		n.logger.Errorf("Failed to get label key for %s: %v", modelInfo, err)
+		return nil // Don't retry for invalid model references
+	}
+
+	// First get the node to check existing labels
+	node, err := n.kubeClient.CoreV1().Nodes().Get(context.TODO(), n.nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Node doesn't exist, log warning and return nil to avoid retries
@@ -92,14 +99,41 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 		return err
 	}
 
+	// Check current labels - make idempotent based on operation type
+	currentValue, labelExists := node.Labels[labelKey]
+
+	// Handle operation based on desired state and current state
+	switch op.ModelStateOnNode {
+	case Deleted:
+		// For delete operations, if the label doesn't exist, the operation is already complete
+		if !labelExists {
+			n.logger.Infof("Label %s already removed from node %s for %s - operation is idempotent", labelKey, n.nodeName, modelInfo)
+			return nil
+		}
+	case Ready, Updating, Failed:
+		// For add/update operations, if the label already has the desired value, skip
+		if labelExists && currentValue == string(op.ModelStateOnNode) {
+			n.logger.Infof("Label %s already set to %s on node %s for %s - operation is idempotent",
+				labelKey, string(op.ModelStateOnNode), n.nodeName, modelInfo)
+			return nil
+		}
+	}
+
+	// Generate patch payload
 	payloadBytes, err := getNodeLabelPatchPayloadBytes(op)
 	if err != nil {
 		n.logger.Errorf("Failed to get node label patch payload for %s: %v", modelInfo, err)
-		return err
+		return nil // Don't retry for payload generation issues
 	}
 	n.logger.Debugf("Generated node label patch payload for %s: %s", modelInfo, string(payloadBytes))
 
-	// Patch the node
+	// Skip empty patch operations
+	if len(payloadBytes) <= 2 { // Just "[]" for empty patch
+		n.logger.Infof("Empty patch payload for %s, skipping operation", modelInfo)
+		return nil
+	}
+
+	// Apply the patch
 	_, err = n.kubeClient.CoreV1().Nodes().Patch(
 		context.TODO(),
 		n.nodeName,
@@ -113,9 +147,20 @@ func (n *NodeLabelReconciler) applyNodeLabelOperation(op *NodeLabelOp) error {
 			// Node disappeared after our initial check
 			n.logger.Warnf("Node %s not found during patch operation for %s, skipping", n.nodeName, modelInfo)
 			return nil // Don't retry for non-existent nodes
+		} else if errors.IsConflict(err) {
+			// Conflict means the resource was modified - this is retryable
+			n.logger.Warnf("Conflict during patch operation for node %s and model %s, will retry: %v", n.nodeName, modelInfo, err)
+			return err // Return error to trigger retry
 		} else if errors.IsInvalid(err) || errors.IsBadRequest(err) {
-			// Invalid request, could be malformed patch, log but don't retry
-			n.logger.Errorf("Invalid patch request for node %s and model %s: %v", n.nodeName, modelInfo, err)
+			// For delete operations that fail with "not found" patch path errors, consider it already done
+			if op.ModelStateOnNode == Deleted && strings.Contains(err.Error(), "not found") {
+				n.logger.Infof("Label %s already removed from node %s for %s - considering delete operation successful",
+					labelKey, n.nodeName, modelInfo)
+				return nil
+			}
+
+			// Other invalid request, could be malformed patch, log but don't retry
+			n.logger.Warnf("Invalid patch request for node %s and model %s: %v", n.nodeName, modelInfo, err)
 			return nil // Don't retry for bad requests
 		}
 
@@ -138,8 +183,8 @@ func getNodeLabelModelInfo(op *NodeLabelOp) string {
 	return "unknown model"
 }
 
-// getNodeLabelPatchPayloadBytes generates the JSON patch for node labels
-func getNodeLabelPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
+// getModelLabelKey gets the label key for a model
+func getModelLabelKey(op *NodeLabelOp) (string, error) {
 	var labelKey string
 
 	// Use the deterministic labeling system
@@ -151,9 +196,19 @@ func getNodeLabelPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
 
 	if len(labelKey) == 0 {
 		if op.ClusterBaseModel == nil && op.BaseModel == nil {
-			return []byte{}, fmt.Errorf("node labeler get empty op without any models")
+			return "", fmt.Errorf("node labeler got empty op without any models")
 		}
-		return []byte{}, nil
+		return "", fmt.Errorf("could not generate label key for model")
+	}
+
+	return labelKey, nil
+}
+
+// getNodeLabelPatchPayloadBytes generates the JSON patch for node labels
+func getNodeLabelPatchPayloadBytes(op *NodeLabelOp) ([]byte, error) {
+	labelKey, err := getModelLabelKey(op)
+	if err != nil {
+		return []byte{}, err
 	}
 
 	var payload []patchStringValue
