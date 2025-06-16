@@ -447,7 +447,7 @@ func main() {
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&v1beta1.InferenceService{}).
 			WithDefaulter(&isvc.InferenceServiceDefaulter{}).
-			WithValidator(&isvc.InferenceServiceValidator{Client: mgr.GetClient()}).
+			WithValidator(&isvc.InferenceServiceValidator{}).
 			Complete(); err != nil {
 			setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
 			os.Exit(1)
