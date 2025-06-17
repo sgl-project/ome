@@ -462,8 +462,8 @@ To maintain backward compatibility:
 - Update the validation and mutation webhooks for `InferenceService`:
   - If both `engine` and `decoder` are specified, the deployment mode is PDDisaggregated
   - If only `engine` is specified:
+    - For RawDeployment: must have either `runner` or `podSpec` defined
     - For MultiNode: must have both `leader` and `worker` defined, and `worker.size` must be greater than 0
-    - Otherwise, default to RawDeployment
   - `engine` should never be null. However, this validation must wait until migration is finished.
 
 - Update the validation and mutation webhooks for `ServingRuntime`:
