@@ -22,7 +22,7 @@ spec:
   displayName: cohere.command
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-1-52b-v14-2-0" "osBucket" }}/o/{{ index .Values "cohere-command-1-52b-v14-2-0" "vendor" }}/{{ index .Values "cohere-command-1-52b-v14-2-0" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command_52b_v14.2.0_llh_tokenizers_jul23_md080abg_pref
+    path: "/mnt/data/models/{{ index .Values "cohere-command-1-52b-v14-2-0" "vendor" }}/{{ index .Values "cohere-command-1-52b-v14-2-0" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-command-1-52b-v14-2-0" "vendor" }}
   version: "14.2"
   modelFormat:

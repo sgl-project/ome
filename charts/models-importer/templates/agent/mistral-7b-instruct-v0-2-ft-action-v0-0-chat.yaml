@@ -17,7 +17,7 @@ spec:
   displayName: olm.mistral-7b-instruct-v0.2-ft-action
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-0-chat" "osBucket" }}/o/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-0-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-0-chat" "osPrefixOverride" }}"
-    path: /mnt/data/models/olm/action-mistral-7b-v0.2-finetuned-model-v0.0
+    path: "/mnt/data/models/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-0-chat" "vendor" }}/{{ index .Values "mistral-7b-instruct-v0-2-ft-action-v0-0-chat" "osPrefixOverride" }}"
   vendor: olm
   version: "0.0"
   modelFormat:

@@ -17,7 +17,7 @@ spec:
   displayName: mistralai.mixtral-8x7b-instruct
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "osBucket" }}/o/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "vendor" }}/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "osPrefixOverride" }}"
-    path: /mnt/data/models/mistralai/mixtral-8x7b-instruct-v0-1
+    path: "/mnt/data/models/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "vendor" }}/{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "osPrefixOverride" }}"
   vendor: mistralai
   version: "0.1"
   modelFormat:

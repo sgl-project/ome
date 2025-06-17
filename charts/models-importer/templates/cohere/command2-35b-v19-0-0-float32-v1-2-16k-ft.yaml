@@ -19,7 +19,7 @@ spec:
   displayName: cohere.command-r-16k
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "osBucket" }}/o/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command2_35b_v19.0.0_float32_v1_2_16k
+    path: "/mnt/data/models/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "osPrefixOverride" }}"
   vendor: {{ index .Values "command2-35b-v19-0-0-float32-v1-2-16k-ft" "vendor" }}
   version: "1.2"
   modelFormat:

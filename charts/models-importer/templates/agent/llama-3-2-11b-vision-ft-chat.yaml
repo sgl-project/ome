@@ -17,7 +17,7 @@ spec:
   displayName: olm.llama-3.2-11b-vision-ft
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-2-11b-vision-ft-chat" "osBucket" }}/o/{{ index .Values "llama-3-2-11b-vision-ft-chat" "vendor" }}/{{ index .Values "llama-3-2-11b-vision-ft-chat" "osPrefixOverride" }}"
-    path: /mnt/data/models/olm/llama-3-2-11b-vision-ft-chat
+    path: "/mnt/data/models/{{ index .Values "llama-3-2-11b-vision-ft-chat" "vendor" }}/{{ index .Values "llama-3-2-11b-vision-ft-chat" "osPrefixOverride" }}"
   vendor: olm
   version: "1.0.0"
   modelFormat:

@@ -22,7 +22,7 @@ spec:
   displayName: cohere.rerank-multilingual-v3.1
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-rerank-multilingual-03" "osBucket" }}/o/{{ index .Values "cohere-rerank-multilingual-03" "vendor" }}/{{ index .Values "cohere-rerank-multilingual-03" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/rerank-multilingual-v3.1
+    path: "/mnt/data/models/{{ index .Values "cohere-rerank-multilingual-03" "vendor" }}/{{ index .Values "cohere-rerank-multilingual-03" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-rerank-multilingual-03" "vendor" }}
   version: "3.1"
   modelFormat:

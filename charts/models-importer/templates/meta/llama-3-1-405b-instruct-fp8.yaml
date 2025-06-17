@@ -25,7 +25,7 @@ spec:
   displayName: meta.llama-3.1-405b-instruct
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-1-405b-instruct-fp8" "osBucket" }}/o/{{ index .Values "llama-3-1-405b-instruct-fp8" "vendor" }}/{{ index .Values "llama-3-1-405b-instruct-fp8" "osPrefixOverride" }}"
-    path: /mnt/data/models/meta/llama-3-1-405b-instruct-fp8/64a54b704768dfd589a3e4ac05d546052f67f4fd
+    path: "/mnt/data/models/{{ index .Values "llama-3-1-405b-instruct-fp8" "vendor" }}/{{ index .Values "llama-3-1-405b-instruct-fp8" "osPrefixOverride" }}"
   vendor: meta
   version: "1.0.0"
   modelFramework:

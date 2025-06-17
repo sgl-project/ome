@@ -22,7 +22,7 @@ spec:
   displayName: cohere.command-r-08-2024-tp4
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-082024-v1-6-tp4-128k" "osBucket" }}/o/{{ index .Values "cohere-command-r-082024-v1-6-tp4-128k" "vendor" }}/{{ index .Values "cohere-command-r-082024-v1-6-tp4-128k" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command-r-082024-v1.6-tp4-128k
+    path: "/mnt/data/models/{{ index .Values "cohere-command-r-082024-v1-6-tp4-128k" "vendor" }}/{{ index .Values "cohere-command-r-082024-v1-6-tp4-128k" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-command-r-082024-v1-6-tp4-128k" "vendor" }}
   version: "1.6"
   modelFormat:

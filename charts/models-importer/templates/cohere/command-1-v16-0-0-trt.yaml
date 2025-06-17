@@ -19,7 +19,7 @@ spec:
   displayName: cohere.command.trt
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-1-v16-0-0-trt" "osBucket" }}/o/{{ index .Values "cohere-command-1-v16-0-0-trt" "vendor" }}/{{ index .Values "cohere-command-1-v16-0-0-trt" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command_52b_v16.0.0_xznlji4x_pref_fp16_trt
+    path: "/mnt/data/models/{{ index .Values "cohere-command-1-v16-0-0-trt" "vendor" }}/{{ index .Values "cohere-command-1-v16-0-0-trt" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-command-1-v16-0-0-trt" "vendor" }}
   version: "16.0"
   modelFormat:

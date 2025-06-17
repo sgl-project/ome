@@ -19,7 +19,7 @@ spec:
   displayName: cohere.rerank-english-02
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-rerank" "osBucket" }}/o/{{ index .Values "cohere-rerank" "vendor" }}/{{ index .Values "cohere-rerank" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/rerank-english-02
+    path: "/mnt/data/models/{{ index .Values "cohere-rerank" "vendor" }}/{{ index .Values "cohere-rerank" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-rerank" "vendor" }}
   version: "2.0"
   modelFormat:

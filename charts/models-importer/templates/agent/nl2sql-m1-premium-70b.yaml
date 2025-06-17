@@ -20,7 +20,7 @@ spec:
   displayName: olm.nl2sql-m1-premium-70b
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2sql-m1-premium-70b" "osBucket" }}/o/{{ index .Values "nl2sql-m1-premium-70b" "vendor" }}/{{ index .Values "nl2sql-m1-premium-70b" "osPrefixOverride" }}"
-    path: /mnt/data/models/olm/nl2sql-m1-premium-70b
+    path: "/mnt/data/models/{{ index .Values "nl2sql-m1-premium-70b" "vendor" }}/{{ index .Values "nl2sql-m1-premium-70b" "osPrefixOverride" }}"
   vendor: olm
   version: "1.0"
   modelFormat:

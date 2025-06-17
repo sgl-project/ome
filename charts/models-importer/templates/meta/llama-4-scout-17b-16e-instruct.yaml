@@ -34,7 +34,7 @@ spec:
     - "CHAT"
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-4-scout-17b-16e-instruct" "osBucket" }}/o/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
-    path: /mnt/data/models/meta/llama-4-scout-17b-16e-instruct
+    path: "/mnt/data/models/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:

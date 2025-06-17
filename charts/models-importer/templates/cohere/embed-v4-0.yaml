@@ -22,7 +22,7 @@ spec:
   displayName: cohere.embed-v4.0
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-embed-v4-0" "osBucket" }}/o/{{ index .Values "cohere-embed-v4-0" "vendor" }}/{{ index .Values "cohere-embed-v4-0" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/embed-v4-0-04152025
+    path: "/mnt/data/models/{{ index .Values "cohere-embed-v4-0" "vendor" }}/{{ index .Values "cohere-embed-v4-0" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-embed-v4-0" "vendor" }}
   version: "4.0"
   modelFormat:

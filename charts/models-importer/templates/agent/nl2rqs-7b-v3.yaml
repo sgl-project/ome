@@ -17,7 +17,7 @@ spec:
   displayName: olm.nl2rqs-7b-v3
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "nl2rqs-7b-v3" "osBucket" }}/o/{{ index .Values "nl2rqs-7b-v3" "vendor" }}/{{ index .Values "nl2rqs-7b-v3" "osPrefixOverride" }}"
-    path: /mnt/data/models/olm/nl2rqs-7b-v3
+    path: "/mnt/data/models/{{ index .Values "nl2rqs-7b-v3" "vendor" }}/{{ index .Values "nl2rqs-7b-v3" "osPrefixOverride" }}"
   vendor: olm
   version: "3.0"
   modelFormat:

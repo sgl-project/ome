@@ -47,7 +47,7 @@ spec:
     - "CHAT"
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "deepseek-v3" "osBucket" }}/o/{{ index .Values "deepseek-v3" "vendor" }}/{{ index .Values "deepseek-v3" "osPrefixOverride" }}"
-    path: /mnt/data/models/deepseek-ai/deepseek-v3
+    path: "/mnt/data/models/{{ index .Values "deepseek-v3" "vendor" }}/{{ index .Values "deepseek-v3" "osPrefixOverride" }}"
   modelConfiguration:
     {
       "architectures": [

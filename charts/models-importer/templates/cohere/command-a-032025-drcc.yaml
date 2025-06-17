@@ -22,7 +22,7 @@ spec:
   displayName: cohere.command-a-03-2025
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command-a-032025-drcc" "osBucket" }}/o/{{ index .Values "command-a-032025-drcc" "vendor" }}/{{ index .Values "command-a-032025-drcc" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command-a-032025
+    path: "/mnt/data/models/{{ index .Values "command-a-032025-drcc" "vendor" }}/{{ index .Values "command-a-032025-drcc" "osPrefixOverride" }}"
   vendor: {{ index .Values "command-a-032025-drcc" "vendor" }}
   version: "1.1"
   # keep trt structure for now

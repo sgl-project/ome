@@ -19,7 +19,7 @@ spec:
   displayName: cohere.command-r-08-2024
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "osBucket" }}/o/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command2_35b_v20.1.0_v1_7_float32
+    path: "/mnt/data/models/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "vendor" }}/{{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "osPrefixOverride" }}"
   vendor: {{ index .Values "command2-35b-v20-1-0-float32-v1-7-16k-ft" "vendor" }}
   version: "1.7"
   modelFormat:

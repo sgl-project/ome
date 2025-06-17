@@ -22,7 +22,7 @@ spec:
   displayName: cohere.command-r-plus
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-plus-v1-2-chat" "osBucket" }}/o/{{ index .Values "cohere-command-r-plus-v1-2-chat" "vendor" }}/{{ index .Values "cohere-command-r-plus-v1-2-chat" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command-r-plus-v1.2
+    path: "/mnt/data/models/{{ index .Values "cohere-command-r-plus-v1-2-chat" "vendor" }}/{{ index .Values "cohere-command-r-plus-v1-2-chat" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-command-r-plus-v1-2-chat" "vendor" }}
   version: "1.2"
   modelFormat:

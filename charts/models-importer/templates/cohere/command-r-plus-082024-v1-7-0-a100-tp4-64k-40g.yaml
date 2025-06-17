@@ -22,7 +22,7 @@ spec:
   displayName: cohere.command-r-plus-08-2024-tp4-64k
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g" "osBucket" }}/o/{{ index .Values "cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g" "vendor" }}/{{ index .Values "cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/command_r_plus_082024_v1.7.0_a100_tp4_64k_40g
+    path: "/mnt/data/models/{{ index .Values "cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g" "vendor" }}/{{ index .Values "cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-command-r-plus-082024-v1-7-0-a100-tp4-64k-40g" "vendor" }}
   version: "1.7"
   modelFormat:

@@ -19,7 +19,7 @@ spec:
   displayName: cohere.command
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-command-1-52b-v15-6-gen" "osBucket" }}/o/{{ index .Values "cohere-command-1-52b-v15-6-gen" "vendor" }}/{{ index .Values "cohere-command-1-52b-v15-6-gen" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/52b_v15.6_bfloat16
+    path: "/mnt/data/models/{{ index .Values "cohere-command-1-52b-v15-6-gen" "vendor" }}/{{ index .Values "cohere-command-1-52b-v15-6-gen" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-command-1-52b-v15-6-gen" "vendor" }}
   version: "15.6"
   modelFormat:

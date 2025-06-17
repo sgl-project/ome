@@ -22,7 +22,7 @@ spec:
   displayName: cohere.embed-english-image-v3.0
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "cohere-embed-english-image-v3-0" "osBucket" }}/o/{{ index .Values "cohere-embed-english-image-v3-0" "vendor" }}/{{ index .Values "cohere-embed-english-image-v3-0" "osPrefixOverride" }}"
-    path: /mnt/data/models/cohere/embed-english-image-03
+    path: "/mnt/data/models/{{ index .Values "cohere-embed-english-image-v3-0" "vendor" }}/{{ index .Values "cohere-embed-english-image-v3-0" "osPrefixOverride" }}"
   vendor: {{ index .Values "cohere-embed-english-image-v3-0" "vendor" }}
   version: "3.0"
   modelFormat:
