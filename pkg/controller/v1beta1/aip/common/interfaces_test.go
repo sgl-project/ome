@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -284,32 +285,31 @@ func generateGcpTestData(t *testing.T) (ResourceBase, *v1beta1.Organization) {
 }`, fakePrivateKey)
 	gcpKeyData := []byte(gcpKey)
 
+	// Create the directory if it doesn't exist
+	err := os.MkdirAll("/tmp/secrets-store", 0755)
+	require.NoError(t, err)
+
+	// Write the GCP key data to the file
+	err = os.WriteFile("/tmp/secrets-store/google-sa-file", gcpKeyData, 0644)
+	require.NoError(t, err)
+
+	// Clean up the file after the test
+	t.Cleanup(func() {
+		os.Remove("/tmp/secrets-store/google-sa-file")
+		os.Remove("/tmp/secrets-store")
+	})
+
 	org := &v1beta1.Organization{
 		ObjectMeta: metav1.ObjectMeta{Name: "genai-google-0001"},
 		Spec: v1beta1.OrganizationSpec{
 			Vendor: vendorPtr("google"),
-			SecretRef: &v1beta1.SecretReference{
-				Name:      "google-admin-key",
-				Namespace: "genai-google",
-				Key:       "GOOGLE_ADMIN_API_KEY",
-			},
-		},
-	}
-
-	secret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "google-admin-key",
-			Namespace: "genai-google",
-		},
-		Data: map[string][]byte{
-			"GOOGLE_ADMIN_API_KEY": gcpKeyData,
 		},
 	}
 
 	// Create fake client
 	fakeClient := cfake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(org, secret).
+		WithObjects(org).
 		Build()
 
 	// Create resource base
@@ -320,10 +320,12 @@ func generateGcpTestData(t *testing.T) (ResourceBase, *v1beta1.Organization) {
 
 	return rb, org
 }
+
 func TestResourceBase_InitializeGcpProjectClient(t *testing.T) {
 	rb, org := generateGcpTestData(t)
 
 	t.Run("InitializeGcpProjectClient", func(t *testing.T) {
+
 		client, err := rb.InitializeGcpProjectClient(context.Background(), org)
 		require.NoError(t, err)
 		assert.NotNil(t, client)
@@ -332,7 +334,8 @@ func TestResourceBase_InitializeGcpProjectClient(t *testing.T) {
 	t.Run("InitializeGcpProjectClient_NoSecret", func(t *testing.T) {
 		// Create org with non-existent secret
 		orgNoSecret := org.DeepCopy()
-		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+		// Remove the file to ensure we get the expected error
+		os.Remove("/tmp/secrets-store/google-sa-file")
 
 		_, err := rb.InitializeGcpProjectClient(context.Background(), orgNoSecret)
 		assert.Error(t, err)
@@ -368,7 +371,9 @@ func TestResourceBase_InitializeGcpBillingClient(t *testing.T) {
 	t.Run("InitializeGcpBillingClient_NoSecret", func(t *testing.T) {
 		// Create org with non-existent secret
 		orgNoSecret := org.DeepCopy()
-		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		// Remove the file to ensure we get the expected error
+		os.Remove("/tmp/secrets-store/google-sa-file")
 
 		_, err := rb.InitializeGcpBillingClient(context.Background(), orgNoSecret)
 		assert.Error(t, err)
@@ -404,7 +409,9 @@ func TestResourceBase_InitializeGcpIamClient(t *testing.T) {
 	t.Run("InitializeGcpIamClient_NoSecret", func(t *testing.T) {
 		// Create org with non-existent secret
 		orgNoSecret := org.DeepCopy()
-		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		// Remove the file to ensure we get the expected error
+		os.Remove("/tmp/secrets-store/google-sa-file")
 
 		_, err := rb.InitializeGcpIamClient(context.Background(), orgNoSecret)
 		assert.Error(t, err)
@@ -440,7 +447,9 @@ func TestResourceBase_InitializeGcpServiceUsage(t *testing.T) {
 	t.Run("InitializeGcpServiceUsage_NoSecret", func(t *testing.T) {
 		// Create org with non-existent secret
 		orgNoSecret := org.DeepCopy()
-		orgNoSecret.Spec.SecretRef.Name = "non-existent"
+
+		// Remove the file to ensure we get the expected error
+		os.Remove("/tmp/secrets-store/google-sa-file")
 
 		_, err := rb.InitializeGcpServiceUsage(context.Background(), orgNoSecret)
 		assert.Error(t, err)

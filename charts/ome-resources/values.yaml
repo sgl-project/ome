@@ -85,6 +85,8 @@ ome:
     image: us-chicago-1.ocir.io/axoxdievda5j/genai-dac-dummy-image
     tag: v1.0-58
     schedulerName: genai-kube-scheduler
+  secrets:
+    vaultId: ocid1.vault.oc1.iad.dummy_vault_id
   omeAgent:
     image: ap-osaka-1.ocir.io/idqj093njucb/genai-ome-agent
     tag: *defaultVersion

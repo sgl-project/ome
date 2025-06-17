@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"os"
 
 	admin "cloud.google.com/go/iam/admin/apiv1"
 
@@ -83,20 +84,6 @@ func (r *ResourceBase) getSecret(ctx context.Context, ref *v1beta1.SecretReferen
 	return secret, nil
 }
 
-func (r *ResourceBase) getAdminSecret(ctx context.Context, org *v1beta1.Organization) ([]byte, error) {
-	secret, err := r.getSecret(ctx, org.Spec.SecretRef)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get admin secret: %w", err)
-	}
-
-	adminSecret := secret.Data[org.Spec.SecretRef.Key]
-	if adminSecret == nil {
-		return nil, fmt.Errorf("Admin secret is empty in secret %s", org.Spec.SecretRef.Name)
-	}
-
-	return adminSecret, nil
-}
-
 // InitializeClient initializes an OpenAI client using organization credentials
 func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organization) (*openaisdk.Client, error) {
 	if org.Spec.Vendor == nil {
@@ -127,7 +114,7 @@ func (r *ResourceBase) InitializeClient(ctx context.Context, org *v1beta1.Organi
 
 // InitializeGcpProjectClient initializes a GCP Project client using organization credentials
 func (r *ResourceBase) InitializeGcpProjectClient(ctx context.Context, org *v1beta1.Organization) (GcpProjectClient, error) {
-	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	adminSecret, err := r.GetGcpAdminSecret(org)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get admin secret: %w", err)
 	}
@@ -141,7 +128,7 @@ func (r *ResourceBase) InitializeGcpProjectClient(ctx context.Context, org *v1be
 
 // InitializeGcpBillingClient initializes a GCP Billing client using organization credentials
 func (r *ResourceBase) InitializeGcpBillingClient(ctx context.Context, org *v1beta1.Organization) (GcpBillingClient, error) {
-	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	adminSecret, err := r.GetGcpAdminSecret(org)
 
 	if err != nil {
 		return nil, err
@@ -157,7 +144,7 @@ func (r *ResourceBase) InitializeGcpBillingClient(ctx context.Context, org *v1be
 
 // InitializeGcpServiceUsage initializes a GCP Service usage client using organization credentials
 func (r *ResourceBase) InitializeGcpServiceUsage(ctx context.Context, org *v1beta1.Organization) (GcpServiceUsageClient, error) {
-	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	adminSecret, err := r.GetGcpAdminSecret(org)
 
 	if err != nil {
 		return nil, err
@@ -173,7 +160,7 @@ func (r *ResourceBase) InitializeGcpServiceUsage(ctx context.Context, org *v1bet
 
 // InitializeGcpIamClient initializes a GCP iam client using organization credentials
 func (r *ResourceBase) InitializeGcpIamClient(ctx context.Context, org *v1beta1.Organization) (GcpIamClient, error) {
-	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	adminSecret, err := r.GetGcpAdminSecret(org)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get admin secret: %w", err)
 	}
@@ -186,7 +173,7 @@ func (r *ResourceBase) InitializeGcpIamClient(ctx context.Context, org *v1beta1.
 	return &RealGcpIamClient{client: iamClient}, nil
 }
 
-func (r *ResourceBase) GetGcpAdminSecret(ctx context.Context, org *v1beta1.Organization) ([]byte, error) {
+func (r *ResourceBase) GetGcpAdminSecret(org *v1beta1.Organization) ([]byte, error) {
 	if org.Spec.Vendor == nil {
 		return nil, fmt.Errorf("vendor is not specified for organization %s", org.Name)
 	}
@@ -195,9 +182,13 @@ func (r *ResourceBase) GetGcpAdminSecret(ctx context.Context, org *v1beta1.Organ
 		return nil, fmt.Errorf("unsupported vendor: %s (expected: google)", *org.Spec.Vendor)
 	}
 
-	adminSecret, err := r.getAdminSecret(ctx, org)
+	adminSecret, err := os.ReadFile("/tmp/secrets-store/google-sa-file")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get admin secret: %w", err)
+		return nil, fmt.Errorf("failed to read GCP service account file: %w", err)
+	}
+
+	if len(adminSecret) == 0 {
+		return nil, fmt.Errorf("GCP service account key is empty in OCI Vault secret")
 	}
 
 	return adminSecret, nil
