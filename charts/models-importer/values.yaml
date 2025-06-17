@@ -228,6 +228,12 @@ cohere-command-r-082024-v1-7-tp1-16k:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+cohere-command-plus-latest:
+  enabled: false
+
+cohere-command-latest:
+  enabled: false
+
 cohere-command-1-6b-v14-2-0:
   enabled: false
   lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
@@ -420,3 +426,4 @@ grok-3-fast:
 grok-3-mini-fast:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
