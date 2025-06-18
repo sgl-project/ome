@@ -158,6 +158,7 @@ var (
 	AutoscalerClass                          = OMEAPIGroupName + "/autoscalerClass"
 	AutoscalerMetrics                        = OMEAPIGroupName + "/metrics"
 	TargetUtilizationPercentage              = OMEAPIGroupName + "/targetUtilizationPercentage"
+	DeprecationWarning                       = OMEAPIGroupName + "/deprecation-warning"
 	MinScaleAnnotationKey                    = KnativeAutoscalingAPIGroupName + "/min-scale"
 	MaxScaleAnnotationKey                    = KnativeAutoscalingAPIGroupName + "/max-scale"
 	RollOutDurationAnnotationKey             = KnativeServingAPIGroupName + "/rollout-duration"
@@ -576,6 +577,7 @@ const (
 	RawDeployment     DeploymentModeType = "RawDeployment"
 	MultiNodeRayVLLM  DeploymentModeType = "MultiNodeRayVLLM"
 	MultiNode         DeploymentModeType = "MultiNode"
+	PDDisaggregated   DeploymentModeType = "PDDisaggregated"
 	VirtualDeployment DeploymentModeType = "VirtualDeployment"
 )
 
