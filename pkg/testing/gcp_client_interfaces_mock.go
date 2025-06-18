@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	billingpb "cloud.google.com/go/billing/apiv1/billingpb"
+	budgetspb "cloud.google.com/go/billing/budgets/apiv1/budgetspb"
 	adminpb "cloud.google.com/go/iam/admin/apiv1/adminpb"
 	iampb "cloud.google.com/go/iam/apiv1/iampb"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
@@ -361,4 +362,56 @@ func (m *MockGcpServiceUsageClient) Enable(projectId, apiName string) error {
 func (mr *MockGcpServiceUsageClientMockRecorder) Enable(projectId, apiName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enable", reflect.TypeOf((*MockGcpServiceUsageClient)(nil).Enable), projectId, apiName)
+}
+
+// MockGcpBudgetClient is a mock of GcpBudgetClient interface.
+type MockGcpBudgetClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockGcpBudgetClientMockRecorder
+}
+
+// MockGcpBudgetClientMockRecorder is the mock recorder for MockGcpBudgetClient.
+type MockGcpBudgetClientMockRecorder struct {
+	mock *MockGcpBudgetClient
+}
+
+// NewMockGcpBudgetClient creates a new mock instance.
+func NewMockGcpBudgetClient(ctrl *gomock.Controller) *MockGcpBudgetClient {
+	mock := &MockGcpBudgetClient{ctrl: ctrl}
+	mock.recorder = &MockGcpBudgetClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGcpBudgetClient) EXPECT() *MockGcpBudgetClientMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockGcpBudgetClient) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockGcpBudgetClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockGcpBudgetClient)(nil).Close))
+}
+
+// CreateBudget mocks base method.
+func (m *MockGcpBudgetClient) CreateBudget(ctx context.Context, req *budgetspb.CreateBudgetRequest) (*budgetspb.Budget, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBudget", ctx, req)
+	ret0, _ := ret[0].(*budgetspb.Budget)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBudget indicates an expected call of CreateBudget.
+func (mr *MockGcpBudgetClientMockRecorder) CreateBudget(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBudget", reflect.TypeOf((*MockGcpBudgetClient)(nil).CreateBudget), ctx, req)
 }

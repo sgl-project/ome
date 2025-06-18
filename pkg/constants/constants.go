@@ -51,6 +51,11 @@ var (
 	AIPlatformConfigMapName = "aiplatform-config"
 )
 
+// Google Gemini related Constants
+var (
+	GoogleConfigMapName = "google-config"
+)
+
 // InferenceGraph Constants
 const (
 	RouterHeadersPropagateEnvVar = "PROPAGATE_HEADERS"

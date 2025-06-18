@@ -7,6 +7,8 @@ import (
 
 	billing "cloud.google.com/go/billing/apiv1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	budgets "cloud.google.com/go/billing/budgets/apiv1"
+	budgetspb "cloud.google.com/go/billing/budgets/apiv1/budgetspb"
 	admin "cloud.google.com/go/iam/admin/apiv1"
 	"cloud.google.com/go/iam/admin/apiv1/adminpb"
 	"cloud.google.com/go/iam/apiv1/iampb"
@@ -99,17 +101,22 @@ type RealGcpBillingClient struct {
 }
 
 func (c *RealGcpBillingClient) UpdateProjectBillingInfo(ctx context.Context, req *billingpb.UpdateProjectBillingInfoRequest, opts ...gax.CallOption) (*billingpb.ProjectBillingInfo, error) {
-	// return a mocked billing info until we have a working billing account
-	return &billingpb.ProjectBillingInfo{
-		ProjectId:          req.ProjectBillingInfo.ProjectId,
-		Name:               fmt.Sprintf("projects/%s/billingInfo", req.ProjectBillingInfo.ProjectId),
-		BillingAccountName: fmt.Sprintf("billingAccounts/%s", req.ProjectBillingInfo.BillingAccountName),
-		BillingEnabled:     true,
-	}, nil
-	// return c.client.UpdateProjectBillingInfo(ctx, req)
+	return c.client.UpdateProjectBillingInfo(ctx, req)
 }
 
 func (c *RealGcpBillingClient) Close() error {
+	return c.client.Close()
+}
+
+type RealGcpBudgetClient struct {
+	client *budgets.BudgetClient
+}
+
+func (c *RealGcpBudgetClient) CreateBudget(ctx context.Context, req *budgetspb.CreateBudgetRequest) (*budgetspb.Budget, error) {
+	return c.client.CreateBudget(ctx, req)
+}
+
+func (c *RealGcpBudgetClient) Close() error {
 	return c.client.Close()
 }
 

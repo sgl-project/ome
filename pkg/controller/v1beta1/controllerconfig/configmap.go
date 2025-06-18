@@ -24,6 +24,7 @@ const (
 	BenchmarkJobConfigName                       = "benchmarkjob"
 	ReplicationJobConfigName                     = "replicationjob"
 	AIPlatformSecretConfigName                   = "aiplatform-config"
+	GoogleConfigName                             = "google-config"
 
 	DefaultDomainTemplate = "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
 	DefaultIngressDomain  = "example.com"
@@ -149,6 +150,12 @@ type DacReservationWorkloadConfig struct {
 	Image                             string `json:"image"`
 	CreationFailedTimeThresholdSecond int    `json:"creationFailedTimeThresholdSecond"`
 	SchedulerName                     string `json:"schedulerName"`
+}
+
+type GoogleConfig struct {
+	EnableBudget   bool   `json:"EnableBudget"`
+	ProjectFolder  string `json:"ProjectFolder"`
+	BillingAccount string `json:"BillingAccount"`
 }
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {
@@ -359,4 +366,20 @@ func NewAIPlatformConfig(clientset kubernetes.Interface) (*AIPlatformConfig, err
 		}
 	}
 	return aiPlatformConfig, nil
+}
+
+func NewGoogleConfig(clientset kubernetes.Interface) (*GoogleConfig, error) {
+	configMap, err := clientset.CoreV1().ConfigMaps(constants.OMENamespace).Get(context.TODO(), constants.GoogleConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	googleConfig := &GoogleConfig{}
+	for _, err := range []error{
+		getComponentConfig(GoogleConfigName, configMap, &googleConfig),
+	} {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return googleConfig, nil
 }

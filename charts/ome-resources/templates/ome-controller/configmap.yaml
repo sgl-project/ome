@@ -187,3 +187,16 @@ data:
         "secretName": "{{.Values.ome.aiPlatformSecretConfig.secretName}}"
       }
     }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: google-config
+  namespace: ome
+data:
+  google-config: |
+    {
+      "enableBudget": {{.Values.google.enableBudget}},
+      "billingAccount": "{{.Values.google.billingAccount}}",
+      "projectFolder": "{{.Values.google.projectFolder}}"
+    }

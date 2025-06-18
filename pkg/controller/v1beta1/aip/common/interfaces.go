@@ -13,6 +13,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
 	billing "cloud.google.com/go/billing/apiv1"
+	budgets "cloud.google.com/go/billing/budgets/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	"github.com/go-logr/logr"
 	googleOption "google.golang.org/api/option"
@@ -140,6 +141,22 @@ func (r *ResourceBase) InitializeGcpBillingClient(ctx context.Context, org *v1be
 	}
 
 	return &RealGcpBillingClient{client: billingClient}, nil
+}
+
+// InitializeGcpBudgetClient initializes a GCP Budget client using organization credentials
+func (r *ResourceBase) InitializeGcpBudgetClient(ctx context.Context, org *v1beta1.Organization) (GcpBudgetClient, error) {
+	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+
+	if err != nil {
+		return nil, err
+	}
+
+	budgetClient, err := budgets.NewBudgetClient(ctx, googleOption.WithCredentialsJSON(adminSecret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP budget client: %w", err)
+	}
+
+	return &RealGcpBudgetClient{client: budgetClient}, nil
 }
 
 // InitializeGcpServiceUsage initializes a GCP Service usage client using organization credentials

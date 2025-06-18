@@ -148,14 +148,22 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 	sa.Log.Info("GCP service account created", "displayName", svc.DisplayName, "serviceAccountId", serviceAccountId)
 	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", serviceAccountId, projectId)
 
-	// Generate key for the newly created service account
-	keyResp, err := iamClient.CreateServiceAccountKey(ctx, &adminpb.CreateServiceAccountKeyRequest{
-		Name: fmt.Sprintf("projects/%s/serviceAccounts/%s", projectId, saEmail),
-	})
+	retry := 3
+	var keyResp *adminpb.ServiceAccountKey
+	for retry > 0 {
+		keyResp, err = iamClient.CreateServiceAccountKey(ctx, &adminpb.CreateServiceAccountKeyRequest{
+			Name: fmt.Sprintf("projects/%s/serviceAccounts/%s", projectId, saEmail),
+		})
 
-	if err != nil {
-		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError,
-			fmt.Errorf("failed to create service account key:%s", err))
+		if err != nil {
+			retry--
+			fmt.Println(fmt.Errorf("failed to create service account key:%s, retry remaining: %d", err, retry))
+			if retry > 0 {
+				time.Sleep(5 * time.Second)
+			}
+		} else {
+			break
+		}
 	}
 
 	// Add service account key to common secret

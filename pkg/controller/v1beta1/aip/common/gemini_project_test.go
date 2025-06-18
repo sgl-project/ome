@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"testing"
 
+	"k8s.io/client-go/kubernetes/fake"
+
 	testingpkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
+	"cloud.google.com/go/billing/budgets/apiv1/budgetspb"
 	"cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 	"github.com/golang/mock/gomock"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -83,10 +86,21 @@ func setupTestGeminiProject(t *testing.T, projectName string, projectDisplayName
 		WithStatusSubresource(testProject).
 		Build()
 
+	// Create fake clientset for GoogleConfig
+	fakeClientset := fake.NewSimpleClientset(&v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "google-config",
+			Namespace: "ome",
+		},
+		Data: map[string]string{
+			"google-config": `{"enableBudget": true, "billingAccount": "0182A9-xxxx-cccc", "projectFolder": "folders/542786757384"}`,
+		},
+	})
+
 	// Create project handler
 	project := NewGeminiProject(
 		fakeClient,
-		nil,
+		fakeClientset,
 		logr.Discard(),
 		scheme,
 		testProject,
@@ -107,6 +121,21 @@ func addMockedGcpProjectClientForGetProjectNoGcp(mockGcpClient *testingpkg.MockG
 	}
 }
 
+func addMockedGcpBudgetClient(mockedGcpBudgetClient *testingpkg.MockGcpBudgetClient,
+	projectId string, mockClose bool) {
+
+	mockedBudget := &budgetspb.Budget{
+		Name:        "Budget name",
+		DisplayName: "Budget display name",
+	}
+
+	mockedGcpBudgetClient.EXPECT().CreateBudget(
+		gomock.Any(), gomock.Any()).Return(mockedBudget, nil).Times(1)
+
+	if mockClose {
+		mockedGcpBudgetClient.EXPECT().Close().Return(nil).Times(1)
+	}
+}
 func addMockedGcpBillingClient(mockedGcpBillingClient *testingpkg.MockGcpBillingClient,
 	projectId string, mockClose bool) {
 	mockedProjectBillingInfo := &billingpb.ProjectBillingInfo{
@@ -118,6 +147,7 @@ func addMockedGcpBillingClient(mockedGcpBillingClient *testingpkg.MockGcpBilling
 
 	mockedGcpBillingClient.EXPECT().UpdateProjectBillingInfo(
 		gomock.Any(), gomock.Any()).Return(mockedProjectBillingInfo, nil).Times(1)
+
 	if mockClose {
 		mockedGcpBillingClient.EXPECT().Close().Return(nil).Times(1)
 	}
@@ -247,8 +277,11 @@ func TestGeminiProject_Create(t *testing.T) {
 		"test-project", "test-project-name", "folders/542786757384", true)
 	project.SetGcpProjectClient(mockGcpClient)
 	mockedGcpBillingClient := testingpkg.NewMockGcpBillingClient(ctrl)
+	mockedGcpBudgetClient := testingpkg.NewMockGcpBudgetClient(ctrl)
 	addMockedGcpBillingClient(mockedGcpBillingClient, projectId, true)
+	addMockedGcpBudgetClient(mockedGcpBudgetClient, projectId, true)
 	project.SetGcpBillingClient(mockedGcpBillingClient)
+	project.SetGcpBudgetClient(mockedGcpBudgetClient)
 	mockedGcpServiceClient := testingpkg.NewMockGcpServiceUsageClient(ctrl)
 	addMockedGcpServiceClient(mockedGcpServiceClient)
 	project.SetGcpServiceUsageClient(mockedGcpServiceClient)

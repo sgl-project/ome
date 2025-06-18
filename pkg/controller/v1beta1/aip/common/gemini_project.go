@@ -6,10 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
+
+	"google.golang.org/genproto/googleapis/type/money"
+
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	budgetspb "cloud.google.com/go/billing/budgets/apiv1/budgetspb"
 	"cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 	"github.com/go-logr/logr"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +30,7 @@ type GeminiProject struct {
 	gcpProjectClient GcpProjectClient
 	gcpService       GcpServiceUsageClient
 	billingClient    GcpBillingClient
+	budgetClient     GcpBudgetClient
 }
 
 // NewGeminiProject creates a new Project resource handler
@@ -57,12 +63,17 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 
 	defer gcpClient.Close()
 
+	googleConfig, err := controllerconfig.NewGoogleConfig(p.Clientset)
+	if err != nil {
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusConfigError, err)
+	}
+
 	projectId := strings.ToLower(GenerateId("proj-", p.Resource.UID))
 	req := &resourcemanagerpb.CreateProjectRequest{
 		Project: &resourcemanagerpb.Project{
 			ProjectId:   projectId,
 			DisplayName: p.Resource.Spec.Name,
-			Parent:      "folders/542786757384",
+			Parent:      googleConfig.ProjectFolder,
 		},
 	}
 
@@ -88,12 +99,23 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 	if err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
 	}
+
 	// Link predefined billing account to the project
-	// Fake billing account, TODO: set up a billing account
-	billingAccount := "011111-200000-20000"
-	err = p.LinkToBillingAccount(ctx, createdProject.ProjectId, billingAccount)
+	googleConfig, err = controllerconfig.NewGoogleConfig(p.Clientset)
+	if err != nil {
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusConfigError, err)
+	}
+
+	err = p.LinkToBillingAccount(ctx, createdProject.ProjectId, googleConfig.BillingAccount)
 	if err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
+	}
+
+	if googleConfig.EnableBudget {
+		err = p.SetProjectBillingBudget(ctx, createdProject.ProjectId, googleConfig.BillingAccount)
+		if err != nil {
+			return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
+		}
 	}
 
 	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusCreated)
@@ -253,6 +275,26 @@ func (p *GeminiProject) GetGcpBillingClient(ctx context.Context) (GcpBillingClie
 	return billingClient, nil
 
 }
+
+func (p *GeminiProject) GetGcpBudgetClient(ctx context.Context) (GcpBudgetClient, error) {
+	if p.budgetClient != nil {
+		// For unit testing
+		return p.budgetClient, nil
+	}
+
+	org, err := p.GetOrganizationFromProject(ctx, p.Resource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization when creating gcp budget client: %w", err)
+	}
+
+	budgetClient, err := p.InitializeGcpBudgetClient(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP budget client: %w", err)
+	}
+
+	return budgetClient, nil
+}
+
 func (p *GeminiProject) GetGcpServiceUsage(ctx context.Context) (GcpServiceUsageClient, error) {
 	if p.gcpService != nil {
 		// For unit testing
@@ -284,6 +326,56 @@ func (p *GeminiProject) EnableVertexAiAPI(ctx context.Context, projectId string)
 		return fmt.Errorf("failed to enable Vertex Ai API for project %s, error:%w", projectId, err)
 	}
 	return err
+}
+
+func (p *GeminiProject) SetProjectBillingBudget(ctx context.Context, projectId string, billingAccount string) error {
+	budgetClient, err := p.GetGcpBudgetClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create GCP budget Client: %w", err)
+	}
+
+	defer budgetClient.Close()
+
+	// Your billing account ID (starts with "01", like "01A234-567B89-CDEF01")
+	billingAccountID := "billingAccounts/" + billingAccount
+
+	// Create budget request
+	req := &budgetspb.CreateBudgetRequest{
+		Parent: billingAccountID,
+		Budget: &budgetspb.Budget{
+			DisplayName: fmt.Sprintf("Budget for OCI Genai project %s", projectId),
+			BudgetFilter: &budgetspb.Filter{
+				Projects: []string{"projects/" + projectId},
+			},
+			Amount: &budgetspb.BudgetAmount{
+				BudgetAmount: &budgetspb.BudgetAmount_SpecifiedAmount{
+					SpecifiedAmount: &money.Money{
+						CurrencyCode: "USD",
+						Units:        5000, // $5000
+					},
+				},
+			},
+			ThresholdRules: []*budgetspb.ThresholdRule{
+				{
+					ThresholdPercent: 0.5, // 50%
+				},
+				{
+					ThresholdPercent: 0.9, // 90%
+				},
+				{
+					ThresholdPercent: 1.0, // 100%
+				},
+			},
+		},
+	}
+
+	resp, err := budgetClient.CreateBudget(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to create budget for project %s, error:%w", projectId, err)
+	}
+
+	p.Log.Info("Budget created: %s for project %s", resp.GetName(), projectId)
+	return nil
 }
 
 func (p *GeminiProject) LinkToBillingAccount(ctx context.Context, projectId string, billingAccount string) error {
@@ -322,6 +414,11 @@ func (p *GeminiProject) SetGcpProjectClient(client GcpProjectClient) {
 // SetGcpBillingClient sets a custom gcp billing client for testing purposes
 func (p *GeminiProject) SetGcpBillingClient(client GcpBillingClient) {
 	p.billingClient = client
+}
+
+// SetGcpBudgetClient sets a custom gcp budget client for testing purposes
+func (p *GeminiProject) SetGcpBudgetClient(client GcpBudgetClient) {
+	p.budgetClient = client
 }
 
 // SetGcpServiceUsageClient sets a custom gcp service usage client for testing purposes

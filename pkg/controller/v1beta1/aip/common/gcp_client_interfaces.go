@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	"cloud.google.com/go/billing/budgets/apiv1/budgetspb"
 	"cloud.google.com/go/iam/admin/apiv1/adminpb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
@@ -34,4 +35,9 @@ type GcpBillingClient interface {
 
 type GcpServiceUsageClient interface {
 	Enable(projectId string, apiName string) error
+}
+
+type GcpBudgetClient interface {
+	CreateBudget(ctx context.Context, req *budgetspb.CreateBudgetRequest) (*budgetspb.Budget, error)
+	Close() error
 }

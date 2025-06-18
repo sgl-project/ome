@@ -335,6 +335,8 @@ const (
 	ProjectStatusAPIError ProjectStatusReason = "APIError"
 	// ProjectStatusOrgError indicates an organization-related error occurred
 	ProjectStatusOrgError ProjectStatusReason = "OrganizationError"
+	// ProjectStatusConfigError indicates a configuration error occurred
+	ProjectStatusConfigError ProjectStatusReason = "ProjectConfigError"
 )
 
 // String returns the string representation of ProjectStatusReason
