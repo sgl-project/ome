@@ -48,7 +48,7 @@ spec:
     max: 410B
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.6.4.post1.c78ab524
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.7.3.78f0810ef
       ports:
         - containerPort: 8080
           name: http1
@@ -69,8 +69,6 @@ spec:
           --max-model-len=131072 \
           --gpu-memory-utilization=0.95 \
           --enable-chunked-prefill \
-          --preemption-mode=swap \
-          --swap-space=10 \
           --enable-auto-tool-choice \
           --tool-call-parser=llama3_json \
           --chat-template=examples/tool_chat_template_llama3.1_json.jinja
