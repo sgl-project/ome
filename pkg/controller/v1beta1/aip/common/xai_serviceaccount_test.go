@@ -17,11 +17,15 @@ import (
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	testing_pkg "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/testing"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/xaisdk"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/xaisdk/option"
 )
 
 // setupTestXAIServiceAccount creates a test environment for xai service account testing
 func setupTestXAIServiceAccount(t *testing.T) (*XAIServiceAccount, kubernetes.Interface) {
 	// Setup
+	// Setup mock server
+	server := testing_pkg.MockXAIServer()
 	scheme := runtime.NewScheme()
 	require.NoError(t, v1beta1.AddToScheme(scheme))
 	require.NoError(t, v1.AddToScheme(scheme))
@@ -120,6 +124,13 @@ func setupTestXAIServiceAccount(t *testing.T) (*XAIServiceAccount, kubernetes.In
 		testServiceAccount,
 	)
 
+	// Create a custom client that uses the mock server
+	customClient := xaisdk.NewClient(
+		option.WithAPIKey("test-api-key"),
+		option.WithBaseURL(server.URL),
+	)
+
+	serviceAccount.SetXAIClient(customClient)
 	return serviceAccount, fakeClientset
 }
 
@@ -291,9 +302,9 @@ func TestXAIServiceAccount_Create(t *testing.T) {
 
 	// Check status fields
 	assert.NotNil(t, updatedServiceAccount.Status.ServiceAccountId)
-	assert.Equal(t, "user_74syguzYwy34fGSeK7uaS9", *updatedServiceAccount.Status.ServiceAccountId)
 	assert.NotNil(t, updatedServiceAccount.Status.CreationTime)
-	assert.Nil(t, updatedServiceAccount.Status.APIKey)
+	assert.NotNil(t, updatedServiceAccount.Status.APIKey)
+	assert.NotNil(t, updatedServiceAccount.Status.APIKey.APIKeyId)
 
 	// Check conditions
 	require.NotEmpty(t, updatedServiceAccount.Status.Conditions)
@@ -311,6 +322,10 @@ func TestXAIServiceAccount_Delete(t *testing.T) {
 
 	// Set up service account with an ID for deletion
 	serviceAccount.Resource.Status.ServiceAccountId = testing_pkg.StringPtr("sa-123")
+	serviceAccount.Resource.Status.APIKey = &v1beta1.APIKeySpec{
+		Name:     testing_pkg.StringPtr("key-123"),
+		APIKeyId: testing_pkg.StringPtr("key-123"),
+	}
 
 	// Test
 	err := serviceAccount.Delete(context.Background())

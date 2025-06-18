@@ -12,6 +12,8 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/openaisdk/option"
+	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/xaisdk"
+	xaiOptions "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/xaisdk/option"
 	billing "cloud.google.com/go/billing/apiv1"
 	budgets "cloud.google.com/go/billing/budgets/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
@@ -145,7 +147,7 @@ func (r *ResourceBase) InitializeGcpBillingClient(ctx context.Context, org *v1be
 
 // InitializeGcpBudgetClient initializes a GCP Budget client using organization credentials
 func (r *ResourceBase) InitializeGcpBudgetClient(ctx context.Context, org *v1beta1.Organization) (GcpBudgetClient, error) {
-	adminSecret, err := r.GetGcpAdminSecret(ctx, org)
+	adminSecret, err := r.GetGcpAdminSecret(org)
 
 	if err != nil {
 		return nil, err
@@ -209,4 +211,32 @@ func (r *ResourceBase) GetGcpAdminSecret(org *v1beta1.Organization) ([]byte, err
 	}
 
 	return adminSecret, nil
+}
+
+// InitializeClient initializes an xAI client using organization credentials
+func (r *ResourceBase) InitializeXaiClient(ctx context.Context, org *v1beta1.Organization) (*xaisdk.Client, error) {
+	if org.Spec.Vendor == nil {
+		return nil, fmt.Errorf("vendor is not specified")
+	}
+
+	if *org.Spec.Vendor != "xai" {
+		return nil, fmt.Errorf("unsupported vendor: %s", *org.Spec.Vendor)
+	}
+
+	secret, err := r.getSecret(ctx, org.Spec.SecretRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key secret: %w", err)
+	}
+
+	apiKey := string(secret.Data[org.Spec.SecretRef.Key])
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key is empty in secret %s", org.Spec.SecretRef.Name)
+	}
+
+	opts := []xaiOptions.RequestOption{xaiOptions.WithAPIKey(apiKey)}
+	if baseURL, ok := org.Spec.Config["baseURL"]; ok {
+		opts = append(opts, xaiOptions.WithBaseURL(baseURL))
+	}
+
+	return xaisdk.NewClient(opts...), nil
 }
