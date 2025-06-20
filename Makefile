@@ -27,7 +27,14 @@ GO_FMT ?= gofmt
 GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod|head -n1)
 
 # Determine Docker build command (use nerdctl if available)
-DOCKER_BUILD_CMD = $(shell if command -v nerdctl &> /dev/null; then echo nerdctl; else echo docker; fi)
+DOCKER_BUILD_CMD ?= docker
+
+# Check if nerdctl is available and use it if it exists
+ifeq ($(shell command -v nerdctl 2> /dev/null),)
+    # nerdctl not found, using docker (already set above)
+else
+    DOCKER_BUILD_CMD = nerdctl
+endif
 
 # CRD Options
 CRD_OPTIONS ?= "crd:maxDescLen=0"
