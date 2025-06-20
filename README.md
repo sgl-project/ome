@@ -1,102 +1,94 @@
-# Welcome to OME
+# OME
 
-<a name="readme-top"></a>
+[![Go Report](https://goreportcard.com/badge/github.com/sgl-project/sgl-ome)](https://goreportcard.com/report/github.com/sgl-project/sgl-ome)
+[![Latest Release](https://img.shields.io/github/v/release/sgl-project/sgl-ome?include_prereleases)](https://github.com/sgl-project/sgl-ome/releases/latest)
+[![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://sgl-project.github.io/sgl-ome/docs/reference/ome.v1beta1/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-
-<!-- PROJECT LOGO -->
-<br />
 <div align="center">
-  <a href="https://github.com/github_username/repo_name">
-    <img src="site/assets/icons/logo-clear-background.png" alt="Logo" width="300" height="auto" style="max-width: 100%;">
+  <a href="https://github.com/sgl-project/sgl-ome">
+    <img src="site/assets/icons/logo-clear-background.png" alt="OME Logo" width="300" height="auto" style="max-width: 100%;">
   </a>
-
-  <p align="center">
-Enterprise-Grade AI/ML Workload Management Platform on Kubernetes
-    <br />
-    <a href="https://PENDING"><strong>Explore the docs »</strong></a>
-    <br />
-  </p>
 </div>
 
+OME is a Kubernetes operator for enterprise-grade management and serving of Large Language Models (LLMs). It optimizes the deployment and operation of LLMs by automating model management, intelligent runtime selection, efficient resource utilization, and sophisticated deployment patterns.
 
-OME is a comprehensive operator for managing the lifecycle of Large Language Models (LLMs) and other AI workloads in Kubernetes environments. It orchestrates model serving, training, benchmarking, and dedicated AI clusters with enterprise-grade resource management.
+Read the [documentation](https://sgl-project.github.io/sgl-ome/docs/) to learn more about OME capabilities and features.
+
+## Features Overview
+
+- **Model Management:** Models are first-class citizen custom resources in OME. Sophisticated model parsing extracts architecture, parameter count, and capabilities directly from model files. Supports distributed storage with automated repair, double encryption, namespace scoping, and multiple formats (SafeTensors, PyTorch, TensorRT, ONNX).
+
+- **Intelligent Runtime Selection:** Automatic matching of models to optimal runtime configurations through weighted scoring based on architecture, format, quantization, parameter size, and framework compatibility.
+
+- **Optimized Deployments:** Supports multiple deployment patterns including prefill-decode disaggregation, multi-node inference, and traditional Kubernetes deployments with advanced scaling controls.
+
+- **Resource Optimization:** Specialized GPU bin-packing scheduling with dynamic re-optimization to maximize cluster efficiency while ensuring high availability.
+
+- **Runtime Integrations:** First-class support for [**SGLang**](https://github.com/sgl-project/sglang) - the most advanced inference engine with cache-aware load balancing, multi-node deployment, prefill-decode disaggregated serving, multi-LoRA adapter serving, and much more. Also supports Triton for general model inference.
+
+- **Kubernetes Ecosystem Integration:** Deep integration with modern Kubernetes components including [Kueue](https://kueue.sigs.k8s.io/) for gang scheduling of multi-pod workloads, [LeaderWorkerSet](https://github.com/kubernetes-sigs/lws) for resilient multi-node deployments, [KEDA](https://keda.sh/) for advanced custom metrics-based autoscaling, [K8s Gateway API](https://gateway-api.sigs.k8s.io/) for sophisticated traffic routing, and [Kubernetes Inference Service](https://github.com/kubernetes-sigs/isis) for standardized inference endpoints.
+
+- **Automated Benchmarking:** Built-in performance evaluation through the BenchmarkJob custom resource, supporting configurable traffic patterns, concurrent load testing, and comprehensive result storage. Enables systematic performance comparison across models and service configurations.
+
+## Production Readiness Status
+
+- ✅ API version: v1beta1
+- ✅ Comprehensive [documentation](https://sgl-project.github.io/sgl-ome/docs/)
+- ✅ Unit and integration test coverage
+- ✅ Production deployments with large-scale LLM workloads
+- ✅ Monitoring via standard metrics and Kubernetes events
+- ✅ Security: RBAC-based access control and model encryption
+- ✅ High availability mode with redundant model storage
+
+## Installation
+
+**Requires Kubernetes 1.28 or newer**
+
+To install OME in your cluster using Helm:
+
+```bash
+# Add the OME Helm repository
+helm repo add ome https://sgl-project.github.io/sgl-ome/charts
+helm repo update
+
+# Install OME
+helm install ome ome/ome --namespace ome --create-namespace
+```
+
+Read the [installation guide](https://sgl-project.github.io/sgl-ome/docs/installation/) for more options and advanced configurations.
+
+Learn more about:
+- OME [concepts](https://sgl-project.github.io/sgl-ome/docs/concepts/)
+- Common [tasks](https://sgl-project.github.io/sgl-ome/docs/tasks/)
 
 ## Architecture
-<p align="center"><img src="site/static/images/architecture.drawio.svg" alt="Architecture Diagram" width="" height=""></p>
 
-### Infrastructure Layers
+OME uses a component-based architecture built on Kubernetes custom resources:
 
-1. **Hardware Layer**: Built on OCI infrastructure with high-performance RDMA networks, GPUs, CPUs, and NVMe storage.
+- **BaseModel/ClusterBaseModel:** Define model sources and metadata
+- **ServingRuntime/ClusterServingRuntime:** Define how models are served
+- **InferenceService:** Connects models to runtimes for deployment
 
-2. **Kubernetes Layer**: Leverages OCI Kubernetes Engine (OKE) for container orchestration with hardware-level optimizations.
+OME's controller automatically:
+1. Downloads and parses models to understand their characteristics
+2. Selects the optimal runtime configuration for each model
+3. Generates Kubernetes resources for efficient deployment
+4. Continuously optimizes resource utilization across the cluster
 
-3. **OME Core Components**: Provides specialized Kubernetes operators for managing AI/ML workflows:
+## Roadmap
 
-   - **Model Management**: Manages model lifecycle, from import to versioning, with support for various model formats and architectures including large-scale models (LLaMA, Mistral, Mixtral, etc.)
-     - **Dynamic Model Parsing**: Automatically analyzes model files to extract architecture, parameter count, and capabilities directly from safetensors files
-   
-   - **Inference Services**: Deploys models as inference services with flexible scaling options, from serverless to dedicated resources
-   
-   - **Training System**: Orchestrates distributed training jobs with support for popular frameworks
-   
-   - **Resource Management**: Controls GPU allocation through Capacity Reservations and Dedicated AI Clusters with cache-aware resource allocation
+High-level overview of the main priorities:
 
-   - **Performance Analysis**: Provides benchmarking tools for model evaluation and optimization
+- Enhanced model parsing for additional model families and architectures
+- Support for model quantization and optimization workflows
+- Federation across multiple Kubernetes clusters
 
-### Runtime Support
+## Community and Support
 
-- **Serving Runtimes**: Integrates with popular inference engines including vLLM, SGLang, TGI, NIM, Triton, and more
-   - **Intelligent Runtime Selection**: Automatically selects the optimal runtime based on model architecture, model type, format, quantization, and parameter size
-   - **Advanced Model Parsing**: Built-in support for parsing configurations from popular model families including LLaMA, Mistral, Mixtral, DeepSeek, Phi, and Qwen
+- [GitHub Issues](https://github.com/sgl-project/sgl-ome/issues) for bug reports and feature requests
+- [Documentation](https://sgl-project.github.io/sgl-ome/docs/) for guides and reference
 
-- **Training Frameworks**: Supports Accelerate, DeepSpeed, PyTorch, TensorFlow, and MPI-based systems 
+## License
 
-- **Deployment Patterns**:
-   - **PD Deployment**: Prefill-Decode disaggregated serving for efficient token generation
-   - **Multi-Node Serving**: Distributed inference across multiple nodes
-   - **Serverless**: On-demand scaling with zero idle resources
-   - **Multi-Node Training**: Distributed training with gang scheduling
-   - **Cache-Aware Load Balancing**: Intelligent routing to optimize model cache utilization
-
-## Key Features
-
-- 🚀 **Model Management**: Comprehensive model registry with support for different formats, architectures, and model types. Supports both OCI Object Storage and Hugging Face Hub as model sources. Features sophisticated model file parsing to automatically determine model architecture, size, and capabilities.
-
-- 🔀 **Inference Graphs**: Create complex inference workflows with routing patterns (sequence, splitter, ensemble, switch) for chaining models together.
-
-- 🔌 **Flexible Deployment Options**: From serverless to dedicated clusters with fine-grained resource control.
-
-- 💰 **Advanced Autoscaling**: Support for serverless workloads with scale-to-zero capabilities and KEDA integration.
-
-- 🔒 **Enterprise Security**: Built-in mTLS, RBAC, and compartment isolation for secure multi-tenant deployments.
-
-- 🌐 **Distributed Computing**: First-class support for multi-node model serving and distributed training.
-
-- 📏 **Resource Management**: Capacity reservation system for dedicated resource allocation and efficient resource sharing.
-
-- 📊 **Benchmarking**: Built-in performance testing for model evaluation and comparison.
-
-- 💾 **Optimized Storage**: Efficient model storage and loading with distributed model caching leveraging high-performance NVMe storage for optimal performance.
-
-## Core Components
-
-- **Model System**: Manages base models and fine-tuned weights with rich metadata
-
-- **Inference Service**: Deploys models with customizable configurations and auto-scaling
-
-- **Serving Runtime**: Integrates various serving technologies (vLLM, TGI, Cohere, TensorRT-LLM, etc.)
-
-- **Training Job**: Orchestrates model training with framework-specific optimizations
-
-- **Benchmark Job**: Evaluates model performance with standardized metrics
-
-- **Capacity Reservation**: Allocates and manages compute resources
-
-- **Dedicated AI Cluster**: Creates isolated environments for specialized workloads
-
-## Documentation
-
-- [Contributing Guidelines](CONTRIBUTING.md) - Learn how to contribute to OME
-- [Roadmap](Roadmap.md) - Check out our future plans and upcoming features
-
-[Back to top](#readme-top)
+OME is licensed under the [MIT License](LICENSE).
