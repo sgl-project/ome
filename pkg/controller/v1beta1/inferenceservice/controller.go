@@ -39,6 +39,7 @@ import (
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/components"
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/sgl-ome/pkg/utils"
@@ -352,6 +353,14 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
 	if err := ingressReconciler.Reconcile(ctx, isvc); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+	}
+
+	// Reconcile external service - creates a service with the inference service name
+	// when ingress is disabled to provide a stable endpoint
+	externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig)
+	r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
+	if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
 	}
 
 	if deploymentMode == constants.Serverless {
