@@ -62,8 +62,14 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
+        image: fra.ocir.io/idqj093njucb/sgl:dev1
         env:
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: "true"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -76,10 +82,8 @@ spec:
             value: '0'
           - name: NCCL_IB_QPS_PER_CONNECTION
             value: '16'
-          - name: NCCL_IB_GID_INDEX
-            value: '3'
           - name: NCCL_IB_HCA
-            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL
@@ -110,33 +114,36 @@ spec:
           - >
             MC_TE_METRIC=true;
             SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
+            --port 30000
+            --host 0.0.0.0
             --model-path ${MODEL_PATH}
             --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --chunked-prefill-size 524288
+            --max-prefill-tokens 32768
+            --page-size 64
+            --ep-dispatch-algorithm dynamic
+            --eplb-algorithm deepseek
+            --enable-dp-lm-head
+            --enable-dp-attention
+            --dp-size ${PARALLELISM_SIZE}
+            --disable-radix-cache
+            --enable-deepep-moe
+            --deepep-mode normal
             --disaggregation-mode prefill
+            --mem-fraction-static 0.849
+            --context-length 32768 
+            --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
-            --port 30000
-            --tp-size ${PARALLELISM_SIZE}
-            --dp-size ${PARALLELISM_SIZE}
-            --enable-dp-attention
-            --decode-log-interval 1
-            --enable-deepep-moe
-            --page-size 1
-            --host 0.0.0.0
             --trust-remote-code
-            --moe-dense-tp-size 1
-            --enable-dp-lm-head
-            --deepep-mode normal
-            --mem-fraction-static 0.75
-            --chunked-prefill-size 524288
-            --max-running-requests 8192
-            --max-total-tokens 131072
-            --context-length 8192
             --ep-num-redundant-experts 32
-            --ep-dispatch-algorithm dynamic
+            --moe-dense-tp-size 1
+            --decode-log-interval 1
+            --moe-dense-tp-size 1
+            --max-running-requests 1024
+            --max-total-tokens 131072
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -179,7 +186,7 @@ spec:
           initialDelaySeconds: 600
           timeoutSeconds: 30
     worker:
-      size: 3
+      size: 1
       nodeSelector:
         oci.oraclecloud.com/rdma.authenticated: "16"
         oci.oraclecloud.com/rdma.mlx_issues: "0"
@@ -209,46 +216,59 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
+        image: fra.ocir.io/idqj093njucb/sgl:dev1
         command:
           - sh
           - -c
           - >
-            MC_TE_METRIC=true;
-            SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
             --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --chunked-prefill-size 524288
+            --max-prefill-tokens 32768
+            --page-size 64
+            --ep-dispatch-algorithm dynamic
+            --eplb-algorithm deepseek
+            --enable-dp-lm-head
+            --enable-dp-attention
+            --dp-size ${PARALLELISM_SIZE}
+            --disable-radix-cache
+            --enable-deepep-moe
+            --deepep-mode normal
             --disaggregation-mode prefill
+            --mem-fraction-static 0.849
+            --context-length 32768
+            --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
             --port 30000
-            --tp-size ${PARALLELISM_SIZE}
-            --dp-size ${PARALLELISM_SIZE}
-            --enable-dp-attention
-            --decode-log-interval 1
-            --enable-deepep-moe
-            --page-size 1
-            --host 0.0.0.0
             --trust-remote-code
-            --moe-dense-tp-size 1
-            --enable-dp-lm-head
-            --deepep-mode normal
-            --mem-fraction-static 0.75
-            --chunked-prefill-size 524288
-            --max-running-requests 8192
-            --max-total-tokens 131072
-            --context-length 8192
             --ep-num-redundant-experts 32
-            --ep-dispatch-algorithm dynamic
+            --moe-dense-tp-size 1
+            --decode-log-interval 1
+            --host 0.0.0.0
+            --max-running-requests 1024
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
         env:
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: "true"
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: "8"
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: "0"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: "8"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          - name: SGL_CHUNKED_PREFIX_CACHE_THRESHOLD
+            value: "0"
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -261,10 +281,8 @@ spec:
             value: '0'
           - name: NCCL_IB_QPS_PER_CONNECTION
             value: '16'
-          - name: NCCL_IB_GID_INDEX
-            value: '3'
           - name: NCCL_IB_HCA
-            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL
@@ -330,10 +348,14 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
+        image: fra.ocir.io/idqj093njucb/sgl:dev1
         env:
           - name: NCCL_DEBUG
             value: INFO
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: "16"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
           - name: NCCL_CROSS_NIC
             value: '2'
           - name: NCCL_SOCKET_NTHREADS
@@ -344,10 +366,8 @@ spec:
             value: '0'
           - name: NCCL_IB_QPS_PER_CONNECTION
             value: '16'
-          - name: NCCL_IB_GID_INDEX
-            value: '3'
           - name: NCCL_IB_HCA
-            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL
@@ -376,35 +396,31 @@ spec:
           - sh
           - -c
           - >
-            MC_TE_METRIC=true;
-            SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
+            --port 30000
+            --host 0.0.0.0
+            --chunked-prefill-size 262144
+            --page-size 64
             --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --enable-dp-attention
+            --enable-dp-lm-head
+            --dp-size ${PARALLELISM_SIZE}
+            --enable-deepep-moe
+            --deepep-mode low_latency
             --disaggregation-mode decode
-            --base-gpu-id 0
+            --mem-fraction-static 0.849
+            --context-length 32768
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --cuda-graph-max-bs 64
+            --max-running-requests 2048
+            --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
-            --port 30001
             --node-rank ${LWS_WORKER_INDEX}
-            --tp-size ${PARALLELISM_SIZE}
-            --dp-size ${PARALLELISM_SIZE}
-            --enable-dp-attention
             --decode-log-interval 1
-            --enable-deepep-moe
-            --page-size 64
-            --chunked-prefill-size 6144
-            --host 0.0.0.0
             --trust-remote-code
             --moe-dense-tp-size 1
-            --enable-dp-lm-head
-            --deepep-mode low_latency
-            --mem-fraction-static 0.75
-            --max-running-requests 4096
-            --context-length 32768
             --ep-num-redundant-experts 32
-            --cuda-graph-max-bs 128
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -447,7 +463,7 @@ spec:
           initialDelaySeconds: 600
           timeoutSeconds: 30
     worker:
-      size: 3
+      size: 1
       nodeSelector:
         oci.oraclecloud.com/rdma.authenticated: "16"
         oci.oraclecloud.com/rdma.mlx_issues: "0"
@@ -477,46 +493,52 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/official-sgl:deepdev-1
+        image: fra.ocir.io/idqj093njucb/sgl:dev1
         command:
           - sh
           - -c
           - >
-            MC_TE_METRIC=true;
-            SGLANG_TBO_DEBUG=1;
-            pip install mooncake-transfer-engine --break-system-packages;
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --chunked-prefill-size 262144
+            --page-size 64
+            --enable-dp-attention
+            --enable-dp-lm-head
+            --dp-size ${PARALLELISM_SIZE}
+            --enable-deepep-moe
+            --deepep-mode low_latency
             --disaggregation-mode decode
-            --base-gpu-id 0
+            --mem-fraction-static 0.849
+            --context-length 32768
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --cuda-graph-max-bs 64
+            --max-running-requests 2048
+            --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
-            --port 30001
-            --tp-size ${PARALLELISM_SIZE}
-            --dp-size ${PARALLELISM_SIZE}
-            --enable-dp-attention
+            --port 30000
             --decode-log-interval 1
-            --enable-deepep-moe
-            --page-size 64
-            --chunked-prefill-size 6144
             --host 0.0.0.0
             --trust-remote-code
             --moe-dense-tp-size 1
-            --enable-dp-lm-head
-            --deepep-mode low_latency
-            --mem-fraction-static 0.75
-            --max-running-requests 4096
-            --context-length 32768
             --ep-num-redundant-experts 32
-            --cuda-graph-max-bs 128
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
         env:
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: "24"
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: "0"
+          - name: NVSHMEM_IB_TRAFFIC_CLASS
+            value: "16"
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: "16"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
           - name: NCCL_DEBUG
             value: INFO
           - name: NCCL_CROSS_NIC
@@ -529,10 +551,8 @@ spec:
             value: '0'
           - name: NCCL_IB_QPS_PER_CONNECTION
             value: '16'
-          - name: NCCL_IB_GID_INDEX
-            value: '3'
           - name: NCCL_IB_HCA
-            value: "mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
+            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
           - name: NCCL_IB_TC
             value: '41'
           - name: NCCL_IB_SL

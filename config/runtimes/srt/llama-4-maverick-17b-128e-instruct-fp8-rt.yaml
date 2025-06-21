@@ -10,11 +10,10 @@ spec:
         version: "4.51.0.dev0"
       modelFormat:
         name: safetensors
-        version: "1"
+        version: "1.0.0"
       modelArchitecture: Llama4ForConditionalGeneration
       autoSelect: true
       priority: 2
-      quantization: fp8
   protocolVersions:
     - openAI
   modelSizeRange:
@@ -46,7 +45,7 @@ spec:
                     - BM.GPU.H100.8
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.4.6.post5-cu124
+      image: fra.ocir.io/idqj093njucb/sgl:dev1
       ports:
         - containerPort: 8080
           name: http1
@@ -108,11 +107,11 @@ spec:
         periodSeconds: 6
         initialDelaySeconds: 60
         timeoutSeconds: 30
-  routerConfig:
-    runner:
-      name: router
-      image: fra.ocir.io/idqj093njucb/sgl-router:0.1.4
-      ports:
-      - containerPort: 8080
-        name: http
-      args: ["--host", "0.0.0.0", "--port", "8080"]
+#  routerConfig:
+#    runner:
+#      name: router
+#      image: fra.ocir.io/idqj093njucb/sgl-router:0.1.4
+#      ports:
+#      - containerPort: 8080
+#        name: http
+#      args: ["--host", "0.0.0.0", "--port", "8080"]
