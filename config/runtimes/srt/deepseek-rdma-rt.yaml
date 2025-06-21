@@ -62,7 +62,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.6.post5-cu124
+        image: fra.ocir.io/idqj093njucb/sgl:dev1
         env:
           - name: NCCL_NET_PLUGIN
             value: none
@@ -109,7 +109,19 @@ spec:
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 --nnodes ${LWS_GROUP_SIZE} --node-rank ${LWS_WORKER_INDEX} --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
+          - >
+            python3 -m sglang.launch_server 
+            --host 0.0.0.0 --port 8080 
+            --model-path ${MODEL_PATH} 
+            --tp 16 
+            --nccl-init $(LWS_LEADER_ADDRESS):5000 
+            --nnodes ${LWS_GROUP_SIZE} 
+            --node-rank ${LWS_WORKER_INDEX} 
+            --trust-remote-code 
+            --enable-torch-compile 
+            --torch-compile-max-bs 1 
+            --reasoning-parser deepseek-r1 
+            --enable-metrics
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -182,11 +194,24 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.6.post5-cu124
+        image: fra.ocir.io/idqj093njucb/sgl:dev1
         command:
           - sh
           - -c
-          - "python3 -m sglang.launch_server --host 0.0.0.0 --port 8080 --model-path ${MODEL_PATH} --tp 16 --nccl-init $(LWS_LEADER_ADDRESS):5000 -nnodes ${LWS_GROUP_SIZE} --node-rank ${LWS_WORKER_INDEX} --trust-remote-code --enable-torch-compile --torch-compile-max-bs 1 --reasoning-parser deepseek-r1 --enable-metrics"
+          - >
+            python3 -m sglang.launch_server 
+            --host 0.0.0.0 
+            --port 8080 
+            --model-path ${MODEL_PATH} 
+            --tp 16 
+            --nccl-init $(LWS_LEADER_ADDRESS):5000 
+            --nnodes ${LWS_GROUP_SIZE} 
+            --node-rank ${LWS_WORKER_INDEX} 
+            --trust-remote-code 
+            --enable-torch-compile 
+            --torch-compile-max-bs 1 
+            --reasoning-parser deepseek-r1 
+            --enable-metrics"
         resources:
           limits:
             nvidia.com/gpu: "8"
