@@ -66,12 +66,6 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, isvc *v1beta1.Inferen
 		return nil
 	}
 
-	// Check if service is cluster-local (no external ingress needed)
-	if val, ok := isvc.Labels[constants.VisibilityLabel]; ok && val == constants.ClusterLocalVisibility {
-		mainLog.Info("Service is cluster-local, skipping ingress reconciliation", "isvc", isvc.Name)
-		return nil
-	}
-
 	// Create reconciler options
 	opts := interfaces.ReconcilerOptions{
 		Client:        r.client,
