@@ -21,7 +21,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
 )
@@ -63,16 +62,8 @@ func (g *GatewayAPIStrategy) GetName() string {
 
 func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.InferenceService) error {
 	var err error
-	isInternal := false
-	// disable ingress creation if service is labelled with cluster local or kserve domain is cluster local
-	if val, ok := isvc.Labels[constants.VisibilityLabel]; ok && val == constants.ClusterLocalVisibility {
-		isInternal = true
-	}
-	if g.ingressConfig.IngressDomain == constants.ClusterLocalDomain {
-		isInternal = true
-	}
 
-	if !isInternal && !g.ingressConfig.DisableIngressCreation {
+	if !g.ingressConfig.DisableIngressCreation {
 		// Reconcile component HTTPRoutes
 		if err := g.reconcileComponentHTTPRoute(ctx, isvc, builders.EngineComponent); err != nil {
 			return err

@@ -110,7 +110,7 @@ func TestGatewayAPIStrategy_Reconcile(t *testing.T) {
 			},
 			expectedError:           false,
 			expectedIngressReady:    corev1.ConditionTrue,
-			expectedHTTPRoutesCount: 0,
+			expectedHTTPRoutesCount: 1,
 		},
 	}
 

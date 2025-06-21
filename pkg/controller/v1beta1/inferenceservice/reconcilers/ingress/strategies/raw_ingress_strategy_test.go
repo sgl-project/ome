@@ -110,7 +110,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			},
 			expectedError:         false,
 			expectedIngressReady:  corev1.ConditionTrue,
-			expectIngressCreation: false,
+			expectIngressCreation: true,
 		},
 		{
 			name: "cluster local domain",
@@ -125,7 +125,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			},
 			expectedError:         false,
 			expectedIngressReady:  corev1.ConditionTrue,
-			expectIngressCreation: false,
+			expectIngressCreation: true,
 		},
 		{
 			name: "update existing ingress",

@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
 	"k8s.io/klog/v2"
@@ -55,16 +54,8 @@ func (k *KubernetesIngressStrategy) GetName() string {
 
 func (k *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1.InferenceService) error {
 	var err error
-	isInternal := false
-	// disable ingress creation if service is labelled with cluster local or kserve domain is cluster local
-	if val, ok := isvc.Labels[constants.VisibilityLabel]; ok && val == constants.ClusterLocalVisibility {
-		isInternal = true
-	}
-	if k.ingressConfig.IngressDomain == constants.ClusterLocalDomain {
-		isInternal = true
-	}
 
-	if !isInternal && !k.ingressConfig.DisableIngressCreation {
+	if !k.ingressConfig.DisableIngressCreation {
 		// Use builder to create the ingress
 		desired, err := k.builder.BuildIngress(ctx, isvc)
 		if err != nil {
