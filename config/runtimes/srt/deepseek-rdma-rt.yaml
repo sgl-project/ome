@@ -62,7 +62,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev1
+        image: fra.ocir.io/idqj093njucb/sgl:dev2
         env:
           - name: NCCL_NET_PLUGIN
             value: none
@@ -194,7 +194,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev1
+        image: fra.ocir.io/idqj093njucb/sgl:dev2
         command:
           - sh
           - -c
@@ -211,7 +211,7 @@ spec:
             --enable-torch-compile 
             --torch-compile-max-bs 1 
             --reasoning-parser deepseek-r1 
-            --enable-metrics"
+            --enable-metrics
         resources:
           limits:
             nvidia.com/gpu: "8"

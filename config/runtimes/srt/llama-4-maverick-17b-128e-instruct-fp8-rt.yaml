@@ -45,7 +45,7 @@ spec:
                     - BM.GPU.H100.8
     runner:
       name: ome-container
-      image: fra.ocir.io/idqj093njucb/sgl:dev1
+      image: fra.ocir.io/idqj093njucb/sgl:dev2
       ports:
         - containerPort: 8080
           name: http1
