@@ -110,7 +110,7 @@ func TestGatewayAPIStrategy_Reconcile(t *testing.T) {
 			},
 			expectedError:           false,
 			expectedIngressReady:    corev1.ConditionTrue,
-			expectedHTTPRoutesCount: 0,
+			expectedHTTPRoutesCount: 1,
 		},
 	}
 
@@ -497,7 +497,7 @@ func createTestInferenceServiceWithDecoderGateway(name, namespace string) *v1bet
 func createTestInferenceServiceWithClusterLocal(name, namespace string) *v1beta1.InferenceService {
 	isvc := createTestInferenceServiceGateway(name, namespace)
 	isvc.Labels = map[string]string{
-		constants.NetworkVisibility: constants.ClusterLocalVisibility,
+		constants.VisibilityLabel: constants.ClusterLocalVisibility,
 	}
 	return isvc
 }

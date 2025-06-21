@@ -39,6 +39,7 @@ import (
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/components"
+	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/sgl-ome/pkg/utils"
@@ -201,7 +202,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// TODO: covert predictor spec to engine spec, and remove predictor spec
 
 	// Check if we should use the new architecture
-	if isvc.Spec.Model != nil && (isvc.Spec.Engine != nil || isvc.Spec.Decoder != nil || isvc.Spec.Runtime != nil || isvc.Spec.Router != nil) {
+	hasNewArchitectureConfig := isvc.Spec.Model != nil && (isvc.Spec.Engine != nil || isvc.Spec.Decoder != nil || isvc.Spec.Runtime != nil || isvc.Spec.Router != nil)
+	var ingressDeploymentMode constants.DeploymentModeType
+	if hasNewArchitectureConfig {
 		// New architecture path
 		r.Log.Info("Using new engine/decoder architecture", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
 
@@ -302,7 +305,22 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			)
 			reconcilers = append(reconcilers, routerReconciler)
 		}
-	} else if isvc.Spec.Predictor.Model != nil {
+
+		// Determine the correct ingress deployment mode using the same logic as ingress reconciler
+		// but with the already-determined deployment modes to avoid inconsistency
+		if mergedRouter != nil {
+			ingressDeploymentMode = routerDeploymentMode
+		} else if mergedDecoder != nil {
+			ingressDeploymentMode = decoderDeploymentMode
+		} else {
+			ingressDeploymentMode = engineDeploymentMode
+		}
+
+		r.Log.Info("Determined ingress deployment mode",
+			"ingressDeploymentMode", ingressDeploymentMode,
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+	} else {
 		// Legacy architecture: use predictor with deployment mode from annotations/configmap
 		r.Log.Info("Using legacy predictor architecture",
 			"deploymentMode", deploymentMode,
@@ -310,9 +328,12 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"inferenceService", isvc.Name)
 		// TODO: change this to v2 predictor
 		reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
+
+		// For legacy architecture, ingress deployment mode is the same as the overall deployment mode
+		ingressDeploymentMode = deploymentMode
 	}
 
-	// Reconcile components sequentially
+	// Reconcile components sequentially first
 	for _, component := range reconcilers {
 		componentType := reflect.TypeOf(component).String()
 		r.Log.Info("Reconciling component", "component", componentType)
@@ -323,35 +344,43 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// Attempt to update status before returning error
 			if updateErr := r.updateStatus(isvc, deploymentMode); updateErr != nil {
 				r.Log.Error(updateErr, "Failed to update status after component reconciliation error")
-				// Return the update error as it indicates a problem persisting state
-				return reconcile.Result{}, updateErr
 			}
-			// Return error to trigger retry
-			return reconcile.Result{}, errors.Wrapf(err, "failed to reconcile component %s", componentType)
+			return reconcile.Result{}, err
 		}
-		// Handle requeue requests from components
-		if result.Requeue || result.RequeueAfter > 0 {
-			r.Log.Info("Component requested requeue", "component", componentType, "requeue", result.Requeue, "requeueAfter", result.RequeueAfter)
-			// Update status before requeueing
-			if updateErr := r.updateStatus(isvc, deploymentMode); updateErr != nil {
-				r.Log.Error(updateErr, "Failed to update status before requeue")
-				// Return the update error
-				return reconcile.Result{}, updateErr
-			}
-			return result, nil // Return the component's requested requeue result
+		if !result.IsZero() {
+			r.Log.Info("Component reconciliation returned non-zero result, requeuing", "component", componentType, "result", result)
+			return result, nil
 		}
 	}
 
-	// Reconcile ingress
+	// Now reconcile ingress and external service after components have created their services
 	ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
 	}
 
-	ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
-	r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
-	if err := ingressReconciler.Reconcile(ctx, isvc); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+	if hasNewArchitectureConfig {
+		// New architecture: ingress uses the determined ingress deployment mode
+		ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
+		r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
+		if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, ingressDeploymentMode); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+		}
+	} else {
+		// Legacy architecture: ingress uses the legacy deployment mode
+		ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
+		r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
+		if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, deploymentMode); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+		}
+	}
+
+	// Reconcile external service - creates a service with the inference service name
+	// when ingress is disabled to provide a stable endpoint
+	externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig)
+	r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
+	if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
 	}
 
 	if deploymentMode == constants.Serverless {

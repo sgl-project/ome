@@ -51,21 +51,21 @@ func TestIngressBuilder_BuildIngress(t *testing.T) {
 			name:           "engine only",
 			isvc:           createTestInferenceServiceIngress("test-isvc", "default"),
 			expectedError:  false,
-			expectedRules:  2, // engine-only + engine
+			expectedRules:  1, // engine-only (no duplicate)
 			expectedEngine: true,
 		},
 		{
 			name:           "with router",
 			isvc:           createTestInferenceServiceWithRouterIngress("test-isvc", "default"),
 			expectedError:  false,
-			expectedRules:  3, // router rules + engine
+			expectedRules:  2, // router rules (no duplicate engine)
 			expectedEngine: true,
 		},
 		{
 			name:           "with decoder",
 			isvc:           createTestInferenceServiceWithDecoderIngress("test-isvc", "default"),
 			expectedError:  false,
-			expectedRules:  3, // decoder rules + engine
+			expectedRules:  2, // decoder rules (no duplicate engine)
 			expectedEngine: true,
 		},
 		{

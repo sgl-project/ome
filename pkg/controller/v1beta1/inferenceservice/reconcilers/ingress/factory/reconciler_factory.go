@@ -32,7 +32,7 @@ func (f *DefaultStrategyFactory) CreateStrategyWithOptions(deploymentMode string
 	switch deploymentMode {
 	case string(constants.Serverless):
 		return strategies.NewServerlessStrategy(opts, f.clientset, f.domainService, f.pathService), nil
-	case string(constants.RawDeployment):
+	case string(constants.RawDeployment), string(constants.MultiNode):
 		if opts.IngressConfig.EnableGatewayAPI {
 			return strategies.NewGatewayAPIStrategy(opts, f.domainService, f.pathService), nil
 		} else {
