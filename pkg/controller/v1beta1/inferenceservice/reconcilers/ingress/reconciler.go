@@ -8,8 +8,10 @@ import (
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -60,6 +62,16 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
 	// Check if ingress creation is disabled
 	if r.ingressConfig.DisableIngressCreation {
 		mainLog.Info("Ingress creation disabled, skipping ingress reconciliation", "isvc", isvc.Name)
+		
+		// Set IngressReady to True since we're intentionally not creating ingress
+		// External service will be created as fallback for cluster access
+		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+			Type:   v1beta1.IngressReady,
+			Status: corev1.ConditionTrue,
+			Reason: "IngressDisabled",
+			Message: "Ingress creation is disabled, using external service for access",
+		})
+		
 		return nil
 	}
 
@@ -97,6 +109,16 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, isvc *v1beta1.Inferen
 	// Check if ingress creation is disabled
 	if r.ingressConfig.DisableIngressCreation {
 		mainLog.Info("Ingress creation disabled, skipping ingress reconciliation", "isvc", isvc.Name)
+		
+		// Set IngressReady to True since we're intentionally not creating ingress
+		// External service will be created as fallback for cluster access
+		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+			Type:   v1beta1.IngressReady,
+			Status: corev1.ConditionTrue,
+			Reason: "IngressDisabled",
+			Message: "Ingress creation is disabled, using external service for access",
+		})
+		
 		return nil
 	}
 
