@@ -62,8 +62,14 @@ func (k *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
 			return fmt.Errorf("builder error: %w", err)
 		}
 		if desired == nil {
-			// Log this case to understand why builder returns nil
-			klog.Info("Builder returned nil ingress - likely no target service found", "isvc", isvc.Name)
+			// Set ingress condition to indicate component not ready
+			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+				Type:    v1beta1.IngressReady,
+				Status:  corev1.ConditionFalse,
+				Reason:  "ComponentNotReady",
+				Message: "Target service not ready for ingress creation",
+			})
+			klog.Info("Builder returned nil ingress - component not ready", "isvc", isvc.Name)
 			return nil
 		}
 
