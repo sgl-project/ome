@@ -110,7 +110,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			},
 			expectedError:         false,
 			expectedIngressReady:  corev1.ConditionTrue,
-			expectIngressCreation: false,
+			expectIngressCreation: true,
 		},
 		{
 			name: "cluster local domain",
@@ -125,7 +125,7 @@ func TestKubernetesIngressStrategy_Reconcile(t *testing.T) {
 			},
 			expectedError:         false,
 			expectedIngressReady:  corev1.ConditionTrue,
-			expectIngressCreation: false,
+			expectIngressCreation: true,
 		},
 		{
 			name: "update existing ingress",
@@ -386,7 +386,7 @@ func createTestInferenceServiceWithDecoderRaw(name, namespace string) *v1beta1.I
 func createTestInferenceServiceWithClusterLocalRaw(name, namespace string) *v1beta1.InferenceService {
 	isvc := createTestInferenceServiceRaw(name, namespace)
 	isvc.Labels = map[string]string{
-		constants.NetworkVisibility: constants.ClusterLocalVisibility,
+		constants.VisibilityLabel: constants.ClusterLocalVisibility,
 	}
 	return isvc
 }
