@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )

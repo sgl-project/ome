@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 
 	istiov1beta1 "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
@@ -14,10 +14,10 @@ import (
 	"knative.dev/pkg/network"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
-	"github.com/sgl-project/sgl-ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"github.com/sgl-project/ome/pkg/utils"
 )
 
 // VirtualServiceBuilder builds Istio VirtualService resources

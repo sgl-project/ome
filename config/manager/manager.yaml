@@ -30,7 +30,7 @@ spec:
           - "--leader-elect"
           - "webhook"
           - "--zap-encoder=console"
-        image: ko://github.com/sgl-project/sgl-ome/cmd/manager
+        image: ko://github.com/sgl-project/ome/cmd/manager
         imagePullPolicy: Always
         name: manager
         securityContext:

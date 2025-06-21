@@ -5,10 +5,10 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/strategies"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/strategies"
 )
 
 // DefaultStrategyFactory implements StrategyFactory interface

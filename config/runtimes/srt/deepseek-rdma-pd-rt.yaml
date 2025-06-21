@@ -62,7 +62,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev1
+        image: fra.ocir.io/idqj093njucb/sgl:dev2
         env:
           - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
             value: "1"
@@ -216,7 +216,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev1
+        image: fra.ocir.io/idqj093njucb/sgl:dev2
         command:
           - sh
           - -c
@@ -348,7 +348,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev1
+        image: fra.ocir.io/idqj093njucb/sgl:dev2
         env:
           - name: NCCL_DEBUG
             value: INFO
@@ -493,7 +493,7 @@ spec:
           name: devinf
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev1
+        image: fra.ocir.io/idqj093njucb/sgl:dev2
         command:
           - sh
           - -c

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"github.com/sgl-project/sgl-ome/pkg/utils/storage"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

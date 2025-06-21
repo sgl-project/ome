@@ -3,8 +3,8 @@ package ociobjectstore
 import (
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/logging"
-	"github.com/sgl-project/sgl-ome/pkg/principals"
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -5,7 +5,7 @@ hiddenMemberFields:
 apis:
   - name: ome
     title: OME API
-    package: github.com/sgl-project/sgl-ome
+    package: github.com/sgl-project/ome
     path: pkg/apis/ome/v1beta1
 
 externalPackages:
@@ -34,4 +34,4 @@ externalPackages:
   - match: ^knative\.dev/pkg/apis\.URL$
     target: https://pkg.go.dev/knative.dev/pkg/apis#URL
   - match: ^github\.com/sgl-project/sgl-ome/pkg/constants\.
-    target: https://pkg.go.dev/github.com/sgl-project/sgl-ome/pkg/constants#{{- .TypeIdentifier -}} 
+    target: https://pkg.go.dev/github.com/sgl-project/ome/pkg/constants#{{- .TypeIdentifier -}}

@@ -7,18 +7,18 @@ import (
 	"strconv"
 	"time"
 
-	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/benchmark/reconcilers/job"
-	benchmarkutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/benchmark/utils"
-	"github.com/sgl-project/sgl-ome/pkg/utils/storage"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark/reconcilers/job"
+	benchmarkutils "github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark/utils"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"

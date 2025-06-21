@@ -28,7 +28,7 @@ ignoreFiles = []
     name = "GitHub"
     weight = 99
     pre = "<i class='fab fa-github pr-2'></i>"
-    url = "https://github.com/sgl-project/sgl-ome"
+    url = "https://github.com/sgl-project/ome"
 
 ###############################################################################
 # Docsy - Goldmark markdown parser
@@ -70,8 +70,8 @@ ignoreFiles = []
 # Docsy - Site Parameters
 ###############################################################################
 [params]
-  github_repo = "https://github.com/sgl-project/sgl-ome"
-github_project_repo = "https://github.com/sgl-project/sgl-ome"
+  github_repo = "https://github.com/sgl-project/ome"
+github_project_repo = "https://github.com/sgl-project/ome"
   github_subdir = "site"
   RSSLink = "/index.xml"
   author = "Oracle" # add your company name
@@ -131,8 +131,8 @@ github_project_repo = "https://github.com/sgl-project/sgl-ome"
       [params.ui.feedback]
         enable = true
         # The responses that the user sees after clicking "yes" (the page was helpful) or "no" (the page was not helpful).
-        yes = 'Glad to hear it! Please <a href="https://github.com/sgl-project/sgl-ome/issues/new">tell us how we can improve</a>.'
-        no = 'Sorry to hear that. Please <a href="https://github.com/sgl-project/sgl-ome/issues/new">tell us how we can improve</a>.'
+        yes = 'Glad to hear it! Please <a href="https://github.com/sgl-project/ome/issues/new">tell us how we can improve</a>.'
+        no = 'Sorry to hear that. Please <a href="https://github.com/sgl-project/ome/issues/new">tell us how we can improve</a>.'
 
 [params.links]
 # End user relevant links. These will show up on left side of footer and in the community page if you have one.

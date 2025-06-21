@@ -17,7 +17,7 @@ The OCI Object Storage package provides a robust data store abstraction backed b
 ## Installation
 
 ```bash
-go get github.com/sgl-project/sgl-ome/pkg/ociobjectstore
+go get github.com/sgl-project/ome/pkg/ociobjectstore
 ```
 
 ## Quick Start
@@ -28,8 +28,8 @@ go get github.com/sgl-project/sgl-ome/pkg/ociobjectstore
 package main
 
 import (
-    "github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
-    "github.com/sgl-project/sgl-ome/pkg/principals"
+    "github.com/sgl-project/ome/pkg/ociobjectstore"
+    "github.com/sgl-project/ome/pkg/principals"
     "github.com/spf13/viper"
 )
 
@@ -279,7 +279,7 @@ config := &ociobjectstore.Config{
 package main
 
 import (
-    "github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+    "github.com/sgl-project/ome/pkg/ociobjectstore"
     "go.uber.org/fx"
 )
 

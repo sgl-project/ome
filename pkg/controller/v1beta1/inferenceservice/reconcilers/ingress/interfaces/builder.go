@@ -5,7 +5,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // ResourceBuilder builds Kubernetes resources for ingress

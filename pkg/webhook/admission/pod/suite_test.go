@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -12,7 +12,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	pkgtest "github.com/sgl-project/sgl-ome/pkg/testing"
+	pkgtest "github.com/sgl-project/ome/pkg/testing"
 )
 
 var cfg *rest.Config

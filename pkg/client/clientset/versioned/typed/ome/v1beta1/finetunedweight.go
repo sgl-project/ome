@@ -5,8 +5,8 @@ package v1beta1
 import (
 	"context"
 
-	v1beta1 "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	scheme "github.com/sgl-project/sgl-ome/pkg/client/clientset/versioned/scheme"
+	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	scheme "github.com/sgl-project/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"

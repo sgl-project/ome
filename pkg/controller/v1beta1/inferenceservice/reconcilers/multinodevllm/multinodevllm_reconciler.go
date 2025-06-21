@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
 
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/istiosidecar"
 	"k8s.io/client-go/kubernetes"
 	knapis "knative.dev/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

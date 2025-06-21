@@ -7,13 +7,13 @@ import (
 
 	"knative.dev/pkg/kmp"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
-	omev1beta1informers "github.com/sgl-project/sgl-ome/pkg/client/informers/externalversions"
-	omev1beta1 "github.com/sgl-project/sgl-ome/pkg/client/informers/externalversions/ome/v1beta1"
-	omev1beta1lister "github.com/sgl-project/sgl-ome/pkg/client/listers/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/utils"
+	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/informers/externalversions/ome/v1beta1"
+	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/utils"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

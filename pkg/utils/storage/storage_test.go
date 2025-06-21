@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/stretchr/testify/assert"
 )
 

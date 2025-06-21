@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"regexp"
 
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"

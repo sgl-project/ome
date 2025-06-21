@@ -19,8 +19,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/onsi/gomega"
 
-	v1beta1 "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 

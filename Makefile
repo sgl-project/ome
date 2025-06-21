@@ -8,7 +8,7 @@ ARCH         ?= linux/amd64
 MANAGER_IMG  ?= $(REGISTRY)/manager:$(TAG)
 
 # Git version and commit information for build
-version_pkg = github.com/sgl-project/sgl-ome/pkg/version
+version_pkg = github.com/sgl-project/ome/pkg/version
 GIT_TAG ?= $(shell git describe --tags --dirty --always)
 LD_FLAGS += -X '$(version_pkg).GitVersion=$(GIT_TAG)'
 LD_FLAGS += -X '$(version_pkg).GitCommit=$(shell git rev-parse HEAD)'

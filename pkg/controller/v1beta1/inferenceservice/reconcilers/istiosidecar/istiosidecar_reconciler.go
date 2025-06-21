@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	istiov1beta1 "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"

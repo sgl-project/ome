@@ -1,4 +1,4 @@
-module github.com/sgl-project/sgl-ome
+module github.com/sgl-project/ome
 
 go 1.23.3
 

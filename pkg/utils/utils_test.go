@@ -6,7 +6,7 @@ import (
 
 	"github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 

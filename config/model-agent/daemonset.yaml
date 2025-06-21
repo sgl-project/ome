@@ -62,7 +62,7 @@ spec:
           type: Directory
       containers:
       - name: model-agent
-        image: ko://github.com/sgl-project/sgl-ome/cmd/model-agent
+        image: ko://github.com/sgl-project/ome/cmd/model-agent
         imagePullPolicy: Always
         ports:
         - name: metrics

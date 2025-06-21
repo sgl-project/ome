@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,8 +22,8 @@ import (
 
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 )

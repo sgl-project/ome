@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -2,7 +2,7 @@ package autoscaler
 
 import (
 	"github.com/google/go-cmp/cmp"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"testing"

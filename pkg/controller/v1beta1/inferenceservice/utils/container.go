@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 )
 

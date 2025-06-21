@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 const (

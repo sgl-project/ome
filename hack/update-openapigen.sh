@@ -14,7 +14,7 @@ then
     echo >&2 "Error: GOPATH is not set. Please configure your GOPATH environment variable."
     exit 1
 fi
-TARGET_DIR="$GOPATH/src/github.com/sgl-project/sgl-ome"
+TARGET_DIR="$GOPATH/src/github.com/sgl-project/ome"
 CURRENT_DIR=$(pwd)
 
 # Redirect stdout to /dev/null but keep stderr
@@ -41,7 +41,7 @@ fi
 
 # Generating OpenAPI specification
 go run k8s.io/kube-openapi/cmd/openapi-gen \
-    --output-pkg github.com/sgl-project/sgl-ome/pkg/openapi --output-dir "./pkg/openapi" \
+    --output-pkg github.com/sgl-project/ome/pkg/openapi --output-dir "./pkg/openapi" \
     --output-file "openapi_generated.go" \
     -v 5 --go-header-file hack/boilerplate.go.txt \
     -r $CURRENT_VIOLATION_EXCEPTIONS \

@@ -22,7 +22,7 @@ spec:
   engineConfig:
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.4.6.post5-cu124
+      image: fra.ocir.io/idqj093njucb/sgl:dev2
       ports:
         - containerPort: 8080
           name: http1

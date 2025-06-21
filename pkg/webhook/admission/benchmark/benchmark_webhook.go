@@ -7,12 +7,12 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	v1beta1 "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	storageutil "github.com/sgl-project/sgl-ome/pkg/utils/storage"
+	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	storageutil "github.com/sgl-project/ome/pkg/utils/storage"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 

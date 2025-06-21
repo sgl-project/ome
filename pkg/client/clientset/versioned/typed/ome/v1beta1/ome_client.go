@@ -5,8 +5,8 @@ package v1beta1
 import (
 	"net/http"
 
-	v1beta1 "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/client/clientset/versioned/scheme"
+	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

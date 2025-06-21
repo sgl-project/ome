@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/principals"
+	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
