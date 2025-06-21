@@ -328,7 +328,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"inferenceService", isvc.Name)
 		// TODO: change this to v2 predictor
 		reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
-		
+
 		// For legacy architecture, ingress deployment mode is the same as the overall deployment mode
 		ingressDeploymentMode = deploymentMode
 	}

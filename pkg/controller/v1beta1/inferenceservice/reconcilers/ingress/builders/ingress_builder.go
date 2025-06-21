@@ -49,17 +49,7 @@ func (b *IngressBuilder) Build(ctx context.Context, isvc *v1beta1.InferenceServi
 }
 
 func (b *IngressBuilder) BuildIngress(ctx context.Context, isvc *v1beta1.InferenceService) (client.Object, error) {
-	if !isvc.Status.IsConditionReady(v1beta1.PredictorReady) {
-		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
-			Type:   v1beta1.IngressReady,
-			Status: corev1.ConditionFalse,
-			Reason: "Engine ingress not created",
-		})
-		return nil, nil
-	}
-
 	var rules []netv1.IngressRule
-	engineName := constants.PredictorServiceName(isvc.Name)
 
 	switch {
 	case isvc.Spec.Router != nil:
@@ -93,20 +83,20 @@ func (b *IngressBuilder) BuildIngress(ctx context.Context, isvc *v1beta1.Inferen
 		rules = append(rules, decoderRules...)
 
 	default:
-		// Only engine case
+		if !isvc.Status.IsConditionReady(v1beta1.EngineReady) {
+			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+				Type:   v1beta1.IngressReady,
+				Status: corev1.ConditionFalse,
+				Reason: "Engine ingress not created",
+			})
+			return nil, nil
+		}
 		engineRules, err := b.buildEngineOnlyRules(isvc)
 		if err != nil {
 			return nil, err
 		}
 		rules = append(rules, engineRules...)
 	}
-
-	// Add engine rule
-	engineHost, err := b.generateIngressHost(string(constants.Predictor), false, engineName, isvc)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating engine ingress host: %w", err)
-	}
-	rules = append(rules, b.generateRule(engineHost, engineName, "/", constants.CommonDefaultHttpPort))
 
 	ingress := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -132,7 +122,7 @@ func (b *IngressBuilder) buildRouterRules(isvc *v1beta1.InferenceService) ([]net
 
 	routerName := constants.RouterServiceName(isvc.Name)
 	decoderName := constants.DecoderServiceName(isvc.Name)
-	engineName := constants.PredictorServiceName(isvc.Name)
+	engineName := constants.EngineServiceName(isvc.Name)
 
 	host, err := b.generateIngressHost(string(constants.Router), true, routerName, isvc)
 	if err != nil {
@@ -163,7 +153,7 @@ func (b *IngressBuilder) buildDecoderRules(isvc *v1beta1.InferenceService) ([]ne
 	var rules []netv1.IngressRule
 
 	decoderName := constants.DecoderServiceName(isvc.Name)
-	engineName := constants.PredictorServiceName(isvc.Name)
+	engineName := constants.EngineServiceName(isvc.Name)
 
 	host, err := b.generateIngressHost(string(constants.Decoder), true, decoderName, isvc)
 	if err != nil {
@@ -185,9 +175,9 @@ func (b *IngressBuilder) buildDecoderRules(isvc *v1beta1.InferenceService) ([]ne
 func (b *IngressBuilder) buildEngineOnlyRules(isvc *v1beta1.InferenceService) ([]netv1.IngressRule, error) {
 	var rules []netv1.IngressRule
 
-	engineName := constants.PredictorServiceName(isvc.Name)
+	engineName := constants.EngineServiceName(isvc.Name)
 
-	host, err := b.generateIngressHost(string(constants.Predictor), true, engineName, isvc)
+	host, err := b.generateIngressHost(string(constants.Engine), true, engineName, isvc)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating top level engine ingress host: %w", err)
 	}

@@ -626,6 +626,10 @@ func DecoderServiceName(name string) string {
 	return name
 }
 
+func EngineServiceName(name string) string {
+	return name + "-engine"
+}
+
 func DecoderPrefix() string {
 	return "^/v1/.*$"
 }
