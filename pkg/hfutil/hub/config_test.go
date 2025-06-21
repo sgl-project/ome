@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

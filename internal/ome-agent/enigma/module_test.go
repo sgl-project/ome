@@ -3,10 +3,10 @@ package enigma
 import (
 	"testing"
 
-	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
-	"github.com/sgl-project/sgl-ome/pkg/vault/kmscrypto"
-	"github.com/sgl-project/sgl-ome/pkg/vault/kmsmgm"
-	ocisecret "github.com/sgl-project/sgl-ome/pkg/vault/secret"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
+	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
+	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

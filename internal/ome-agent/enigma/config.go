@@ -5,13 +5,13 @@ import (
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/sgl-project/sgl-ome/pkg/configutils"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
-	utils "github.com/sgl-project/sgl-ome/pkg/utils"
-	"github.com/sgl-project/sgl-ome/pkg/vault/kmscrypto"
-	"github.com/sgl-project/sgl-ome/pkg/vault/kmsmgm"
-	ocisecret "github.com/sgl-project/sgl-ome/pkg/vault/secret"
+	"github.com/sgl-project/ome/pkg/configutils"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/logging"
+	utils "github.com/sgl-project/ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
+	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
+	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
 	"github.com/spf13/viper"
 )
 

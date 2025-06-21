@@ -3,9 +3,9 @@ package kmscrypto
 import (
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/principals"
-	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
-	"github.com/sgl-project/sgl-ome/pkg/vault/kmsvault"
+	"github.com/sgl-project/ome/pkg/principals"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/vault/kmsvault"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

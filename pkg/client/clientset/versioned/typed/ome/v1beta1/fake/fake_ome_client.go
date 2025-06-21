@@ -3,7 +3,7 @@
 package fake
 
 import (
-	v1beta1 "github.com/sgl-project/sgl-ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	v1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )

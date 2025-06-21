@@ -9,7 +9,7 @@ import (
 
 	fortiopb "fortio.org/progressbar"
 	schollzpb "github.com/schollz/progressbar/v3"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 // ProgressManager manages progress reporting for downloads

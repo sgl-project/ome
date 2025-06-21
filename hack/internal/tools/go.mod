@@ -1,7 +1,8 @@
-module github.com/sgl-project/sgl-ome/hack/internal/tools
+module github.com/sgl-project/ome/hack/internal/tools
 
-go 1.23
+go 1.23.0
 
+toolchain go1.24.1
 
 require (
 	github.com/gohugoio/hugo v0.142.0

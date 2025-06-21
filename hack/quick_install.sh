@@ -129,15 +129,15 @@ MINOR_VERSION=$(echo ${OME_VERSION} | cut -d "." -f2)
 if [ ${MAJOR_VERSION} -eq 0 ] && [ ${MINOR_VERSION} -le 6 ]; then OME_CONFIG=kfserving.yaml; fi
 
 # Retry inorder to handle that it may take a minute or so for the TLS assets required for the webhook to function to be provisioned
-kubectl apply -f https://github.com/sgl-project/sgl-ome/releases/download/${OME_VERSION}/${OME_CONFIG}
+kubectl apply -f https://github.com/sgl-project/ome/releases/download/${OME_VERSION}/${OME_CONFIG}
 
 # Install OME built-in servingruntimes and storagecontainers
 kubectl wait --for=condition=ready pod -l control-plane=ome-controller-manager -n ome --timeout=300s
 
 if [ ${MAJOR_VERSION} -eq 0 ] && [ ${MINOR_VERSION} -le 11 ]; then
-    kubectl apply -f https://github.com/sgl-project/sgl-ome/releases/download/${OME_VERSION}/ome-runtimes.yaml
+    kubectl apply -f https://github.com/sgl-project/ome/releases/download/${OME_VERSION}/ome-runtimes.yaml
 else
-    kubectl apply -f https://github.com/sgl-project/sgl-ome/releases/download/${OME_VERSION}/ome-cluster-resources.yaml
+    kubectl apply -f https://github.com/sgl-project/ome/releases/download/${OME_VERSION}/ome-cluster-resources.yaml
 fi
 
 # Patch default deployment mode for raw deployment

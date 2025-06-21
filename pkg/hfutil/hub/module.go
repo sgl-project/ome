@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )

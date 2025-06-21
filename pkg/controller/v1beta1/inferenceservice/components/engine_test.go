@@ -7,10 +7,10 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
-	omeTesting "github.com/sgl-project/sgl-ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
+	omeTesting "github.com/sgl-project/ome/pkg/testing"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/onsi/gomega"

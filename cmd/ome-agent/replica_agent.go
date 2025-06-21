@@ -4,10 +4,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/sgl-ome/internal/ome-agent/replica"
-	"github.com/sgl-project/sgl-ome/pkg/afero"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/internal/ome-agent/replica"
+	"github.com/sgl-project/ome/pkg/afero"
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 // ReplicaAgent implements the AgentModule interface for object storage replica agent

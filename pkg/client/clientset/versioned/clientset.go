@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	omev1beta1 "github.com/sgl-project/sgl-ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

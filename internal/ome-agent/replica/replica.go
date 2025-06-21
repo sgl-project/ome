@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 const (

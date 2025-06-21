@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/controllerconfig"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/status"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
 
-	v1beta2 "github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
+	v1beta2 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	multimodelconfig "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
+	multimodelconfig "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/modelconfig"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -37,12 +37,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/components"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
-	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
-	isvcutils "github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"github.com/sgl-project/sgl-ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/components"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/utils"
 	knapis "knative.dev/pkg/apis"
 )
 

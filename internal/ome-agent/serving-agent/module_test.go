@@ -3,8 +3,8 @@ package serving_agent
 import (
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
-	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

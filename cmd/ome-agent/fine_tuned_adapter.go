@@ -4,10 +4,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
-	finetunedadapter "github.com/sgl-project/sgl-ome/internal/ome-agent/fine-tuned-adapter"
-	"github.com/sgl-project/sgl-ome/pkg/afero"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
+	finetunedadapter "github.com/sgl-project/ome/internal/ome-agent/fine-tuned-adapter"
+	"github.com/sgl-project/ome/pkg/afero"
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 // FineTunedAdapterAgent implements the AgentModule interface for fine-tuned adapter agent

@@ -145,7 +145,7 @@ docker login us-ashburn-1.ocir.io -u bmc_operator_access/${USER}
 
 ### Clone OME Repository
 
-The Go tools require that you clone the repository to the `src/github.com/sgl-project/sgl-ome` directory in your [`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
+The Go tools require that you clone the repository to the `src/github.com/sgl-project/ome` directory in your [`GOPATH`](https://github.com/golang/go/wiki/SettingGOPATH).
 
 To check out this repository:
 
@@ -255,7 +255,7 @@ Goland IDE is recommended for running the OME manager in the IDE. After cloning 
 * You can also create a run configuration by clicking on the `Edit Configurations` option in the top right corner of the IDE and adding a new Go configuration with the following settings:
     * Name: `ome-controller-manager`
     * Run Kind: `File`
-    * Files: `${GOPATH}/src/github.com/sgl-project/sgl-ome/cmd/manager/main.go`
+    * Files: `${GOPATH}/src/github.com/sgl-project/ome/cmd/manager/main.go`
     * Environment Variables: `KUBECONFIG=<path to kubeconfig file>`
     * Program Arguments: `--zap-encoder console --health-probe-addr 127.0.0.1:8081 --metrics-bind-address 127.0.0.1:8080 --leader-elect`
     * Module: `ome`

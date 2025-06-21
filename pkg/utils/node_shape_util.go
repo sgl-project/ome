@@ -3,8 +3,8 @@ package utils
 import (
 	"fmt"
 
-	"github.com/sgl-project/sgl-ome/pkg/imds"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/imds"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 var shapeMap = map[string]string{

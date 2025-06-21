@@ -3,8 +3,8 @@ package kmscrypto
 import (
 	"fmt"
 
-	"github.com/sgl-project/sgl-ome/pkg/logging"
-	"github.com/sgl-project/sgl-ome/pkg/vault/kmsvault"
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/vault/kmsvault"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )

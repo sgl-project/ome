@@ -2420,7 +2420,7 @@ DynamicResourceAllocation feature gate.</p>
 </td>
 </tr>
 <tr><td><code>protocolVersion</code><br/>
-<a href="https://pkg.go.dev/github.com/sgl-project/sgl-ome/pkg/constants#InferenceServiceProtocol"><code>github.com/sgl-project/sgl-ome/pkg/constants.InferenceServiceProtocol</code></a>
+<a href="https://pkg.go.dev/github.com/sgl-project/ome/pkg/constants#InferenceServiceProtocol"><code>github.com/sgl-project/ome/pkg/constants.InferenceServiceProtocol</code></a>
 </td>
 <td>
    <p>Protocol version to use by the predictor (i.e. v1 or v2 or grpc-v1 or grpc-v2)</p>
@@ -2863,7 +2863,7 @@ are hammered out.</p>
 </td>
 </tr>
 <tr><td><code>protocolVersions</code><br/>
-<a href="https://pkg.go.dev/github.com/sgl-project/sgl-ome/pkg/constants#InferenceServiceProtocol"><code>[]github.com/sgl-project/sgl-ome/pkg/constants.InferenceServiceProtocol</code></a>
+<a href="https://pkg.go.dev/github.com/sgl-project/ome/pkg/constants#InferenceServiceProtocol"><code>[]github.com/sgl-project/ome/pkg/constants.InferenceServiceProtocol</code></a>
 </td>
 <td>
    <p>Supported protocol versions (i.e. openAI or cohere or openInference-v1 or openInference-v2)</p>

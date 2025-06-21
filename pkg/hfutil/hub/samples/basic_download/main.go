@@ -17,7 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sgl-project/sgl-ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
 func main() {

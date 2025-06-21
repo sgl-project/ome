@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	istiov1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"

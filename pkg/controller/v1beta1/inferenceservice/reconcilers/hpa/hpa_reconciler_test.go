@@ -3,11 +3,11 @@ package hpa
 import (
 	"testing"
 
-	"github.com/sgl-project/sgl-ome/pkg/webhook/admission/isvc"
+	"github.com/sgl-project/ome/pkg/webhook/admission/isvc"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"

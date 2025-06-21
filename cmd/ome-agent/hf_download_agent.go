@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sgl-project/sgl-ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	"github.com/sgl-project/sgl-ome/pkg/afero"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/afero"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 // hfDownloadAgentParams represents the parameters for dependency injection

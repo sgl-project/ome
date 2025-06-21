@@ -15,7 +15,7 @@ if [ -z "${GOPATH:-}" ]; then
 fi
 
 CODEGEN_PKG=$(cd "${KUBE_ROOT}" && go list -f '{{.Dir}}' -m k8s.io/code-generator@"${CODEGEN_VERSION}" 2>/dev/null)
-THIS_PKG="github.com/sgl-project/sgl-ome"
+THIS_PKG="github.com/sgl-project/ome"
 
 # shellcheck source=/dev/null
 source "${CODEGEN_PKG}/kube_codegen.sh"

@@ -5,8 +5,8 @@ import (
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
-	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )

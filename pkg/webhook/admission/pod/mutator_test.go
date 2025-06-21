@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/onsi/gomega"
 	gomegaTypes "github.com/onsi/gomega/types"
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	"gomodules.xyz/jsonpatch/v2"
 	"google.golang.org/protobuf/proto"
 	admissionv1 "k8s.io/api/admission/v1"

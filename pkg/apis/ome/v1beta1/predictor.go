@@ -1,7 +1,7 @@
 package v1beta1
 
 import (
-	"github.com/sgl-project/sgl-ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 )
 

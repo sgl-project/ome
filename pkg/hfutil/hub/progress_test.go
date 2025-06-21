@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/schollz/progressbar/v3"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/stretchr/testify/assert"
 )
 

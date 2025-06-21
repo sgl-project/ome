@@ -3,8 +3,8 @@ package model
 import (
 	"encoding/json"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/modelagent"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/modelagent"
 	"go.uber.org/zap"
 )
 

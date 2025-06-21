@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	omesecrets "github.com/sgl-project/sgl-ome/pkg/vault"
+	omesecrets "github.com/sgl-project/ome/pkg/vault"
 
 	"github.com/oracle/oci-go-sdk/v65/secrets"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 type SecretRetriever struct {

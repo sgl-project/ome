@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sgl-project/sgl-ome/pkg/ociobjectstore"
-	testingPkg "github.com/sgl-project/sgl-ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

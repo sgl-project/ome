@@ -19,8 +19,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/sgl-project/sgl-ome/pkg/hfutil/hub"
-	"github.com/sgl-project/sgl-ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 func main() {

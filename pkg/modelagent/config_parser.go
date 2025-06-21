@@ -10,9 +10,9 @@ import (
 
 	"context"
 
-	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/sgl-ome/pkg/client/clientset/versioned"
-	"github.com/sgl-project/sgl-ome/pkg/hfutil/modelconfig"
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/client/clientset/versioned"
+	"github.com/sgl-project/ome/pkg/hfutil/modelconfig"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
