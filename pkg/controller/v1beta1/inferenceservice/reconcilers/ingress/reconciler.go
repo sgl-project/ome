@@ -62,16 +62,16 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
 	// Check if ingress creation is disabled
 	if r.ingressConfig.DisableIngressCreation {
 		mainLog.Info("Ingress creation disabled, skipping ingress reconciliation", "isvc", isvc.Name)
-		
+
 		// Set IngressReady to True since we're intentionally not creating ingress
 		// External service will be created as fallback for cluster access
 		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
-			Type:   v1beta1.IngressReady,
-			Status: corev1.ConditionTrue,
-			Reason: "IngressDisabled",
+			Type:    v1beta1.IngressReady,
+			Status:  corev1.ConditionTrue,
+			Reason:  "IngressDisabled",
 			Message: "Ingress creation is disabled, using external service for access",
 		})
-		
+
 		return nil
 	}
 
@@ -109,16 +109,16 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, isvc *v1beta1.Inferen
 	// Check if ingress creation is disabled
 	if r.ingressConfig.DisableIngressCreation {
 		mainLog.Info("Ingress creation disabled, skipping ingress reconciliation", "isvc", isvc.Name)
-		
+
 		// Set IngressReady to True since we're intentionally not creating ingress
 		// External service will be created as fallback for cluster access
 		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
-			Type:   v1beta1.IngressReady,
-			Status: corev1.ConditionTrue,
-			Reason: "IngressDisabled",
+			Type:    v1beta1.IngressReady,
+			Status:  corev1.ConditionTrue,
+			Reason:  "IngressDisabled",
 			Message: "Ingress creation is disabled, using external service for access",
 		})
-		
+
 		return nil
 	}
 

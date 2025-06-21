@@ -90,6 +90,21 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 			expectedStrategyName: "GatewayAPI",
 			expectError:          false,
 		},
+		{
+			name:           "disabled ingress creation",
+			isvc:           createTestInferenceServiceWithStatus("test-isvc", "default"),
+			deploymentMode: constants.RawDeployment,
+			ingressConfig: &controllerconfig.IngressConfig{
+				IngressDomain:          "example.com",
+				IngressClassName:       stringPtr("nginx"),
+				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+				UrlScheme:              "https",
+				DisableIngressCreation: true,
+			},
+			isvcConfig:           &controllerconfig.InferenceServicesConfig{},
+			expectedStrategyName: "", // No strategy should be used
+			expectError:          false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -123,6 +138,20 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+			}
+
+			// Special verification for disabled ingress creation
+			if tt.ingressConfig.DisableIngressCreation {
+				// Verify IngressReady condition is set to True
+				condition := tt.isvc.Status.GetCondition(v1beta1.IngressReady)
+				t.Logf("IngressReady condition: %+v", condition)
+				assert.NotNil(t, condition, "IngressReady condition should be set when ingress is disabled")
+				if condition != nil {
+					t.Logf("Condition Status: %s, Reason: %s, Message: %s", condition.Status, condition.Reason, condition.Message)
+					assert.Equal(t, corev1.ConditionTrue, condition.Status, "IngressReady should be True when ingress creation is disabled")
+					assert.Equal(t, "IngressDisabled", condition.Reason, "IngressReady condition reason should be IngressDisabled")
+					assert.Contains(t, condition.Message, "Ingress creation is disabled", "IngressReady condition message should explain ingress is disabled")
+				}
 			}
 		})
 	}
