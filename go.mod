@@ -1,6 +1,6 @@
 module github.com/sgl-project/ome
 
-go 1.23.3
+go 1.24.1
 
 require (
 	fortio.org/progressbar v1.1.0

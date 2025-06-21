@@ -33,6 +33,10 @@ spec:
   protocolVersions:
     - openAI
   engineConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/profile: "oci-roce"
+      rdma.ome.io/container-name: "ome-container"
     leader:
       tolerations:
         - key: "nvidia.com/gpu"
@@ -53,57 +57,10 @@ spec:
                     operator: In
                     values:
                       - BM.GPU.H100.8
-      volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-        - hostPath:
-            path: /dev/infiniband
-          name: devinf
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
         env:
-          - name: NCCL_NET_PLUGIN
-            value: none
-          - name: NCCL_DEBUG
-            value: DEBUG
-          - name: NCCL_CROSS_NIC
-            value: '2'
-          - name: NCCL_SOCKET_NTHREADS
-            value: '16'
-          - name: NCCL_CUMEM_ENABLE
-            value: '0'
-          - name: NCCL_IB_SPLIT_DATA_ON_QPS
-            value: '0'
-          - name: NCCL_IB_QPS_PER_CONNECTION
-            value: '16'
-          - name: NCCL_IB_GID_INDEX
-            value: '3'
-          - name: NCCL_IB_HCA
-            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
-          - name: NCCL_IB_TC
-            value: '41'
-          - name: NCCL_IB_SL
-            value: '0'
-          - name: NCCL_IB_TIMEOUT
-            value: '22'
-          - name: HCOLL_ENABLE_MCAST_ALL
-            value: '0'
-          - name: coll_hcoll_enable
-            value: '0'
-          - name: UCX_TLS
-            value: tcp
-          - name: UCX_NET_DEVICES
-            value: eth0
-          - name: RX_QUEUE_LEN
-            value: '8192'
-          - name: IB_RX_QUEUE_LEN
-            value: '8192'
-          - name: NCCL_SOCKET_IFNAME
-            value: eth0
-          - name: NCCL_IGNORE_CPU_AFFINITY
-            value: '1'
           - name: GLOO_SOCKET_IFNAME
             value: eth0
         command:
@@ -122,22 +79,11 @@ spec:
             --torch-compile-max-bs 1 
             --reasoning-parser deepseek-r1 
             --enable-metrics
-        volumeMounts:
-          - mountPath: /dev/shm
-            name: dshm
-          - mountPath: /dev/infiniband
-            name: devinf
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
-              - CAP_SYS_ADMIN
-          privileged: true
         readinessProbe:
           httpGet:
             path: /health_generate
@@ -184,14 +130,6 @@ spec:
                     operator: In
                     values:
                       - BM.GPU.H100.8
-      volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: 15Gi
-        - hostPath:
-            path: /dev/infiniband
-          name: devinf
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
@@ -218,56 +156,5 @@ spec:
           requests:
             nvidia.com/gpu: "8"
         env:
-          - name: NCCL_NET_PLUGIN
-            value: none
-          - name: NCCL_DEBUG
-            value: INFO
-          - name: NCCL_CROSS_NIC
-            value: '2'
-          - name: NCCL_SOCKET_NTHREADS
-            value: '16'
-          - name: NCCL_CUMEM_ENABLE
-            value: '0'
-          - name: NCCL_IB_SPLIT_DATA_ON_QPS
-            value: '0'
-          - name: NCCL_IB_QPS_PER_CONNECTION
-            value: '16'
-          - name: NCCL_IB_GID_INDEX
-            value: '3'
-          - name: NCCL_IB_HCA
-            value: "=mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17"
-          - name: NCCL_IB_TC
-            value: '41'
-          - name: NCCL_IB_SL
-            value: '0'
-          - name: NCCL_IB_TIMEOUT
-            value: '22'
-          - name: HCOLL_ENABLE_MCAST_ALL
-            value: '0'
-          - name: coll_hcoll_enable
-            value: '0'
-          - name: UCX_TLS
-            value: tcp
-          - name: UCX_NET_DEVICES
-            value: eth0
-          - name: RX_QUEUE_LEN
-            value: '8192'
-          - name: IB_RX_QUEUE_LEN
-            value: '8192'
-          - name: NCCL_SOCKET_IFNAME
-            value: eth0
-          - name: NCCL_IGNORE_CPU_AFFINITY
-            value: '1'
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
-              - CAP_SYS_ADMIN
-          privileged: true
-        volumeMounts:
-          - mountPath: /dev/shm
-            name: dshm
-          - mountPath: /dev/infiniband
-            name: devinf

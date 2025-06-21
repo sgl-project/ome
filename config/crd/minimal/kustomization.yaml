@@ -7,9 +7,4 @@ resources:
   - ome.io_servingruntimes.yaml
   - ome.io_basemodels.yaml
   - ome.io_clusterbasemodels.yaml
-  - ome.io_dedicatedaiclusters.yaml
-  - ome.io_dedicatedaiclusterprofiles.yaml
-  - ome.io_clustertrainingruntimes.yaml
-  - ome.io_trainingruntimes.yaml
-  - ome.io_trainingjobs.yaml
   - ome.io_benchmarkjobs.yaml
