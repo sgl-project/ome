@@ -16,10 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-var extSvcLog = logf.Log.WithName("ExternalServiceReconciler")
 
 // ExternalServiceReconciler reconciles the external service for an InferenceService
 // This service provides external access when ingress is disabled
