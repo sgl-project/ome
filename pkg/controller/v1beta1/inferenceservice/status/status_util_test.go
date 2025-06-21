@@ -535,6 +535,18 @@ func TestSetCondition(t *testing.T) {
 			shouldSet: true,
 		},
 		{
+			name:          "set condition true with reason and message",
+			status:        &v1beta1.InferenceServiceStatus{},
+			conditionType: v1beta1.PredictorReady,
+			condition: &apis.Condition{
+				Type:    v1beta1.PredictorReady,
+				Status:  corev1.ConditionTrue,
+				Reason:  "Ready",
+				Message: "Predictor is ready",
+			},
+			shouldSet: true,
+		},
+		{
 			name:          "nil condition",
 			status:        &v1beta1.InferenceServiceStatus{},
 			conditionType: v1beta1.PredictorReady,
@@ -552,9 +564,8 @@ func TestSetCondition(t *testing.T) {
 				condition := tt.status.GetCondition(tt.conditionType)
 				assert.NotNil(t, condition)
 				assert.Equal(t, tt.condition.Status, condition.Status)
-				if tt.condition.Status != corev1.ConditionTrue {
-					assert.Equal(t, tt.condition.Reason, condition.Reason)
-				}
+				assert.Equal(t, tt.condition.Reason, condition.Reason)
+				assert.Equal(t, tt.condition.Message, condition.Message)
 			}
 		})
 	}

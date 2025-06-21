@@ -201,18 +201,23 @@ curl -X POST https://llama-chat.your-namespace.example.com/v1/decoder/decode \
   -d '{"tokens": [1, 2, 3, 4], "decode_format": "text"}'
 
 # Health checks
-curl https://llama-chat.your-namespace.example.com/health
-curl https://llama-chat.your-namespace.example.com/v1/router/health
-curl https://llama-chat.your-namespace.example.com/v1/decoder/health
+curl -H "Accept: application/json" \
+  https://llama-chat.your-namespace.example.com/health
+curl -H "Accept: application/json" \
+  https://llama-chat.your-namespace.example.com/v1/router/health
+curl -H "Accept: application/json" \
+  https://llama-chat.your-namespace.example.com/v1/decoder/health
 ```
 
 ### Model Information
 ```bash
 # List available models
-curl https://llama-chat.your-namespace.example.com/v1/models
+curl -H "Accept: application/json" \
+  https://llama-chat.your-namespace.example.com/v1/models
 
 # Get model details
-curl https://llama-chat.your-namespace.example.com/v1/models/llama-3-70b-instruct
+curl -H "Accept: application/json" \
+  https://llama-chat.your-namespace.example.com/v1/models/llama-3-70b-instruct
 ```
 
 ## Ingress Configuration Options
@@ -246,7 +251,13 @@ spec:
 This creates a service accessible only from within the cluster:
 ```bash
 # From inside the cluster
-curl http://internal-llama.your-namespace.svc.cluster.local/v1/completions
+curl -X POST http://internal-llama.your-namespace.svc.cluster.local/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3-70b-instruct",
+    "prompt": "Internal cluster request",
+    "max_tokens": 100
+  }'
 ```
 
 ### Load Balancer Services
@@ -290,11 +301,11 @@ kubectl get httproute -l ome.io/inferenceservice=llama-chat
 ```bash
 # Test engine service directly
 kubectl port-forward service/llama-chat-engine 8080:80
-curl http://localhost:8080/health
+curl -H "Accept: application/json" http://localhost:8080/health
 
 # Test router service (if exists)
 kubectl port-forward service/llama-chat 8080:80
-curl http://localhost:8080/health
+curl -H "Accept: application/json" http://localhost:8080/health
 ```
 
 ### Common Issues
@@ -323,12 +334,24 @@ OME ingress supports various authentication methods:
 
 ```bash
 # Using API keys (if configured)
-curl -H "Authorization: Bearer your-api-key" \
-  https://llama-chat.your-namespace.example.com/v1/completions
+curl -X POST https://llama-chat.your-namespace.example.com/v1/completions \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3-70b-instruct",
+    "prompt": "API key authentication",
+    "max_tokens": 100
+  }'
 
 # Using basic auth (if configured)  
-curl -u username:password \
-  https://llama-chat.your-namespace.example.com/v1/completions
+curl -X POST https://llama-chat.your-namespace.example.com/v1/completions \
+  -u username:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3-70b-instruct",
+    "prompt": "Basic auth request",
+    "max_tokens": 100
+  }'
 ```
 
 ### TLS/SSL
