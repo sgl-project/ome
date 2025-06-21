@@ -303,7 +303,41 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			)
 			reconcilers = append(reconcilers, routerReconciler)
 		}
-	} else if isvc.Spec.Predictor.Model != nil {
+
+		// Determine the correct ingress deployment mode using the same logic as ingress reconciler
+		// but with the already-determined deployment modes to avoid inconsistency
+		ingressDeploymentMode := engineDeploymentMode  // default to engine
+		if mergedRouter != nil {
+			ingressDeploymentMode = routerDeploymentMode
+		} else if mergedDecoder != nil {
+			ingressDeploymentMode = decoderDeploymentMode
+		}
+
+		r.Log.Info("Determined ingress deployment mode", 
+			"ingressDeploymentMode", ingressDeploymentMode,
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+
+		// Reconcile ingress
+		ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
+		}
+
+		ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
+		r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
+		if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, ingressDeploymentMode); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+		}
+
+		// Reconcile external service - creates a service with the inference service name
+		// when ingress is disabled to provide a stable endpoint
+		externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig)
+		r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
+		if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
+		}
+	} else {
 		// Legacy architecture: use predictor with deployment mode from annotations/configmap
 		r.Log.Info("Using legacy predictor architecture",
 			"deploymentMode", deploymentMode,
@@ -311,6 +345,26 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"inferenceService", isvc.Name)
 		// TODO: change this to v2 predictor
 		reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
+
+		// Reconcile ingress for legacy architecture
+		ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
+		}
+
+		ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
+		r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
+		if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, deploymentMode); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
+		}
+
+		// Reconcile external service - creates a service with the inference service name
+		// when ingress is disabled to provide a stable endpoint
+		externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig)
+		r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
+		if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
+		}
 	}
 
 	// Reconcile components sequentially
@@ -341,26 +395,6 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			return result, nil // Return the component's requested requeue result
 		}
-	}
-
-	// Reconcile ingress
-	ingressConfig, err := controllerconfig.NewIngressConfig(r.Clientset)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
-	}
-
-	ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
-	r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
-	if err := ingressReconciler.Reconcile(ctx, isvc); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
-	}
-
-	// Reconcile external service - creates a service with the inference service name
-	// when ingress is disabled to provide a stable endpoint
-	externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig)
-	r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
-	if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
 	}
 
 	if deploymentMode == constants.Serverless {
