@@ -72,7 +72,6 @@ func (r *ExternalServiceReconciler) Reconcile(ctx context.Context, isvc *v1beta1
 		if serviceExists {
 			// Update existing service if spec has changed
 			if !r.serviceSpecsEqual(&existingService.Spec, &desiredService.Spec) {
-				extSvcLog.Info("Updating external service for InferenceService", "isvc", isvc.Name)
 				existingService.Spec = desiredService.Spec
 				existingService.Labels = desiredService.Labels
 				existingService.Annotations = desiredService.Annotations
@@ -82,14 +81,12 @@ func (r *ExternalServiceReconciler) Reconcile(ctx context.Context, isvc *v1beta1
 			}
 		} else {
 			// Create new service
-			extSvcLog.Info("Creating external service for InferenceService", "isvc", isvc.Name)
 			if err := r.client.Create(ctx, desiredService); err != nil {
 				return errors.Wrapf(err, "failed to create external service for InferenceService %s", isvc.Name)
 			}
 		}
 	} else if serviceExists {
 		// Delete existing service if it should no longer exist
-		extSvcLog.Info("Deleting external service for InferenceService", "isvc", isvc.Name)
 		if err := r.client.Delete(ctx, existingService); err != nil {
 			return errors.Wrapf(err, "failed to delete external service for InferenceService %s", isvc.Name)
 		}

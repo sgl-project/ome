@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -90,6 +91,21 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 			expectedStrategyName: "GatewayAPI",
 			expectError:          false,
 		},
+		{
+			name:           "disabled ingress creation",
+			isvc:           createTestInferenceServiceWithStatus("test-isvc", "default"),
+			deploymentMode: constants.RawDeployment,
+			ingressConfig: &controllerconfig.IngressConfig{
+				IngressDomain:          "example.com",
+				IngressClassName:       stringPtr("nginx"),
+				DomainTemplate:         "{{.Name}}.{{.Namespace}}.{{.IngressDomain}}",
+				UrlScheme:              "https",
+				DisableIngressCreation: true,
+			},
+			isvcConfig:           &controllerconfig.InferenceServicesConfig{},
+			expectedStrategyName: "", // No strategy should be used
+			expectError:          false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -108,21 +124,57 @@ func TestIngressReconciler_Reconcile(t *testing.T) {
 				scheme,
 				tt.ingressConfig,
 				tt.isvcConfig,
-			)
+			).(*IngressReconciler)
 
-			// Set deployment mode annotation
+			// Add specific handling for disabled ingress creation test
+			if tt.name == "disabled ingress creation" {
+				// Update the InferenceService in fake client before reconcile
+				err := fakeClient.Update(context.Background(), tt.isvc)
+				require.NoError(t, err, "Failed to update InferenceService in fake client")
+			}
+
+			// Set deployment mode annotation and update in fake client
 			if tt.isvc.Annotations == nil {
 				tt.isvc.Annotations = make(map[string]string)
 			}
 			tt.isvc.Annotations[constants.DeploymentMode] = string(tt.deploymentMode)
 
+			// Update the object in the fake client with the annotation
+			err := fakeClient.Update(context.Background(), tt.isvc)
+			assert.NoError(t, err, "Failed to update InferenceService with deployment mode annotation")
+
 			// Execute reconcile
-			err := reconciler.Reconcile(context.Background(), tt.isvc)
+			err = reconciler.Reconcile(context.Background(), tt.isvc)
 
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+			}
+
+			// Special verification for disabled ingress creation
+			if tt.ingressConfig.DisableIngressCreation {
+				// First check the condition directly on the isvc object (in-memory)
+				condition := tt.isvc.Status.GetCondition(v1beta1.IngressReady)
+				if condition == nil {
+					// Get the updated object from the fake client
+					updatedIsvc := &v1beta1.InferenceService{}
+					err = fakeClient.Get(context.Background(), client.ObjectKey{
+						Name:      tt.isvc.Name,
+						Namespace: tt.isvc.Namespace,
+					}, updatedIsvc)
+					assert.NoError(t, err, "Failed to get updated InferenceService from fake client")
+
+					condition = updatedIsvc.Status.GetCondition(v1beta1.IngressReady)
+				}
+
+				// Verify IngressReady condition is set to True
+				assert.NotNil(t, condition, "IngressReady condition should be set when ingress is disabled")
+				if condition != nil {
+					assert.Equal(t, corev1.ConditionTrue, condition.Status, "IngressReady should be True when ingress creation is disabled")
+					assert.Equal(t, "IngressDisabled", condition.Reason, "IngressReady condition reason should be IngressDisabled")
+					assert.Contains(t, condition.Message, "Ingress creation is disabled", "IngressReady condition message should explain ingress is disabled")
+				}
 			}
 		})
 	}

@@ -288,7 +288,25 @@ func (ss *InferenceServiceStatus) SetCondition(conditionType apis.ConditionType,
 	case condition.Status == v1.ConditionUnknown:
 		conditionSet.Manage(ss).MarkUnknown(conditionType, condition.Reason, condition.Message)
 	case condition.Status == v1.ConditionTrue:
-		conditionSet.Manage(ss).MarkTrue(conditionType)
+		// If reason or message are provided, we need to set them directly since MarkTrue doesn't support them
+		if condition.Reason != "" || condition.Message != "" {
+			// Get the condition manager to access the underlying conditions
+			manager := conditionSet.Manage(ss)
+			// First mark it true to set the basic state
+			manager.MarkTrue(conditionType)
+			// Then directly set the reason and message by finding and updating the condition
+			if ss.Status.Conditions != nil {
+				for i := range ss.Status.Conditions {
+					if ss.Status.Conditions[i].Type == conditionType {
+						ss.Status.Conditions[i].Reason = condition.Reason
+						ss.Status.Conditions[i].Message = condition.Message
+						break
+					}
+				}
+			}
+		} else {
+			conditionSet.Manage(ss).MarkTrue(conditionType)
+		}
 	case condition.Status == v1.ConditionFalse:
 		conditionSet.Manage(ss).MarkFalse(conditionType, condition.Reason, condition.Message)
 	}

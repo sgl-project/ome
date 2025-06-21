@@ -23,7 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierr "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -113,7 +113,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Fetch the InferenceService instance
 	isvc := &v1beta2.InferenceService{}
 	if err := r.Get(ctx, req.NamespacedName, isvc); err != nil {
-		if apierr.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
 			return reconcile.Result{}, nil
@@ -383,6 +383,14 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
 	}
 
+	// Set Status.Address for external service when ingress is disabled
+	if ingressConfig.DisableIngressCreation {
+		if err := r.setExternalServiceURL(ctx, isvc, ingressConfig); err != nil {
+			r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
+			return reconcile.Result{}, errors.Wrapf(err, "fails to set external service URL")
+		}
+	}
+
 	if deploymentMode == constants.Serverless {
 		componentList := []v1beta2.ComponentType{v1beta2.EngineComponent}
 		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
@@ -562,4 +570,26 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	}
 
 	return ctrlBuilder.Complete(r)
+}
+
+func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, isvc *v1beta2.InferenceService, ingressConfig *controllerconfig.IngressConfig) error {
+	// Get the external service
+	externalService := &v1.Service{}
+	if err := r.Get(ctx, types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, externalService); err != nil {
+		return err
+	}
+
+	// Set the URL and Address of the external service
+	host := network.GetServiceHostname(externalService.Name, externalService.Namespace)
+	openAIURL := knapis.HTTP(host)
+	addressURL := &duckv1.Addressable{
+		URL: &knapis.URL{
+			Host:   host,
+			Scheme: "http",
+		},
+	}
+	isvc.Status.URL = openAIURL
+	isvc.Status.Address = addressURL
+
+	return nil
 }
