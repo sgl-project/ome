@@ -8,8 +8,10 @@ import (
 
 	"github.com/sgl-project/sgl-ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/sgl-ome/pkg/constants"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"knative.dev/pkg/apis"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -51,15 +53,25 @@ func NewIngressReconciler(
 	}
 }
 
-// ReconcileWithDeploymentMode orchestrates the ingress reconciliation using the provided deployment mode
+// ReconcileWithDeploymentMode reconciles ingress resources for a specific deployment mode
 func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isvc *v1beta1.InferenceService, deploymentMode constants.DeploymentModeType) error {
-	mainLog.Info("Reconciling ingress for inference service",
-		"isvc", isvc.Name,
-		"deploymentMode", deploymentMode)
+	mainLog := logf.FromContext(ctx)
 
 	// Check if ingress creation is disabled
 	if r.ingressConfig.DisableIngressCreation {
 		mainLog.Info("Ingress creation disabled, skipping ingress reconciliation", "isvc", isvc.Name)
+
+		// Set IngressReady to True since we're intentionally not creating ingress
+		// External service will be created as fallback for cluster access
+		mainLog.Info("Setting IngressReady condition to True with reason IngressDisabled", "isvc", isvc.Name)
+		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+			Type:    v1beta1.IngressReady,
+			Status:  corev1.ConditionTrue,
+			Reason:  "IngressDisabled",
+			Message: "Ingress creation is disabled, using external service for access",
+		})
+
+		mainLog.Info("Returning early from ingress reconciler due to disabled ingress creation", "isvc", isvc.Name)
 		return nil
 	}
 
@@ -90,36 +102,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, isvc *v1beta1.Inferen
 	// Determine deployment mode for ingress strategy selection
 	deploymentMode := r.getDeploymentMode(isvc, isvc.Spec.Engine, isvc.Spec.Decoder, isvc.Spec.Router)
 
-	mainLog.Info("Reconciling ingress for inference service",
-		"isvc", isvc.Name,
-		"deploymentMode", deploymentMode)
-
-	// Check if ingress creation is disabled
-	if r.ingressConfig.DisableIngressCreation {
-		mainLog.Info("Ingress creation disabled, skipping ingress reconciliation", "isvc", isvc.Name)
-		return nil
-	}
-
-	// Create reconciler options
-	opts := interfaces.ReconcilerOptions{
-		Client:        r.client,
-		Scheme:        r.scheme,
-		IngressConfig: r.ingressConfig,
-		IsvcConfig:    r.isvcConfig,
-	}
-
-	// Get the appropriate strategy
-	strategy, err := r.getStrategy(deploymentMode, opts)
-	if err != nil {
-		return fmt.Errorf("failed to get ingress strategy for deployment mode %s: %w", deploymentMode, err)
-	}
-
-	mainLog.Info("Using ingress strategy",
-		"strategy", strategy.GetName(),
-		"isvc", isvc.Name)
-
-	// Execute the strategy
-	return strategy.Reconcile(ctx, isvc)
+	return r.ReconcileWithDeploymentMode(ctx, isvc, deploymentMode)
 }
 
 // getDeploymentMode determines deployment mode using new spec-based logic

@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"knative.dev/pkg/apis"
 	knapis "knative.dev/pkg/apis"
@@ -122,6 +123,14 @@ func (g *GatewayAPIStrategy) reconcileComponentHTTPRoute(ctx context.Context, is
 		return err
 	}
 	if desired == nil {
+		// Set ingress condition to indicate component not ready
+		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+			Type:    v1beta1.IngressReady,
+			Status:  corev1.ConditionFalse,
+			Reason:  "ComponentNotReady",
+			Message: fmt.Sprintf("%s component not ready for HTTPRoute creation", componentType),
+		})
+		klog.Info("Builder returned nil HTTPRoute - component not ready", "isvc", isvc.Name, "component", componentType)
 		return nil
 	}
 

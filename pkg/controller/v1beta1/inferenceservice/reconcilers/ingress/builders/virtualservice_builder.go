@@ -48,23 +48,12 @@ func (b *VirtualServiceBuilder) Build(ctx context.Context, isvc *v1beta1.Inferen
 }
 
 func (b *VirtualServiceBuilder) BuildVirtualService(ctx context.Context, isvc *v1beta1.InferenceService, domainList *[]string) (client.Object, error) {
-	if !isvc.Status.IsConditionReady(v1beta1.PredictorReady) {
-		status := corev1.ConditionFalse
-		if isvc.Status.IsConditionUnknown(v1beta1.PredictorReady) {
-			status = corev1.ConditionUnknown
-		}
-		isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
-			Type:   v1beta1.IngressReady,
-			Status: status,
-			Reason: "Engine ingress not created",
-		})
-		return nil, nil
-	}
+	// Determine backend service based on component architecture
+	var backend string
 
-	backend := constants.PredictorServiceName(isvc.Name)
-
-	if isvc.Spec.Router != nil {
-		backend = constants.RouterServiceName(isvc.Name)
+	switch {
+	case isvc.Spec.Router != nil:
+		// Router takes priority - check router readiness
 		if !isvc.Status.IsConditionReady(v1beta1.RoutesReady) {
 			status := corev1.ConditionFalse
 			if isvc.Status.IsConditionUnknown(v1beta1.RoutesReady) {
@@ -77,6 +66,40 @@ func (b *VirtualServiceBuilder) BuildVirtualService(ctx context.Context, isvc *v
 			})
 			return nil, nil
 		}
+		backend = constants.RouterServiceName(isvc.Name)
+
+	case isvc.Spec.Decoder != nil:
+		// Decoder without router - check engine readiness since VirtualService routes to engine
+		if !isvc.Status.IsConditionReady(v1beta1.EngineReady) {
+			status := corev1.ConditionFalse
+			if isvc.Status.IsConditionUnknown(v1beta1.EngineReady) {
+				status = corev1.ConditionUnknown
+			}
+			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+				Type:   v1beta1.IngressReady,
+				Status: status,
+				Reason: "Engine ingress not created",
+			})
+			return nil, nil
+		}
+		// For serverless with decoder, still route to engine as the entrypoint
+		backend = constants.EngineServiceName(isvc.Name)
+
+	default:
+		// Engine only - check engine readiness
+		if !isvc.Status.IsConditionReady(v1beta1.EngineReady) {
+			status := corev1.ConditionFalse
+			if isvc.Status.IsConditionUnknown(v1beta1.EngineReady) {
+				status = corev1.ConditionUnknown
+			}
+			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
+				Type:   v1beta1.IngressReady,
+				Status: status,
+				Reason: "Engine ingress not created",
+			})
+			return nil, nil
+		}
+		backend = constants.EngineServiceName(isvc.Name)
 	}
 
 	isInternal := b.determineIfInternal(isvc)
