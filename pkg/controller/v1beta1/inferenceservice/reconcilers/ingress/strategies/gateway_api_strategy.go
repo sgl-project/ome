@@ -65,7 +65,7 @@ func (g *GatewayAPIStrategy) Reconcile(ctx context.Context, isvc *v1beta1.Infere
 	var err error
 	isInternal := false
 	// disable ingress creation if service is labelled with cluster local or kserve domain is cluster local
-	if val, ok := isvc.Labels[constants.NetworkVisibility]; ok && val == constants.ClusterLocalVisibility {
+	if val, ok := isvc.Labels[constants.VisibilityLabel]; ok && val == constants.ClusterLocalVisibility {
 		isInternal = true
 	}
 	if g.ingressConfig.IngressDomain == constants.ClusterLocalDomain {

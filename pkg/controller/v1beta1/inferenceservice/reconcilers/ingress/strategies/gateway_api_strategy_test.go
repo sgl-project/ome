@@ -497,7 +497,7 @@ func createTestInferenceServiceWithDecoderGateway(name, namespace string) *v1bet
 func createTestInferenceServiceWithClusterLocal(name, namespace string) *v1beta1.InferenceService {
 	isvc := createTestInferenceServiceGateway(name, namespace)
 	isvc.Labels = map[string]string{
-		constants.NetworkVisibility: constants.ClusterLocalVisibility,
+		constants.VisibilityLabel: constants.ClusterLocalVisibility,
 	}
 	return isvc
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/sgl-project/sgl-ome/pkg/constants"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/builders"
 	"github.com/sgl-project/sgl-ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"k8s.io/klog/v2"
 )
 
 // KubernetesIngressStrategy handles Kubernetes Ingress (raw deployment mode)
@@ -67,9 +68,11 @@ func (k *KubernetesIngressStrategy) Reconcile(ctx context.Context, isvc *v1beta1
 		// Use builder to create the ingress
 		desired, err := k.builder.BuildIngress(ctx, isvc)
 		if err != nil {
-			return err
+			return fmt.Errorf("builder error: %w", err)
 		}
 		if desired == nil {
+			// Log this case to understand why builder returns nil
+			klog.Info("Builder returned nil ingress - likely no target service found", "isvc", isvc.Name)
 			return nil
 		}
 
