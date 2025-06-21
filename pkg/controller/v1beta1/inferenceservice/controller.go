@@ -306,14 +306,14 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		// Determine the correct ingress deployment mode using the same logic as ingress reconciler
 		// but with the already-determined deployment modes to avoid inconsistency
-		ingressDeploymentMode := engineDeploymentMode  // default to engine
+		ingressDeploymentMode := engineDeploymentMode // default to engine
 		if mergedRouter != nil {
 			ingressDeploymentMode = routerDeploymentMode
 		} else if mergedDecoder != nil {
 			ingressDeploymentMode = decoderDeploymentMode
 		}
 
-		r.Log.Info("Determined ingress deployment mode", 
+		r.Log.Info("Determined ingress deployment mode",
 			"ingressDeploymentMode", ingressDeploymentMode,
 			"namespace", isvc.Namespace,
 			"inferenceService", isvc.Name)
