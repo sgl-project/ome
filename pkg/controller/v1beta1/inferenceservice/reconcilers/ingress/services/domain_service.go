@@ -17,6 +17,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 var log = logf.Log.WithName("DomainService")
@@ -74,16 +75,19 @@ func (d *DefaultDomainService) GenerateDomainName(name string, obj interface{}, 
 		return "", fmt.Errorf("unsupported object type for domain generation")
 	}
 
+	// Resolve effective ingress config with annotation overrides
+	effectiveConfig := utils.ResolveIngressConfig(ingressConfig, objMeta.Annotations)
+
 	values := DomainTemplateValues{
 		Name:          name,
 		Namespace:     objMeta.Namespace,
-		IngressDomain: ingressConfig.IngressDomain,
+		IngressDomain: effectiveConfig.IngressDomain,
 		Annotations:   objMeta.Annotations,
 		Labels:        objMeta.Labels,
 	}
 
 	// Use cached template instead of parsing every time
-	tpl, err := getTemplate(ingressConfig.DomainTemplate)
+	tpl, err := getTemplate(effectiveConfig.DomainTemplate)
 	if err != nil {
 		return "", err
 	}
@@ -179,4 +183,13 @@ func (d *DefaultDomainService) GetAdditionalHosts(domainList *[]string, serviceH
 	}
 
 	return additionalHosts
+}
+
+// GetAdditionalHostsWithAnnotations returns additional hosts with annotation override support
+func (d *DefaultDomainService) GetAdditionalHostsWithAnnotations(domainList *[]string, serviceHost string, config *controllerconfig.IngressConfig, annotations map[string]string) *[]string {
+	// Resolve effective ingress config with annotation overrides
+	effectiveConfig := utils.ResolveIngressConfig(config, annotations)
+
+	// Use the standard method with the effective config
+	return d.GetAdditionalHosts(domainList, serviceHost, effectiveConfig)
 }

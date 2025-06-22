@@ -130,6 +130,15 @@ var (
 	QueueProxyAggregatePrometheusMetricsPort = 9088
 	DefaultPodPrometheusPort                 = "9091"
 	ModelCategoryAnnotation                  = "models.ome.io/category"
+
+	// Ingress Configuration Overrides
+	IngressDomainTemplate          = OMEAPIGroupName + "/ingress-domain-template"
+	IngressDomain                  = OMEAPIGroupName + "/ingress-domain"
+	IngressAdditionalDomains       = OMEAPIGroupName + "/ingress-additional-domains"
+	IngressURLScheme               = OMEAPIGroupName + "/ingress-url-scheme"
+	IngressPathTemplate            = OMEAPIGroupName + "/ingress-path-template"
+	IngressDisableIstioVirtualHost = OMEAPIGroupName + "/ingress-disable-istio-virtualhost"
+	IngressDisableCreation         = OMEAPIGroupName + "/ingress-disable-creation"
 )
 
 // InferenceService Annotations for model encryption and decryption

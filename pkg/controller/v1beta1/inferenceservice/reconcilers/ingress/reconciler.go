@@ -75,11 +75,14 @@ func (r *IngressReconciler) ReconcileWithDeploymentMode(ctx context.Context, isv
 		return nil
 	}
 
+	// Resolve ingress config with annotation overrides
+	resolvedIngressConfig := isvcutils.ResolveIngressConfig(r.ingressConfig, isvc.Annotations)
+
 	// Create reconciler options
 	opts := interfaces.ReconcilerOptions{
 		Client:        r.client,
 		Scheme:        r.scheme,
-		IngressConfig: r.ingressConfig,
+		IngressConfig: resolvedIngressConfig,
 		IsvcConfig:    r.isvcConfig,
 	}
 
