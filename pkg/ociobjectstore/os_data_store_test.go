@@ -125,8 +125,8 @@ func TestOCIOSDefaultDownloadOptions(t *testing.T) {
 	opts := DefaultDownloadOptions()
 
 	assert.Equal(t, defaultThresholdMB, opts.SizeThresholdInMB)
-	assert.Equal(t, 8, opts.ChunkSizeInMB)
-	assert.Equal(t, 100, opts.Threads)
+	assert.Equal(t, 32, opts.ChunkSizeInMB)
+	assert.Equal(t, 16, opts.Threads)
 	assert.False(t, opts.StripPrefix)
 	assert.False(t, opts.ForceStandard)
 	assert.False(t, opts.ForceMultipart)
@@ -490,8 +490,8 @@ func TestDownloadOptionsStruct(t *testing.T) {
 		opts := DefaultDownloadOptions()
 
 		assert.Equal(t, defaultThresholdMB, opts.SizeThresholdInMB)
-		assert.Equal(t, 8, opts.ChunkSizeInMB)
-		assert.Equal(t, 100, opts.Threads)
+		assert.Equal(t, 32, opts.ChunkSizeInMB)
+		assert.Equal(t, 16, opts.Threads)
 		assert.False(t, opts.StripPrefix)
 		assert.False(t, opts.ForceStandard)
 		assert.False(t, opts.ForceMultipart)
@@ -517,7 +517,7 @@ func TestDownloadOptionsStruct(t *testing.T) {
 
 		result := applyDownloadDefaults(opts)
 		assert.Equal(t, 200, result.SizeThresholdInMB)
-		assert.Equal(t, 8, result.ChunkSizeInMB) // Default value
+		assert.Equal(t, 32, result.ChunkSizeInMB) // Default value
 		assert.Equal(t, 50, result.Threads)
 	})
 }

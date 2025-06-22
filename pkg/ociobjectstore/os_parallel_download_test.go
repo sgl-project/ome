@@ -1,9 +1,11 @@
 package ociobjectstore
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSplitToParts(t *testing.T) {
@@ -90,32 +92,47 @@ func TestSplitToParts(t *testing.T) {
 
 func TestDownloadedPart(t *testing.T) {
 	t.Run("Create DownloadedPart", func(t *testing.T) {
+		// Create a temporary file for testing
+		tempFile, err := os.CreateTemp("", "test_download_part_*.tmp")
+		require.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		testContent := []byte("test content")
+		_, err = tempFile.Write(testContent)
+		require.NoError(t, err)
+		tempFile.Close()
+
 		part := &DownloadedPart{
-			size:     1024,
-			partBody: []byte("test content"),
-			offset:   0,
-			partNum:  1,
-			err:      nil,
+			size:         1024,
+			tempFilePath: tempFile.Name(),
+			offset:       0,
+			partNum:      1,
+			err:          nil,
 		}
 
 		assert.Equal(t, int64(1024), part.size)
-		assert.Equal(t, []byte("test content"), part.partBody)
+		assert.Equal(t, tempFile.Name(), part.tempFilePath)
 		assert.Equal(t, int64(0), part.offset)
 		assert.Equal(t, 1, part.partNum)
 		assert.NoError(t, part.err)
+
+		// Verify temp file contains expected content
+		data, err := os.ReadFile(part.tempFilePath)
+		require.NoError(t, err)
+		assert.Equal(t, testContent, data)
 	})
 
 	t.Run("DownloadedPart with error", func(t *testing.T) {
 		part := &DownloadedPart{
-			size:     0,
-			partBody: nil,
-			offset:   0,
-			partNum:  1,
-			err:      assert.AnError,
+			size:         0,
+			tempFilePath: "",
+			offset:       0,
+			partNum:      1,
+			err:          assert.AnError,
 		}
 
 		assert.Equal(t, int64(0), part.size)
-		assert.Nil(t, part.partBody)
+		assert.Equal(t, "", part.tempFilePath)
 		assert.Error(t, part.err)
 	})
 }
