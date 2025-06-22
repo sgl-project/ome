@@ -18,11 +18,12 @@ import (
 
 // RBACReconciler reconciles RBAC resources for components
 type RBACReconciler struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	objectMeta    metav1.ObjectMeta
-	componentType v1beta1.ComponentType
-	Log           logr.Logger
+	client           client.Client
+	scheme           *runtime.Scheme
+	objectMeta       metav1.ObjectMeta
+	componentType    v1beta1.ComponentType
+	inferenceService string
+	Log              logr.Logger
 }
 
 // NewRBACReconciler creates a new RBAC reconciler
@@ -31,13 +32,15 @@ func NewRBACReconciler(
 	scheme *runtime.Scheme,
 	objectMeta metav1.ObjectMeta,
 	componentType v1beta1.ComponentType,
+	inferenceService string,
 ) *RBACReconciler {
 	return &RBACReconciler{
-		client:        client,
-		scheme:        scheme,
-		objectMeta:    objectMeta,
-		componentType: componentType,
-		Log:           ctrl.Log.WithName("RBACReconciler"),
+		client:           client,
+		scheme:           scheme,
+		objectMeta:       objectMeta,
+		componentType:    componentType,
+		inferenceService: inferenceService,
+		Log:              ctrl.Log.WithName("RBACReconciler"),
 	}
 }
 
@@ -45,10 +48,12 @@ func NewRBACReconciler(
 func (r *RBACReconciler) Reconcile() error {
 	r.Log.Info("Reconciling RBAC resources", "name", r.objectMeta.Name, "namespace", r.objectMeta.Namespace, "component", r.componentType)
 
+	serviceAccountName := r.GetServiceAccountName()
+
 	// Create ServiceAccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.objectMeta.Name,
+			Name:      serviceAccountName,
 			Namespace: r.objectMeta.Namespace,
 			Labels:    r.objectMeta.Labels,
 		},
@@ -66,10 +71,11 @@ func (r *RBACReconciler) Reconcile() error {
 
 	// Only create Role and RoleBinding for Router component
 	if r.componentType == v1beta1.RouterComponent {
+		roleName := serviceAccountName
 		// Create Role
 		role := &rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.objectMeta.Name,
+				Name:      roleName,
 				Namespace: r.objectMeta.Namespace,
 				Labels:    r.objectMeta.Labels,
 			},
@@ -95,19 +101,19 @@ func (r *RBACReconciler) Reconcile() error {
 		// Create RoleBinding
 		roleBinding := &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      r.objectMeta.Name,
+				Name:      roleName,
 				Namespace: r.objectMeta.Namespace,
 				Labels:    r.objectMeta.Labels,
 			},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
 				Kind:     "Role",
-				Name:     r.objectMeta.Name,
+				Name:     roleName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      r.objectMeta.Name,
+					Name:      serviceAccountName,
 					Namespace: r.objectMeta.Namespace,
 				},
 			},
@@ -128,9 +134,9 @@ func (r *RBACReconciler) Reconcile() error {
 	return nil
 }
 
-// GetServiceAccountName returns the name of the ServiceAccount
+// GetServiceAccountName returns the name of the ServiceAccount using inference service name + component name
 func (r *RBACReconciler) GetServiceAccountName() string {
-	return r.objectMeta.Name
+	return fmt.Sprintf("%s-%s", r.inferenceService, string(r.componentType))
 }
 
 // createOrUpdate creates or updates a Kubernetes resource
