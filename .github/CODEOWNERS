@@ -1,0 +1,17 @@
+# This is a GitHub CODEOWNERS file that defines individuals or teams responsible for code in this repository.
+# For more information, see: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# These owners will be the default owners for everything in the repo
+# unless a later match takes precedence
+*       @slin1237
+
+# Config files
+/config/  @slin1237 @CatherineSue @zhyncs
+
+# Core Go packages
+/pkg/controller/v1beta1/benchmark   @CatherineSue
+/pkg/controller/v1beta1/inferenceservice @slin1237 @CatherineSue @YouNeedCryDear
+/pkg/principals   @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
+/pkg/ociobjectstore @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
+/pkg/vault @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
+/pkg/modelagent @slin1237 @pallasathena92
