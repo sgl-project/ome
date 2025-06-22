@@ -157,16 +157,7 @@ func (e *Engine) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 
 // updateEngineStatus updates the status of the engine
 func (e *Engine) updateEngineStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	rawDeployment := e.DeploymentMode == constants.RawDeployment
-	statusSpec := isvc.Status.Components[v1beta1.EngineComponent]
-	podLabelKey, podLabelValue := e.getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
-
-	enginePods, err := isvcutils.ListPodsByLabel(e.Client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
-	if err != nil {
-		return errors.Wrapf(err, "failed to list engine pods by label")
-	}
-	e.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, enginePods, rawDeployment)
-	return nil
+	return UpdateComponentStatus(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, objectMeta, e.getPodLabelInfo)
 }
 
 // getPodLabelInfo returns the pod label key and value based on the deployment mode

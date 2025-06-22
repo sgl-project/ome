@@ -496,8 +496,8 @@ func setEngineReadyIngress(isvc *v1beta1.InferenceService) {
 }
 
 func setRouterReadyIngress(isvc *v1beta1.InferenceService) {
-	isvc.Status.SetCondition(v1beta1.RoutesReady, &knativeapis.Condition{
-		Type:   v1beta1.RoutesReady,
+	isvc.Status.SetCondition(v1beta1.RouterReady, &knativeapis.Condition{
+		Type:   v1beta1.RouterReady,
 		Status: corev1.ConditionTrue,
 	})
 }

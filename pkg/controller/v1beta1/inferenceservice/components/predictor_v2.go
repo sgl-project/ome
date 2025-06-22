@@ -300,15 +300,13 @@ func (p *PredictorV2) reconcileDeployment(isvc *v1beta1.InferenceService, object
 
 // updatePredictorStatus updates the status of the predictor
 func (p *PredictorV2) updatePredictorStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	rawDeployment := p.DeploymentMode == constants.RawDeployment
-	statusSpec := isvc.Status.Components[v1beta1.PredictorComponent]
-	podLabelKey, podLabelValue := p.getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
+	podLabelKey, podLabelValue := p.getPodLabelInfo(p.DeploymentMode == constants.RawDeployment, objectMeta, isvc.Status.Components[v1beta1.PredictorComponent])
 
 	predictorPods, err := isvcutils.ListPodsByLabel(p.Client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
 	if err != nil {
 		return errors.Wrapf(err, "failed to list predictor pods by label")
 	}
-	p.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, predictorPods, rawDeployment)
+	p.StatusManager.PropagateModelStatus(&isvc.Status, isvc.Status.Components[v1beta1.PredictorComponent], predictorPods, p.DeploymentMode == constants.RawDeployment)
 	return nil
 }
 

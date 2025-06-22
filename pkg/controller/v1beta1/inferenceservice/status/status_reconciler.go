@@ -56,12 +56,26 @@ func (sm *StatusReconciler) PropagateMultiNodeStatus(
 	statusSpec := sm.initializeComponentStatus(status, component)
 
 	statusSpec.LatestCreatedRevision = lws.GetObjectMeta().GetAnnotations()["resourceVersion"]
-	condition := sm.getLWSConditions(lws, lwsspec.LeaderWorkerSetAvailable)
-	if condition != nil && condition.Status == v1.ConditionTrue {
+	lwsCondition := sm.getLWSConditions(lws, lwsspec.LeaderWorkerSetAvailable)
+	if lwsCondition != nil && lwsCondition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
 	}
+
 	readyCondition := sm.getReadyConditionsMap()[component]
-	sm.setCondition(status, readyCondition, condition)
+
+	// Create a new condition with the correct component ready condition type
+	// instead of using the LWS condition type directly
+	if lwsCondition != nil {
+		componentCondition := &apis.Condition{
+			Type:               readyCondition,
+			Status:             lwsCondition.Status,
+			Message:            lwsCondition.Message,
+			Reason:             lwsCondition.Reason,
+			LastTransitionTime: lwsCondition.LastTransitionTime,
+		}
+		sm.setCondition(status, readyCondition, componentCondition)
+	}
+
 	status.Components[component] = statusSpec
 	status.ObservedGeneration = lws.Generation
 }

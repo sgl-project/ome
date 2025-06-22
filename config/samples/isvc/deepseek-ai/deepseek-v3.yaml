@@ -16,8 +16,8 @@ spec:
     name: deepseek-v3
   # runtime is optional, if not specified, the controller will automatically select a compatible runtime
   # otherwise, please ensure that the runtime is compatible with the model and actually exists
-  runtime:
-    name: srt-deepseek-rdma
+#  runtime:
+#    name: srt-deepseek-rdma
   engine:
     minReplicas: 1
     maxReplicas: 1

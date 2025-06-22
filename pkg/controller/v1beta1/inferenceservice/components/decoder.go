@@ -156,16 +156,7 @@ func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta
 
 // updateDecoderStatus updates the status of the decoder
 func (d *Decoder) updateDecoderStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	rawDeployment := d.DeploymentMode != constants.MultiNode
-	statusSpec := isvc.Status.Components[v1beta1.DecoderComponent]
-	podLabelKey, podLabelValue := d.getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
-
-	decoderPods, err := isvcutils.ListPodsByLabel(d.Client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
-	if err != nil {
-		return errors.Wrapf(err, "failed to list decoder pods by label")
-	}
-	d.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, decoderPods, rawDeployment)
-	return nil
+	return UpdateComponentStatus(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, objectMeta, d.getPodLabelInfo)
 }
 
 // getPodLabelInfo returns the pod label key and value based on the deployment mode
