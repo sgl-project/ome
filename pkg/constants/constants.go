@@ -603,11 +603,28 @@ func LWSName(isvcName string) string {
 }
 
 func InferenceServiceHostName(name string, namespace string, domain string) string {
-	return fmt.Sprintf("%s.%s.%s", name, namespace, domain)
+	var builder strings.Builder
+	// Pre-allocate capacity: name + "." + namespace + "." + domain
+	builder.Grow(len(name) + len(namespace) + len(domain) + 2)
+	builder.WriteString(name)
+	builder.WriteByte('.')
+	builder.WriteString(namespace)
+	builder.WriteByte('.')
+	builder.WriteString(domain)
+	return builder.String()
 }
 
 func DefaultPredictorServiceName(name string) string {
-	return name + "-" + string(Predictor) + "-" + InferenceServiceDefault
+	var builder strings.Builder
+	predictorStr := string(Predictor)
+	// Pre-allocate capacity: name + "-" + predictorStr + "-" + InferenceServiceDefault
+	builder.Grow(len(name) + len(predictorStr) + len(InferenceServiceDefault) + 2)
+	builder.WriteString(name)
+	builder.WriteByte('-')
+	builder.WriteString(predictorStr)
+	builder.WriteByte('-')
+	builder.WriteString(InferenceServiceDefault)
+	return builder.String()
 }
 
 func PredictorServiceName(name string) string {
