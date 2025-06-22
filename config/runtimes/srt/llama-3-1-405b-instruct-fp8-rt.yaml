@@ -108,8 +108,31 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: fra.ocir.io/idqj093njucb/sgl-router:0.1.4
+      image: fra.ocir.io/idqj093njucb/sgl-router:dev2
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
       ports:
-      - containerPort: 8080
-        name: http
-      args: ["--host", "0.0.0.0", "--port", "8080"]
+        - containerPort: 8080
+          name: http
+      command:
+        - sh
+        - -c
+        - >
+          python3 -m sglang_router.launch_router
+          --host "0.0.0.0"
+          --port "8080"
+          --service-discovery
+          --service-discovery-namespace "${NAMESPACE}"
+          --service-discovery-port 8080
+          --selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
