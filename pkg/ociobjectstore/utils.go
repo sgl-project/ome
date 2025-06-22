@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // ObjectBaseName returns only the file name from a given object path.
@@ -33,6 +33,39 @@ func TrimObjectPrefix(objectPath string, prefix string) string {
 	return strings.Replace(objectPath, prefix, "", 1) // Remove only the first occurrence
 }
 
+// BufferPool provides reusable buffers to reduce memory allocations
+var BufferPool = sync.Pool{
+	New: func() interface{} {
+		// Use 1MB buffer by default instead of 8MB
+		return make([]byte, 1024*1024)
+	},
+}
+
+// LargeBufferPool for files > 10MB
+var LargeBufferPool = sync.Pool{
+	New: func() interface{} {
+		// 4MB buffer for large files
+		return make([]byte, 4*1024*1024)
+	},
+}
+
+// getOptimalBuffer returns the best buffer size based on file size
+func getOptimalBuffer(fileSize int64) []byte {
+	if fileSize > 10*1024*1024 { // > 10MB
+		return LargeBufferPool.Get().([]byte)
+	}
+	return BufferPool.Get().([]byte)
+}
+
+// returnBuffer returns buffer to appropriate pool
+func returnBuffer(buf []byte, fileSize int64) {
+	if fileSize > 10*1024*1024 {
+		LargeBufferPool.Put(buf)
+	} else {
+		BufferPool.Put(buf)
+	}
+}
+
 // CopyByFilePath copies a file from sourceFilePath to targetFilePath.
 // It returns an error if the source file cannot be opened, the target file
 // cannot be created, or the copy operation fails.
@@ -43,14 +76,23 @@ func CopyByFilePath(sourceFilePath string, targetFilePath string) error {
 	}
 	defer sourceFile.Close()
 
+	// Get file size for optimal buffer selection
+	sourceInfo, err := sourceFile.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get source file info %s: %s", sourceFilePath, err.Error())
+	}
+	fileSize := sourceInfo.Size()
+
 	targetFile, err := os.Create(targetFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to create target file %s: %s", targetFilePath, err.Error())
 	}
 	defer targetFile.Close()
 
-	// Use a large buffer (8MB) for optimal performance
-	buf := make([]byte, 8*1024*1024)
+	// Use optimal buffer size and pool it
+	buf := getOptimalBuffer(fileSize)
+	defer returnBuffer(buf, fileSize)
+
 	if _, err = io.CopyBuffer(targetFile, sourceFile, buf); err != nil {
 		return fmt.Errorf("failed to copy source file %s to target path %s: %s", sourceFilePath, targetFilePath, err.Error())
 	}
@@ -63,7 +105,7 @@ func CopyByFilePath(sourceFilePath string, targetFilePath string) error {
 
 // CopyReaderToFilePath copies content from an io.Reader into the file at targetFilePath.
 // It creates the target file and parent directories if they don't exist.
-// Uses a large buffer (8MB) for optimal performance with large files.
+// Uses a pooled buffer for optimal performance and memory efficiency.
 // Ensures data is synced to disk and cleans up partial files on failure.
 func CopyReaderToFilePath(source io.Reader, targetFilePath string) error {
 	targetFile, err := os.Create(targetFilePath)
@@ -72,8 +114,10 @@ func CopyReaderToFilePath(source io.Reader, targetFilePath string) error {
 	}
 	defer targetFile.Close()
 
-	// Use a large buffer (8MB) for optimal performance
-	buf := make([]byte, 8*1024*1024)
+	// Use default buffer from pool (we don't know size ahead of time)
+	buf := BufferPool.Get().([]byte)
+	defer BufferPool.Put(buf)
+
 	if _, err = io.CopyBuffer(targetFile, source, buf); err != nil {
 		return fmt.Errorf("failed to copy source to target path %s: %s", targetFilePath, err.Error())
 	}
@@ -84,22 +128,24 @@ func CopyReaderToFilePath(source io.Reader, targetFilePath string) error {
 	return nil
 }
 
+// JoinWithTailOverlap combines directoryPath and objectPath with overlap.
 func JoinWithTailOverlap(directoryPath, objectPath string) string {
-	dirParts := strings.Split(strings.Trim(path.Clean(directoryPath), "/"), "/")
-	objParts := strings.Split(strings.Trim(path.Clean(objectPath), "/"), "/")
+	dirParts := strings.Split(strings.Trim(filepath.Clean(directoryPath), "/"), "/")
+	objParts := strings.Split(strings.Trim(filepath.Clean(objectPath), "/"), "/")
 
 	// Find the longest overlap between dirParts suffix and objParts prefix
 	for l := min(len(dirParts), len(objParts)); l > 0; l-- {
 		if slicesEqual(dirParts[len(dirParts)-l:], objParts[:l]) {
 			combined := append(dirParts, objParts[l:]...)
-			return "/" + path.Join(combined...)
+			return "/" + filepath.Join(combined...)
 		}
 	}
 
 	// No overlap found
-	return "/" + path.Join(append(dirParts, objParts...)...)
+	return "/" + filepath.Join(append(dirParts, objParts...)...)
 }
 
+// ComputeTargetFilePath computes the target file path for a given source object and options.
 func ComputeTargetFilePath(source ObjectURI, target string, opts *DownloadOptions) string {
 	// Handle nil options by using default behavior
 	if opts == nil {
@@ -116,6 +162,7 @@ func ComputeTargetFilePath(source ObjectURI, target string, opts *DownloadOption
 	return filepath.Join(target, source.ObjectName)
 }
 
+// slicesEqual checks if two slices are equal.
 func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -126,4 +173,12 @@ func slicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

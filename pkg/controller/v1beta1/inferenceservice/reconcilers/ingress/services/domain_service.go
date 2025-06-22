@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
@@ -20,6 +21,9 @@ import (
 
 var log = logf.Log.WithName("DomainService")
 
+// Template cache to avoid parsing the same template repeatedly
+var templateCache = sync.Map{}
+
 // DefaultDomainService implements DomainService interface
 type DefaultDomainService struct{}
 
@@ -34,6 +38,27 @@ type DomainTemplateValues struct {
 	IngressDomain string
 	Annotations   map[string]string
 	Labels        map[string]string
+}
+
+// getTemplate retrieves a cached template or creates and caches a new one
+func getTemplate(templateStr string) (*template.Template, error) {
+	if cached, ok := templateCache.Load(templateStr); ok {
+		return cached.(*template.Template), nil
+	}
+
+	tpl, err := template.New("domain-template").Parse(templateStr)
+	if err != nil {
+		return nil, err
+	}
+
+	templateCache.Store(templateStr, tpl)
+	return tpl, nil
+}
+
+// estimateBufferSize estimates the buffer capacity needed for domain generation
+func estimateBufferSize(values *DomainTemplateValues) int {
+	// Conservative estimate: name + namespace + ingressDomain + some separators and template overhead
+	return len(values.Name) + len(values.Namespace) + len(values.IngressDomain) + 32
 }
 
 // GenerateDomainName generates domain name using template configured in IngressConfig
@@ -57,12 +82,16 @@ func (d *DefaultDomainService) GenerateDomainName(name string, obj interface{}, 
 		Labels:        objMeta.Labels,
 	}
 
-	tpl, err := template.New("domain-template").Parse(ingressConfig.DomainTemplate)
+	// Use cached template instead of parsing every time
+	tpl, err := getTemplate(ingressConfig.DomainTemplate)
 	if err != nil {
 		return "", err
 	}
 
-	buf := bytes.Buffer{}
+	// Pre-allocate buffer with estimated capacity
+	var buf bytes.Buffer
+	buf.Grow(estimateBufferSize(&values))
+
 	if err := tpl.Execute(&buf, values); err != nil {
 		return "", fmt.Errorf("error rendering the domain template: %w", err)
 	}
@@ -96,12 +125,16 @@ func (d *DefaultDomainService) GenerateInternalDomainName(name string, obj inter
 		Labels:        objMeta.Labels,
 	}
 
-	tpl, err := template.New("domain-template").Parse(ingressConfig.DomainTemplate)
+	// Use cached template instead of parsing every time
+	tpl, err := getTemplate(ingressConfig.DomainTemplate)
 	if err != nil {
 		return "", err
 	}
 
-	buf := bytes.Buffer{}
+	// Pre-allocate buffer with estimated capacity
+	var buf bytes.Buffer
+	buf.Grow(estimateBufferSize(&values))
+
 	if err := tpl.Execute(&buf, values); err != nil {
 		return "", fmt.Errorf("error rendering the domain template: %w", err)
 	}
