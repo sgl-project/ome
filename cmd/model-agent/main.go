@@ -184,6 +184,7 @@ func setupInformers(omeClient *omev1beta1client.Clientset) (omev1beta1informers.
 
 // initializeComponents creates and initializes all the model agent components
 func initializeComponents(
+	ctx context.Context,
 	kubeClient *kubernetes.Clientset,
 	omeClient *omev1beta1client.Clientset,
 	omeInformerFactory omev1beta1informers.SharedInformerFactory,
@@ -208,6 +209,7 @@ func initializeComponents(
 	clusterBaseModelInformer := omeInformerFactory.Ome().V1beta1().ClusterBaseModels()
 
 	scout, err := modelagent.NewScout(
+		ctx,
 		cfg.nodeName,
 		baseModelInformer,
 		clusterBaseModelInformer,
@@ -301,6 +303,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 
 	// Initialize components
 	scout, gopher, err := initializeComponents(
+		ctx,
 		kubeClient,
 		omeClient,
 		omeInformerFactory,

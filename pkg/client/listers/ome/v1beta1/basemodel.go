@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // BaseModelLister helps list BaseModels.
@@ -14,7 +14,7 @@ import (
 type BaseModelLister interface {
 	// List lists all BaseModels in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.BaseModel, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.BaseModel, err error)
 	// BaseModels returns an object that can list and get BaseModels.
 	BaseModels(namespace string) BaseModelNamespaceLister
 	BaseModelListerExpansion
@@ -22,17 +22,17 @@ type BaseModelLister interface {
 
 // baseModelLister implements the BaseModelLister interface.
 type baseModelLister struct {
-	listers.ResourceIndexer[*v1beta1.BaseModel]
+	listers.ResourceIndexer[*omev1beta1.BaseModel]
 }
 
 // NewBaseModelLister returns a new BaseModelLister.
 func NewBaseModelLister(indexer cache.Indexer) BaseModelLister {
-	return &baseModelLister{listers.New[*v1beta1.BaseModel](indexer, v1beta1.Resource("basemodel"))}
+	return &baseModelLister{listers.New[*omev1beta1.BaseModel](indexer, omev1beta1.Resource("basemodel"))}
 }
 
 // BaseModels returns an object that can list and get BaseModels.
 func (s *baseModelLister) BaseModels(namespace string) BaseModelNamespaceLister {
-	return baseModelNamespaceLister{listers.NewNamespaced[*v1beta1.BaseModel](s.ResourceIndexer, namespace)}
+	return baseModelNamespaceLister{listers.NewNamespaced[*omev1beta1.BaseModel](s.ResourceIndexer, namespace)}
 }
 
 // BaseModelNamespaceLister helps list and get BaseModels.
@@ -40,15 +40,15 @@ func (s *baseModelLister) BaseModels(namespace string) BaseModelNamespaceLister 
 type BaseModelNamespaceLister interface {
 	// List lists all BaseModels in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.BaseModel, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.BaseModel, err error)
 	// Get retrieves the BaseModel from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.BaseModel, error)
+	Get(name string) (*omev1beta1.BaseModel, error)
 	BaseModelNamespaceListerExpansion
 }
 
 // baseModelNamespaceLister implements the BaseModelNamespaceLister
 // interface.
 type baseModelNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.BaseModel]
+	listers.ResourceIndexer[*omev1beta1.BaseModel]
 }

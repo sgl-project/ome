@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	versioned "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // FineTunedWeights.
 type FineTunedWeightInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.FineTunedWeightLister
+	Lister() omev1beta1.FineTunedWeightLister
 }
 
 type fineTunedWeightInformer struct {
@@ -45,16 +45,28 @@ func NewFilteredFineTunedWeightInformer(client versioned.Interface, resyncPeriod
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().FineTunedWeights().List(context.TODO(), options)
+				return client.OmeV1beta1().FineTunedWeights().List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().FineTunedWeights().Watch(context.TODO(), options)
+				return client.OmeV1beta1().FineTunedWeights().Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().FineTunedWeights().List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().FineTunedWeights().Watch(ctx, options)
 			},
 		},
-		&omev1beta1.FineTunedWeight{},
+		&apisomev1beta1.FineTunedWeight{},
 		resyncPeriod,
 		indexers,
 	)
@@ -65,9 +77,9 @@ func (f *fineTunedWeightInformer) defaultInformer(client versioned.Interface, re
 }
 
 func (f *fineTunedWeightInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.FineTunedWeight{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.FineTunedWeight{}, f.defaultInformer)
 }
 
-func (f *fineTunedWeightInformer) Lister() v1beta1.FineTunedWeightLister {
-	return v1beta1.NewFineTunedWeightLister(f.Informer().GetIndexer())
+func (f *fineTunedWeightInformer) Lister() omev1beta1.FineTunedWeightLister {
+	return omev1beta1.NewFineTunedWeightLister(f.Informer().GetIndexer())
 }

@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	scheme "github.com/sgl-project/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type ClusterBaseModelsGetter interface {
 
 // ClusterBaseModelInterface has methods to work with ClusterBaseModel resources.
 type ClusterBaseModelInterface interface {
-	Create(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.CreateOptions) (*v1beta1.ClusterBaseModel, error)
-	Update(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (*v1beta1.ClusterBaseModel, error)
+	Create(ctx context.Context, clusterBaseModel *omev1beta1.ClusterBaseModel, opts v1.CreateOptions) (*omev1beta1.ClusterBaseModel, error)
+	Update(ctx context.Context, clusterBaseModel *omev1beta1.ClusterBaseModel, opts v1.UpdateOptions) (*omev1beta1.ClusterBaseModel, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, clusterBaseModel *v1beta1.ClusterBaseModel, opts v1.UpdateOptions) (*v1beta1.ClusterBaseModel, error)
+	UpdateStatus(ctx context.Context, clusterBaseModel *omev1beta1.ClusterBaseModel, opts v1.UpdateOptions) (*omev1beta1.ClusterBaseModel, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.ClusterBaseModel, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.ClusterBaseModelList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.ClusterBaseModel, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.ClusterBaseModelList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ClusterBaseModel, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.ClusterBaseModel, err error)
 	ClusterBaseModelExpansion
 }
 
 // clusterBaseModels implements ClusterBaseModelInterface
 type clusterBaseModels struct {
-	*gentype.ClientWithList[*v1beta1.ClusterBaseModel, *v1beta1.ClusterBaseModelList]
+	*gentype.ClientWithList[*omev1beta1.ClusterBaseModel, *omev1beta1.ClusterBaseModelList]
 }
 
 // newClusterBaseModels returns a ClusterBaseModels
 func newClusterBaseModels(c *OmeV1beta1Client) *clusterBaseModels {
 	return &clusterBaseModels{
-		gentype.NewClientWithList[*v1beta1.ClusterBaseModel, *v1beta1.ClusterBaseModelList](
+		gentype.NewClientWithList[*omev1beta1.ClusterBaseModel, *omev1beta1.ClusterBaseModelList](
 			"clusterbasemodels",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			"",
-			func() *v1beta1.ClusterBaseModel { return &v1beta1.ClusterBaseModel{} },
-			func() *v1beta1.ClusterBaseModelList { return &v1beta1.ClusterBaseModelList{} }),
+			func() *omev1beta1.ClusterBaseModel { return &omev1beta1.ClusterBaseModel{} },
+			func() *omev1beta1.ClusterBaseModelList { return &omev1beta1.ClusterBaseModelList{} },
+		),
 	}
 }

@@ -3,129 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeBenchmarkJobs implements BenchmarkJobInterface
-type FakeBenchmarkJobs struct {
+// fakeBenchmarkJobs implements BenchmarkJobInterface
+type fakeBenchmarkJobs struct {
+	*gentype.FakeClientWithList[*v1beta1.BenchmarkJob, *v1beta1.BenchmarkJobList]
 	Fake *FakeOmeV1beta1
-	ns   string
 }
 
-var benchmarkjobsResource = v1beta1.SchemeGroupVersion.WithResource("benchmarkjobs")
-
-var benchmarkjobsKind = v1beta1.SchemeGroupVersion.WithKind("BenchmarkJob")
-
-// Get takes name of the benchmarkJob, and returns the corresponding benchmarkJob object, and an error if there is any.
-func (c *FakeBenchmarkJobs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.BenchmarkJob, err error) {
-	emptyResult := &v1beta1.BenchmarkJob{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(benchmarkjobsResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeBenchmarkJobs(fake *FakeOmeV1beta1, namespace string) omev1beta1.BenchmarkJobInterface {
+	return &fakeBenchmarkJobs{
+		gentype.NewFakeClientWithList[*v1beta1.BenchmarkJob, *v1beta1.BenchmarkJobList](
+			fake.Fake,
+			namespace,
+			v1beta1.SchemeGroupVersion.WithResource("benchmarkjobs"),
+			v1beta1.SchemeGroupVersion.WithKind("BenchmarkJob"),
+			func() *v1beta1.BenchmarkJob { return &v1beta1.BenchmarkJob{} },
+			func() *v1beta1.BenchmarkJobList { return &v1beta1.BenchmarkJobList{} },
+			func(dst, src *v1beta1.BenchmarkJobList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.BenchmarkJobList) []*v1beta1.BenchmarkJob {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.BenchmarkJobList, items []*v1beta1.BenchmarkJob) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.BenchmarkJob), err
-}
-
-// List takes label and field selectors, and returns the list of BenchmarkJobs that match those selectors.
-func (c *FakeBenchmarkJobs) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.BenchmarkJobList, err error) {
-	emptyResult := &v1beta1.BenchmarkJobList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(benchmarkjobsResource, benchmarkjobsKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.BenchmarkJobList{ListMeta: obj.(*v1beta1.BenchmarkJobList).ListMeta}
-	for _, item := range obj.(*v1beta1.BenchmarkJobList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested benchmarkJobs.
-func (c *FakeBenchmarkJobs) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(benchmarkjobsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a benchmarkJob and creates it.  Returns the server's representation of the benchmarkJob, and an error, if there is any.
-func (c *FakeBenchmarkJobs) Create(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, opts v1.CreateOptions) (result *v1beta1.BenchmarkJob, err error) {
-	emptyResult := &v1beta1.BenchmarkJob{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(benchmarkjobsResource, c.ns, benchmarkJob, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.BenchmarkJob), err
-}
-
-// Update takes the representation of a benchmarkJob and updates it. Returns the server's representation of the benchmarkJob, and an error, if there is any.
-func (c *FakeBenchmarkJobs) Update(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, opts v1.UpdateOptions) (result *v1beta1.BenchmarkJob, err error) {
-	emptyResult := &v1beta1.BenchmarkJob{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(benchmarkjobsResource, c.ns, benchmarkJob, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.BenchmarkJob), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeBenchmarkJobs) UpdateStatus(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, opts v1.UpdateOptions) (result *v1beta1.BenchmarkJob, err error) {
-	emptyResult := &v1beta1.BenchmarkJob{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(benchmarkjobsResource, "status", c.ns, benchmarkJob, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.BenchmarkJob), err
-}
-
-// Delete takes name of the benchmarkJob and deletes it. Returns an error if one occurs.
-func (c *FakeBenchmarkJobs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(benchmarkjobsResource, c.ns, name, opts), &v1beta1.BenchmarkJob{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeBenchmarkJobs) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(benchmarkjobsResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.BenchmarkJobList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched benchmarkJob.
-func (c *FakeBenchmarkJobs) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.BenchmarkJob, err error) {
-	emptyResult := &v1beta1.BenchmarkJob{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(benchmarkjobsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.BenchmarkJob), err
 }

@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ClusterServingRuntimeLister helps list ClusterServingRuntimes.
@@ -14,19 +14,19 @@ import (
 type ClusterServingRuntimeLister interface {
 	// List lists all ClusterServingRuntimes in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ClusterServingRuntime, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ClusterServingRuntime, err error)
 	// Get retrieves the ClusterServingRuntime from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ClusterServingRuntime, error)
+	Get(name string) (*omev1beta1.ClusterServingRuntime, error)
 	ClusterServingRuntimeListerExpansion
 }
 
 // clusterServingRuntimeLister implements the ClusterServingRuntimeLister interface.
 type clusterServingRuntimeLister struct {
-	listers.ResourceIndexer[*v1beta1.ClusterServingRuntime]
+	listers.ResourceIndexer[*omev1beta1.ClusterServingRuntime]
 }
 
 // NewClusterServingRuntimeLister returns a new ClusterServingRuntimeLister.
 func NewClusterServingRuntimeLister(indexer cache.Indexer) ClusterServingRuntimeLister {
-	return &clusterServingRuntimeLister{listers.New[*v1beta1.ClusterServingRuntime](indexer, v1beta1.Resource("clusterservingruntime"))}
+	return &clusterServingRuntimeLister{listers.New[*omev1beta1.ClusterServingRuntime](indexer, omev1beta1.Resource("clusterservingruntime"))}
 }

@@ -3,7 +3,7 @@
 package externalversions
 
 import (
-	"fmt"
+	fmt "fmt"
 
 	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

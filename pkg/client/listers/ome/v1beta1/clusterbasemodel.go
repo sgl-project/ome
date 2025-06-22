@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ClusterBaseModelLister helps list ClusterBaseModels.
@@ -14,19 +14,19 @@ import (
 type ClusterBaseModelLister interface {
 	// List lists all ClusterBaseModels in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.ClusterBaseModel, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.ClusterBaseModel, err error)
 	// Get retrieves the ClusterBaseModel from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.ClusterBaseModel, error)
+	Get(name string) (*omev1beta1.ClusterBaseModel, error)
 	ClusterBaseModelListerExpansion
 }
 
 // clusterBaseModelLister implements the ClusterBaseModelLister interface.
 type clusterBaseModelLister struct {
-	listers.ResourceIndexer[*v1beta1.ClusterBaseModel]
+	listers.ResourceIndexer[*omev1beta1.ClusterBaseModel]
 }
 
 // NewClusterBaseModelLister returns a new ClusterBaseModelLister.
 func NewClusterBaseModelLister(indexer cache.Indexer) ClusterBaseModelLister {
-	return &clusterBaseModelLister{listers.New[*v1beta1.ClusterBaseModel](indexer, v1beta1.Resource("clusterbasemodel"))}
+	return &clusterBaseModelLister{listers.New[*omev1beta1.ClusterBaseModel](indexer, omev1beta1.Resource("clusterbasemodel"))}
 }
