@@ -3,129 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeServingRuntimes implements ServingRuntimeInterface
-type FakeServingRuntimes struct {
+// fakeServingRuntimes implements ServingRuntimeInterface
+type fakeServingRuntimes struct {
+	*gentype.FakeClientWithList[*v1beta1.ServingRuntime, *v1beta1.ServingRuntimeList]
 	Fake *FakeOmeV1beta1
-	ns   string
 }
 
-var servingruntimesResource = v1beta1.SchemeGroupVersion.WithResource("servingruntimes")
-
-var servingruntimesKind = v1beta1.SchemeGroupVersion.WithKind("ServingRuntime")
-
-// Get takes name of the servingRuntime, and returns the corresponding servingRuntime object, and an error if there is any.
-func (c *FakeServingRuntimes) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.ServingRuntime, err error) {
-	emptyResult := &v1beta1.ServingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(servingruntimesResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeServingRuntimes(fake *FakeOmeV1beta1, namespace string) omev1beta1.ServingRuntimeInterface {
+	return &fakeServingRuntimes{
+		gentype.NewFakeClientWithList[*v1beta1.ServingRuntime, *v1beta1.ServingRuntimeList](
+			fake.Fake,
+			namespace,
+			v1beta1.SchemeGroupVersion.WithResource("servingruntimes"),
+			v1beta1.SchemeGroupVersion.WithKind("ServingRuntime"),
+			func() *v1beta1.ServingRuntime { return &v1beta1.ServingRuntime{} },
+			func() *v1beta1.ServingRuntimeList { return &v1beta1.ServingRuntimeList{} },
+			func(dst, src *v1beta1.ServingRuntimeList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.ServingRuntimeList) []*v1beta1.ServingRuntime {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.ServingRuntimeList, items []*v1beta1.ServingRuntime) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.ServingRuntime), err
-}
-
-// List takes label and field selectors, and returns the list of ServingRuntimes that match those selectors.
-func (c *FakeServingRuntimes) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.ServingRuntimeList, err error) {
-	emptyResult := &v1beta1.ServingRuntimeList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(servingruntimesResource, servingruntimesKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.ServingRuntimeList{ListMeta: obj.(*v1beta1.ServingRuntimeList).ListMeta}
-	for _, item := range obj.(*v1beta1.ServingRuntimeList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested servingRuntimes.
-func (c *FakeServingRuntimes) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(servingruntimesResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a servingRuntime and creates it.  Returns the server's representation of the servingRuntime, and an error, if there is any.
-func (c *FakeServingRuntimes) Create(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.CreateOptions) (result *v1beta1.ServingRuntime, err error) {
-	emptyResult := &v1beta1.ServingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(servingruntimesResource, c.ns, servingRuntime, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ServingRuntime), err
-}
-
-// Update takes the representation of a servingRuntime and updates it. Returns the server's representation of the servingRuntime, and an error, if there is any.
-func (c *FakeServingRuntimes) Update(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ServingRuntime, err error) {
-	emptyResult := &v1beta1.ServingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(servingruntimesResource, c.ns, servingRuntime, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ServingRuntime), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeServingRuntimes) UpdateStatus(ctx context.Context, servingRuntime *v1beta1.ServingRuntime, opts v1.UpdateOptions) (result *v1beta1.ServingRuntime, err error) {
-	emptyResult := &v1beta1.ServingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(servingruntimesResource, "status", c.ns, servingRuntime, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ServingRuntime), err
-}
-
-// Delete takes name of the servingRuntime and deletes it. Returns an error if one occurs.
-func (c *FakeServingRuntimes) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(servingruntimesResource, c.ns, name, opts), &v1beta1.ServingRuntime{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeServingRuntimes) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(servingruntimesResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.ServingRuntimeList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched servingRuntime.
-func (c *FakeServingRuntimes) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.ServingRuntime, err error) {
-	emptyResult := &v1beta1.ServingRuntime{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(servingruntimesResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.ServingRuntime), err
 }

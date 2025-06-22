@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	scheme "github.com/sgl-project/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type InferenceServicesGetter interface {
 
 // InferenceServiceInterface has methods to work with InferenceService resources.
 type InferenceServiceInterface interface {
-	Create(ctx context.Context, inferenceService *v1beta1.InferenceService, opts v1.CreateOptions) (*v1beta1.InferenceService, error)
-	Update(ctx context.Context, inferenceService *v1beta1.InferenceService, opts v1.UpdateOptions) (*v1beta1.InferenceService, error)
+	Create(ctx context.Context, inferenceService *omev1beta1.InferenceService, opts v1.CreateOptions) (*omev1beta1.InferenceService, error)
+	Update(ctx context.Context, inferenceService *omev1beta1.InferenceService, opts v1.UpdateOptions) (*omev1beta1.InferenceService, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, inferenceService *v1beta1.InferenceService, opts v1.UpdateOptions) (*v1beta1.InferenceService, error)
+	UpdateStatus(ctx context.Context, inferenceService *omev1beta1.InferenceService, opts v1.UpdateOptions) (*omev1beta1.InferenceService, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.InferenceService, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.InferenceServiceList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.InferenceService, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.InferenceServiceList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.InferenceService, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.InferenceService, err error)
 	InferenceServiceExpansion
 }
 
 // inferenceServices implements InferenceServiceInterface
 type inferenceServices struct {
-	*gentype.ClientWithList[*v1beta1.InferenceService, *v1beta1.InferenceServiceList]
+	*gentype.ClientWithList[*omev1beta1.InferenceService, *omev1beta1.InferenceServiceList]
 }
 
 // newInferenceServices returns a InferenceServices
 func newInferenceServices(c *OmeV1beta1Client, namespace string) *inferenceServices {
 	return &inferenceServices{
-		gentype.NewClientWithList[*v1beta1.InferenceService, *v1beta1.InferenceServiceList](
+		gentype.NewClientWithList[*omev1beta1.InferenceService, *omev1beta1.InferenceServiceList](
 			"inferenceservices",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1beta1.InferenceService { return &v1beta1.InferenceService{} },
-			func() *v1beta1.InferenceServiceList { return &v1beta1.InferenceServiceList{} }),
+			func() *omev1beta1.InferenceService { return &omev1beta1.InferenceService{} },
+			func() *omev1beta1.InferenceServiceList { return &omev1beta1.InferenceServiceList{} },
+		),
 	}
 }

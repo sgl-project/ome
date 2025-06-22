@@ -13,31 +13,31 @@ type FakeOmeV1beta1 struct {
 }
 
 func (c *FakeOmeV1beta1) BaseModels(namespace string) v1beta1.BaseModelInterface {
-	return &FakeBaseModels{c, namespace}
+	return newFakeBaseModels(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) BenchmarkJobs(namespace string) v1beta1.BenchmarkJobInterface {
-	return &FakeBenchmarkJobs{c, namespace}
+	return newFakeBenchmarkJobs(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) ClusterBaseModels() v1beta1.ClusterBaseModelInterface {
-	return &FakeClusterBaseModels{c}
+	return newFakeClusterBaseModels(c)
 }
 
 func (c *FakeOmeV1beta1) ClusterServingRuntimes() v1beta1.ClusterServingRuntimeInterface {
-	return &FakeClusterServingRuntimes{c}
+	return newFakeClusterServingRuntimes(c)
 }
 
 func (c *FakeOmeV1beta1) FineTunedWeights() v1beta1.FineTunedWeightInterface {
-	return &FakeFineTunedWeights{c}
+	return newFakeFineTunedWeights(c)
 }
 
 func (c *FakeOmeV1beta1) InferenceServices(namespace string) v1beta1.InferenceServiceInterface {
-	return &FakeInferenceServices{c, namespace}
+	return newFakeInferenceServices(c, namespace)
 }
 
 func (c *FakeOmeV1beta1) ServingRuntimes(namespace string) v1beta1.ServingRuntimeInterface {
-	return &FakeServingRuntimes{c, namespace}
+	return newFakeServingRuntimes(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

@@ -25,6 +25,7 @@ import (
 )
 
 type Scount struct {
+	ctx                    context.Context
 	baseModelLister        omev1beta1lister.BaseModelLister
 	baseModelSynced        cache.InformerSynced
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister
@@ -44,7 +45,7 @@ type TensorRTLLMShapeFilter struct {
 	ModelType          string
 }
 
-func NewScout(nodeName string,
+func NewScout(ctx context.Context, nodeName string,
 	baseModelInformer omev1beta1.BaseModelInformer,
 	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,
 	informerFactory omev1beta1informers.SharedInformerFactory,
@@ -53,7 +54,7 @@ func NewScout(nodeName string,
 	logger *zap.SugaredLogger) (*Scount, error) {
 
 	// Fetch the complete node info
-	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
+	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node info for node %s: %w", nodeName, err)
 	}
@@ -63,6 +64,7 @@ func NewScout(nodeName string,
 	}
 
 	scout := &Scount{
+		ctx:                    ctx,
 		nodeShapeAlias:         nodeShapeAlias,
 		nodeInfo:               nodeInfo,
 		baseModelLister:        baseModelInformer.Lister(),
@@ -85,7 +87,7 @@ func NewScout(nodeName string,
 	for name, informer := range informers {
 		err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
 			// Pipe to the default handler first, which just logs the error
-			cache.DefaultWatchErrorHandler(r, err)
+			cache.DefaultWatchErrorHandler(ctx, r, err)
 
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
 				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", name, err.Error())
@@ -162,7 +164,7 @@ func (w *Scount) downloadBaseModel(obj interface{}) {
 	if w.shouldDownloadModel(baseModel.Spec.Storage) {
 		// Refresh the node info
 		var err error
-		w.nodeInfo, err = w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
+		w.nodeInfo, err = w.kubeClient.CoreV1().Nodes().Get(w.ctx, w.nodeName, metav1.GetOptions{})
 		if err != nil {
 			w.logger.Errorf("Error getting the node info: %s, skipping download", err.Error())
 			return
@@ -207,7 +209,7 @@ func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 	if w.shouldDownloadModel(clusterBaseModel.Spec.Storage) {
 		// Refresh the node info
 		var err error
-		w.nodeInfo, err = w.kubeClient.CoreV1().Nodes().Get(context.TODO(), w.nodeName, metav1.GetOptions{})
+		w.nodeInfo, err = w.kubeClient.CoreV1().Nodes().Get(w.ctx, w.nodeName, metav1.GetOptions{})
 		if err != nil {
 			w.logger.Errorf("Error getting the node info: %s, skipping download", err.Error())
 			return

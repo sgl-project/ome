@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // BenchmarkJobLister helps list BenchmarkJobs.
@@ -14,7 +14,7 @@ import (
 type BenchmarkJobLister interface {
 	// List lists all BenchmarkJobs in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.BenchmarkJob, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.BenchmarkJob, err error)
 	// BenchmarkJobs returns an object that can list and get BenchmarkJobs.
 	BenchmarkJobs(namespace string) BenchmarkJobNamespaceLister
 	BenchmarkJobListerExpansion
@@ -22,17 +22,17 @@ type BenchmarkJobLister interface {
 
 // benchmarkJobLister implements the BenchmarkJobLister interface.
 type benchmarkJobLister struct {
-	listers.ResourceIndexer[*v1beta1.BenchmarkJob]
+	listers.ResourceIndexer[*omev1beta1.BenchmarkJob]
 }
 
 // NewBenchmarkJobLister returns a new BenchmarkJobLister.
 func NewBenchmarkJobLister(indexer cache.Indexer) BenchmarkJobLister {
-	return &benchmarkJobLister{listers.New[*v1beta1.BenchmarkJob](indexer, v1beta1.Resource("benchmarkjob"))}
+	return &benchmarkJobLister{listers.New[*omev1beta1.BenchmarkJob](indexer, omev1beta1.Resource("benchmarkjob"))}
 }
 
 // BenchmarkJobs returns an object that can list and get BenchmarkJobs.
 func (s *benchmarkJobLister) BenchmarkJobs(namespace string) BenchmarkJobNamespaceLister {
-	return benchmarkJobNamespaceLister{listers.NewNamespaced[*v1beta1.BenchmarkJob](s.ResourceIndexer, namespace)}
+	return benchmarkJobNamespaceLister{listers.NewNamespaced[*omev1beta1.BenchmarkJob](s.ResourceIndexer, namespace)}
 }
 
 // BenchmarkJobNamespaceLister helps list and get BenchmarkJobs.
@@ -40,15 +40,15 @@ func (s *benchmarkJobLister) BenchmarkJobs(namespace string) BenchmarkJobNamespa
 type BenchmarkJobNamespaceLister interface {
 	// List lists all BenchmarkJobs in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.BenchmarkJob, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.BenchmarkJob, err error)
 	// Get retrieves the BenchmarkJob from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.BenchmarkJob, error)
+	Get(name string) (*omev1beta1.BenchmarkJob, error)
 	BenchmarkJobNamespaceListerExpansion
 }
 
 // benchmarkJobNamespaceLister implements the BenchmarkJobNamespaceLister
 // interface.
 type benchmarkJobNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.BenchmarkJob]
+	listers.ResourceIndexer[*omev1beta1.BenchmarkJob]
 }

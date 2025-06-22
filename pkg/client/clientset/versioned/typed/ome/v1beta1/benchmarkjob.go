@@ -3,9 +3,9 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	scheme "github.com/sgl-project/ome/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -21,33 +21,34 @@ type BenchmarkJobsGetter interface {
 
 // BenchmarkJobInterface has methods to work with BenchmarkJob resources.
 type BenchmarkJobInterface interface {
-	Create(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, opts v1.CreateOptions) (*v1beta1.BenchmarkJob, error)
-	Update(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, opts v1.UpdateOptions) (*v1beta1.BenchmarkJob, error)
+	Create(ctx context.Context, benchmarkJob *omev1beta1.BenchmarkJob, opts v1.CreateOptions) (*omev1beta1.BenchmarkJob, error)
+	Update(ctx context.Context, benchmarkJob *omev1beta1.BenchmarkJob, opts v1.UpdateOptions) (*omev1beta1.BenchmarkJob, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, opts v1.UpdateOptions) (*v1beta1.BenchmarkJob, error)
+	UpdateStatus(ctx context.Context, benchmarkJob *omev1beta1.BenchmarkJob, opts v1.UpdateOptions) (*omev1beta1.BenchmarkJob, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1beta1.BenchmarkJob, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1beta1.BenchmarkJobList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*omev1beta1.BenchmarkJob, error)
+	List(ctx context.Context, opts v1.ListOptions) (*omev1beta1.BenchmarkJobList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.BenchmarkJob, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *omev1beta1.BenchmarkJob, err error)
 	BenchmarkJobExpansion
 }
 
 // benchmarkJobs implements BenchmarkJobInterface
 type benchmarkJobs struct {
-	*gentype.ClientWithList[*v1beta1.BenchmarkJob, *v1beta1.BenchmarkJobList]
+	*gentype.ClientWithList[*omev1beta1.BenchmarkJob, *omev1beta1.BenchmarkJobList]
 }
 
 // newBenchmarkJobs returns a BenchmarkJobs
 func newBenchmarkJobs(c *OmeV1beta1Client, namespace string) *benchmarkJobs {
 	return &benchmarkJobs{
-		gentype.NewClientWithList[*v1beta1.BenchmarkJob, *v1beta1.BenchmarkJobList](
+		gentype.NewClientWithList[*omev1beta1.BenchmarkJob, *omev1beta1.BenchmarkJobList](
 			"benchmarkjobs",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1beta1.BenchmarkJob { return &v1beta1.BenchmarkJob{} },
-			func() *v1beta1.BenchmarkJobList { return &v1beta1.BenchmarkJobList{} }),
+			func() *omev1beta1.BenchmarkJob { return &omev1beta1.BenchmarkJob{} },
+			func() *omev1beta1.BenchmarkJobList { return &omev1beta1.BenchmarkJobList{} },
+		),
 	}
 }

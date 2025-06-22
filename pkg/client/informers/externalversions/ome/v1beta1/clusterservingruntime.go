@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	versioned "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // ClusterServingRuntimes.
 type ClusterServingRuntimeInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.ClusterServingRuntimeLister
+	Lister() omev1beta1.ClusterServingRuntimeLister
 }
 
 type clusterServingRuntimeInformer struct {
@@ -45,16 +45,28 @@ func NewFilteredClusterServingRuntimeInformer(client versioned.Interface, resync
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterServingRuntimes().List(context.TODO(), options)
+				return client.OmeV1beta1().ClusterServingRuntimes().List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().ClusterServingRuntimes().Watch(context.TODO(), options)
+				return client.OmeV1beta1().ClusterServingRuntimes().Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().ClusterServingRuntimes().List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().ClusterServingRuntimes().Watch(ctx, options)
 			},
 		},
-		&omev1beta1.ClusterServingRuntime{},
+		&apisomev1beta1.ClusterServingRuntime{},
 		resyncPeriod,
 		indexers,
 	)
@@ -65,9 +77,9 @@ func (f *clusterServingRuntimeInformer) defaultInformer(client versioned.Interfa
 }
 
 func (f *clusterServingRuntimeInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.ClusterServingRuntime{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.ClusterServingRuntime{}, f.defaultInformer)
 }
 
-func (f *clusterServingRuntimeInformer) Lister() v1beta1.ClusterServingRuntimeLister {
-	return v1beta1.NewClusterServingRuntimeLister(f.Informer().GetIndexer())
+func (f *clusterServingRuntimeInformer) Lister() omev1beta1.ClusterServingRuntimeLister {
+	return omev1beta1.NewClusterServingRuntimeLister(f.Informer().GetIndexer())
 }
