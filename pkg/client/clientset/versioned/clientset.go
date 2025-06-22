@@ -3,8 +3,8 @@
 package versioned
 
 import (
-	"fmt"
-	"net/http"
+	fmt "fmt"
+	http "net/http"
 
 	omev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
 	discovery "k8s.io/client-go/discovery"

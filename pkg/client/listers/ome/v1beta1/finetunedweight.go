@@ -3,10 +3,10 @@
 package v1beta1
 
 import (
-	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // FineTunedWeightLister helps list FineTunedWeights.
@@ -14,19 +14,19 @@ import (
 type FineTunedWeightLister interface {
 	// List lists all FineTunedWeights in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1beta1.FineTunedWeight, err error)
+	List(selector labels.Selector) (ret []*omev1beta1.FineTunedWeight, err error)
 	// Get retrieves the FineTunedWeight from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1beta1.FineTunedWeight, error)
+	Get(name string) (*omev1beta1.FineTunedWeight, error)
 	FineTunedWeightListerExpansion
 }
 
 // fineTunedWeightLister implements the FineTunedWeightLister interface.
 type fineTunedWeightLister struct {
-	listers.ResourceIndexer[*v1beta1.FineTunedWeight]
+	listers.ResourceIndexer[*omev1beta1.FineTunedWeight]
 }
 
 // NewFineTunedWeightLister returns a new FineTunedWeightLister.
 func NewFineTunedWeightLister(indexer cache.Indexer) FineTunedWeightLister {
-	return &fineTunedWeightLister{listers.New[*v1beta1.FineTunedWeight](indexer, v1beta1.Resource("finetunedweight"))}
+	return &fineTunedWeightLister{listers.New[*omev1beta1.FineTunedWeight](indexer, omev1beta1.Resource("finetunedweight"))}
 }

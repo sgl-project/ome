@@ -3,120 +3,34 @@
 package fake
 
 import (
-	"context"
-
 	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/clientset/versioned/typed/ome/v1beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeFineTunedWeights implements FineTunedWeightInterface
-type FakeFineTunedWeights struct {
+// fakeFineTunedWeights implements FineTunedWeightInterface
+type fakeFineTunedWeights struct {
+	*gentype.FakeClientWithList[*v1beta1.FineTunedWeight, *v1beta1.FineTunedWeightList]
 	Fake *FakeOmeV1beta1
 }
 
-var finetunedweightsResource = v1beta1.SchemeGroupVersion.WithResource("finetunedweights")
-
-var finetunedweightsKind = v1beta1.SchemeGroupVersion.WithKind("FineTunedWeight")
-
-// Get takes name of the fineTunedWeight, and returns the corresponding fineTunedWeight object, and an error if there is any.
-func (c *FakeFineTunedWeights) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.FineTunedWeight, err error) {
-	emptyResult := &v1beta1.FineTunedWeight{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(finetunedweightsResource, name, options), emptyResult)
-	if obj == nil {
-		return emptyResult, err
+func newFakeFineTunedWeights(fake *FakeOmeV1beta1) omev1beta1.FineTunedWeightInterface {
+	return &fakeFineTunedWeights{
+		gentype.NewFakeClientWithList[*v1beta1.FineTunedWeight, *v1beta1.FineTunedWeightList](
+			fake.Fake,
+			"",
+			v1beta1.SchemeGroupVersion.WithResource("finetunedweights"),
+			v1beta1.SchemeGroupVersion.WithKind("FineTunedWeight"),
+			func() *v1beta1.FineTunedWeight { return &v1beta1.FineTunedWeight{} },
+			func() *v1beta1.FineTunedWeightList { return &v1beta1.FineTunedWeightList{} },
+			func(dst, src *v1beta1.FineTunedWeightList) { dst.ListMeta = src.ListMeta },
+			func(list *v1beta1.FineTunedWeightList) []*v1beta1.FineTunedWeight {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1beta1.FineTunedWeightList, items []*v1beta1.FineTunedWeight) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1beta1.FineTunedWeight), err
-}
-
-// List takes label and field selectors, and returns the list of FineTunedWeights that match those selectors.
-func (c *FakeFineTunedWeights) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.FineTunedWeightList, err error) {
-	emptyResult := &v1beta1.FineTunedWeightList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(finetunedweightsResource, finetunedweightsKind, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1beta1.FineTunedWeightList{ListMeta: obj.(*v1beta1.FineTunedWeightList).ListMeta}
-	for _, item := range obj.(*v1beta1.FineTunedWeightList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested fineTunedWeights.
-func (c *FakeFineTunedWeights) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(finetunedweightsResource, opts))
-}
-
-// Create takes the representation of a fineTunedWeight and creates it.  Returns the server's representation of the fineTunedWeight, and an error, if there is any.
-func (c *FakeFineTunedWeights) Create(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.CreateOptions) (result *v1beta1.FineTunedWeight, err error) {
-	emptyResult := &v1beta1.FineTunedWeight{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(finetunedweightsResource, fineTunedWeight, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.FineTunedWeight), err
-}
-
-// Update takes the representation of a fineTunedWeight and updates it. Returns the server's representation of the fineTunedWeight, and an error, if there is any.
-func (c *FakeFineTunedWeights) Update(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (result *v1beta1.FineTunedWeight, err error) {
-	emptyResult := &v1beta1.FineTunedWeight{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(finetunedweightsResource, fineTunedWeight, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.FineTunedWeight), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeFineTunedWeights) UpdateStatus(ctx context.Context, fineTunedWeight *v1beta1.FineTunedWeight, opts v1.UpdateOptions) (result *v1beta1.FineTunedWeight, err error) {
-	emptyResult := &v1beta1.FineTunedWeight{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(finetunedweightsResource, "status", fineTunedWeight, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.FineTunedWeight), err
-}
-
-// Delete takes name of the fineTunedWeight and deletes it. Returns an error if one occurs.
-func (c *FakeFineTunedWeights) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(finetunedweightsResource, name, opts), &v1beta1.FineTunedWeight{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeFineTunedWeights) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(finetunedweightsResource, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1beta1.FineTunedWeightList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched fineTunedWeight.
-func (c *FakeFineTunedWeights) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.FineTunedWeight, err error) {
-	emptyResult := &v1beta1.FineTunedWeight{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(finetunedweightsResource, name, pt, data, opts, subresources...), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1beta1.FineTunedWeight), err
 }

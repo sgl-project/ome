@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	versioned "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // InferenceServices.
 type InferenceServiceInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.InferenceServiceLister
+	Lister() omev1beta1.InferenceServiceLister
 }
 
 type inferenceServiceInformer struct {
@@ -46,16 +46,28 @@ func NewFilteredInferenceServiceInformer(client versioned.Interface, namespace s
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().InferenceServices(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().InferenceServices(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().InferenceServices(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().InferenceServices(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().InferenceServices(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().InferenceServices(namespace).Watch(ctx, options)
 			},
 		},
-		&omev1beta1.InferenceService{},
+		&apisomev1beta1.InferenceService{},
 		resyncPeriod,
 		indexers,
 	)
@@ -66,9 +78,9 @@ func (f *inferenceServiceInformer) defaultInformer(client versioned.Interface, r
 }
 
 func (f *inferenceServiceInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.InferenceService{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.InferenceService{}, f.defaultInformer)
 }
 
-func (f *inferenceServiceInformer) Lister() v1beta1.InferenceServiceLister {
-	return v1beta1.NewInferenceServiceLister(f.Informer().GetIndexer())
+func (f *inferenceServiceInformer) Lister() omev1beta1.InferenceServiceLister {
+	return omev1beta1.NewInferenceServiceLister(f.Informer().GetIndexer())
 }

@@ -3,13 +3,13 @@
 package v1beta1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	apisomev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	versioned "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/sgl-project/ome/pkg/client/informers/externalversions/internalinterfaces"
-	v1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
+	omev1beta1 "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -20,7 +20,7 @@ import (
 // BaseModels.
 type BaseModelInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1beta1.BaseModelLister
+	Lister() omev1beta1.BaseModelLister
 }
 
 type baseModelInformer struct {
@@ -46,16 +46,28 @@ func NewFilteredBaseModelInformer(client versioned.Interface, namespace string, 
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().BaseModels(namespace).List(context.TODO(), options)
+				return client.OmeV1beta1().BaseModels(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.OmeV1beta1().BaseModels(namespace).Watch(context.TODO(), options)
+				return client.OmeV1beta1().BaseModels(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().BaseModels(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.OmeV1beta1().BaseModels(namespace).Watch(ctx, options)
 			},
 		},
-		&omev1beta1.BaseModel{},
+		&apisomev1beta1.BaseModel{},
 		resyncPeriod,
 		indexers,
 	)
@@ -66,9 +78,9 @@ func (f *baseModelInformer) defaultInformer(client versioned.Interface, resyncPe
 }
 
 func (f *baseModelInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&omev1beta1.BaseModel{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisomev1beta1.BaseModel{}, f.defaultInformer)
 }
 
-func (f *baseModelInformer) Lister() v1beta1.BaseModelLister {
-	return v1beta1.NewBaseModelLister(f.Informer().GetIndexer())
+func (f *baseModelInformer) Lister() omev1beta1.BaseModelLister {
+	return omev1beta1.NewBaseModelLister(f.Informer().GetIndexer())
 }
