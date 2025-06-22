@@ -7,6 +7,7 @@ import (
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/rbac"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
@@ -30,6 +31,7 @@ type Router struct {
 	routerSpec           *v1beta1.RouterSpec
 	deploymentReconciler *common.DeploymentReconciler
 	podSpecReconciler    *common.PodSpecReconciler
+	rbacReconciler       *rbac.RBACReconciler
 }
 
 // NewRouter creates a new Router component instance
@@ -90,11 +92,26 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
 	}
 
+	// Reconcile RBAC resources (ServiceAccount, Role, RoleBinding)
+	r.rbacReconciler = rbac.NewRBACReconciler(
+		r.Client,
+		r.Scheme,
+		objectMeta,
+		v1beta1.RouterComponent,
+		isvc.Name,
+	)
+	if err := r.rbacReconciler.Reconcile(); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile RBAC resources")
+	}
+
 	// Reconcile pod spec
 	podSpec, err := r.reconcilePodSpec(isvc, &objectMeta)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile pod spec")
 	}
+
+	// Set the service account name in the pod spec
+	podSpec.ServiceAccountName = r.rbacReconciler.GetServiceAccountName()
 
 	// Reconcile deployment based on deployment mode
 	if result, err := r.reconcileDeployment(isvc, objectMeta, podSpec); err != nil {
