@@ -32,6 +32,37 @@ spec:
       priority: 1
   protocolVersions:
     - openAI
+  routerConfig:
+    runner:
+      name: router
+      image: fra.ocir.io/idqj093njucb/sgl-router:dev2
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      ports:
+        - containerPort: 8080
+          name: http
+      command:
+        - sh
+        - -c
+        - >
+          python3 -m sglang_router.launch_router
+          --host "0.0.0.0"
+          --port "8080"
+          --service-discovery
+          --service-discovery-namespace "${NAMESPACE}"
+          --service-discovery-port 8080
+          --selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
   engineConfig:
     annotations:
       rdma.ome.io/auto-inject: "true"
@@ -60,9 +91,6 @@ spec:
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
-        env:
-          - name: GLOO_SOCKET_IFNAME
-            value: eth0
         command:
           - sh
           - -c
@@ -155,6 +183,3 @@ spec:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
-        env:
-          - name: GLOO_SOCKET_IFNAME
-            value: eth0
