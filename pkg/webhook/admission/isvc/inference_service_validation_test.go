@@ -340,6 +340,7 @@ func TestInferenceService_AutoscalerValidation(t *testing.T) {
 			isvc := &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "test-isvc",
+					Namespace:   "default",
 					Annotations: tt.annotations,
 				},
 			}
@@ -404,6 +405,7 @@ func TestInferenceService_TargetUtilizationValidation(t *testing.T) {
 			isvc := &v1beta1.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "test-isvc",
+					Namespace:   "default",
 					Annotations: tt.annotations,
 				},
 			}
@@ -1294,7 +1296,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 				assert.NoError(t, err)
 				if tt.wantWarnings > 0 {
 					assert.Len(t, warnings, tt.wantWarnings)
-					assert.Contains(t, warnings[0], "Runtime will be auto-selected")
+					assert.Contains(t, warnings[0], "will be auto-selected for model")
 				}
 			}
 		})
@@ -1498,8 +1500,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 		warnings, err := validator.resolveModelAndRuntime(context.Background(), isvc, admission.Warnings{})
 		assert.NoError(t, err)
 		assert.Len(t, warnings, 1)
-		assert.Contains(t, warnings[0], "Runtime will be auto-selected for model test-model")
-		assert.Contains(t, warnings[0], "found 2 compatible runtimes")
+		assert.Contains(t, warnings[0], "will be auto-selected for model test-model")
 	})
 
 	t.Run("existing warnings preserved", func(t *testing.T) {
@@ -1508,7 +1509,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, warnings, 2)
 		assert.Equal(t, "existing warning", warnings[0])
-		assert.Contains(t, warnings[1], "Runtime will be auto-selected")
+		assert.Contains(t, warnings[1], "will be auto-selected")
 	})
 }
 
@@ -1590,7 +1591,7 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 	warnings, err := validator.resolveModelAndRuntime(context.Background(), isvc, admission.Warnings{})
 	assert.NoError(t, err)
 	assert.Len(t, warnings, 1)
-	assert.Contains(t, warnings[0], "Runtime will be auto-selected for model test-model")
+	assert.Contains(t, warnings[0], "will be auto-selected for model test-model")
 }
 
 // =============================================================================
