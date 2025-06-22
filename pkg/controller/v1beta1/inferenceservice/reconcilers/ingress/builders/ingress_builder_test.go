@@ -58,14 +58,14 @@ func TestIngressBuilder_BuildIngress(t *testing.T) {
 			name:           "with router",
 			isvc:           createTestInferenceServiceWithRouterIngress("test-isvc", "default"),
 			expectedError:  false,
-			expectedRules:  2, // router rules (no duplicate engine)
+			expectedRules:  3, // router rules: default→router, router→router, engine→engine
 			expectedEngine: true,
 		},
 		{
 			name:           "with decoder",
 			isvc:           createTestInferenceServiceWithDecoderIngress("test-isvc", "default"),
 			expectedError:  false,
-			expectedRules:  2, // decoder rules (no duplicate engine)
+			expectedRules:  3, // decoder rules: default→engine, engine→engine, decoder→decoder
 			expectedEngine: true,
 		},
 		{
@@ -136,13 +136,13 @@ func TestIngressBuilder_BuildRouterRules(t *testing.T) {
 		{
 			name:          "router only",
 			isvc:          createTestInferenceServiceWithRouterIngress("test-isvc", "default"),
-			expectedRules: 2, // top-level router + router host
+			expectedRules: 3, // default→router, router→router, engine→engine
 			expectedError: false,
 		},
 		{
 			name:          "router with decoder",
 			isvc:          createTestInferenceServiceWithRouterAndDecoderIngress("test-isvc", "default"),
-			expectedRules: 3, // top-level router + decoder + router host
+			expectedRules: 4, // default→router, router→router, engine→engine, decoder→decoder
 			expectedError: false,
 		},
 	}
@@ -173,7 +173,7 @@ func TestIngressBuilder_BuildDecoderRules(t *testing.T) {
 		{
 			name:          "decoder only",
 			isvc:          createTestInferenceServiceWithDecoderIngress("test-isvc", "default"),
-			expectedRules: 2, // top-level engine + decoder host
+			expectedRules: 3, // default→engine, engine→engine, decoder→decoder
 			expectedError: false,
 		},
 	}

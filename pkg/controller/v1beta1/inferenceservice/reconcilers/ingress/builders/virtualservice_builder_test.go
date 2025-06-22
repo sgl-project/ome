@@ -321,7 +321,7 @@ func TestVirtualServiceBuilder_CreateHTTPRouteDestination(t *testing.T) {
 	destination := builder.createHTTPRouteDestination("test-gateway-service")
 
 	assert.Equal(t, "test-gateway-service", destination.Destination.Host)
-	assert.Equal(t, uint32(80), destination.Destination.Port.Number)
+	assert.Equal(t, uint32(8080), destination.Destination.Port.Number)
 	assert.Equal(t, int32(100), destination.Weight)
 }
 
