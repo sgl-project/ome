@@ -59,8 +59,8 @@ const (
 func DefaultDownloadOptions() DownloadOptions {
 	return DownloadOptions{
 		SizeThresholdInMB:   defaultThresholdMB,
-		ChunkSizeInMB:       8,
-		Threads:             100,
+		ChunkSizeInMB:       32, // Larger chunks reduce HTTP requests and improve efficiency
+		Threads:             16, // More reasonable concurrency to prevent resource exhaustion
 		StripPrefix:         false,
 		ForceStandard:       false,
 		ForceMultipart:      false,

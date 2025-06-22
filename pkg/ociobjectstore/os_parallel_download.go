@@ -36,11 +36,11 @@ type PrepareDownloadPart struct {
 
 // DownloadedPart contains the data downloaded from object storage and the body part info
 type DownloadedPart struct {
-	size     int64
-	partBody []byte
-	offset   int64
-	partNum  int
-	err      error
+	size         int64
+	tempFilePath string // Path to temporary file containing the data
+	offset       int64
+	partNum      int
+	err          error
 }
 
 type FileToDownload struct {
@@ -153,21 +153,35 @@ func (cds *OCIOSDataStore) MultipartDownload(source ObjectURI, target string, op
 			return fmt.Errorf("error downloading part %d: %v", part.partNum, part.err)
 		}
 
-		// Check part size matches expected size
-		if int64(len(part.partBody)) != part.size {
-			cds.logger.Warnf("[%s] Part %d size mismatch: expected %d bytes, got %d bytes",
-				source.ObjectName, part.partNum, part.size, len(part.partBody))
+		// Copy the part from the temporary file to the final position
+		tempFile, err := os.Open(part.tempFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to open temporary file for part %d: %v", part.partNum, err)
 		}
+		defer tempFile.Close()
 
-		// Write the part to the temp file at the correct offset
-		_, err := tmpFile.WriteAt(part.partBody, part.offset)
+		// Copy data from temp file to final file at correct offset using streaming
+		_, err = tmpFile.Seek(part.offset, 0)
 		if err != nil {
 			os.Remove(tempTargetFilePath)
-			return fmt.Errorf("failed to write part %d at offset %d: %v", part.partNum, part.offset, err)
+			return fmt.Errorf("failed to seek to offset %d for part %d: %v", part.offset, part.partNum, err)
 		}
 
-		// Free up memory by clearing the part data
-		part.partBody = nil
+		// Use pooled buffer for streaming copy
+		buf := BufferPool.Get().([]byte)
+		_, err = io.CopyBuffer(tmpFile, tempFile, buf)
+		BufferPool.Put(buf)
+
+		if err != nil {
+			os.Remove(tempTargetFilePath)
+			return fmt.Errorf("failed to copy part %d data at offset %d: %v", part.partNum, part.offset, err)
+		}
+
+		// Remove the temporary file
+		err = os.Remove(part.tempFilePath)
+		if err != nil {
+			cds.logger.Warnf("[%s] Failed to remove temporary file for part %d: %v", source.ObjectName, part.partNum, err)
+		}
 	}
 
 	// Ensure all data is flushed to disk
@@ -274,8 +288,10 @@ func (cds *OCIOSDataStore) multipartDownload(ctx context.Context, downloadThread
 func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownloadParts chan *PrepareDownloadPart, result chan *DownloadedPart) {
 	for part := range prepareDownloadParts {
 		var lastErr error
-		var content []byte
+		var tempFilePath string
+		var size int64
 		start := time.Now()
+
 		for attempt := 1; attempt <= maxPartRetries; attempt++ {
 			resp, err := cds.Client.GetObject(ctx, objectstorage.GetObjectRequest{
 				NamespaceName: common.String(part.namespace),
@@ -287,32 +303,55 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 				cds.logger.Warnf("Error getting object for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, err)
 				lastErr = err
 			} else {
-				// Successfully got the object response
-				var readErr, closeErr error
-				content, readErr = io.ReadAll(resp.Content)
-				closeErr = resp.Content.Close() // Close immediately
+				// Create temporary file for streaming
+				tempFile, tempErr := os.CreateTemp("", fmt.Sprintf("ome_download_part_%d_*.tmp", part.partNum))
+				if tempErr != nil {
+					cds.logger.Warnf("Error creating temp file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, tempErr)
+					lastErr = tempErr
+					resp.Content.Close()
+					continue
+				}
+				tempFilePath = tempFile.Name()
 
-				if readErr != nil {
-					cds.logger.Warnf("Error reading response body for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, readErr)
-					lastErr = readErr // Report read error
+				// Stream data directly to temp file using pooled buffer
+				buf := BufferPool.Get().([]byte)
+				written, streamErr := io.CopyBuffer(tempFile, resp.Content, buf)
+				BufferPool.Put(buf)
+
+				closeErr := resp.Content.Close()
+				syncErr := tempFile.Sync()
+				tempFile.Close()
+
+				if streamErr != nil {
+					cds.logger.Warnf("Error streaming response to temp file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, streamErr)
+					os.Remove(tempFilePath) // Clean up temp file
+					lastErr = streamErr
 				} else if closeErr != nil {
 					cds.logger.Warnf("Error closing response body for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, closeErr)
-					lastErr = closeErr // Report close error if read was ok
+					os.Remove(tempFilePath)
+					lastErr = closeErr
+				} else if syncErr != nil {
+					cds.logger.Warnf("Error syncing temp file for part %d (attempt %d/%d): %s", part.partNum, attempt, maxPartRetries, syncErr)
+					os.Remove(tempFilePath)
+					lastErr = syncErr
 				} else {
-					// Success reading and closing
-					lastErr = nil // Clear any potential previous attempt's error
-					break         // Exit retry loop on success
+					// Success
+					size = written
+					lastErr = nil
+					break
 				}
 			}
 			if attempt < maxPartRetries && lastErr != nil {
 				time.Sleep(2 * time.Second)
 			}
 		}
+
 		duration := time.Since(start)
-		speedMBs := float64(len(content)) / 1024.0 / 1024.0 / duration.Seconds()
+		speedMBs := float64(size) / 1024.0 / 1024.0 / duration.Seconds()
 		if lastErr == nil {
-			cds.logger.Debugf("[Chunk %d] Downloaded %d bytes in %.2fs (%.2f MB/s) for file %s", part.partNum, len(content), duration.Seconds(), speedMBs, part.object)
+			cds.logger.Debugf("[Chunk %d] Downloaded %d bytes in %.2fs (%.2f MB/s) for file %s", part.partNum, size, duration.Seconds(), speedMBs, part.object)
 		}
+
 		if lastErr != nil {
 			// All retries failed for this part
 			result <- &DownloadedPart{
@@ -322,12 +361,13 @@ func (cds *OCIOSDataStore) downloadFilePart(ctx context.Context, prepareDownload
 			}
 			continue
 		}
+
 		// Success: send the downloaded part
 		result <- &DownloadedPart{
-			size:     int64(len(content)),
-			partBody: content,
-			offset:   part.offset,
-			partNum:  part.partNum,
+			size:         size,
+			tempFilePath: tempFilePath,
+			offset:       part.offset,
+			partNum:      part.partNum,
 		}
 	}
 }
