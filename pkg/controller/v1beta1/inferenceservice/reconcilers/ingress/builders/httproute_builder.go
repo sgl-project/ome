@@ -254,7 +254,7 @@ func (b *HTTPRouteBuilder) buildTopLevelHTTPRoute(isvc *v1beta1.InferenceService
 
 	// Add additional hosts
 	domainList := []string{b.ingressConfig.IngressDomain}
-	additionalHosts := b.domainService.GetAdditionalHosts(&domainList, topLevelHost, b.ingressConfig)
+	additionalHosts := b.domainService.GetAdditionalHostsWithAnnotations(&domainList, topLevelHost, b.ingressConfig, isvc.Annotations)
 	if additionalHosts != nil {
 		hostMap := make(map[gatewayapiv1.Hostname]bool, len(allowedHosts))
 		for _, host := range allowedHosts {
