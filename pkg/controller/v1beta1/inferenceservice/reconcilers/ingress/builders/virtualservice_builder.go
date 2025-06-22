@@ -108,7 +108,7 @@ func (b *VirtualServiceBuilder) BuildVirtualService(ctx context.Context, isvc *v
 	var additionalHosts *[]string
 	hosts := []string{network.GetServiceHostname(isvc.Name, isvc.Namespace)}
 	if !isInternal {
-		additionalHosts = b.domainService.GetAdditionalHosts(domainList, serviceHost, b.ingressConfig)
+		additionalHosts = b.domainService.GetAdditionalHostsWithAnnotations(domainList, serviceHost, b.ingressConfig, isvc.Annotations)
 	}
 
 	httpRoutes := b.buildHTTPRoutes(isvc, serviceHost, additionalHosts, isInternal, backend)

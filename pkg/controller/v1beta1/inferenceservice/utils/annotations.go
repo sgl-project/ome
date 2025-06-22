@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"strings"
+
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
@@ -94,4 +96,64 @@ func RemovePodAnnotations(metadata *metav1.ObjectMeta, annotationsToRemove []str
 	for _, annotation := range annotationsToRemove {
 		delete(metadata.Annotations, annotation)
 	}
+}
+
+// ResolveIngressConfig creates an effective ingress configuration by merging
+// global defaults from configMap with per-service annotation overrides
+func ResolveIngressConfig(baseConfig *controllerconfig.IngressConfig, annotations map[string]string) *controllerconfig.IngressConfig {
+	// Start with a copy of the base config to avoid modifying the original
+	resolved := &controllerconfig.IngressConfig{
+		IngressGateway:             baseConfig.IngressGateway,
+		IngressServiceName:         baseConfig.IngressServiceName,
+		LocalGateway:               baseConfig.LocalGateway,
+		LocalGatewayServiceName:    baseConfig.LocalGatewayServiceName,
+		KnativeLocalGatewayService: baseConfig.KnativeLocalGatewayService,
+		OmeIngressGateway:          baseConfig.OmeIngressGateway,
+		IngressDomain:              baseConfig.IngressDomain,
+		IngressClassName:           baseConfig.IngressClassName,
+		AdditionalIngressDomains:   baseConfig.AdditionalIngressDomains,
+		DomainTemplate:             baseConfig.DomainTemplate,
+		UrlScheme:                  baseConfig.UrlScheme,
+		DisableIstioVirtualHost:    baseConfig.DisableIstioVirtualHost,
+		PathTemplate:               baseConfig.PathTemplate,
+		DisableIngressCreation:     baseConfig.DisableIngressCreation,
+		EnableGatewayAPI:           baseConfig.EnableGatewayAPI,
+	}
+
+	// Override with annotation values if present
+	if domainTemplate, exists := annotations[constants.IngressDomainTemplate]; exists && domainTemplate != "" {
+		resolved.DomainTemplate = domainTemplate
+	}
+
+	if ingressDomain, exists := annotations[constants.IngressDomain]; exists && ingressDomain != "" {
+		resolved.IngressDomain = ingressDomain
+	}
+
+	if urlScheme, exists := annotations[constants.IngressURLScheme]; exists && urlScheme != "" {
+		resolved.UrlScheme = urlScheme
+	}
+
+	if pathTemplate, exists := annotations[constants.IngressPathTemplate]; exists {
+		resolved.PathTemplate = pathTemplate
+	}
+
+	if additionalDomains, exists := annotations[constants.IngressAdditionalDomains]; exists && additionalDomains != "" {
+		// Parse comma-separated list
+		domains := strings.Split(additionalDomains, ",")
+		for i := range domains {
+			domains[i] = strings.TrimSpace(domains[i])
+		}
+		resolved.AdditionalIngressDomains = &domains
+	}
+
+	// Boolean overrides
+	if disableVirtualHost, exists := annotations[constants.IngressDisableIstioVirtualHost]; exists {
+		resolved.DisableIstioVirtualHost = disableVirtualHost == "true"
+	}
+
+	if disableCreation, exists := annotations[constants.IngressDisableCreation]; exists {
+		resolved.DisableIngressCreation = disableCreation == "true"
+	}
+
+	return resolved
 }

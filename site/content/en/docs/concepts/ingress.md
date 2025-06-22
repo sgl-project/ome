@@ -327,6 +327,22 @@ kubectl get ingress llama-chat -o yaml
 nslookup llama-chat.your-namespace.example.com
 ```
 
+## Per-Service Ingress Configuration
+
+While cluster-wide ingress settings are configured in the OME ConfigMap, you can override specific ingress settings per InferenceService using annotations. This allows flexible customization without changing cluster defaults.
+
+### Available Annotation Overrides
+
+| Annotation | Purpose | Example |
+|------------|---------|---------|
+| `ome.io/ingress-domain-template` | Custom domain template | `{{.Name}}.{{.Namespace}}.ml.example.com` |
+| `ome.io/ingress-domain` | Fixed ingress domain | `ml-services.example.com` |
+| `ome.io/ingress-additional-domains` | Additional domains (comma-separated) | `backup.example.com,alt.example.com` |
+| `ome.io/ingress-url-scheme` | URL scheme override | `https` |
+| `ome.io/ingress-path-template` | Custom path template | `/models/{{.Name}}/{{.Namespace}}` |
+| `ome.io/ingress-disable-istio-virtualhost` | Disable Istio VirtualService | `"true"` |
+| `ome.io/ingress-disable-creation` | Skip ingress creation entirely | `"true"` |
+
 ## Security Considerations
 
 ### Authentication

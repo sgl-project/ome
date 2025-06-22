@@ -119,6 +119,32 @@ data:
     }
 ```
 
+## Per-Service Configuration Overrides
+
+While the ConfigMap provides cluster-wide defaults, individual InferenceServices can override specific ingress settings using annotations. This enables flexible per-service customization without changing global configuration.
+
+### Supported Override Annotations
+
+The following ingress settings can be overridden per service:
+
+| Annotation Key | ConfigMap Equivalent | Description | Type |
+|----------------|---------------------|-------------|------|
+| `ome.io/ingress-domain-template` | `domainTemplate` | Custom domain pattern | String template |
+| `ome.io/ingress-domain` | `ingressDomain` | Fixed base domain | String |
+| `ome.io/ingress-additional-domains` | `additionalIngressDomains` | Extra domains (comma-separated) | String list |
+| `ome.io/ingress-url-scheme` | `urlScheme` | HTTP/HTTPS scheme | String |
+| `ome.io/ingress-path-template` | `pathTemplate` | URL path pattern | String template |
+| `ome.io/ingress-disable-istio-virtualhost` | `disableIstioVirtualHost` | Skip VirtualService creation | Boolean ("true"/"false") |
+| `ome.io/ingress-disable-creation` | `disableIngressCreation` | Skip all ingress creation | Boolean ("true"/"false") |
+
+### Configuration Priority
+
+The resolution order follows this priority (highest to lowest):
+
+1. **Service Annotations** - Per-service overrides via `ome.io/ingress-*` annotations
+2. **ConfigMap Defaults** - Cluster-wide settings in `inferenceservice-config`
+3. **Built-in Defaults** - OME controller fallback values
+
 ## Deployment Mode Behavior
 
 OME creates different ingress resources based on deployment mode:

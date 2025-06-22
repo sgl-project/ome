@@ -7,6 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/interfaces"
 )
@@ -519,5 +520,67 @@ func BenchmarkDefaultDomainService_GetAdditionalHosts(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = service.GetAdditionalHosts(domainList, serviceHost, config)
+	}
+}
+
+func TestDefaultDomainService_AnnotationOverrides(t *testing.T) {
+	service := NewDomainService().(*DefaultDomainService)
+
+	// Base configuration from ConfigMap
+	baseConfig := &controllerconfig.IngressConfig{
+		IngressDomain:  "svc.cluster.local",
+		DomainTemplate: "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
+		UrlScheme:      "http",
+	}
+
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		expected    string
+	}{
+		{
+			name:        "no annotations - uses base config",
+			annotations: map[string]string{},
+			expected:    "test-service.test-namespace.svc.cluster.local",
+		},
+		{
+			name: "custom domain template annotation",
+			annotations: map[string]string{
+				constants.IngressDomainTemplate: "{{ .Name }}-custom.example.com",
+			},
+			expected: "test-service-custom.example.com",
+		},
+		{
+			name: "custom ingress domain annotation",
+			annotations: map[string]string{
+				constants.IngressDomain: "my-domain.com",
+			},
+			expected: "test-service.test-namespace.my-domain.com",
+		},
+		{
+			name: "both template and domain override",
+			annotations: map[string]string{
+				constants.IngressDomainTemplate: "{{ .Name }}-prod.{{ .IngressDomain }}",
+				constants.IngressDomain:         "company.com",
+			},
+			expected: "test-service-prod.company.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test InferenceService with annotations
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-service",
+					Namespace:   "test-namespace",
+					Annotations: tt.annotations,
+				},
+			}
+
+			result, err := service.GenerateDomainName("test-service", isvc, baseConfig)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
 	}
 }
