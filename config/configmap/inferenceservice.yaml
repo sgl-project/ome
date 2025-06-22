@@ -10,12 +10,17 @@ data:
         "ingressService" : "istio-ingressgateway.istio-system.svc.cluster.local",
         "localGateway" : "knative-serving/knative-local-gateway",
         "localGatewayService" : "knative-local-gateway.istio-system.svc.cluster.local",
+        "knativeLocalGatewayService" : "knative-local-gateway.istio-system.svc.cluster.local",
+        "omeIngressGateway" : "",
         "ingressDomain"  : "svc.cluster.local",
         "ingressClassName" : "istio",
+        "additionalIngressDomains" : null,
         "domainTemplate": "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}",
         "urlScheme": "http",
         "disableIstioVirtualHost": false,
-        "disableIngressCreation": false
+        "pathTemplate": "",
+        "disableIngressCreation": false,
+        "enableGatewayAPI": false
     }
 
   deploy: |-
