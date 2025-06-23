@@ -13,6 +13,14 @@ metadata:
 spec:
   model:
     name: llama-4-maverick-17b-128e-instruct-fp8
+  runtime:
+    name: srt-llama-4-maverick-17b-128e-instruct-fp8-pd
   engine:
+    minReplicas: 1
+    maxReplicas: 1
+  decoder:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
     minReplicas: 1
     maxReplicas: 1

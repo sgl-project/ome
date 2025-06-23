@@ -332,3 +332,27 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 
 	return labels
 }
+
+// UpdateComponentStatus updates component status based on deployment mode
+// This method provides a systematic way to handle status updates across all components
+func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, objectMeta metav1.ObjectMeta, getPodLabelInfo func(bool, metav1.ObjectMeta, v1beta1.ComponentStatusSpec) (string, string)) error {
+	// Always initialize the component ready condition to ensure it's visible from the start
+	// The deployment reconciler will update the condition based on the actual deployment status:
+	// - MultiNode: Updates when LWS becomes available
+	// - RawDeployment: Updates when Deployment becomes available
+	// - Serverless: Updates when Knative Service becomes ready
+	b.StatusManager.InitializeComponentCondition(&isvc.Status, componentType)
+
+	// Update model status for all deployment modes based on actual pod information
+	rawDeployment := b.DeploymentMode == constants.RawDeployment
+	statusSpec := isvc.Status.Components[componentType]
+	podLabelKey, podLabelValue := getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
+
+	pods, err := isvcutils.ListPodsByLabel(b.Client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
+	if err != nil {
+		return errors.Wrapf(err, "failed to list %s pods by label", componentType)
+	}
+	b.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, pods, rawDeployment)
+
+	return nil
+}

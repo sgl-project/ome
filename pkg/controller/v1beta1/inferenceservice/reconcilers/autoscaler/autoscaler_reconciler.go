@@ -81,7 +81,6 @@ func createAutoscaler(client client.Client,
 	scheme *runtime.Scheme, componentMeta metav1.ObjectMeta,
 	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
 ) (Autoscaler, error) {
-	log.Info("Current Autoscaler Class Info", "componentMeta", componentMeta, "inferenceServiceSpec", inferenceServiceSpec)
 	ac := getAutoscalerClass(componentMeta)
 
 	switch ac {

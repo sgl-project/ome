@@ -130,14 +130,25 @@ func (sr *StatusReconciler) getMultiDeploymentCondition(deployments []*appsv1.De
 
 // setCondition sets a condition on the status
 func (sr *StatusReconciler) setCondition(status *v1beta1.InferenceServiceStatus, conditionType apis.ConditionType, condition *apis.Condition) {
-	switch {
-	case condition == nil:
-	case condition.Status == v1.ConditionUnknown:
+	if condition != nil {
 		status.SetCondition(conditionType, condition)
-	case condition.Status == v1.ConditionTrue:
-		status.SetCondition(conditionType, condition)
-	case condition.Status == v1.ConditionFalse:
-		status.SetCondition(conditionType, condition)
+	}
+}
+
+// InitializeComponentCondition initializes a component ready condition if it doesn't exist
+// This is used for MultiNode deployments to ensure conditions are visible from the start
+func (sr *StatusReconciler) InitializeComponentCondition(status *v1beta1.InferenceServiceStatus, component v1beta1.ComponentType) {
+	readyCondition := sr.getReadyConditionsMap()[component]
+
+	// Only initialize if the condition doesn't exist yet
+	if !status.IsConditionReady(readyCondition) && !status.IsConditionUnknown(readyCondition) {
+		condition := &apis.Condition{
+			Type:    readyCondition,
+			Status:  v1.ConditionFalse,
+			Reason:  "Initializing",
+			Message: fmt.Sprintf("%s component initializing", component),
+		}
+		sr.setCondition(status, readyCondition, condition)
 	}
 }
 

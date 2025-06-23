@@ -122,7 +122,7 @@ func TestHTTPRouteBuilder_BuildHTTPRoute_RouterComponent(t *testing.T) {
 		{
 			name:            "router component ready",
 			isvc:            createTestInferenceServiceWithRouterHTTPRoute("test-isvc", "default"),
-			expectedName:    "test-isvc",
+			expectedName:    "test-isvc-router",
 			expectedError:   false,
 			expectedTimeout: toGatewayAPIDuration(60),
 		},
@@ -135,7 +135,7 @@ func TestHTTPRouteBuilder_BuildHTTPRoute_RouterComponent(t *testing.T) {
 		{
 			name:            "router component with custom timeout",
 			isvc:            createTestInferenceServiceWithRouterHTTPRouteTimeout("test-isvc", "default", 90),
-			expectedName:    "test-isvc",
+			expectedName:    "test-isvc-router",
 			expectedError:   false,
 			expectedTimeout: toGatewayAPIDuration(90),
 		},
@@ -187,7 +187,7 @@ func TestHTTPRouteBuilder_BuildHTTPRoute_DecoderComponent(t *testing.T) {
 		{
 			name:            "decoder component ready",
 			isvc:            createTestInferenceServiceWithDecoderHTTPRoute("test-isvc", "default"),
-			expectedName:    "test-isvc",
+			expectedName:    "test-isvc-decoder",
 			expectedError:   false,
 			expectedTimeout: toGatewayAPIDuration(60),
 		},
@@ -200,7 +200,7 @@ func TestHTTPRouteBuilder_BuildHTTPRoute_DecoderComponent(t *testing.T) {
 		{
 			name:            "decoder component with custom timeout",
 			isvc:            createTestInferenceServiceWithDecoderHTTPRouteTimeout("test-isvc", "default", 45),
-			expectedName:    "test-isvc",
+			expectedName:    "test-isvc-decoder",
 			expectedError:   false,
 			expectedTimeout: toGatewayAPIDuration(45),
 		},
