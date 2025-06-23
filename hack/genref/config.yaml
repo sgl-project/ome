@@ -33,5 +33,5 @@ externalPackages:
     target: https://pkg.go.dev/k8s.io/apimachinery/pkg/runtime#RawExtension
   - match: ^knative\.dev/pkg/apis\.URL$
     target: https://pkg.go.dev/knative.dev/pkg/apis#URL
-  - match: ^github\.com/sgl-project/sgl-ome/pkg/constants\.
+  - match: ^github\.com/sgl-project/ome/pkg/constants\.
     target: https://pkg.go.dev/github.com/sgl-project/ome/pkg/constants#{{- .TypeIdentifier -}}
