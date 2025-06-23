@@ -11,7 +11,7 @@ SWAGGER_CODEGEN_JAR="hack/python-sdk/openapi-generator-cli-${OPENAPI_GENERATOR_V
 SWAGGER_CODEGEN_CONF="hack/python-sdk/swagger_config.json"
 SWAGGER_CODEGEN_FILE="pkg/openapi/swagger.json"
 SDK_OUTPUT_PATH="python/ome"
-NPM_REGISTRY="https://artifactory.oci.oraclecorp.com/api/npm/global-dev-npm"
+NPM_REGISTRY="https://registry.npmjs.org"
 
 # Function to handle errors
 handle_error() {
