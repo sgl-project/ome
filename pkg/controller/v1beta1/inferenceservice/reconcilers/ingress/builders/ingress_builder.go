@@ -53,7 +53,7 @@ func (b *IngressBuilder) BuildIngress(ctx context.Context, isvc *v1beta1.Inferen
 
 	switch {
 	case isvc.Spec.Router != nil:
-		if !isvc.Status.IsConditionReady(v1beta1.RoutesReady) {
+		if !isvc.Status.IsConditionReady(v1beta1.RouterReady) {
 			isvc.Status.SetCondition(v1beta1.IngressReady, &apis.Condition{
 				Type:   v1beta1.IngressReady,
 				Status: corev1.ConditionFalse,
@@ -124,27 +124,35 @@ func (b *IngressBuilder) buildRouterRules(isvc *v1beta1.InferenceService) ([]net
 	decoderName := constants.DecoderServiceName(isvc.Name)
 	engineName := constants.EngineServiceName(isvc.Name)
 
+	// 1. Default/top-level host routes to router (since router exists)
 	host, err := b.generateIngressHost(string(constants.Router), true, routerName, isvc)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating top level router ingress host: %w", err)
 	}
+	rules = append(rules, b.generateRule(host, routerName, "/", constants.CommonISVCPort))
 
+	// 2. Component-specific rule for router
 	routerHost, err := b.generateIngressHost(string(constants.Router), false, routerName, isvc)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating router ingress host: %w", err)
 	}
+	rules = append(rules, b.generateRule(routerHost, routerName, "/", constants.CommonISVCPort))
 
+	// 3. Component-specific rule for engine
+	engineHost, err := b.generateIngressHost(string(constants.Engine), false, engineName, isvc)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating engine ingress host: %w", err)
+	}
+	rules = append(rules, b.generateRule(engineHost, engineName, "/", constants.CommonISVCPort))
+
+	// 4. Component-specific rule for decoder (if decoder exists)
 	if isvc.Spec.Decoder != nil {
-		decoderHost, err := b.generateIngressHost(string(constants.Decoder), false, routerName, isvc)
+		decoderHost, err := b.generateIngressHost(string(constants.Decoder), false, decoderName, isvc)
 		if err != nil {
 			return nil, fmt.Errorf("failed creating decoder ingress host: %w", err)
 		}
-		rules = append(rules, b.generateRule(decoderHost, decoderName, "/", constants.CommonDefaultHttpPort))
+		rules = append(rules, b.generateRule(decoderHost, decoderName, "/", constants.CommonISVCPort))
 	}
-
-	// :predict routes to the router when there are both engine and router
-	rules = append(rules, b.generateRule(host, routerName, "/", constants.CommonDefaultHttpPort))
-	rules = append(rules, b.generateRule(routerHost, engineName, "/", constants.CommonDefaultHttpPort))
 
 	return rules, nil
 }
@@ -155,19 +163,26 @@ func (b *IngressBuilder) buildDecoderRules(isvc *v1beta1.InferenceService) ([]ne
 	decoderName := constants.DecoderServiceName(isvc.Name)
 	engineName := constants.EngineServiceName(isvc.Name)
 
+	// 1. Default/top-level host routes to engine (since no router exists)
 	host, err := b.generateIngressHost(string(constants.Decoder), true, decoderName, isvc)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating top level decoder ingress host: %w", err)
 	}
+	rules = append(rules, b.generateRule(host, engineName, "/", constants.CommonISVCPort))
 
+	// 2. Component-specific rule for engine
+	engineHost, err := b.generateIngressHost(string(constants.Engine), false, engineName, isvc)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating engine ingress host: %w", err)
+	}
+	rules = append(rules, b.generateRule(engineHost, engineName, "/", constants.CommonISVCPort))
+
+	// 3. Component-specific rule for decoder
 	decoderHost, err := b.generateIngressHost(string(constants.Decoder), false, decoderName, isvc)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating decoder ingress host: %w", err)
 	}
-
-	// :predict routes to the engine when there is only engine and decoder
-	rules = append(rules, b.generateRule(host, engineName, "/", constants.CommonDefaultHttpPort))
-	rules = append(rules, b.generateRule(decoderHost, decoderName, "/", constants.CommonDefaultHttpPort))
+	rules = append(rules, b.generateRule(decoderHost, decoderName, "/", constants.CommonISVCPort))
 
 	return rules, nil
 }
@@ -182,7 +197,8 @@ func (b *IngressBuilder) buildEngineOnlyRules(isvc *v1beta1.InferenceService) ([
 		return nil, fmt.Errorf("failed creating top level engine ingress host: %w", err)
 	}
 
-	rules = append(rules, b.generateRule(host, engineName, "/", constants.CommonDefaultHttpPort))
+	rules = append(rules, b.generateRule(host, engineName, "/", constants.CommonISVCPort))
+
 	return rules, nil
 }
 

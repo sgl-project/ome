@@ -636,20 +636,20 @@ func DefaultPredictorServiceName(name string) string {
 	return builder.String()
 }
 
-func PredictorServiceName(name string) string {
-	return name
-}
-
 func DefaultRouterServiceName(name string) string {
 	return name + "-" + string(Router) + "-" + InferenceServiceDefault
 }
 
-func RouterServiceName(name string) string {
+func PredictorServiceName(name string) string {
 	return name
 }
 
+func RouterServiceName(name string) string {
+	return name + "-router"
+}
+
 func DecoderServiceName(name string) string {
-	return name
+	return name + "-decoder"
 }
 
 func EngineServiceName(name string) string {

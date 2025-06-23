@@ -376,7 +376,7 @@ func (b *VirtualServiceBuilder) createHTTPRouteDestination(gatewayService string
 		Destination: &istiov1beta1.Destination{
 			Host: gatewayService,
 			Port: &istiov1beta1.PortSelector{
-				Number: constants.CommonDefaultHttpPort,
+				Number: constants.CommonISVCPort,
 			},
 		},
 		Weight: 100,

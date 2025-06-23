@@ -403,8 +403,8 @@ func setComponentStatusReadyRaw(isvc *v1beta1.InferenceService) {
 	})
 
 	if isvc.Spec.Router != nil {
-		isvc.Status.SetCondition(v1beta1.RoutesReady, &apis.Condition{
-			Type:   v1beta1.RoutesReady,
+		isvc.Status.SetCondition(v1beta1.RouterReady, &apis.Condition{
+			Type:   v1beta1.RouterReady,
 			Status: corev1.ConditionTrue,
 		})
 	}
