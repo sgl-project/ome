@@ -113,7 +113,7 @@ The Go tools require that you clone the repository to the
 To check out this repository:
 
 1. Create your own
-   [clone this repo](https://support.atlassian.com/bitbucket-cloud/docs/clone-a-git-repository/)
+   [clone this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
 1. Clone it to your machine:
 
 ```shell
