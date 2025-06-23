@@ -40,16 +40,16 @@ OME-Agent offers the following capabilities:
 - **Environment Variables**:
     - `GOPATH`: If not already set, select a directory and add it to the environment: `export GOPATH=...`.
     - `$GOPATH/bin` in `PATH`: Ensures tooling installed via `go get` functions correctly.
-    - `GONOPROXY` and `GOPRIVATE`: Set to retrieve dependencies from Oracle's internal Bitbucket repository (`oracle.com/oci,bitbucket.oci.oraclecorp.com`).
+    - `GONOPROXY` and `GOPRIVATE`: (Optional) Set to retrieve dependencies from any internal repository.
 
 ### Installation
 
 Clone the repository and install the OME-Agent CLI.
 
 ```bash
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
-cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/gencore
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/genaicore/ome.git
+mkdir -p ${GOPATH}/src/github.com/sgl-project/ome
+cd ${GOPATH}/src/github.com/sgl-project/ome
+git clone https://github.com/sgl-project/ome.git
 cd ome
 make ome-agent
 ```
