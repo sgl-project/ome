@@ -11,6 +11,7 @@ SWAGGER_CODEGEN_JAR="hack/python-sdk/openapi-generator-cli-${OPENAPI_GENERATOR_V
 SWAGGER_CODEGEN_CONF="hack/python-sdk/swagger_config.json"
 SWAGGER_CODEGEN_FILE="pkg/openapi/swagger.json"
 SDK_OUTPUT_PATH="python/ome"
+NPM_REGISTRY="https://artifactory.oci.oraclecorp.com/api/npm/global-dev-npm"
 
 # Function to handle errors
 handle_error() {
@@ -75,7 +76,7 @@ ensure_npm_installed() {
     
     # Configure npm registry
     echo >&2 "Configuring npm registry..."
-    npm config set registry https://artifactory.oci.oraclecorp.com/api/npm/global-dev-npm 2>&1 || handle_error "Failed to set npm registry"
+    npm config set registry $NPM_REGISTRY 2>&1 || handle_error "Failed to set npm registry"
     npm config set strict-ssl false 2>&1 || handle_error "Failed to set npm strict-ssl option"
 }
 

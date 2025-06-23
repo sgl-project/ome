@@ -128,10 +128,10 @@ To start your environment, you'll need to set these environment variables (we re
 
 1. `GOPATH`: If you don't have one, simply pick a directory and add `export GOPATH=...`
 2. `$GOPATH/bin` on `PATH`: This is so that tooling installed via `go get` will work properly.
-3. `GONOPROXY`: Set go proxy to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
-4. `GOPRIVATE`: Set go private to pull the dependencies from the internal Oracle bitbucket repository `oracle.com/oci,bitbucket.oci.oraclecorp.com`.
+3. `GONOPROXY`: (Optional) Set go proxy to pull the dependencies from the any internal repository.
+4. `GOPRIVATE`: (Optional) Set go private to pull the dependencies from the any internal repository.
 5. `ARCH`: If you are using M1 or M2 MacBook, the value is `linux/arm64`.
-6. `REGISTRY`: The docker repository to which developer images should be pushed (e.g., `ord.ocir.io/<namespace>`).
+6. `REGISTRY`: The docker repository to which developer images should be pushed.
 
 **Note:** Set up a container image repository for pushing images. You can use any container image registry by adjusting the authentication methods and repository paths mentioned in the sections below.
 
@@ -149,12 +149,12 @@ The Go tools require that you clone the repository to the `src/github.com/sgl-pr
 
 To check out this repository:
 
-1. Create your own [clone this repo](https://support.atlassian.com/bitbucket-cloud/docs/clone-a-git-repository/)
+1. Create your own [clone this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
 2. Clone it to your machine:
 ```shell
-mkdir -p ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
-cd ${GOPATH}/src/bitbucket.oci.oraclecorp.com/genaicore
-git clone ssh://git@bitbucket.oci.oraclecorp.com:7999/genaicore/ome.git
+mkdir -p ${GOPATH}/src/github.com/sgl-project/ome
+cd ${GOPATH}/src/github.com/sgl-project/ome
+git clone https://github.com/sgl-project/ome.git
 cd ome
 ```
 
@@ -318,8 +318,8 @@ For VSCode or Cursor, follow these steps to set up the development environment:
 As you make changes to the code-base, there are two special cases to be aware of:
 
 * **If you change an input to generated code**, then you must run `make manifests`. Inputs include:
-  * API type definitions in [apis/serving](https://bitbucket.oci.oraclecorp.com/projects/GEN/repos/ome/browse/pkg/apis/serving)
-  * Manifests or kustomize patches stored in [config](https://bitbucket.oci.oraclecorp.com/projects/GENAI/repos/ome/browse/config).
+  * API type definitions in [pkg/apis](https://github.com/sgl-project/ome/tree/main/pkg/apis)
+  * Manifests or kustomize patches stored in [config](https://github.com/sgl-project/ome/tree/main/config).
 
   To generate the OME go clients, you should run `make generate`.
 
