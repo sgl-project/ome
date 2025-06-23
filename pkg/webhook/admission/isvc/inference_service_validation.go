@@ -223,33 +223,25 @@ func (v *InferenceServiceValidator) validateRuntimeAndModelResolution(ctx contex
 
 // resolveModelAndRuntime performs actual model and runtime resolution
 func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, isvc *v1beta1.InferenceService, warnings admission.Warnings) (admission.Warnings, error) {
-	// Resolve model
-	model, _, err := isvcutils.GetBaseModel(v.Client, isvc.Spec.Model.Name, isvc.Namespace)
+	// Resolve model using the new architecture approach
+	baseModel, _, err := isvcutils.GetBaseModel(v.Client, isvc.Spec.Model.Name, isvc.Namespace)
 	if err != nil {
 		return warnings, fmt.Errorf("failed to resolve model %s: %w", isvc.Spec.Model.Name, err)
 	}
 
 	// Validate model is not disabled
-	if model.Disabled != nil && *model.Disabled {
+	if baseModel.Disabled != nil && *baseModel.Disabled {
 		return warnings, fmt.Errorf("model %s is disabled", isvc.Spec.Model.Name)
 	}
 
-	// Try to resolve runtime
-	tempModelSpec := &v1beta1.ModelSpec{
-		BaseModel: &isvc.Spec.Model.Name,
-	}
-
-	runtimes, err := isvcutils.GetSupportingRuntimes(tempModelSpec, v.Client, isvc.Namespace)
+	// Use the same runtime resolution logic as the reconciler
+	_, rtName, err := isvcutils.GetRuntimeForNewArchitecture(v.Client, isvc, baseModel)
 	if err != nil {
-		return warnings, fmt.Errorf("failed to get supporting runtimes: %w", err)
-	}
-
-	if len(runtimes) == 0 {
 		return warnings, fmt.Errorf("no supporting runtime found for model %s and engine does not have complete runner configuration", isvc.Spec.Model.Name)
 	}
 
 	// Success - runtime will be auto-selected
-	warnings = append(warnings, fmt.Sprintf("Runtime will be auto-selected for model %s (found %d compatible runtimes)", isvc.Spec.Model.Name, len(runtimes)))
+	warnings = append(warnings, fmt.Sprintf("Runtime %s will be auto-selected for model %s", rtName, isvc.Spec.Model.Name))
 	return warnings, nil
 }
 
