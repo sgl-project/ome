@@ -152,12 +152,12 @@ func mergeSpec[T any](runtimeInit T, override T) (*T, error) {
 // The user-provided (isvcRouter) fields take precedence over the runtime defaults.
 func MergeRouterSpec(isvcRouter, runtimeRouter *v1beta1.RouterSpec) (*v1beta1.RouterSpec, error) {
 	switch {
-	case runtimeRouter == nil && isvcRouter == nil:
+	case isvcRouter == nil:
+		// if router is not specified in isvc, return nil
 		return nil, nil
 	case runtimeRouter == nil:
+		// if router is not specified in runtime, return isvcRouter
 		return isvcRouter.DeepCopy(), nil
-	case isvcRouter == nil:
-		return runtimeRouter.DeepCopy(), nil
 	}
 
 	return mergeSpec(v1beta1.RouterSpec{
@@ -172,12 +172,12 @@ func MergeRouterSpec(isvcRouter, runtimeRouter *v1beta1.RouterSpec) (*v1beta1.Ro
 // The user-provided (isvcEngine) fields take precedence over the runtime defaults.
 func MergeEngineSpec(runtimeEngine, isvcEngine *v1beta1.EngineSpec) (*v1beta1.EngineSpec, error) {
 	switch {
-	case runtimeEngine == nil && isvcEngine == nil:
+	case isvcEngine == nil:
+		// if engine is not specified in isvc, return nil
 		return nil, nil
 	case runtimeEngine == nil:
+		// if engine is not specified in runtime, return isvcEngine
 		return isvcEngine.DeepCopy(), nil
-	case isvcEngine == nil:
-		return runtimeEngine.DeepCopy(), nil
 	}
 
 	return mergeSpec(v1beta1.EngineSpec{
@@ -193,12 +193,12 @@ func MergeEngineSpec(runtimeEngine, isvcEngine *v1beta1.EngineSpec) (*v1beta1.En
 // The user-provided (isvcDecoder) fields take precedence over the runtime defaults.
 func MergeDecoderSpec(runtimeDecoder, isvcDecoder *v1beta1.DecoderSpec) (*v1beta1.DecoderSpec, error) {
 	switch {
-	case runtimeDecoder == nil && isvcDecoder == nil:
+	case isvcDecoder == nil:
+		// if decoder is not specified in isvc, return nil
 		return nil, nil
 	case runtimeDecoder == nil:
+		// if decoder is not specified in runtime, return isvcDecoder
 		return isvcDecoder.DeepCopy(), nil
-	case isvcDecoder == nil:
-		return runtimeDecoder.DeepCopy(), nil
 	}
 
 	return mergeSpec(v1beta1.DecoderSpec{
