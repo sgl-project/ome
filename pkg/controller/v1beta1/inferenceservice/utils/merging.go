@@ -156,7 +156,7 @@ func MergeRouterSpec(isvcRouter, runtimeRouter *v1beta1.RouterSpec) (*v1beta1.Ro
 		// if router is not specified in isvc, return nil
 		return nil, nil
 	case runtimeRouter == nil:
-		// if router is not specified in runtime, return isvcRouter
+		// if router is not specified in runtime, return a copy of isvcRouter
 		return isvcRouter.DeepCopy(), nil
 	}
 
@@ -176,7 +176,7 @@ func MergeEngineSpec(runtimeEngine, isvcEngine *v1beta1.EngineSpec) (*v1beta1.En
 		// if engine is not specified in isvc, return nil
 		return nil, nil
 	case runtimeEngine == nil:
-		// if engine is not specified in runtime, return isvcEngine
+		// if engine is not specified in runtime, return a copy of isvcEngine
 		return isvcEngine.DeepCopy(), nil
 	}
 
@@ -197,7 +197,7 @@ func MergeDecoderSpec(runtimeDecoder, isvcDecoder *v1beta1.DecoderSpec) (*v1beta
 		// if decoder is not specified in isvc, return nil
 		return nil, nil
 	case runtimeDecoder == nil:
-		// if decoder is not specified in runtime, return isvcDecoder
+		// if decoder is not specified in runtime, return a copy of isvcDecoder
 		return isvcDecoder.DeepCopy(), nil
 	}
 
