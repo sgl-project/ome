@@ -14,6 +14,9 @@ if [ -z "${GOPATH:-}" ]; then
     export GOPATH
 fi
 
+# Make sure all modules are downloaded.
+(cd "${KUBE_ROOT}" && go mod tidy)
+
 CODEGEN_PKG=$(cd "${KUBE_ROOT}" && go list -f '{{.Dir}}' -m k8s.io/code-generator@"${CODEGEN_VERSION}" 2>/dev/null)
 THIS_PKG="github.com/sgl-project/ome"
 

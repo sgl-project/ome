@@ -1,8 +1,8 @@
 # OME
 
 [![Go Report](https://goreportcard.com/badge/github.com/sgl-project/ome)](https://goreportcard.com/report/github.com/sgl-project/ome)
-[![Latest Release](https://img.shields.io/github/v/release/sgl-project/sgl-ome?include_prereleases)](https://github.com/sgl-project/ome/releases/latest)
-[![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://sgl-project.github.io/sgl-ome/docs/reference/ome.v1beta1/)
+[![Latest Release](https://img.shields.io/github/v/release/sgl-project/ome?include_prereleases)](https://github.com/sgl-project/ome/releases/latest)
+[![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://sgl-project.github.io/ome/docs/reference/ome.v1beta1/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 <div align="center">
@@ -13,7 +13,7 @@
 
 OME is a Kubernetes operator for enterprise-grade management and serving of Large Language Models (LLMs). It optimizes the deployment and operation of LLMs by automating model management, intelligent runtime selection, efficient resource utilization, and sophisticated deployment patterns.
 
-Read the [documentation](https://sgl-project.github.io/sgl-ome/docs/) to learn more about OME capabilities and features.
+Read the [documentation](https://sgl-project.github.io/ome/docs/) to learn more about OME capabilities and features.
 
 ## Features Overview
 
@@ -34,7 +34,7 @@ Read the [documentation](https://sgl-project.github.io/sgl-ome/docs/) to learn m
 ## Production Readiness Status
 
 - ✅ API version: v1beta1
-- ✅ Comprehensive [documentation](https://sgl-project.github.io/sgl-ome/docs/)
+- ✅ Comprehensive [documentation](https://sgl-project.github.io/ome/docs/)
 - ✅ Unit and integration test coverage
 - ✅ Production deployments with large-scale LLM workloads
 - ✅ Monitoring via standard metrics and Kubernetes events
@@ -49,18 +49,18 @@ To install OME in your cluster using Helm:
 
 ```bash
 # Add the OME Helm repository
-helm repo add ome https://sgl-project.github.io/sgl-ome/charts
+helm repo add ome https://sgl-project.github.io/ome/charts
 helm repo update
 
 # Install OME
 helm install ome ome/ome --namespace ome --create-namespace
 ```
 
-Read the [installation guide](https://sgl-project.github.io/sgl-ome/docs/installation/) for more options and advanced configurations.
+Read the [installation guide](https://sgl-project.github.io/ome/docs/installation/) for more options and advanced configurations.
 
 Learn more about:
-- OME [concepts](https://sgl-project.github.io/sgl-ome/docs/concepts/)
-- Common [tasks](https://sgl-project.github.io/sgl-ome/docs/tasks/)
+- OME [concepts](https://sgl-project.github.io/ome/docs/concepts/)
+- Common [tasks](https://sgl-project.github.io/ome/docs/tasks/)
 
 ## Architecture
 
@@ -87,7 +87,7 @@ High-level overview of the main priorities:
 ## Community and Support
 
 - [GitHub Issues](https://github.com/sgl-project/ome/issues) for bug reports and feature requests
-- [Documentation](https://sgl-project.github.io/sgl-ome/docs/) for guides and reference
+- [Documentation](https://sgl-project.github.io/ome/docs/) for guides and reference
 
 ## License
 
