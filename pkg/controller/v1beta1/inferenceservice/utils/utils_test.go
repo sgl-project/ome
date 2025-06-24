@@ -530,6 +530,74 @@ func marshalJSONHelper(v interface{}) []byte {
 	return data
 }
 
+func TestMergeRouterSpec(t *testing.T) {
+	// Create a sample RouterSpec for use in tests
+	isvcRouter := &v1beta1.RouterSpec{
+		PodSpec: v1beta1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  "isvc-container",
+					Image: "isvc-image",
+				},
+			},
+		},
+	}
+
+	runtimeRouter := &v1beta1.RouterSpec{
+		PodSpec: v1beta1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  "runtime-container",
+					Image: "runtime-image",
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		isvcRouter    *v1beta1.RouterSpec
+		runtimeRouter *v1beta1.RouterSpec
+		expected      *v1beta1.RouterSpec
+		expectError   bool
+	}{
+		{
+			name:          "isvc router is nil",
+			isvcRouter:    nil,
+			runtimeRouter: runtimeRouter,
+			expected:      nil,
+			expectError:   false,
+		},
+		{
+			name:          "runtime router is nil",
+			isvcRouter:    isvcRouter,
+			runtimeRouter: nil,
+			expected:      isvcRouter,
+			expectError:   false,
+		},
+		{
+			name:          "both routers are nil",
+			isvcRouter:    nil,
+			runtimeRouter: nil,
+			expected:      nil,
+			expectError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merged, err := MergeRouterSpec(tt.isvcRouter, tt.runtimeRouter)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, merged)
+			}
+		})
+	}
+}
+
 func TestMergeEngineSpec(t *testing.T) {
 	intPtr := func(i int) *int { return &i }
 	strPtr := func(s string) *string { return &s }
@@ -597,22 +665,9 @@ func TestMergeEngineSpec(t *testing.T) {
 					},
 				},
 			},
-			isvcEngine: nil,
-			expectedEngine: &v1beta1.EngineSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(1),
-					MaxReplicas: 3,
-				},
-				PodSpec: v1beta1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:  "ome-container",
-							Image: "runtime-engine:v1",
-						},
-					},
-				},
-			},
-			expectError: false,
+			isvcEngine:     nil,
+			expectedEngine: nil,
+			expectError:    false,
 		},
 		{
 			name: "merge min/max replicas - isvc overrides",
@@ -1082,72 +1137,59 @@ func TestMergeDecoderSpec(t *testing.T) {
 		expectError     bool
 	}{
 		{
-			name:            "both nil",
+			name:            "nil inputs",
 			runtimeDecoder:  nil,
 			isvcDecoder:     nil,
 			expectedDecoder: nil,
 			expectError:     false,
 		},
 		{
-			name:           "runtime nil, isvc not nil",
+			name: "isvc spec is nil, runtime spec is not nil",
+			runtimeDecoder: &v1beta1.DecoderSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					MinReplicas: intPtr(2),
+					MaxReplicas: 5,
+				},
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "ome-container",
+							Image: "runtime:v1",
+						},
+					},
+				},
+			},
+			isvcDecoder:     nil,
+			expectedDecoder: nil,
+			expectError:     false,
+		},
+		{
+			name:           "runtime spec is nil, isvc spec is not nil",
 			runtimeDecoder: nil,
 			isvcDecoder: &v1beta1.DecoderSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(2),
+					MinReplicas: intPtr(1),
 					MaxReplicas: 5,
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
 						{
 							Name:  "ome-container",
-							Image: "decoder:latest",
+							Image: "isvc:v1",
 						},
 					},
 				},
 			},
 			expectedDecoder: &v1beta1.DecoderSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(2),
+					MinReplicas: intPtr(1),
 					MaxReplicas: 5,
 				},
 				PodSpec: v1beta1.PodSpec{
 					Containers: []v1.Container{
 						{
 							Name:  "ome-container",
-							Image: "decoder:latest",
-						},
-					},
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "runtime not nil, isvc nil",
-			runtimeDecoder: &v1beta1.DecoderSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(1),
-					MaxReplicas: 3,
-				},
-				PodSpec: v1beta1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:  "ome-container",
-							Image: "runtime-decoder:v1",
-						},
-					},
-				},
-			},
-			isvcDecoder: nil,
-			expectedDecoder: &v1beta1.DecoderSpec{
-				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
-					MinReplicas: intPtr(1),
-					MaxReplicas: 3,
-				},
-				PodSpec: v1beta1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:  "ome-container",
-							Image: "runtime-decoder:v1",
+							Image: "isvc:v1",
 						},
 					},
 				},
