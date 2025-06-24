@@ -1,5 +1,5 @@
 {
-    "name": "sgl-ome",
+    "name": "ome",
     "build": {
         "dockerfile": "Dockerfile",
         "context": ".."

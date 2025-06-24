@@ -1,4 +1,4 @@
-# SGL-OME Ingress Reconciler Documentation
+# OME Ingress Reconciler Documentation
 
 ## Recent Updates (2024)
 
@@ -635,7 +635,7 @@ data:
 
 ## Summary
 
-The SGL-OME ingress reconciler provides a flexible, strategy-based approach to handling external access across different deployment modes:
+The OME ingress reconciler provides a flexible, strategy-based approach to handling external access across different deployment modes:
 
 1. **Serverless deployments** use Istio VirtualService for seamless Knative integration
 2. **RawDeployment/MultiNode deployments** use either Kubernetes Ingress or Gateway API HTTPRoute based on configuration
