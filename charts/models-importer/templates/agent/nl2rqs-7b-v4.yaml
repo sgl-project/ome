@@ -9,7 +9,7 @@ metadata:
     genai-model-on-demand-retired-date: "{{ index .Values "nl2rqs-7b-v4" "timeOnDemandRetired" }}"
     genai-model-dedicated-retired-date: "{{ index .Values "nl2rqs-7b-v4" "timeDedicatedRetired" }}"
   annotations:
-    models.ome.io/runtime: "vllm-nl2rqs-7b-v2"
+    models.ome.io/runtime: "vllm-llama-3-1-8b-instruct"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "nl2rqs-7b-v4" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "nl2rqs-7b-v4" "isInternal" }}"

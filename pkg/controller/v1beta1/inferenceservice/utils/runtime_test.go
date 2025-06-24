@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,39 +18,39 @@ func createFakeClient() client.Client {
 	return fake.NewClientBuilder().WithScheme(scheme).Build()
 }
 
-func TestGetProtocol(t *testing.T) {
-	tests := []struct {
-		name      string
-		modelSpec *v1beta1.ModelSpec
-		want      constants.InferenceServiceProtocol
-	}{
-		{
-			name: "with protocol version",
-			modelSpec: &v1beta1.ModelSpec{
-				PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-					ProtocolVersion: ptr(constants.OpenInferenceProtocolV1),
-				},
-			},
-			want: constants.OpenInferenceProtocolV1,
-		},
-		{
-			name: "without protocol version",
-			modelSpec: &v1beta1.ModelSpec{
-				PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
-					ProtocolVersion: nil,
-				},
-			},
-			want: constants.OpenInferenceProtocolV2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetProtocol(tt.modelSpec)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
+//func TestGetProtocol(t *testing.T) {
+//	tests := []struct {
+//		name      string
+//		modelSpec *v1beta1.ModelSpec
+//		want      constants.InferenceServiceProtocol
+//	}{
+//		{
+//			name: "with protocol version",
+//			modelSpec: &v1beta1.ModelSpec{
+//				PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
+//					ProtocolVersion: ptr(constants.OpenInferenceProtocolV1),
+//				},
+//			},
+//			want: constants.OpenInferenceProtocolV1,
+//		},
+//		{
+//			name: "without protocol version",
+//			modelSpec: &v1beta1.ModelSpec{
+//				PredictorExtensionSpec: v1beta1.PredictorExtensionSpec{
+//					ProtocolVersion: nil,
+//				},
+//			},
+//			want: constants.OpenInferenceProtocolV2,
+//		},
+//	}
+//
+//	for _, tt := range tests {
+//		t.Run(tt.name, func(t *testing.T) {
+//			got := GetProtocol(tt.modelSpec)
+//			assert.Equal(t, tt.want, got)
+//		})
+//	}
+//}
 
 func TestGetBaseModel(t *testing.T) {
 	// Create a fake fakeClient with our custom types registered

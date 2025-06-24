@@ -48,6 +48,15 @@ spec:
       modelArchitecture: MistralForCausalLM
       autoSelect: true
       priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.42.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: MistralForCausalLM
+      autoSelect: true
+      priority: 1
   modelSizeRange:
     min: 5B
     max: 9B

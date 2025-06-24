@@ -53,7 +53,7 @@ spec:
         version: "4.42.0.dev0"
       modelFormat:
         name: safetensors
-        version: "1"
+        version: "1.0.0"
       modelArchitecture: Qwen2ForCausalLM
       autoSelect: true
       priority: 1

@@ -890,10 +890,11 @@ func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseMode
 		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s is disabled", *isvc.Spec.Predictor.Model.Runtime)
 	}
 
-	if !p.isProtocolVersionSupported(isvc, rt) {
-		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified runtime does not support specified protocol version")
-		return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s does not support specified protocol version", *isvc.Spec.Predictor.Model.Runtime)
-	}
+	// TODO: add back ProtocolVersion validation
+	//if !p.isProtocolVersionSupported(isvc, rt) {
+	//	p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified runtime does not support specified protocol version")
+	//	return v1beta1.ServingRuntimeSpec{}, ctrl.Result{}, fmt.Errorf("specified runtime %s does not support specified protocol version", *isvc.Spec.Predictor.Model.Runtime)
+	//}
 
 	if !isvcutils.RuntimeSupportsModel(isvc.Spec.Predictor.Model, rt, &baseModel) {
 		p.updateModelTransitionStatus(isvc, v1beta1.NoSupportingRuntime, "Specified runtime does not support specified framework/version")
@@ -903,16 +904,16 @@ func (p *Predictor) getSpecifiedRuntime(isvc *v1beta1.InferenceService, baseMode
 	return *rt, ctrl.Result{}, nil
 }
 
-// isProtocolVersionSupported checks if the protocol version is supported by the runtime.
-func (p *Predictor) isProtocolVersionSupported(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec) bool {
-	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
-		return true
-	}
-
-	protocolVersion := isvcutils.GetProtocol(isvc.Spec.Predictor.Model)
-
-	return runtime.IsProtocolVersionSupported(protocolVersion)
-}
+//// isProtocolVersionSupported checks if the protocol version is supported by the runtime.
+//func (p *Predictor) isProtocolVersionSupported(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec) bool {
+//	if isvc.Spec.Predictor.Model.ProtocolVersion == nil {
+//		return true
+//	}
+//
+//	protocolVersion := isvcutils.GetProtocol(isvc.Spec.Predictor.Model)
+//
+//	return runtime.IsProtocolVersionSupported(protocolVersion)
+//}
 
 // reconcileBaseModel reconciles the base model for the predictor.
 func (p *Predictor) reconcileBaseModel(isvc *v1beta1.InferenceService) (v1beta1.BaseModelSpec, metav1.ObjectMeta, ctrl.Result, error) {

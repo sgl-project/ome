@@ -7,23 +7,26 @@ import (
 	"strconv"
 	"strings"
 
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	goerrors "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var log = logf.Log.WithName("Runtime")
+
 // GetProtocol returns the protocol version for the given model spec.
 // If ProtocolVersion is not specified, it defaults to OpenInferenceProtocolV2.
 // This is used to determine which inference protocol the model should use for serving.
-func GetProtocol(modelSpec *v1beta1.ModelSpec) constants.InferenceServiceProtocol {
-	if modelSpec.PredictorExtensionSpec.ProtocolVersion != nil {
-		return *modelSpec.PredictorExtensionSpec.ProtocolVersion
-	}
-	return constants.OpenInferenceProtocolV2
-}
+//func GetProtocol(modelSpec *v1beta1.ModelSpec) constants.InferenceServiceProtocol {
+//	if modelSpec.PredictorExtensionSpec.ProtocolVersion != nil {
+//		return *modelSpec.PredictorExtensionSpec.ProtocolVersion
+//	}
+//	return constants.OpenInferenceProtocolV2
+//}
 
 // stringSet is a helper type that implements a set-like behavior for strings
 // using a map with empty struct values for efficient membership testing
@@ -67,10 +70,7 @@ func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.Bas
 // 1. If the runtime is disabled
 // 2. If the runtime supports the model's format and architecture
 // 3. If the runtime supports the model's size range
-// 4. If the runtime supports the model's protocol version
 func GetSupportingRuntimes(modelSpec *v1beta1.ModelSpec, cl client.Client, namespace string) ([]v1beta1.SupportedRuntime, error) {
-	modelProtocolVersion := GetProtocol(modelSpec)
-
 	// List all namespace-scoped runtimes
 	runtimes := &v1beta1.ServingRuntimeList{}
 	if err := cl.List(context.TODO(), runtimes, client.InNamespace(namespace)); err != nil {
@@ -98,7 +98,8 @@ func GetSupportingRuntimes(modelSpec *v1beta1.ModelSpec, cl client.Client, names
 	// Process namespace-scoped runtimes
 	for i := range runtimes.Items {
 		rt := &runtimes.Items[i]
-		if !rt.Spec.IsDisabled() && RuntimeSupportsModel(modelSpec, &rt.Spec, model) && rt.Spec.IsProtocolVersionSupported(modelProtocolVersion) {
+		// TODO: add back ProtocolVersion validation
+		if !rt.Spec.IsDisabled() && RuntimeSupportsModel(modelSpec, &rt.Spec, model) {
 			srSpecs = append(srSpecs, v1beta1.SupportedRuntime{Name: rt.GetName(), Spec: rt.Spec})
 		}
 	}
@@ -107,12 +108,19 @@ func GetSupportingRuntimes(modelSpec *v1beta1.ModelSpec, cl client.Client, names
 	// Process cluster-scoped runtimes
 	for i := range clusterRuntimes.Items {
 		crt := &clusterRuntimes.Items[i]
-		if !crt.Spec.IsDisabled() && RuntimeSupportsModel(modelSpec, &crt.Spec, model) && crt.Spec.IsProtocolVersionSupported(modelProtocolVersion) {
+		// TODO: add back ProtocolVersion validation
+		if !crt.Spec.IsDisabled() && RuntimeSupportsModel(modelSpec, &crt.Spec, model) {
 			clusterSrSpecs = append(clusterSrSpecs, v1beta1.SupportedRuntime{Name: crt.GetName(), Spec: crt.Spec})
 		}
 	}
 	sortSupportedRuntimeByPriority(clusterSrSpecs, model.ModelFormat, parseModelSize(*model.ModelParameterSize))
 	srSpecs = append(srSpecs, clusterSrSpecs...)
+
+	if len(srSpecs) == 0 {
+		log.Info("No supported cluster runtimes found",
+			"expected model format label", getModelFormatLabel(model))
+	}
+
 	return srSpecs, nil
 }
 

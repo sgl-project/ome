@@ -53,6 +53,16 @@ spec:
       autoSelect: true
       priority: 1
       version: "1.0.0"
+    - modelFramework:
+        name: transformers
+        version: "4.47.1"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: true
+      priority: 1
+      version: "1.0.0"
   modelSizeRange:
     min: 60B
     max: 75B
