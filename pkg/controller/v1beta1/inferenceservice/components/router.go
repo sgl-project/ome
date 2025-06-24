@@ -79,12 +79,6 @@ func NewRouter(
 
 // Reconcile implements the Component interface for Router
 func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
-	// If router is not specified in ISVC, do not reconcile router, even if it's in the runtime.
-	if isvc.Spec.Router == nil {
-		r.Log.Info("Router not specified in InferenceService, skipping reconciliation", "inferenceService", isvc.Name, "namespace", isvc.Namespace)
-		// TODO: Consider deleting existing router resources if isvc.Spec.Router is nil and resources exist.
-		return ctrl.Result{}, nil
-	}
 	r.Log.Info("Reconciling router component", "inferenceService", isvc.Name, "namespace", isvc.Namespace)
 
 	// Validate router spec
