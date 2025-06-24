@@ -25,9 +25,7 @@ func SetupEnvTest() *envtest.Environment {
 		// This code should be illegal
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "..", "..", "..", "..", "config", "crd", "ome.io_trainedmodels.yaml"),
-			filepath.Join("..", "..", "..", "..", "..", "..", "test", "crds"),
 			filepath.Join("..", "..", "..", "..", "config", "crd", "ome.io_trainedmodels.yaml"),
-			filepath.Join("..", "..", "..", "..", "test", "crds"),
 		},
 		UseExistingCluster: proto.Bool(false),
 	}

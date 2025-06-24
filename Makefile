@@ -524,7 +524,9 @@ artifacts: kustomize ## Generate artifacts for release.
 .PHONY: integration-test
 integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."
-	go test -v ./integration_tests/... -ginkgo.v -ginkgo.trace
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		-v ./integration_tests/... \
+		-ginkgo.v -ginkgo.trace
 	@echo "✅ Integration tests passed"
 
 ##@ 🧪 Testing

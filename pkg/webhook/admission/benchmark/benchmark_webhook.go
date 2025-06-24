@@ -98,6 +98,14 @@ func (v *BenchmarkJobValidator) validateTrafficScenarios(task string, scenarios 
 			"E(512)",
 			"E(1024)"},
 		"image-to-embeddings": {"I(512,512)"},
+		"text-to-rerank": {
+			"R(64,100)",
+			"R(128,100)",
+			"R(256,100)",
+			"R(512,100)",
+			"R(1024,100)",
+			"R(2096,100)",
+			"R(4096,100)"},
 	}
 
 	// Use default if no scenarios provided
@@ -134,7 +142,8 @@ func (v *BenchmarkJobValidator) validateStorage(storage *v1beta1.StorageSpec) er
 // ScenarioValidationPattern holds regex patterns for scenario validation.
 var ScenarioValidationPattern = map[string]*regexp.Regexp{
 	"text-to-text":        regexp.MustCompile(`^N\(\d+,\d+\)\/\(\d+,\d+\)|U\(\d+,\d+\)(?:\/\(\d+,\d+\))?|D\(\d+,\d+\)$`),
-	"text-to-embeddings":  regexp.MustCompile(`^E\(\d+,\d+\)$`),
+	"text-to-embeddings":  regexp.MustCompile(`^E\(\d+\)$`),
+	"text-to-rerank":      regexp.MustCompile(`^R\(\d+,\d+\)$`),
 	"image-to-text":       regexp.MustCompile(`^I\(\d+,\d+(?:,\d+)?\)$`),
 	"image-to-embeddings": regexp.MustCompile(`^I\(\d+,\d+(?:,\d+)?\)$`),
 }

@@ -186,7 +186,12 @@ func TestValidateTrafficScenarios(t *testing.T) {
 		},
 		"Valid text-to-embeddings scenario": {
 			task:      "text-to-embeddings",
-			scenarios: []string{"E(10,20)"},
+			scenarios: []string{"E(10)"},
+			expected:  gomega.BeNil(),
+		},
+		"Valid text-to-rerank scenario": {
+			task:      "text-to-rerank",
+			scenarios: []string{"R(10,20)"},
 			expected:  gomega.BeNil(),
 		},
 		"Invalid scenario format": {
@@ -197,6 +202,11 @@ func TestValidateTrafficScenarios(t *testing.T) {
 		"Invalid scenario for task type": {
 			task:      "text-to-embeddings",
 			scenarios: []string{"N10,20/30,40"},
+			expected:  gomega.HaveOccurred(),
+		},
+		"Invalid scenario for rerank task type": {
+			task:      "text-to-rerank",
+			scenarios: []string{"R(100)"},
 			expected:  gomega.HaveOccurred(),
 		},
 	}
