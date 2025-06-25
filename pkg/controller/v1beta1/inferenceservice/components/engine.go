@@ -170,17 +170,20 @@ func (e *Engine) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 
 // reconcileObjectMeta creates the object metadata for the engine component
 func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	annotations, err := e.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{}, err
-	}
-
-	labels := e.processLabels(isvc)
-
 	engineName, err := e.determineEngineName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
+
+	annotations, err := e.processAnnotations(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      engineName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels := e.processLabels(isvc)
 
 	return metav1.ObjectMeta{
 		Name:        engineName,
@@ -197,7 +200,13 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 	})
 
 	// Merge with engine annotations
-	mergedAnnotations := utils.Union(annotations, e.engineSpec.Annotations)
+	var mergedAnnotations map[string]string
+	if e.engineSpec != nil {
+		engineAnnotations := e.engineSpec.Annotations
+		mergedAnnotations = utils.Union(annotations, engineAnnotations)
+	} else {
+		mergedAnnotations = annotations
+	}
 
 	// Use common function for base annotations processing
 	processedAnnotations, err := ProcessBaseAnnotations(&e.BaseComponentFields, isvc, mergedAnnotations)
@@ -210,13 +219,16 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the engine
 func (e *Engine) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	engineLabels := e.engineSpec.Labels
-
-	// Start with engine-specific labels
-	labels := utils.Union(isvc.Labels, engineLabels)
+	var mergedLabels map[string]string
+	if e.engineSpec != nil {
+		engineLabels := e.engineSpec.Labels
+		mergedLabels = utils.Union(isvc.Labels, engineLabels)
+	} else {
+		mergedLabels = isvc.Labels
+	}
 
 	// Use common function for base labels processing
-	return ProcessBaseLabels(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, labels)
+	return ProcessBaseLabels(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, mergedLabels)
 }
 
 // determineEngineName determines the name of the engine service

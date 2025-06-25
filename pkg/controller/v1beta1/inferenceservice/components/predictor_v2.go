@@ -320,17 +320,20 @@ func (p *PredictorV2) getPodLabelInfo(rawDeployment bool, objectMeta metav1.Obje
 
 // reconcileObjectMeta creates the object metadata for the predictor component
 func (p *PredictorV2) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	annotations, err := p.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{}, err
-	}
-
-	labels := p.processLabels(isvc)
-
 	predictorName, err := p.determinePredictorName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
+
+	annotations, err := p.processAnnotations(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      predictorName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels := p.processLabels(isvc)
 
 	return metav1.ObjectMeta{
 		Name:        predictorName,

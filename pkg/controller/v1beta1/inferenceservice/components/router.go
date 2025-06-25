@@ -162,17 +162,20 @@ func (r *Router) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 
 // reconcileObjectMeta creates the object metadata for the router component
 func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	annotations, err := r.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{}, err
-	}
-
-	labels := r.processLabels(isvc)
-
 	routerName, err := r.determineRouterName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
+
+	annotations, err := r.processAnnotations(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      routerName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels := r.processLabels(isvc)
 
 	return metav1.ObjectMeta{
 		Name:        routerName,
@@ -189,7 +192,13 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 	})
 
 	// Merge with router annotations
-	mergedAnnotations := utils.Union(annotations, r.routerSpec.Annotations)
+	var mergedAnnotations map[string]string
+	if r.routerSpec != nil {
+		routerAnnotations := r.routerSpec.Annotations
+		mergedAnnotations = utils.Union(annotations, routerAnnotations)
+	} else {
+		mergedAnnotations = annotations
+	}
 
 	// Use common function for base annotations processing
 	processedAnnotations, err := ProcessBaseAnnotations(&r.BaseComponentFields, isvc, mergedAnnotations)
@@ -202,13 +211,16 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the router
 func (r *Router) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	routerLabels := r.routerSpec.Labels
-
-	// Start with router-specific labels
-	labels := utils.Union(isvc.Labels, routerLabels)
+	var mergedLabels map[string]string
+	if r.routerSpec != nil {
+		routerLabels := r.routerSpec.Labels
+		mergedLabels = utils.Union(isvc.Labels, routerLabels)
+	} else {
+		mergedLabels = isvc.Labels
+	}
 
 	// Use common function for base labels processing
-	return ProcessBaseLabels(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, labels)
+	return ProcessBaseLabels(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, mergedLabels)
 }
 
 // determineRouterName determines the name of the router service
