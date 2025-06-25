@@ -396,15 +396,15 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// Check if this component should exist based on current spec
 		if !reconciler.ShouldExist(isvc) {
 			// Component should be deleted
-			r.Log.Info("Calling Delete on component that should not exist", 
+			r.Log.Info("Calling Delete on component that should not exist",
 				"component", fmt.Sprintf("%T", reconciler),
-				"namespace", isvc.Namespace, 
+				"namespace", isvc.Namespace,
 				"inferenceService", isvc.Name)
 			result, err := reconciler.Delete(isvc)
 			if err != nil {
-				r.Log.Error(err, "Failed to delete component", 
+				r.Log.Error(err, "Failed to delete component",
 					"component", fmt.Sprintf("%T", reconciler),
-					"namespace", isvc.Namespace, 
+					"namespace", isvc.Namespace,
 					"inferenceService", isvc.Name)
 				return result, err
 			}
@@ -415,9 +415,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			// Component should exist, do normal reconciliation
 			result, err := reconciler.Reconcile(isvc)
 			if err != nil {
-				r.Log.Error(err, "Failed to reconcile component", 
+				r.Log.Error(err, "Failed to reconcile component",
 					"component", fmt.Sprintf("%T", reconciler),
-					"namespace", isvc.Namespace, 
+					"namespace", isvc.Namespace,
 					"inferenceService", isvc.Name)
 				return result, err
 			}

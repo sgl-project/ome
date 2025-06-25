@@ -1,6 +1,7 @@
 package components
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -13,12 +14,16 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
-	v1 "k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	leaderworkerset "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -79,7 +84,7 @@ func ReconcileFineTunedWeights(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 }
 
 // UpdateVolumeMounts updates volume mounts for the container
-func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta) {
+func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *corev1.Container, objectMeta *metav1.ObjectMeta) {
 	if container == nil {
 		b.Log.Error(errors.New("container is nil"), "UpdateVolumeMounts: container is nil")
 		return
@@ -88,7 +93,7 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	// Add model volume mount if base model is specified and it's necessary
 	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			vm := v1.VolumeMount{
+			vm := corev1.VolumeMount{
 				Name:      b.BaseModelMeta.Name,
 				MountPath: *b.BaseModel.Storage.Path,
 				ReadOnly:  true,
@@ -99,7 +104,7 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 
 	// Add fine-tuned serving volume mounts
 	if b.FineTunedServing {
-		defaultModelVolumeMount := v1.VolumeMount{
+		defaultModelVolumeMount := corev1.VolumeMount{
 			Name:      constants.ModelEmptyDirVolumeName,
 			MountPath: constants.ModelDefaultMountPath,
 		}
@@ -107,14 +112,14 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 
 		if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
 			// Update to have `base` sub-path in model volume mount for cohere tfew stacked serving case
-			defaultModelVolumeMountWithSubPath := v1.VolumeMount{
+			defaultModelVolumeMountWithSubPath := corev1.VolumeMount{
 				Name:      constants.ModelEmptyDirVolumeName,
 				MountPath: filepath.Join(constants.ModelDefaultMountPath, objectMeta.Annotations[constants.BaseModelFormat]),
 				SubPath:   constants.BaseModelVolumeMountSubPath,
 			}
 			isvcutils.UpdateVolumeMount(container, &defaultModelVolumeMountWithSubPath)
 
-			tfewFineTunedWeightVolumeMount := v1.VolumeMount{
+			tfewFineTunedWeightVolumeMount := corev1.VolumeMount{
 				Name:      constants.ModelEmptyDirVolumeName,
 				MountPath: filepath.Join(constants.CohereTFewFineTunedWeightVolumeMountPath, objectMeta.Annotations[constants.BaseModelFormat]),
 				ReadOnly:  true,
@@ -126,7 +131,7 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 
 	// Add blocklist volume mounts if enabled
 	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
-		inputBlocklistVolumeMount := v1.VolumeMount{
+		inputBlocklistVolumeMount := corev1.VolumeMount{
 			Name:      constants.BlocklistConfigMapVolumeName,
 			MountPath: constants.InputBlocklistMountPath,
 			ReadOnly:  true,
@@ -134,7 +139,7 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		}
 		isvcutils.AppendVolumeMount(container, &inputBlocklistVolumeMount)
 
-		outputBlocklistVolumeMount := v1.VolumeMount{
+		outputBlocklistVolumeMount := corev1.VolumeMount{
 			Name:      constants.BlocklistConfigMapVolumeName,
 			MountPath: constants.OutputBlocklistMountPath,
 			ReadOnly:  true,
@@ -145,7 +150,7 @@ func UpdateVolumeMounts(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 }
 
 // UpdateEnvVariables updates environment variables for the container
-func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *v1.Container, objectMeta *metav1.ObjectMeta) {
+func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *corev1.Container, objectMeta *metav1.ObjectMeta) {
 	if container == nil {
 		b.Log.Error(errors.New("container is nil"), "UpdateEnvVariables: container is nil")
 		return
@@ -156,7 +161,7 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
 			if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil {
 				b.Log.Info("Base model serving - adding MODEL_PATH env variable", "inference service", isvc.Name, "namespace", isvc.Namespace)
-				isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+				isvcutils.AppendEnvVars(container, &[]corev1.EnvVar{
 					{Name: constants.ModelPathEnvVarKey, Value: *b.BaseModel.Storage.Path},
 				})
 			}
@@ -166,20 +171,20 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		if b.BaseModel != nil && b.BaseModel.Vendor != nil {
 			if *b.BaseModel.Vendor == string(constants.Meta) {
 				// Llama/Meta vendor specific env vars
-				isvcutils.UpdateEnvVars(container, &v1.EnvVar{
+				isvcutils.UpdateEnvVars(container, &corev1.EnvVar{
 					Name: constants.ServedModelNameEnvVarKey,
 					Value: filepath.Join(
 						constants.LLamaVllmFTServingServedModelNamePrefix,
 						objectMeta.Annotations[constants.FineTunedAdapterInjectionKey],
 					),
 				})
-				isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+				isvcutils.AppendEnvVars(container, &[]corev1.EnvVar{
 					{Name: constants.ModelPathEnvVarKey, Value: constants.ModelDefaultMountPath},
 				})
 			} else if *b.BaseModel.Vendor == string(constants.Cohere) {
 				// Cohere vendor specific env vars
 				if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
-					isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+					isvcutils.AppendEnvVars(container, &[]corev1.EnvVar{
 						{Name: constants.TFewWeightPathEnvVarKey, Value: constants.CohereTFewFineTunedWeightDefaultPath},
 					})
 				}
@@ -191,13 +196,13 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 }
 
 // UpdatePodSpecVolumes updates pod spec with common volumes
-func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *v1.PodSpec, objectMeta *metav1.ObjectMeta) {
+func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
 	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
-		modelVolume := v1.Volume{
+		modelVolume := corev1.Volume{
 			Name: b.BaseModelMeta.Name,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
 					Path: *b.BaseModel.Storage.Path,
 				},
 			},
@@ -207,11 +212,11 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 
 	// Add empty model directory volume if required for fine-tuned serving
 	if isvcutils.IsEmptyModelDirVolumeRequired(objectMeta.Annotations) {
-		emptyModelDirVolume := v1.Volume{
+		emptyModelDirVolume := corev1.Volume{
 			Name: constants.ModelEmptyDirVolumeName,
-			VolumeSource: v1.VolumeSource{
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					Medium: v1.StorageMediumMemory,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium: corev1.StorageMediumMemory,
 				},
 			},
 		}
@@ -220,11 +225,11 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 
 	// Add blocklist configmap volume if enabled
 	if isvcutils.IsBlockListInjectionDisabled(objectMeta.Annotations) {
-		blockListConfigMapVolume := v1.Volume{
+		blockListConfigMapVolume := corev1.Volume{
 			Name: constants.BlocklistConfigMapVolumeName,
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					LocalObjectReference: v1.LocalObjectReference{
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: constants.ModelConfigName(isvc.Name),
 					},
 				},
@@ -358,37 +363,98 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	return nil
 }
 
-// DeleteComponent provides a helper implementation for component deletion
-// This method handles cleanup when a component is removed from the spec
+// DeleteComponent implements the common deletion logic for components
 func (b *BaseComponentFields) DeleteComponent(
-	isvc *v1beta1.InferenceService, 
+	isvc *v1beta1.InferenceService,
 	componentType v1beta1.ComponentType,
 	reconcileObjectMeta func(*v1beta1.InferenceService) (metav1.ObjectMeta, error),
 	deploymentReconciler interface{},
 ) (ctrl.Result, error) {
-	b.Log.Info("Deleting component resources", 
-		"component", componentType,
-		"inferenceService", isvc.Name, 
-		"namespace", isvc.Namespace)
-	
-	// Get object metadata for the component
+	log := b.Log.WithValues("inferenceservice", isvc.Name, "namespace", isvc.Namespace, "component", componentType)
+	log.Info("Deleting component")
+
 	objectMeta, err := reconcileObjectMeta(isvc)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile object metadata for deletion of %s", componentType)
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile object metadata for %s deletion", componentType)
 	}
-	
-	// Handle deletion based on deployment mode through the deployment reconciler
-	// The deployment reconciler will clean up all associated resources (deployments, services, etc.)
-	switch dr := deploymentReconciler.(type) {
-	case interface{ ReconcileDeployment(*v1beta1.InferenceService, metav1.ObjectMeta, *v1.PodSpec, int, *v1.PodSpec) (ctrl.Result, error) }:
-		// Call deployment reconciler with nil specs to trigger deletion
-		if result, err := dr.ReconcileDeployment(isvc, objectMeta, nil, 0, nil); err != nil {
-			return result, errors.Wrapf(err, "failed to delete %s deployment", componentType)
-		}
-	default:
-		b.Log.Info("No deletion reconciler available for component", "component", componentType)
+
+	// Direct deletion of Kubernetes resources
+	return b.deleteResourcesDirectly(isvc, objectMeta, componentType)
+}
+
+// deleteResourcesDirectly deletes component resources directly without using deployment reconcilers
+func (b *BaseComponentFields) deleteResourcesDirectly(
+	isvc *v1beta1.InferenceService,
+	objectMeta metav1.ObjectMeta,
+	componentType v1beta1.ComponentType,
+) (ctrl.Result, error) {
+	log := b.Log.WithValues("inferenceservice", isvc.Name, "namespace", isvc.Namespace, "component", componentType)
+
+	ctx := context.TODO()
+	var errors []error
+
+	// Delete Deployment
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      objectMeta.Name,
+			Namespace: objectMeta.Namespace,
+		},
 	}
-	
+	if err := b.Client.Delete(ctx, deployment); err != nil && !apierrors.IsNotFound(err) {
+		log.Error(err, "Failed to delete deployment", "name", deployment.Name)
+		errors = append(errors, err)
+	} else if err == nil {
+		log.Info("Successfully deleted deployment", "name", deployment.Name)
+	}
+
+	// Delete Service
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      objectMeta.Name,
+			Namespace: objectMeta.Namespace,
+		},
+	}
+	if err := b.Client.Delete(ctx, service); err != nil && !apierrors.IsNotFound(err) {
+		log.Error(err, "Failed to delete service", "name", service.Name)
+		errors = append(errors, err)
+	} else if err == nil {
+		log.Info("Successfully deleted service", "name", service.Name)
+	}
+
+	// Delete HPA (if exists)
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      objectMeta.Name,
+			Namespace: objectMeta.Namespace,
+		},
+	}
+	if err := b.Client.Delete(ctx, hpa); err != nil && !apierrors.IsNotFound(err) {
+		log.Error(err, "Failed to delete HPA", "name", hpa.Name)
+		errors = append(errors, err)
+	} else if err == nil {
+		log.Info("Successfully deleted HPA", "name", hpa.Name)
+	}
+
+	// Delete LeaderWorkerSet (for multi-node deployments)
+	lws := &leaderworkerset.LeaderWorkerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      objectMeta.Name,
+			Namespace: objectMeta.Namespace,
+		},
+	}
+	if err := b.Client.Delete(ctx, lws); err != nil && !apierrors.IsNotFound(err) {
+		log.Error(err, "Failed to delete LeaderWorkerSet", "name", lws.Name)
+		errors = append(errors, err)
+	} else if err == nil {
+		log.Info("Successfully deleted LeaderWorkerSet", "name", lws.Name)
+	}
+
+	// If any deletion failed, return error
+	if len(errors) > 0 {
+		return ctrl.Result{}, fmt.Errorf("failed to delete some resources for component %s: %v", componentType, errors)
+	}
+
+	log.Info("Successfully deleted all resources for component", "component", componentType)
 	return ctrl.Result{}, nil
 }
 

@@ -339,9 +339,9 @@ func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerRe
 // Delete implements the Component interface for Engine
 func (e *Engine) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 	return e.BaseComponentFields.DeleteComponent(
-		isvc, 
-		v1beta1.EngineComponent, 
-		e.reconcileObjectMeta, 
+		isvc,
+		v1beta1.EngineComponent,
+		e.reconcileObjectMeta,
 		e.deploymentReconciler,
 	)
 }
