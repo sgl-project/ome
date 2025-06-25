@@ -30,5 +30,6 @@ spec:
   modelCapabilities:
     - "CHAT"
   maxTokens: 200000
-
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "o3-mini-2025-01-31" "enableImageInput" }}"
 {{- end }}

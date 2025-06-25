@@ -30,5 +30,6 @@ spec:
   modelCapabilities:
     - "CHAT"
   maxTokens: 1047576
-
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "gpt-4-1-2025-04-14" "enableImageInput" }}"
 {{- end }}
