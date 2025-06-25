@@ -335,3 +335,18 @@ func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerRe
 		e.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
 }
+
+// Delete implements the Component interface for Engine
+func (e *Engine) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return e.BaseComponentFields.DeleteComponent(
+		isvc, 
+		v1beta1.EngineComponent, 
+		e.reconcileObjectMeta, 
+		e.deploymentReconciler,
+	)
+}
+
+// ShouldExist implements the Component interface for Engine
+func (e *Engine) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return e.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.EngineComponent)
+}

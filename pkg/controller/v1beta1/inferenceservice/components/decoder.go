@@ -339,3 +339,18 @@ func (d *Decoder) setParallelismEnvVarForDecoder(container *v1.Container, worker
 		d.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
 }
+
+// Delete implements the Component interface for Decoder
+func (d *Decoder) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return d.BaseComponentFields.DeleteComponent(
+		isvc,
+		v1beta1.DecoderComponent,
+		d.reconcileObjectMeta,
+		d.deploymentReconciler,
+	)
+}
+
+// ShouldExist implements the Component interface for Decoder
+func (d *Decoder) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return d.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.DecoderComponent)
+}

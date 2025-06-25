@@ -57,13 +57,6 @@ spec:
                     operator: In
                     values:
                       - BM.GPU.H100.8
-      volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-        - hostPath:
-            path: /dev/infiniband
-          name: devinf
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
@@ -112,22 +105,11 @@ spec:
             --moe-dense-tp-size 1
             --max-running-requests 1024
             --max-total-tokens 131072
-        volumeMounts:
-          - mountPath: /dev/shm
-            name: dshm
-          - mountPath: /dev/infiniband
-            name: devinf
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
-              - CAP_SYS_ADMIN
-          privileged: true
         readinessProbe:
           httpGet:
             path: /health_generate
@@ -174,14 +156,6 @@ spec:
                     operator: In
                     values:
                       - BM.GPU.H100.8
-      volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: 15Gi
-        - hostPath:
-            path: /dev/infiniband
-          name: devinf
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
@@ -239,17 +213,6 @@ spec:
             value: "0"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
-              - CAP_SYS_ADMIN
-          privileged: true
-        volumeMounts:
-          - mountPath: /dev/shm
-            name: dshm
-          - mountPath: /dev/infiniband
-            name: devinf
   decoderConfig:
     annotations:
       rdma.ome.io/auto-inject: "true"
@@ -275,19 +238,10 @@ spec:
                     operator: In
                     values:
                       - BM.GPU.H100.8
-      volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-        - hostPath:
-            path: /dev/infiniband
-          name: devinf
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
         env:
-          - name: NCCL_DEBUG
-            value: INFO
           - name: SGLANG_MOONCAKE_TRANS_THREAD
             value: "16"
           - name: SGL_ENABLE_JIT_DEEPGEMM
@@ -323,22 +277,11 @@ spec:
             --trust-remote-code
             --moe-dense-tp-size 1
             --ep-num-redundant-experts 32
-        volumeMounts:
-          - mountPath: /dev/shm
-            name: dshm
-          - mountPath: /dev/infiniband
-            name: devinf
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
-              - CAP_SYS_ADMIN
-          privileged: true
         readinessProbe:
           httpGet:
             path: /health_generate
@@ -385,14 +328,6 @@ spec:
                     operator: In
                     values:
                       - BM.GPU.H100.8
-      volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: 15Gi
-        - hostPath:
-            path: /dev/infiniband
-          name: devinf
       runner:
         name: ome-container
         image: fra.ocir.io/idqj093njucb/sgl:dev2
@@ -443,14 +378,3 @@ spec:
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-        securityContext:
-          capabilities:
-            add:
-              - IPC_LOCK
-              - CAP_SYS_ADMIN
-          privileged: true
-        volumeMounts:
-          - mountPath: /dev/shm
-            name: dshm
-          - mountPath: /dev/infiniband
-            name: devinf

@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -355,4 +356,56 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	b.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, pods, rawDeployment)
 
 	return nil
+}
+
+// DeleteComponent provides a helper implementation for component deletion
+// This method handles cleanup when a component is removed from the spec
+func (b *BaseComponentFields) DeleteComponent(
+	isvc *v1beta1.InferenceService, 
+	componentType v1beta1.ComponentType,
+	reconcileObjectMeta func(*v1beta1.InferenceService) (metav1.ObjectMeta, error),
+	deploymentReconciler interface{},
+) (ctrl.Result, error) {
+	b.Log.Info("Deleting component resources", 
+		"component", componentType,
+		"inferenceService", isvc.Name, 
+		"namespace", isvc.Namespace)
+	
+	// Get object metadata for the component
+	objectMeta, err := reconcileObjectMeta(isvc)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile object metadata for deletion of %s", componentType)
+	}
+	
+	// Handle deletion based on deployment mode through the deployment reconciler
+	// The deployment reconciler will clean up all associated resources (deployments, services, etc.)
+	switch dr := deploymentReconciler.(type) {
+	case interface{ ReconcileDeployment(*v1beta1.InferenceService, metav1.ObjectMeta, *v1.PodSpec, int, *v1.PodSpec) (ctrl.Result, error) }:
+		// Call deployment reconciler with nil specs to trigger deletion
+		if result, err := dr.ReconcileDeployment(isvc, objectMeta, nil, 0, nil); err != nil {
+			return result, errors.Wrapf(err, "failed to delete %s deployment", componentType)
+		}
+	default:
+		b.Log.Info("No deletion reconciler available for component", "component", componentType)
+	}
+	
+	return ctrl.Result{}, nil
+}
+
+// ShouldComponentExist provides a helper implementation for component existence checks
+// This method returns true if the component should exist based on the current InferenceService spec
+func (b *BaseComponentFields) ShouldComponentExist(isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType) bool {
+	switch componentType {
+	case v1beta1.EngineComponent:
+		return isvc.Spec.Engine != nil
+	case v1beta1.DecoderComponent:
+		return isvc.Spec.Decoder != nil
+	case v1beta1.RouterComponent:
+		return isvc.Spec.Router != nil
+	case v1beta1.PredictorComponent:
+		return isvc.Spec.Predictor.Model != nil
+	default:
+		b.Log.Info("Unknown component type for ShouldExist check", "component", componentType)
+		return false
+	}
 }

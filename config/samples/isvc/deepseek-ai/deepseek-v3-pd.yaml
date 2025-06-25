@@ -19,5 +19,5 @@ spec:
     minReplicas: 1
     maxReplicas: 1
   decoder:
-    minReplicas: 1
-    maxReplicas: 1
+    minReplicas: 2
+    maxReplicas: 2

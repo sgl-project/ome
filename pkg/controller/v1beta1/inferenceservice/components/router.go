@@ -254,3 +254,18 @@ func (r *Router) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	r.Log.Info("Router PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
 }
+
+// Delete implements the Component interface for Router
+func (r *Router) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return r.BaseComponentFields.DeleteComponent(
+		isvc,
+		v1beta1.RouterComponent,
+		r.reconcileObjectMeta,
+		r.deploymentReconciler,
+	)
+}
+
+// ShouldExist implements the Component interface for Router
+func (r *Router) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return r.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.RouterComponent)
+}

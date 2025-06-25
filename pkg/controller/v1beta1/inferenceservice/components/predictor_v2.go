@@ -784,3 +784,18 @@ func (p *PredictorV2) updateModelTransitionStatus(isvc *v1beta1.InferenceService
 		Message: message,
 	})
 }
+
+// Delete implements the Component interface for PredictorV2
+func (p *PredictorV2) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return p.BaseComponentFields.DeleteComponent(
+		isvc,
+		v1beta1.PredictorComponent,
+		p.reconcileObjectMeta,
+		p.deploymentReconciler,
+	)
+}
+
+// ShouldExist implements the Component interface for PredictorV2
+func (p *PredictorV2) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return p.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.PredictorComponent)
+}
