@@ -794,7 +794,6 @@ func (p *PredictorV2) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error
 		isvc,
 		v1beta1.PredictorComponent,
 		p.reconcileObjectMeta,
-		p.deploymentReconciler,
 	)
 }
 

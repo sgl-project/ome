@@ -371,7 +371,6 @@ func (b *BaseComponentFields) DeleteComponent(
 	isvc *v1beta1.InferenceService,
 	componentType v1beta1.ComponentType,
 	reconcileObjectMeta func(*v1beta1.InferenceService) (metav1.ObjectMeta, error),
-	deploymentReconciler interface{},
 ) (ctrl.Result, error) {
 	log := b.Log.WithValues("inferenceservice", isvc.Name, "namespace", isvc.Namespace, "component", componentType)
 	log.Info("Deleting component")

@@ -269,7 +269,6 @@ func (r *Router) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 		isvc,
 		v1beta1.RouterComponent,
 		r.reconcileObjectMeta,
-		r.deploymentReconciler,
 	)
 }
 

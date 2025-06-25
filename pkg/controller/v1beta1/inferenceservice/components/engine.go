@@ -350,7 +350,6 @@ func (e *Engine) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 		isvc,
 		v1beta1.EngineComponent,
 		e.reconcileObjectMeta,
-		e.deploymentReconciler,
 	)
 }
 

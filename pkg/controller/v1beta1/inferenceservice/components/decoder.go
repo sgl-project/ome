@@ -354,7 +354,6 @@ func (d *Decoder) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 		isvc,
 		v1beta1.DecoderComponent,
 		d.reconcileObjectMeta,
-		d.deploymentReconciler,
 	)
 }
 
