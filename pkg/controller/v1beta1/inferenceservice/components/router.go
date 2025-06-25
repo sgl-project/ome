@@ -192,12 +192,10 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 	})
 
 	// Merge with router annotations
-	var mergedAnnotations map[string]string
+	mergedAnnotations := annotations
 	if r.routerSpec != nil {
 		routerAnnotations := r.routerSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, routerAnnotations)
-	} else {
-		mergedAnnotations = annotations
 	}
 
 	// Use common function for base annotations processing
@@ -211,12 +209,10 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the router
 func (r *Router) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	var mergedLabels map[string]string
+	mergedLabels := isvc.Labels
 	if r.routerSpec != nil {
 		routerLabels := r.routerSpec.Labels
 		mergedLabels = utils.Union(isvc.Labels, routerLabels)
-	} else {
-		mergedLabels = isvc.Labels
 	}
 
 	// Use common function for base labels processing

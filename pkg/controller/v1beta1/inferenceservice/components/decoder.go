@@ -199,12 +199,10 @@ func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string
 	})
 
 	// Merge with decoder annotations
-	var mergedAnnotations map[string]string
+	mergedAnnotations := annotations
 	if d.decoderSpec != nil {
 		decoderAnnotations := d.decoderSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, decoderAnnotations)
-	} else {
-		mergedAnnotations = annotations
 	}
 
 	// Use common function for base annotations processing
@@ -218,12 +216,10 @@ func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string
 
 // processLabels processes the labels for the decoder
 func (d *Decoder) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	var mergedLabels map[string]string
+	mergedLabels := isvc.Labels
 	if d.decoderSpec != nil {
 		decoderLabels := d.decoderSpec.Labels
 		mergedLabels = utils.Union(isvc.Labels, decoderLabels)
-	} else {
-		mergedLabels = isvc.Labels
 	}
 
 	// Use common function for base labels processing

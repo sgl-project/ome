@@ -200,12 +200,10 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 	})
 
 	// Merge with engine annotations
-	var mergedAnnotations map[string]string
+	mergedAnnotations := annotations
 	if e.engineSpec != nil {
 		engineAnnotations := e.engineSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, engineAnnotations)
-	} else {
-		mergedAnnotations = annotations
 	}
 
 	// Use common function for base annotations processing
@@ -219,12 +217,10 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the engine
 func (e *Engine) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	var mergedLabels map[string]string
+	mergedLabels := isvc.Labels
 	if e.engineSpec != nil {
 		engineLabels := e.engineSpec.Labels
 		mergedLabels = utils.Union(isvc.Labels, engineLabels)
-	} else {
-		mergedLabels = isvc.Labels
 	}
 
 	// Use common function for base labels processing

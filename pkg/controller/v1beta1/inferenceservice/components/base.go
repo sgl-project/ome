@@ -307,6 +307,9 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 	}
 
 	// Merge with provided labels
+	if labels == nil {
+		labels = make(map[string]string)
+	}
 	for k, v := range baseLabels {
 		labels[k] = v
 	}
