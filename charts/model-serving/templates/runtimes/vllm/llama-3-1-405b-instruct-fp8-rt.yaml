@@ -45,6 +45,7 @@ spec:
       autoSelect: true
       priority: 1
       version: "1.0.0"
+      quantization: fp8
   volumes:
     - name: dshm
       emptyDir:
