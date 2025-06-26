@@ -1,0 +1,129 @@
+name: Publish Helm Charts to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  publish-charts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Prepare charts directory
+        run: |
+          mkdir -p .charts-repo
+          
+          # If this is a release, update versions
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix
+            
+            for chart in charts/*/; do
+              yq eval -i ".version = \"${VERSION}\"" "${chart}Chart.yaml"
+              yq eval -i ".appVersion = \"${VERSION}\"" "${chart}Chart.yaml"
+            done
+          fi
+
+      - name: Package charts
+        run: |
+          for chart in charts/*/; do
+            helm package "${chart}" -d .charts-repo
+          done
+
+      - name: Checkout gh-pages branch
+        run: |
+          git fetch origin gh-pages || true
+          git checkout gh-pages || git checkout --orphan gh-pages
+          
+          # Clean everything except charts directory
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.charts-repo' -exec rm -rf {} +
+          
+          # Create charts directory if it doesn't exist
+          mkdir -p charts
+
+      - name: Update Helm repository
+        run: |
+          # Copy new charts
+          cp .charts-repo/*.tgz charts/ || true
+          
+          # Generate index.yaml
+          helm repo index charts --url https://sgl-project.github.io/ome/charts
+          
+          # Also create an index at root for backward compatibility
+          cp charts/index.yaml .
+
+      - name: Create simple index.html
+        run: |
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>OME Helm Charts</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  h1 { color: #333; }
+                  .instructions { background: #f4f4f4; padding: 20px; border-radius: 5px; }
+                  code { background: #e8e8e8; padding: 2px 5px; border-radius: 3px; }
+                  pre { background: #333; color: #fff; padding: 15px; border-radius: 5px; overflow-x: auto; }
+              </style>
+          </head>
+          <body>
+              <h1>OME Helm Charts Repository</h1>
+              <p>This is the official Helm charts repository for OME (Oracle Machine Learning Engine).</p>
+              
+              <div class="instructions">
+                  <h2>Installation Instructions</h2>
+                  <pre>
+# Add the OME Helm repository
+helm repo add ome https://sgl-project.github.io/ome
+helm repo update
+
+# Install OME CRDs
+helm install ome-crd ome/ome-crd --namespace ome --create-namespace
+
+# Install OME resources
+helm install ome ome/ome-resources --namespace ome</pre>
+              </div>
+              
+              <h2>Available Charts</h2>
+              <ul>
+                  <li><a href="charts/">Browse all charts</a></li>
+                  <li><a href="charts/index.yaml">Helm repository index</a></li>
+              </ul>
+              
+              <h2>Documentation</h2>
+              <p>For more information, visit the <a href="https://sgl-project.github.io/ome/docs/">OME documentation</a>.</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Commit and push changes
+        run: |
+          git add .
+          git commit -m "Update Helm charts repository" || echo "No changes to commit"
+          git push origin gh-pages
