@@ -27,6 +27,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive  # Fetch Hugo themes
+          fetch-depth: 0         # Fetch all history for .GitInfo and .Lastmod
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install Hugo
+        run: |
+          cd hack/internal/tools && GOBIN=$GITHUB_WORKSPACE/bin CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@v0.142.0
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+
+      - name: Build Hugo site
+        working-directory: ./site
+        run: $GITHUB_WORKSPACE/bin/hugo --minify --baseURL https://docs.sglang.ai/ome/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -34,6 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          # Upload the built public directory
           path: './site/public'
   
   # Deployment job
