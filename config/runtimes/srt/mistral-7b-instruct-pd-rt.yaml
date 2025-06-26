@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-mistral-7b-instruct
+  name: srt-mistral-7b-instruct-pd
 spec:
   disabled: false
   supportedModelFormats:

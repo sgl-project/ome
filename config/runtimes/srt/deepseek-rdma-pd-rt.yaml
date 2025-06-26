@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-deepseek-pd-rdma
+  name: srt-deepseek-rdma-pd
 spec:
   disabled: false
   modelSizeRange:

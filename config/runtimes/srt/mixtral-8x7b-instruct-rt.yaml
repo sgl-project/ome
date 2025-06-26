@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-mmixtral-8x7b-instruct
+  name: srt-mixtral-8x7b-instruct
 spec:
   disabled: false
   supportedModelFormats:

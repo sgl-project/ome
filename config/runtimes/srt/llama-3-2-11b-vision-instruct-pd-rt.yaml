@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-2-11b-vision-instruct
+  name: srt-llama-3-2-11b-vision-instruct-pd
 spec:
   disabled: false
   supportedModelFormats:
