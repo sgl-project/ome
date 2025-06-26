@@ -61,7 +61,7 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp 4 \
+          --tp-size 4 \
           --mem-frac=0.95 \
           --context-length=128000 \
           --chat-template llama-4 \

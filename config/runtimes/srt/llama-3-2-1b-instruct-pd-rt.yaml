@@ -70,7 +70,7 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp 1 \
+          --tp-size 1 \
           --mem-frac=0.9 \
           --disaggregation-mode prefill \
           --disaggregation-ib-device mlx5_0
@@ -162,7 +162,7 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp 1 \
+          --tp-size 1 \
           --mem-frac=0.9 \
           --disaggregation-mode decode \
           --disaggregation-ib-device mlx5_0

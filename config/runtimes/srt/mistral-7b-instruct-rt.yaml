@@ -65,7 +65,7 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH"\
-          --tp 2 \
+          --tp-size 2 \
           --mem-frac=0.9
       volumeMounts:
         - mountPath: /dev/shm

@@ -38,7 +38,7 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp 1 \
+          --tp-size 1 \
           --is-embedding
       volumeMounts:
         - mountPath: /dev/shm

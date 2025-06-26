@@ -62,7 +62,7 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp 4 \
+          --tp-size 4 \
           --mem-frac=0.9 \
           --chat-template llama_3_vision
       volumeMounts:
