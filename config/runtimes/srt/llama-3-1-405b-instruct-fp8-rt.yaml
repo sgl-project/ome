@@ -108,7 +108,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: ghcr.io/moirai-internal/sgl-router:dev2
+      image: ghcr.io/moirai-internal/sgl-router:0.1.4.30f2a44
       resources:
         limits:
           cpu: "1"
