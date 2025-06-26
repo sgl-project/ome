@@ -36,6 +36,9 @@ jobs:
       - name: Run vet
         run: make vet
 
+      - name: Run tidy
+        run: make tidy
+
       # - name: Run golangci-lint
       #   run: make ci-lint
       # TODO: Re-enable linting once fixed
