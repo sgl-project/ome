@@ -34,7 +34,7 @@ OME-Agent offers the following capabilities:
 ### Prerequisites
 
 - **Go** version 1.23.0 or later.
-- **OCI CLI** and **SDK** for interacting with Oracle Cloud Infrastructure (optional if OCI services are not required).
+- **Cloud CLI** and **SDK** for interacting with cloud storage services (optional if cloud services are not required).
 - **HuggingFace Access Token** if downloading restricted models (optional if downloading public models).
 - **OCI Vault and KMS** setup for model weight decryption (optional if not decrypting model weights).
 - **Environment Variables**:

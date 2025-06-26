@@ -25,7 +25,7 @@ type instanceResultRaw struct {
 		Hostclass string `json:"hostclass"`
 
 		// TODO(achebatu): deprecate and use DefinedTags only.
-		// see https://jira.oci.oraclecorp.com/browse/SSD-13223
+		// Check instance metadata service availability
 		Hostsubclass string `json:"hostsubclass,omitempty"`
 	} `json:"metadata"`
 

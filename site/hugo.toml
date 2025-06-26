@@ -74,10 +74,10 @@ ignoreFiles = []
 github_project_repo = "https://github.com/sgl-project/ome"
   github_subdir = "site"
   RSSLink = "/index.xml"
-  author = "Oracle" # add your company name
+  author = "OME Contributors" # add your company name
   github = "sgl-project" # add your github profile name
 
-  copyright = "OCI Generative AI Service"
+  copyright = "OME Contributors"
   trademark_link = "https://www.linuxfoundation.org/legal/trademark-usage"
 
   # Google Custom Search Engine ID.
