@@ -69,7 +69,7 @@ spec:
           --port=8080 \
           --enable-metrics \
           --log-requests \
-          --model="$MODEL_PATH"\
+          --model-path="$MODEL_PATH"\
           --tp 2 \
           --mem-frac=0.9 \
           --disaggregation-mode prefill \
@@ -161,7 +161,7 @@ spec:
           --port=8080 \
           --enable-metrics \
           --log-requests \
-          --model="$MODEL_PATH"\
+          --model-path="$MODEL_PATH"\
           --tp 2 \
           --mem-frac=0.9 \
           --disaggregation-mode decode \
