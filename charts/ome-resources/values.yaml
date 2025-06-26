@@ -20,14 +20,14 @@ ome:
     adNumberName: ad2
     namespace: ax0pqskufyud
   benchmarkJob:
-    image: phx.ocir.io/idqj093njucb/genai-bench
+    image: ghcr.io/sgl-project/genai-bench
     tag: 0.1.113
     cpuRequest: "2"
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
   multinodeProber:
-    image: eu-frankfurt-1.ocir.io/idlsnvn0f2is/multinode-prober
+    image: ghcr.io/sgl-project/multinode-prober
     tag: v0.1
     memoryRequest: 100Mi
     cpuRequest: 100m
@@ -57,7 +57,7 @@ ome:
     tolerations: []
     topologySpreadConstraints: []
     affinity: {}
-    image: ord.ocir.io/idqj093njucb/ome/manager
+    image: ghcr.io/sgl-project/ome/manager
     tag: *defaultVersion
     resources:
       limits:
@@ -68,15 +68,15 @@ ome:
         memory: 4Gi
   servingruntime:
     vllmMedium:
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai
+      image: ghcr.io/sgl-project/official-vllm-openai
       tag: e3c664b
   dac:
     reconcileWithKueue: true
-    image: us-chicago-1.ocir.io/axoxdievda5j/genai-dac-dummy-image
+    image: ghcr.io/sgl-project/genai-dac-dummy-image
     tag: v1.0-58
     schedulerName: genai-kube-scheduler
   omeAgent:
-    image: ap-osaka-1.ocir.io/idqj093njucb/genai-ome-agent
+    image: ghcr.io/sgl-project/genai-ome-agent
     tag: *defaultVersion
 
     authType: InstancePrincipal
@@ -102,7 +102,7 @@ modelAgent:
   serviceAccountName: ome-model-agent
 
   image:
-    repository: eu-frankfurt-1.ocir.io/idlsnvn0f2is/model-agent
+    repository: ghcr.io/sgl-project/model-agent
     pullPolicy: Always
     tag: v0.1
   
@@ -156,7 +156,7 @@ modelAgent:
 
 trainingSidecar:
   image:
-    repository: us-chicago-1.ocir.io/axoxdievda5j/genai-ome-agent
+    repository: ghcr.io/sgl-project/genai-ome-agent
     tag: v1.1-322
 
   region: us-chicago-1

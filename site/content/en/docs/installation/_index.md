@@ -86,7 +86,7 @@ add the following to the `data` section:
 
 ```yaml
 data:
-  registriesSkippingTagResolving: ko.local, dev.local, ord.ocir.io, us-chicago-1.ocir.io
+  registriesSkippingTagResolving: ko.local, dev.local, ghcr.io/sgl-project
 ```
 
 ### 4. Install KEDA through Helm

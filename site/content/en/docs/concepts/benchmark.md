@@ -29,7 +29,7 @@ metadata:
    namespace: llama-3-1-70b
 spec:
    podOverride:
-      image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.127"
+      image: "ghcr.io/sgl-project/genai-bench:0.1.127"
       resources:
          requests:
             cpu: "4"

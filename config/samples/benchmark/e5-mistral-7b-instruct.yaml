@@ -5,7 +5,7 @@ metadata:
   namespace: e5-mistral-7b-instruct
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+    image: "ghcr.io/sgl-project/genai-bench:0.1.132"
   endpoint:
     inferenceService:
       name: e5-mistral-7b-instruct
