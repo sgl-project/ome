@@ -49,11 +49,26 @@ To install OME in your cluster using Helm:
 
 ```bash
 # Add the OME Helm repository
-helm repo add ome https://sgl-project.github.io/ome/charts
+helm repo add ome https://sgl-project.github.io/ome
 helm repo update
 
-# Install OME
-helm install ome ome/ome --namespace ome --create-namespace
+# Install OME CRDs first
+helm install ome-crd ome/ome-crd --namespace ome --create-namespace
+
+# Install OME resources
+helm install ome ome/ome-resources --namespace ome
+```
+
+For installation from source:
+
+```bash
+# Clone the repository
+git clone https://github.com/sgl-project/ome.git
+cd ome
+
+# Install from local charts
+helm install ome-crd charts/ome-crd --namespace ome --create-namespace
+helm install ome charts/ome-resources --namespace ome
 ```
 
 Read the [installation guide](https://sgl-project.github.io/ome/docs/installation/) for more options and advanced configurations.
