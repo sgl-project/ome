@@ -9,7 +9,7 @@ description: >
 OME is a standard operator for managing the lifecycle of LLM models,
 serving, training, and dedicated AI clusters in a Kubernetes cluster.
 It is designed to be a generic operator
-that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes cluster running on OCI.
+that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes cluster.
 
 ## Features
 
@@ -29,7 +29,7 @@ that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes c
 ![Architecture](/images/architecture.svg)
 
 1. **Compute Layer**: Includes OC Cluster Network, GPU, and compute images that will be used to launch individual nodes forming a larger cluster.
-2. **Kubernetes Cluster**: Sits on top of compute nodes to manage workload and scheduling. This is fully managed by OKE.
+2. **Kubernetes Cluster**: Sits on top of compute nodes to manage workload and scheduling.
 3. **Network Layer**: Pods, the smallest unit in Kubernetes, have their own networking requirements and use CNI (Container Network Interface) to communicate with each other. RDMA capability requires additional CNI for GPUs to communicate directly.
 4. **Application Layer**:
    - **Monitoring Components**: Responsible for surfacing all GPU and network device statuses through Kubernetes APIs.

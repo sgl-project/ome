@@ -55,7 +55,7 @@ spec:
 ```
 
 !!! Note
-If you are running on a managed Kubernetes service like OKE, you can use the managed Istio service provided by the cloud provider.
+If you are running on a managed Kubernetes service, you can use the managed Istio service provided by the cloud provider.
 
 !!! Note
 Istio ingress is recommended, but you can choose to install with other [Ingress controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) and create `IngressClass` resource for your Ingress option.
