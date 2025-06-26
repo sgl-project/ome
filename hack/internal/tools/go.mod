@@ -6,7 +6,7 @@ require (
 	github.com/gohugoio/hugo v0.147.7
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/mikefarah/yq/v4 v4.44.3
-	github.com/norwoodj/helm-docs v1.12.0
+	github.com/norwoodj/helm-docs v1.14.2
 	helm.sh/helm/v3 v3.17.3
 	k8s.io/code-generator v0.33.1
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20241105200929-48ec3b71211f
@@ -129,7 +129,6 @@ require (
 	k8s.io/client-go v0.33.0 // indirect
 	k8s.io/component-base v0.33.0 // indirect
 	k8s.io/gengo/v2 v2.0.0-20250207200755-1244d31929d7 // indirect
-	k8s.io/helm v2.14.3+incompatible // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	k8s.io/kubectl v0.32.2 // indirect
