@@ -36,94 +36,51 @@ footer {
 // --------------------------------------------------
 // custom navbar with larger logo, dropdown on mobile
 // --------------------------------------------------
+.td-navbar {
+  min-height: auto;
 
-// .td-navbar {
-//   min-height: auto;
-//
-//   .navbar-brand {
-//     margin: 1;
-//     padding: 0;
-//
-//     .text-uppercase {
-//       display: none;
-//     }
-//
-//     .navbar-logo {
-//       svg {
-//         display: block; /* Change inline-block to block */
-//         position: absolute;
-//         top: 0;
-//         z-index: 33;
-//         padding: 1px;
-//         height: 120px; /* Adjust as needed */
-//         width: 9%;   /* You can set width to 100% to make it full-width */
-//         background: transparent;
-//         border: none;
-//
-//         @include media-breakpoint-down(md) {
-//           width: 100%; /* Ensure it's full-width on smaller screens */
-//           height: auto; /* Let the height adjust automatically */
-//           padding: 6px;
-//         }
-//       }
-//     }
-//   }
-//
-//   .navbar-nav {
-//     @include media-breakpoint-down(md) {
-//       font-size: .875rem;
-//       .dropdown {
-//         min-width: inherit;
-//       }
-//     }
-//   }
-// }
+  .navbar-brand {
+    margin: 0;
+    padding: 0;
 
-// .td-navbar {
-//   min-height: auto;
-//
-//   .navbar-brand {
-//     margin: 0;
-//     padding: 0;
-//
-//     .text-uppercase {
-//       display: none;
-//     }
-//
-//     .navbar-logo {
-//       svg {
-//         display: block;
-//         position: absolute;
-//         top: 0;
-//         z-index: 33;
-//         padding: 1px;
-//         height: 95px;
-//         background: white; /* Set the background to transparent */
-//         border: 2px solid #e1bee7;
-//
-//         @include media-breakpoint-down(md) {
-//           width: 20px;
-//           height: auto;
-//           padding: 1px;
-//         }
-//
-//         /* Ensure the background remains transparent when clicked */
-//         &:active, &:focus {
-//           background: transparent; /* Keep background transparent on click or focus */
-//         }
-//       }
-//     }
-//   }
-//
-//   .navbar-nav {
-//     @include media-breakpoint-down(md) {
-//       font-size: .875rem;
-//       .dropdown {
-//         min-width: inherit;
-//       }
-//     }
-//   }
-// }
+    .text-uppercase {
+      display: none;
+    }
+
+    .navbar-logo {
+      margin-left: 1.5rem;
+      
+      svg {
+        display: inline-block;
+        position: relative;
+        top: 0;
+        z-index: 33;
+        padding: 15px;
+        height: 150px;
+        background: white;
+        border: 2px solid #4279f4;
+        border-radius: 0 0 10px 10px;
+        margin-top: -8px;
+
+        @include media-breakpoint-down(md) {
+          width: 120px;
+          height: auto;
+          padding: 10px;
+          margin-left: 0;
+        }
+      }
+    }
+  }
+
+  .navbar-nav {
+    @include media-breakpoint-down(md) {
+      font-size: .875rem;
+      .dropdown {
+        min-width: inherit;
+      }
+    }
+  }
+}
 
 .td-sidebar {
   padding-bottom: 0.5rem;
@@ -241,7 +198,6 @@ div.feature-state-notice {
       font-size: 0.95em;
       font-weight: bold;
       color: #000;
-      background-color: #daeaf9;
     }
 
     code {
@@ -252,6 +208,14 @@ div.feature-state-notice {
 
     margin-right: 2em;
     max-width: 80%;
+
+    &.feature-deprecated {
+      > .feature-state-name::before {
+        color: #ed6a5a;
+      }
+
+      background-color: #fbe1de;
+    }
   }
 
 // --------------------------------------------------
@@ -397,3 +361,4 @@ div.feature-state-notice {
     }
   }
 }
+
