@@ -134,13 +134,8 @@ To start your environment, you'll need to set these environment variables (we re
 6. `REGISTRY`: The docker repository to which developer images should be pushed.
 
 **Note:** Set up a container image repository for pushing images. You can use any container image registry by adjusting the authentication methods and repository paths mentioned in the sections below.
-
-1. Login to [BOAT tenancy](https://console.us-ashburn-1.oraclecloud.com/?tenant=bmc_operator_access&provider=ocna-saml)
-2. On the top right, click on the profile icon and then click on your username
-3. Under Auth Token, generate a token and keep a note of that
-4. Run the following command to login to the docker repository
 ```bash
-docker login us-ashburn-1.ocir.io -u bmc_operator_access/${USER}
+docker login <your-registry-url> -u <username>
 ```
 
 ### Clone OME Repository

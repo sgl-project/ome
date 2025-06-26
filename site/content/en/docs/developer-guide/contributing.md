@@ -33,7 +33,7 @@ Before you begin, you'll need to install these tools:
 - [yq 4.x](https://github.com/mikefarah/yq) - Used in project makefiles to parse YAML output
 
 **Container Registry Access:**
-- Access to Oracle Container Registry (`fra.ocir.io/idqj093njucb/`)
+- Access to a container registry
 - Docker login credentials
 
 ### Environment Variables
@@ -47,7 +47,7 @@ export PATH=$GOPATH/bin:$PATH
 
 
 # Container registry
-export REGISTRY="fra.ocir.io/idqj093njucb"  # Adjust to your registry
+export REGISTRY="<your-registry-url>"  # Adjust to your registry
 
 # Architecture (for M1/M2 MacBook)
 export ARCH="linux/arm64"  # Only needed for Apple Silicon
@@ -66,11 +66,11 @@ cd ome
 
 ### Container Registry Login
 
-Set up access to the Oracle Container Registry:
+Set up access to your container registry:
 
 ```bash
-# Generate an auth token in OCI Console (Profile > Auth Token)
-docker login fra.ocir.io -u <namespace>/<username>
+# Generate an auth token in your cloud provider's console
+docker login <your-registry-url> -u <username>
 # Enter your auth token as the password
 ```
 
@@ -404,10 +404,10 @@ go mod download
 **Registry Access:**
 ```bash
 # Re-authenticate
-docker login fra.ocir.io
+docker login <your-registry-url>
 
 # Check access
-docker pull fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124
+docker pull <your-registry-url>/official-sgl:v0.4.5.5e34fb5-cu124
 ```
 
 **Webhook Issues:**

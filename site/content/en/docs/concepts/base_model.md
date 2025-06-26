@@ -97,7 +97,7 @@ Available attributes in the BaseModel/ClusterBaseModel spec:
 
 OME supports multiple storage backends to work with your existing infrastructure:
 
-### Oracle Cloud Infrastructure (OCI) Object Storage
+### Cloud Object Storage
 
 Store your models in OCI Object Storage using this URI format:
 ```

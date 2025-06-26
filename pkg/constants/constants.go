@@ -23,7 +23,6 @@ var (
 	OMEAPIGroupName                  = "ome.io"
 	KnativeAutoscalingAPIGroupName   = "autoscaling.knative.dev"
 	KnativeServingAPIGroupNamePrefix = "serving.knative"
-	ChainsawAPIGroupName             = "chainsaw.k8s-integration.oracle.com"
 	KnativeServingAPIGroupName       = KnativeServingAPIGroupNamePrefix + ".dev"
 	OMENamespace                     = getEnvOrDefault("POD_NAMESPACE", "ome")
 )
