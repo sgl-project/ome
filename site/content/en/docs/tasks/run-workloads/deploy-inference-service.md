@@ -16,7 +16,7 @@ You need to have the following:
 - A Kubernetes cluster with OME installed
 - `kubectl` configured to communicate with your cluster
 - GPU nodes available in your cluster (A100, H100, H200, or B4)
-- Access to OME container registry (`fra.ocir.io/idqj093njucb/`)
+- Access to OME container registry (`ghcr.io/sgl-project/`)
 
 ## Step 1: Verify prerequisites
 

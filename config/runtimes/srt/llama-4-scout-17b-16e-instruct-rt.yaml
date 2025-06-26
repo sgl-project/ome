@@ -45,7 +45,7 @@ spec:
                     - BM.GPU.H100.8
     runner:
       name: ome-container
-      image: fra.ocir.io/idqj093njucb/sgl:dev2
+      image: ghcr.io/sgl-project/sgl:dev2
       ports:
         - containerPort: 8080
           name: http1
@@ -110,7 +110,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: fra.ocir.io/idqj093njucb/sgl-router:dev2
+      image: ghcr.io/sgl-project/sgl-router:dev2
       resources:
         limits:
           cpu: "1"

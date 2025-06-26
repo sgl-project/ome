@@ -5,7 +5,7 @@ metadata:
   namespace: deepseek-r1
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+    image: "ghcr.io/sgl-project/genai-bench:0.1.132"
   endpoint:
     inferenceService:
       name: deepseek-r1
