@@ -302,27 +302,83 @@ run-ome-agent-fine-tuned-adapter: fmt vet ome-agent ## Run ome-agent binary from
 .PHONY: ome-image
 ome-image: fmt vet ## Build ome-manager image.
 	@echo "🚀 Building ome-manager image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG)
 	@echo "✅ Image built"
 
 .PHONY: model-agent-image
 model-agent-image: fmt vet ## Build model-agent image.
 	@echo "🚀 Building model-agent image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG)
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG)
 	@echo "✅ Image built"
 
 .PHONY: multinode-prober-image
 multinode-prober-image: fmt vet ## Build multinode-prober image.
 	@echo "🚀 Building multinode-prober image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG)
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG)
 	@echo "✅ Image built"
 
 .PHONY: ome-agent-image
 ome-agent-image: fmt vet ## Build ome-agent image.
 	@echo "🚀 Building ome-agent image..."
-	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) . -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
+	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG)
 	@echo "✅ Image built"
 
+.PHONY: docker-buildx-setup
+docker-buildx-setup: ## 🔧 Setup Docker buildx for multi-arch builds
+	@echo "🔧 Setting up Docker buildx..."
+	@docker buildx create --name ome-builder --use --platform=linux/amd64,linux/arm64 || docker buildx use ome-builder
+	@docker buildx inspect --bootstrap
+	@echo "✅ Docker buildx ready for multi-arch builds"
+
+.PHONY: build-all-images
+build-all-images: fmt vet ## 🚀 Build all images for current architecture
+	@echo "🚀 Building all OME images for $(ARCH)..."
+	@$(MAKE) ome-image
+	@$(MAKE) model-agent-image
+	@$(MAKE) multinode-prober-image
+	@$(MAKE) ome-agent-image
+	@echo "✅ All images built successfully"
+
+.PHONY: build-all-images-multiarch
+build-all-images-multiarch: fmt vet docker-buildx-setup ## 🌍 Build all images for multiple architectures
+	@echo "🌍 Building all OME images for linux/amd64,linux/arm64..."
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/manager.Dockerfile -t $(MANAGER_IMG) --push
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/model-agent.Dockerfile -t $(REGISTRY)/model-agent:$(TAG) --push
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/multinode-prober.Dockerfile -t $(REGISTRY)/multinode-prober:$(TAG) --push
+	$(DOCKER_BUILD_CMD) buildx build --platform=linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(GIT_TAG) \
+		--build-arg GIT_TAG=$(GIT_TAG) \
+		--build-arg GIT_COMMIT=$(shell git rev-parse HEAD) \
+		. -f dockerfiles/ome-agent.Dockerfile -t $(REGISTRY)/ome-agent:$(TAG) --push
+	@echo "✅ All multi-arch images built and pushed"
 
 .PHONY: telepresence
 telepresence: ## 🌐 Setup telepresence

@@ -117,7 +117,7 @@ jobs:
     needs: quick-checks
     strategy:
       matrix:
-        image: [ome-image, model-agent-image]
+        image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -133,12 +133,59 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build Docker image (amd64 only)
         run: |
+          # Build only for amd64 to save time in PR validation
+          # Multi-arch builds are done during release
           make ${{ matrix.image }}
         env:
           TAG: pr-${{ github.event.pull_request.number }}-${{ github.run_number }}
           REGISTRY: local
+          ARCH: linux/amd64
+
+  # Optional multi-arch validation - only runs when 'test-multiarch' label is present
+  docker-multiarch-validation:
+    name: Docker Multi-Arch Build Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: quick-checks
+    if: contains(github.event.pull_request.labels.*.name, 'test-multiarch')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build multi-arch images (no push)
+        run: |
+          echo "🌍 Building multi-arch images for validation..."
+          # Build but don't push - just validate the build works
+          docker buildx build --platform=linux/amd64,linux/arm64 \
+            --build-arg VERSION=pr-test \
+            --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            . -f dockerfiles/manager.Dockerfile \
+            -t local/ome-manager:pr-test
+          
+          docker buildx build --platform=linux/amd64,linux/arm64 \
+            --build-arg VERSION=pr-test \
+            --build-arg GIT_TAG=pr-${{ github.event.pull_request.number }} \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            . -f dockerfiles/model-agent.Dockerfile \
+            -t local/model-agent:pr-test
+          echo "✅ Multi-arch build validation successful"
 
   helm-validation:
     name: Helm Chart Validation

@@ -1,6 +1,10 @@
 # Build the multinode-prober binary
 FROM golang:1.24 AS builder
 
+# Build arguments for cross-compilation
+ARG TARGETOS
+ARG TARGETARCH
+
 # Set working directory
 WORKDIR /workspace
 
@@ -15,8 +19,16 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 
+# Build arguments for version info
+ARG VERSION
+ARG GIT_TAG
+ARG GIT_COMMIT
+
 # Build the multinode-prober binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o multinode-prober ./cmd/multinode-prober
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -a -installsuffix cgo \
+    -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
+    -o multinode-prober ./cmd/multinode-prober
 
 # Use distroless as minimal base image to package the multinode-prober binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
