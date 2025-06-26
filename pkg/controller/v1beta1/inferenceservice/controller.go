@@ -198,198 +198,173 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Determine which components to reconcile based on the spec
 	var reconcilers []components.Component
-	// TODO: covert predictor spec to engine spec, and remove predictor spec
+
+	// Migrate predictor spec to new architecture if needed
+	if err := r.migratePredictorToNewArchitecture(isvc); err != nil {
+		r.Log.Error(err, "Failed to migrate predictor spec", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "PredictorMigrationError", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Check if we should use the new architecture
-	hasNewArchitectureConfig := isvc.Spec.Model != nil && (isvc.Spec.Engine != nil || isvc.Spec.Decoder != nil || isvc.Spec.Runtime != nil || isvc.Spec.Router != nil)
 	var ingressDeploymentMode constants.DeploymentModeType
-	if hasNewArchitectureConfig {
-		// New architecture path
-		r.Log.Info("Using new engine/decoder architecture", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+	// New architecture path
+	r.Log.Info("Using new engine/decoder architecture", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
 
-		// Step 1: Reconcile model first
-		baseModel, baseModelMeta, err := isvcutils.ReconcileBaseModel(r.Client, isvc)
-		if err != nil {
-			r.Log.Error(err, "Failed to reconcile base model", "Name", isvc.Name)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "ModelReconcileError", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		// TODO, instead of failing, we should use isvc spec to create deployment
-		// Step 2: Get rt spec (either specified or auto-selected based on model)
-		rt, rtName, err := isvcutils.GetRuntimeForNewArchitecture(r.Client, isvc, baseModel)
-		if err != nil {
-			r.Log.Error(err, "Failed to get rt", "Name", isvc.Name)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeReconcileError", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		// Step 3: Merge rt and isvc specs to get final engine, decoder, and router specs
-		mergedEngine, mergedDecoder, mergedRouter, err := isvcutils.MergeRuntimeSpecs(isvc, rt)
-		if err != nil {
-			r.Log.Error(err, "Failed to merge specs", "Name", isvc.Name)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "MergeSpecsError", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		// Step 4: Determine deployment modes based on merged specs
-		engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt)
-		if err != nil {
-			r.Log.Error(err, "Failed to determine deployment modes", "Name", isvc.Name)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		r.Log.Info("Determined deployment modes",
-			"engine", engineDeploymentMode,
-			"decoder", decoderDeploymentMode,
-			"router", routerDeploymentMode,
-			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
-
-		// If both engine and decoder exist, it's PD-disaggregated
-		if mergedEngine != nil && mergedDecoder != nil {
-			r.Log.Info("PD-disaggregated deployment detected", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
-		}
-
-		// Step 5a: Check for existing deployed components and handle deletions
-		existingComponents, err := r.checkExistingComponents(ctx, isvc)
-		if err != nil {
-			r.Log.Error(err, "Failed to check existing components", "Name", isvc.Name)
-			return reconcile.Result{}, err
-		}
-
-		// Create deletion reconcilers for components that exist but are not in current spec
-		r.Log.Info("Checking for components to delete",
-			"existing", existingComponents,
-			"hasEngine", mergedEngine != nil,
-			"hasDecoder", mergedDecoder != nil,
-			"hasRouter", mergedRouter != nil,
-			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
-
-		// Delete engine if it exists but is not in current spec
-		if existingComponents.Engine && mergedEngine == nil {
-			r.Log.Info("Creating engine deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
-			// Use RawDeployment mode for deletion since we just need to clean up resources
-			engineDeletionReconciler := componentBuilderFactory.CreateEngineComponent(
-				constants.RawDeployment, // Use consistent deployment mode for deletion
-				baseModel,
-				baseModelMeta,
-				nil, // nil engine spec for deletion
-				rt,
-				rtName,
-			)
-			reconcilers = append(reconcilers, engineDeletionReconciler)
-		}
-
-		// Delete decoder if it exists but is not in current spec
-		if existingComponents.Decoder && mergedDecoder == nil {
-			r.Log.Info("Creating decoder deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
-			decoderDeletionReconciler := componentBuilderFactory.CreateDecoderComponent(
-				constants.RawDeployment, // Use consistent deployment mode for deletion
-				baseModel,
-				baseModelMeta,
-				nil, // nil decoder spec for deletion
-				rt,
-				rtName,
-			)
-			reconcilers = append(reconcilers, decoderDeletionReconciler)
-		}
-
-		// Delete router if it exists but is not in current spec
-		if existingComponents.Router && mergedRouter == nil {
-			r.Log.Info("Creating router deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
-			routerDeletionReconciler := componentBuilderFactory.CreateRouterComponent(
-				constants.RawDeployment, // Use consistent deployment mode for deletion
-				baseModel,
-				baseModelMeta,
-				nil, // nil router spec for deletion
-				rt,
-				rtName,
-			)
-			reconcilers = append(reconcilers, routerDeletionReconciler)
-		}
-
-		// Step 5b: Create reconcilers based on merged specs
-		if mergedEngine != nil {
-			r.Log.Info("Creating engine reconciler",
-				"deploymentMode", engineDeploymentMode,
-				"namespace", isvc.Namespace,
-				"inferenceService", isvc.Name)
-
-			engineReconciler := componentBuilderFactory.CreateEngineComponent(
-				engineDeploymentMode,
-				baseModel,
-				baseModelMeta,
-				mergedEngine,
-				rt,
-				rtName,
-			)
-			reconcilers = append(reconcilers, engineReconciler)
-		}
-
-		if mergedDecoder != nil {
-			r.Log.Info("Creating decoder reconciler",
-				"deploymentMode", decoderDeploymentMode,
-				"namespace", isvc.Namespace,
-				"inferenceService", isvc.Name)
-
-			decoderReconciler := componentBuilderFactory.CreateDecoderComponent(
-				decoderDeploymentMode,
-				baseModel,
-				baseModelMeta,
-				mergedDecoder,
-				rt,
-				rtName,
-			)
-			reconcilers = append(reconcilers, decoderReconciler)
-		}
-
-		// Add Router reconciler if merged router spec exists (using new v2 Router)
-		if mergedRouter != nil {
-			r.Log.Info("Creating router reconciler",
-				"deploymentMode", routerDeploymentMode, // Using the determined router deployment mode
-				"namespace", isvc.Namespace,
-				"inferenceService", isvc.Name)
-
-			routerReconciler := componentBuilderFactory.CreateRouterComponent(
-				routerDeploymentMode, // Using the determined router deployment mode
-				baseModel,
-				baseModelMeta,
-				mergedRouter, // Using the merged router spec instead of isvc.Spec.Router
-				rt,
-				rtName,
-			)
-			reconcilers = append(reconcilers, routerReconciler)
-		}
-
-		// Determine the correct ingress deployment mode using the same logic as ingress reconciler
-		// but with the already-determined deployment modes to avoid inconsistency
-		if mergedRouter != nil {
-			ingressDeploymentMode = routerDeploymentMode
-		} else if mergedDecoder != nil {
-			ingressDeploymentMode = decoderDeploymentMode
-		} else {
-			ingressDeploymentMode = engineDeploymentMode
-		}
-
-		r.Log.Info("Determined ingress deployment mode",
-			"ingressDeploymentMode", ingressDeploymentMode,
-			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
-	} else {
-		// Legacy architecture: use predictor with deployment mode from annotations/configmap
-		r.Log.Info("Using legacy predictor architecture",
-			"deploymentMode", deploymentMode,
-			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
-		// TODO: change this to v2 predictor
-		reconcilers = append(reconcilers, components.NewPredictor(r.Client, r.Clientset, r.Scheme, isvcConfig, deploymentMode))
-
-		// For legacy architecture, ingress deployment mode is the same as the overall deployment mode
-		ingressDeploymentMode = deploymentMode
+	// Step 1: Reconcile model first
+	baseModel, baseModelMeta, err := isvcutils.ReconcileBaseModel(r.Client, isvc)
+	if err != nil {
+		r.Log.Error(err, "Failed to reconcile base model", "Name", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "ModelReconcileError", err.Error())
+		return reconcile.Result{}, err
 	}
+
+	// Step 2: Get rt spec (either specified or auto-selected based on model)
+	rt, rtName, err := isvcutils.GetRuntimeForNewArchitecture(r.Client, isvc, baseModel)
+	if err != nil {
+		r.Log.Error(err, "Failed to get rt", "Name", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeReconcileError", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// Step 3: Merge rt and isvc specs to get final engine, decoder, and router specs
+	mergedEngine, mergedDecoder, mergedRouter, err := isvcutils.MergeRuntimeSpecs(isvc, rt)
+	if err != nil {
+		r.Log.Error(err, "Failed to merge specs", "Name", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "MergeSpecsError", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// Step 4: Determine deployment modes based on merged specs
+	engineDeploymentMode, decoderDeploymentMode, routerDeploymentMode, err := isvcutils.DetermineDeploymentModes(mergedEngine, mergedDecoder, mergedRouter, rt)
+	if err != nil {
+		r.Log.Error(err, "Failed to determine deployment modes", "Name", isvc.Name)
+		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "DeploymentModeError", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// If both engine and decoder exist, it's PD-disaggregated
+	if mergedEngine != nil && mergedDecoder != nil {
+		r.Log.Info("PD-disaggregated deployment detected", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+	}
+
+	// Step 5a: Check for existing deployed components and handle deletions
+	existingComponents, err := r.checkExistingComponents(ctx, isvc)
+	if err != nil {
+		r.Log.Error(err, "Failed to check existing components", "Name", isvc.Name)
+		return reconcile.Result{}, err
+	}
+
+	// Delete engine if it exists but is not in current spec
+	if existingComponents.Engine && mergedEngine == nil {
+		r.Log.Info("Creating engine deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		// Use RawDeployment mode for deletion since we just need to clean up resources
+		engineDeletionReconciler := componentBuilderFactory.CreateEngineComponent(
+			constants.RawDeployment, // Use consistent deployment mode for deletion
+			baseModel,
+			baseModelMeta,
+			nil, // nil engine spec for deletion
+			rt,
+			rtName,
+		)
+		reconcilers = append(reconcilers, engineDeletionReconciler)
+	}
+
+	// Delete decoder if it exists but is not in current spec
+	if existingComponents.Decoder && mergedDecoder == nil {
+		r.Log.Info("Creating decoder deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		decoderDeletionReconciler := componentBuilderFactory.CreateDecoderComponent(
+			constants.RawDeployment, // Use consistent deployment mode for deletion
+			baseModel,
+			baseModelMeta,
+			nil, // nil decoder spec for deletion
+			rt,
+			rtName,
+		)
+		reconcilers = append(reconcilers, decoderDeletionReconciler)
+	}
+
+	// Delete router if it exists but is not in current spec
+	if existingComponents.Router && mergedRouter == nil {
+		r.Log.Info("Creating router deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		routerDeletionReconciler := componentBuilderFactory.CreateRouterComponent(
+			constants.RawDeployment, // Use consistent deployment mode for deletion
+			baseModel,
+			baseModelMeta,
+			nil, // nil router spec for deletion
+			rt,
+			rtName,
+		)
+		reconcilers = append(reconcilers, routerDeletionReconciler)
+	}
+
+	// Step 5b: Create reconcilers based on merged specs
+	if mergedEngine != nil {
+		r.Log.Info("Creating engine reconciler",
+			"deploymentMode", engineDeploymentMode,
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+
+		engineReconciler := componentBuilderFactory.CreateEngineComponent(
+			engineDeploymentMode,
+			baseModel,
+			baseModelMeta,
+			mergedEngine,
+			rt,
+			rtName,
+		)
+		reconcilers = append(reconcilers, engineReconciler)
+	}
+
+	if mergedDecoder != nil {
+		r.Log.Info("Creating decoder reconciler",
+			"deploymentMode", decoderDeploymentMode,
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+
+		decoderReconciler := componentBuilderFactory.CreateDecoderComponent(
+			decoderDeploymentMode,
+			baseModel,
+			baseModelMeta,
+			mergedDecoder,
+			rt,
+			rtName,
+		)
+		reconcilers = append(reconcilers, decoderReconciler)
+	}
+
+	// Add Router reconciler if merged router spec exists (using new v2 Router)
+	if mergedRouter != nil {
+		r.Log.Info("Creating router reconciler",
+			"deploymentMode", routerDeploymentMode, // Using the determined router deployment mode
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+
+		routerReconciler := componentBuilderFactory.CreateRouterComponent(
+			routerDeploymentMode, // Using the determined router deployment mode
+			baseModel,
+			baseModelMeta,
+			mergedRouter, // Using the merged router spec instead of isvc.Spec.Router
+			rt,
+			rtName,
+		)
+		reconcilers = append(reconcilers, routerReconciler)
+	}
+
+	// Determine the correct ingress deployment mode using the same logic as ingress reconciler
+	// but with the already-determined deployment modes to avoid inconsistency
+	if mergedRouter != nil {
+		ingressDeploymentMode = routerDeploymentMode
+	} else if mergedDecoder != nil {
+		ingressDeploymentMode = decoderDeploymentMode
+	} else {
+		ingressDeploymentMode = engineDeploymentMode
+	}
+
+	r.Log.Info("Determined ingress deployment mode",
+		"ingressDeploymentMode", ingressDeploymentMode,
+		"namespace", isvc.Namespace,
+		"inferenceService", isvc.Name)
 
 	// Step 6: Run all reconcilers (both regular and deletion reconcilers)
 	for _, reconciler := range reconcilers {
@@ -433,20 +408,11 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
 	}
 
-	if hasNewArchitectureConfig {
-		// New architecture: ingress uses the determined ingress deployment mode
-		ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
-		r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
-		if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, ingressDeploymentMode); err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
-		}
-	} else {
-		// Legacy architecture: ingress uses the legacy deployment mode
-		ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
-		r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
-		if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, deploymentMode); err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
-		}
+	// New architecture: ingress uses the determined ingress deployment mode
+	ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
+	r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
+	if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, ingressDeploymentMode); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
 	}
 
 	// Reconcile external service - creates a service with the inference service name
@@ -696,4 +662,9 @@ func (r *InferenceServiceReconciler) checkExistingComponents(ctx context.Context
 	}
 
 	return existing, nil
+}
+
+// migratePredictorToNewArchitecture delegates to the migration utility
+func (r *InferenceServiceReconciler) migratePredictorToNewArchitecture(isvc *v1beta2.InferenceService) error {
+	return isvcutils.MigratePredictorToNewArchitecture(context.Background(), r.Client, r.Log, isvc)
 }

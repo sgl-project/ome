@@ -10,21 +10,10 @@ import (
 
 	goerrors "github.com/pkg/errors"
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// GetProtocol returns the protocol version for the given model spec.
-// If ProtocolVersion is not specified, it defaults to OpenInferenceProtocolV2.
-// This is used to determine which inference protocol the model should use for serving.
-func GetProtocol(modelSpec *v1beta1.ModelSpec) constants.InferenceServiceProtocol {
-	if modelSpec.PredictorExtensionSpec.ProtocolVersion != nil {
-		return *modelSpec.PredictorExtensionSpec.ProtocolVersion
-	}
-	return constants.OpenInferenceProtocolV2
-}
 
 // stringSet is a helper type that implements a set-like behavior for strings
 // using a map with empty struct values for efficient membership testing
@@ -60,86 +49,6 @@ func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.Bas
 		return nil, nil, err
 	}
 	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
-}
-
-// GetSupportingRuntimes returns a list of ServingRuntimeSpecs that can support the given model.
-// It considers both namespace-scoped and cluster-scoped runtimes, and sorts them by priority.
-// The function checks:
-// 1. If the runtime is disabled
-// 2. If the runtime supports the model's format and architecture
-// 3. If the runtime supports the model's size range
-// 4. If the runtime supports the model's protocol version
-func GetSupportingRuntimes(modelSpec *v1beta1.ModelSpec, cl client.Client, namespace string) ([]v1beta1.SupportedRuntime, error) {
-	modelProtocolVersion := GetProtocol(modelSpec)
-
-	// List all namespace-scoped runtimes
-	runtimes := &v1beta1.ServingRuntimeList{}
-	if err := cl.List(context.TODO(), runtimes, client.InNamespace(namespace)); err != nil {
-		return nil, err
-	}
-	// Sort namespace-scoped runtimes by created timestamp desc and name asc
-	sortServingRuntimeList(runtimes)
-
-	// List all cluster-scoped runtimes
-	clusterRuntimes := &v1beta1.ClusterServingRuntimeList{}
-	if err := cl.List(context.TODO(), clusterRuntimes); err != nil {
-		return nil, err
-	}
-	// Sort cluster-scoped runtimes by created timestamp desc and name asc
-	sortClusterServingRuntimeList(clusterRuntimes)
-
-	var srSpecs []v1beta1.SupportedRuntime
-	var clusterSrSpecs []v1beta1.SupportedRuntime
-
-	model, _, err := GetBaseModel(cl, *modelSpec.BaseModel, namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	// Process namespace-scoped runtimes
-	for i := range runtimes.Items {
-		rt := &runtimes.Items[i]
-		if !rt.Spec.IsDisabled() && RuntimeSupportsModel(modelSpec, &rt.Spec, model) && rt.Spec.IsProtocolVersionSupported(modelProtocolVersion) {
-			srSpecs = append(srSpecs, v1beta1.SupportedRuntime{Name: rt.GetName(), Spec: rt.Spec})
-		}
-	}
-	sortSupportedRuntimeByPriority(srSpecs, model.ModelFormat, parseModelSize(*model.ModelParameterSize))
-
-	// Process cluster-scoped runtimes
-	for i := range clusterRuntimes.Items {
-		crt := &clusterRuntimes.Items[i]
-		if !crt.Spec.IsDisabled() && RuntimeSupportsModel(modelSpec, &crt.Spec, model) && crt.Spec.IsProtocolVersionSupported(modelProtocolVersion) {
-			clusterSrSpecs = append(clusterSrSpecs, v1beta1.SupportedRuntime{Name: crt.GetName(), Spec: crt.Spec})
-		}
-	}
-	sortSupportedRuntimeByPriority(clusterSrSpecs, model.ModelFormat, parseModelSize(*model.ModelParameterSize))
-	srSpecs = append(srSpecs, clusterSrSpecs...)
-	return srSpecs, nil
-}
-
-// RuntimeSupportsModel checks if a runtime can support a specific model.
-// It verifies:
-// 1. If the runtime supports the model's format label
-// 2. If the model's size is within the runtime's supported size range
-// 3. If the runtime is auto-selectable when no specific runtime is requested
-func RuntimeSupportsModel(modelSpec *v1beta1.ModelSpec, srSpec *v1beta1.ServingRuntimeSpec, modelSpec2 *v1beta1.BaseModelSpec) bool {
-	// Check if runtime supports the model format
-	runtimeLabelSet := getServingRuntimeSupportedModelFormatLabelSet(modelSpec, srSpec.SupportedModelFormats)
-	modelLabel := getModelFormatLabel(modelSpec2)
-	if !runtimeLabelSet.contains(modelLabel) {
-		return false
-	}
-
-	// Check if model size is within runtime's supported range
-	if modelSpec2.ModelParameterSize != nil && srSpec.ModelSizeRange != nil {
-		modelSize := parseModelSize(*modelSpec2.ModelParameterSize)
-		if modelSize >= parseModelSize(*srSpec.ModelSizeRange.Min) && modelSize <= parseModelSize(*srSpec.ModelSizeRange.Max) {
-			return true
-		}
-		return false
-	}
-
-	return true
 }
 
 // generateLabel creates a standardized label string for model formats.
@@ -183,25 +92,6 @@ func getModelFormatLabel(modelSpec *v1beta1.BaseModelSpec) string {
 		modelSpec.Quantization,
 		modelSpec.ModelFramework,
 	)
-}
-
-// getServingRuntimeSupportedModelFormatLabelSet creates a set of supported model format labels for a runtime.
-// It considers both explicitly specified runtimes and auto-selectable formats.
-func getServingRuntimeSupportedModelFormatLabelSet(modelSpec *v1beta1.ModelSpec, supportedModelFormats []v1beta1.SupportedModelFormat) stringSet {
-	set := make(stringSet, 2*len(supportedModelFormats)+1)
-
-	for _, t := range supportedModelFormats {
-		if modelSpec.Runtime != nil || (t.AutoSelect != nil && *t.AutoSelect) {
-			label := generateLabel(
-				t.ModelFormat,
-				t.ModelArchitecture,
-				t.Quantization,
-				t.ModelFramework,
-			)
-			set.add(label)
-		}
-	}
-	return set
 }
 
 // sortServingRuntimeList sorts a list of ServingRuntimes by creation timestamp (desc) and name (asc)
@@ -325,9 +215,9 @@ func (e *RuntimeCompatibilityError) Error() string {
 		e.RuntimeName, e.ModelName, e.Reason)
 }
 
-// RuntimeSupportsModelNewArchitecture checks if a runtime can support a specific model in the new architecture.
+// RuntimeSupportsModel checks if a runtime can support a specific model in the new architecture.
 // It returns nil if the runtime supports the model, or a RuntimeCompatibilityError if not.
-func RuntimeSupportsModelNewArchitecture(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.ServingRuntimeSpec, runtimeName string) error {
+func RuntimeSupportsModel(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.ServingRuntimeSpec, runtimeName string) error {
 	// Check if runtime supports the model format
 	modelLabel := getModelFormatLabel(baseModel)
 	var supportedFormats []string
@@ -395,10 +285,10 @@ func formatToString(format v1beta1.SupportedModelFormat) string {
 	return result
 }
 
-// GetSupportingRuntimesNewArchitecture returns a list of ServingRuntimeSpecs that can support the given model.
+// GetSupportingRuntimes returns a list of ServingRuntimeSpecs that can support the given model.
 // It considers both namespace-scoped and cluster-scoped runtimes, and sorts them by priority.
 // It also returns detailed reasons why each runtime was excluded, which can be used for debugging.
-func GetSupportingRuntimesNewArchitecture(baseModel *v1beta1.BaseModelSpec, cl client.Client, namespace string) ([]v1beta1.SupportedRuntime, map[string]error, error) {
+func GetSupportingRuntimes(baseModel *v1beta1.BaseModelSpec, cl client.Client, namespace string) ([]v1beta1.SupportedRuntime, map[string]error, error) {
 	excludedRuntimes := make(map[string]error)
 
 	// List all namespace-scoped runtimes
@@ -429,7 +319,7 @@ func GetSupportingRuntimesNewArchitecture(baseModel *v1beta1.BaseModelSpec, cl c
 			continue
 		}
 
-		if err := RuntimeSupportsModelNewArchitecture(baseModel, &rt.Spec, rt.GetName()); err != nil {
+		if err := RuntimeSupportsModel(baseModel, &rt.Spec, rt.GetName()); err != nil {
 			excludedRuntimes[rt.GetName()] = err
 			continue
 		}
@@ -467,7 +357,7 @@ func GetSupportingRuntimesNewArchitecture(baseModel *v1beta1.BaseModelSpec, cl c
 			continue
 		}
 
-		if err := RuntimeSupportsModelNewArchitecture(baseModel, &crt.Spec, crt.GetName()); err != nil {
+		if err := RuntimeSupportsModel(baseModel, &crt.Spec, crt.GetName()); err != nil {
 			excludedRuntimes[crt.GetName()] = err
 			continue
 		}
