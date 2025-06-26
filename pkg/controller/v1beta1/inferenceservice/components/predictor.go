@@ -1022,3 +1022,16 @@ func (p *Predictor) reconcilePodSpec(
 
 	return podSpec, ctrl.Result{}, nil
 }
+
+// Delete implements the Component interface for Predictor
+// Note: This is a no-op since Predictor component is deprecated
+func (p *Predictor) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	// No-op for deprecated predictor component
+	p.Log.Info("Delete called on deprecated Predictor component", "inferenceservice", isvc.Name)
+	return ctrl.Result{}, nil
+}
+
+// ShouldExist implements the Component interface for Predictor
+func (p *Predictor) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return isvc.Spec.Predictor.Model != nil
+}

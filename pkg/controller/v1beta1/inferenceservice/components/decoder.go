@@ -169,17 +169,20 @@ func (d *Decoder) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMe
 
 // reconcileObjectMeta creates the object metadata for the decoder component
 func (d *Decoder) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	annotations, err := d.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{}, err
-	}
-
-	labels := d.processLabels(isvc)
-
 	decoderName, err := d.determineDecoderName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
+
+	annotations, err := d.processAnnotations(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      decoderName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels := d.processLabels(isvc)
 
 	return metav1.ObjectMeta{
 		Name:        decoderName,
@@ -196,7 +199,11 @@ func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string
 	})
 
 	// Merge with decoder annotations
-	mergedAnnotations := utils.Union(annotations, d.decoderSpec.Annotations)
+	mergedAnnotations := annotations
+	if d.decoderSpec != nil {
+		decoderAnnotations := d.decoderSpec.Annotations
+		mergedAnnotations = utils.Union(annotations, decoderAnnotations)
+	}
 
 	// Use common function for base annotations processing
 	processedAnnotations, err := ProcessBaseAnnotations(&d.BaseComponentFields, isvc, mergedAnnotations)
@@ -209,13 +216,14 @@ func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string
 
 // processLabels processes the labels for the decoder
 func (d *Decoder) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	decoderLabels := d.decoderSpec.Labels
-
-	// Start with decoder-specific labels
-	labels := utils.Union(isvc.Labels, decoderLabels)
+	mergedLabels := isvc.Labels
+	if d.decoderSpec != nil {
+		decoderLabels := d.decoderSpec.Labels
+		mergedLabels = utils.Union(isvc.Labels, decoderLabels)
+	}
 
 	// Use common function for base labels processing
-	return ProcessBaseLabels(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, labels)
+	return ProcessBaseLabels(&d.BaseComponentFields, isvc, v1beta1.DecoderComponent, mergedLabels)
 }
 
 // determineDecoderName determines the name of the decoder service
@@ -338,4 +346,18 @@ func (d *Decoder) setParallelismEnvVarForDecoder(container *v1.Container, worker
 	} else {
 		d.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
+}
+
+// Delete implements the Component interface for Decoder
+func (d *Decoder) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return d.BaseComponentFields.DeleteComponent(
+		isvc,
+		v1beta1.DecoderComponent,
+		d.reconcileObjectMeta,
+	)
+}
+
+// ShouldExist implements the Component interface for Decoder
+func (d *Decoder) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return d.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.DecoderComponent)
 }

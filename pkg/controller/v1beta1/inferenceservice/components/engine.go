@@ -170,17 +170,20 @@ func (e *Engine) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 
 // reconcileObjectMeta creates the object metadata for the engine component
 func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	annotations, err := e.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{}, err
-	}
-
-	labels := e.processLabels(isvc)
-
 	engineName, err := e.determineEngineName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
+
+	annotations, err := e.processAnnotations(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      engineName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels := e.processLabels(isvc)
 
 	return metav1.ObjectMeta{
 		Name:        engineName,
@@ -197,7 +200,11 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 	})
 
 	// Merge with engine annotations
-	mergedAnnotations := utils.Union(annotations, e.engineSpec.Annotations)
+	mergedAnnotations := annotations
+	if e.engineSpec != nil {
+		engineAnnotations := e.engineSpec.Annotations
+		mergedAnnotations = utils.Union(annotations, engineAnnotations)
+	}
 
 	// Use common function for base annotations processing
 	processedAnnotations, err := ProcessBaseAnnotations(&e.BaseComponentFields, isvc, mergedAnnotations)
@@ -210,13 +217,14 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the engine
 func (e *Engine) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	engineLabels := e.engineSpec.Labels
-
-	// Start with engine-specific labels
-	labels := utils.Union(isvc.Labels, engineLabels)
+	mergedLabels := isvc.Labels
+	if e.engineSpec != nil {
+		engineLabels := e.engineSpec.Labels
+		mergedLabels = utils.Union(isvc.Labels, engineLabels)
+	}
 
 	// Use common function for base labels processing
-	return ProcessBaseLabels(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, labels)
+	return ProcessBaseLabels(&e.BaseComponentFields, isvc, v1beta1.EngineComponent, mergedLabels)
 }
 
 // determineEngineName determines the name of the engine service
@@ -334,4 +342,18 @@ func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerRe
 	} else {
 		e.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
+}
+
+// Delete implements the Component interface for Engine
+func (e *Engine) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return e.BaseComponentFields.DeleteComponent(
+		isvc,
+		v1beta1.EngineComponent,
+		e.reconcileObjectMeta,
+	)
+}
+
+// ShouldExist implements the Component interface for Engine
+func (e *Engine) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return e.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.EngineComponent)
 }

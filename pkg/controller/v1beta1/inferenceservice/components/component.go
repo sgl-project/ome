@@ -10,6 +10,10 @@ import (
 // Component can be reconciled to create underlying resources for an InferenceService
 type Component interface {
 	Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error)
+	// Delete handles cleanup when component is removed from spec
+	Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error)
+	// ShouldExist returns true if this component should exist based on the current spec
+	ShouldExist(isvc *v1beta1.InferenceService) bool
 }
 
 // ComponentType constants for different component types
