@@ -1,0 +1,356 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write # For signing images with cosign
+
+env:
+  # Image registry configuration
+  REGISTRY: ghcr.io
+  IMAGE_ORG: moirai-internal
+  # Go version
+  GO_VERSION: '1.24.1'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "📦 Releasing version: ${VERSION} (tag: ${TAG})"
+
+  build-images:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component:
+          - name: manager
+            dockerfile: dockerfiles/manager.Dockerfile
+            image: ome-manager
+          - name: model-agent
+            dockerfile: dockerfiles/model-agent.Dockerfile
+            image: model-agent
+          - name: multinode-prober
+            dockerfile: dockerfiles/multinode-prober.Dockerfile
+            image: multinode-prober
+          - name: ome-agent
+            dockerfile: dockerfiles/ome-agent.Dockerfile
+            image: ome-agent
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Build and push ${{ matrix.component.name }}
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:${{ needs.prepare.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            GIT_TAG=${{ needs.prepare.outputs.tag }}
+            GIT_COMMIT=${{ github.sha }}
+
+      - name: Sign image
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: ${{ matrix.component.image }}-sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component.image }}
+          path: ${{ matrix.component.image }}-sbom.spdx.json
+
+  build-binaries:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binaries
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p dist
+          ext=""
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            ext=".exe"
+          fi
+          
+          # Build manager
+          go build -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${{ needs.prepare.outputs.tag }} -X github.com/sgl-project/ome/pkg/version.GitCommit=${{ github.sha }}" \
+            -o dist/ome-manager-${{ matrix.os }}-${{ matrix.arch }}${ext} ./cmd/manager
+          
+          # Build model-agent
+          go build -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${{ needs.prepare.outputs.tag }} -X github.com/sgl-project/ome/pkg/version.GitCommit=${{ github.sha }}" \
+            -o dist/model-agent-${{ matrix.os }}-${{ matrix.arch }}${ext} ./cmd/model-agent
+          
+          # Build ome-agent
+          go build -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${{ needs.prepare.outputs.tag }} -X github.com/sgl-project/ome/pkg/version.GitCommit=${{ github.sha }}" \
+            -o dist/ome-agent-${{ matrix.os }}-${{ matrix.arch }}${ext} ./cmd/ome-agent
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*
+
+  publish-helm-charts:
+    needs: [prepare, build-images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Update chart versions
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
+          
+          # Update chart versions
+          for chart in charts/*/; do
+            yq eval -i ".version = \"${VERSION}\"" ${chart}Chart.yaml
+            yq eval -i ".appVersion = \"${VERSION}\"" ${chart}Chart.yaml
+            
+            # Update image tags in values.yaml
+            if [[ -f ${chart}values.yaml ]]; then
+              yq eval -i ".image.tag = \"${{ needs.prepare.outputs.tag }}\"" ${chart}values.yaml
+              yq eval -i ".image.repository = \"ghcr.io/moirai-internal/ome-manager\"" ${chart}values.yaml
+              yq eval -i ".modelAgent.image.repository = \"ghcr.io/moirai-internal/model-agent\"" ${chart}values.yaml
+              yq eval -i ".modelAgent.image.tag = \"${{ needs.prepare.outputs.tag }}\"" ${chart}values.yaml
+            fi
+          done
+
+      - name: Package charts
+        run: |
+          mkdir -p .charts
+          for chart in charts/*/; do
+            helm package ${chart} -d .charts
+          done
+
+      - name: Create chart index
+        run: |
+          helm repo index .charts --url https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
+
+      - name: Upload charts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: |
+            .charts/*.tgz
+            .charts/index.yaml
+
+  generate-sboms:
+    needs: [prepare, build-images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: latest
+
+      - name: Generate source SBOM
+        run: |
+          syft dir:. -o spdx-json > ome-${{ needs.prepare.outputs.tag }}-source-sbom.spdx.json
+          syft dir:. -o cyclonedx-json > ome-${{ needs.prepare.outputs.tag }}-source-sbom.cyclonedx.json
+
+      - name: Upload source SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-sbom
+          path: |
+            *-source-sbom.*.json
+
+  create-release:
+    needs: [prepare, build-images, build-binaries, publish-helm-charts, generate-sboms]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Organize release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Copy binaries
+          cp artifacts/binaries-*/* release-assets/ || true
+          
+          # Copy Helm charts
+          cp artifacts/helm-charts/*.tgz release-assets/ || true
+          cp artifacts/helm-charts/index.yaml release-assets/helm-index.yaml || true
+          
+          # Copy SBOMs
+          cp artifacts/sbom-*/*.json release-assets/ || true
+          cp artifacts/source-sbom/*.json release-assets/ || true
+          
+          # Create checksums
+          cd release-assets
+          sha256sum * > SHA256SUMS
+          cd ..
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat > release-notes.md << EOF
+          # OME ${{ needs.prepare.outputs.version }}
+          
+          ## 🚀 What's New
+          
+          <!-- Add release highlights here -->
+          
+          ## 📦 Container Images
+          
+          The following container images are available:
+          
+          \`\`\`bash
+          # OME Manager
+          docker pull ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }}
+          
+          # Model Agent
+          docker pull ghcr.io/moirai-internal/model-agent:${{ needs.prepare.outputs.tag }}
+          
+          # OME Agent
+          docker pull ghcr.io/moirai-internal/ome-agent:${{ needs.prepare.outputs.tag }}
+          
+          # Multinode Prober
+          docker pull ghcr.io/moirai-internal/multinode-prober:${{ needs.prepare.outputs.tag }}
+          \`\`\`
+          
+          ## ⎈ Helm Installation
+          
+          \`\`\`bash
+          # Add the OME Helm repository
+          helm repo add ome https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
+          helm repo update
+          
+          # Install OME
+          helm install ome-crd ome/ome-crd --namespace ome --create-namespace
+          helm install ome ome/ome-resources --namespace ome
+          \`\`\`
+          
+          ## 📋 Changelog
+          
+          <!-- Generate from commits or add manually -->
+          
+          ## 📄 Software Bill of Materials
+          
+          SBOMs are available in both SPDX and CycloneDX formats for:
+          - Source code
+          - All container images
+          
+          ## 🔐 Signatures
+          
+          All container images are signed with cosign. Verify with:
+          
+          \`\`\`bash
+          cosign verify ghcr.io/moirai-internal/ome-manager:${{ needs.prepare.outputs.tag }} \
+            --certificate-identity-regexp=https://github.com/sgl-project/ome/.github/workflows/release.yaml@refs/tags/.* \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+          \`\`\`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: OME ${{ needs.prepare.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          body_path: release-notes.md
+          draft: true # Create as draft so you can edit before publishing
+          prerelease: ${{ contains(needs.prepare.outputs.tag, 'rc') || contains(needs.prepare.outputs.tag, 'alpha') || contains(needs.prepare.outputs.tag, 'beta') }}
+          files: |
+            release-assets/*

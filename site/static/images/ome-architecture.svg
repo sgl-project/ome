@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1600" height="1200" xmlns="http://www.w3.org/2000/svg" style="background-color: white;">
+    <title>OME (Operator for Machine learning Endpoints) Architecture</title>
+    <defs>
+        <!-- Define gradients -->
+        <linearGradient id="userGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#e3f2fd;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#bbdefb;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="k8sGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#326ce5;stop-opacity:0.1" />
+            <stop offset="100%" style="stop-color:#326ce5;stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="controlGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#7c4dff;stop-opacity:0.1" />
+            <stop offset="100%" style="stop-color:#7c4dff;stop-opacity:0.2" />
+        </linearGradient>
+        <linearGradient id="dataGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#00897b;stop-opacity:0.1" />
+            <stop offset="100%" style="stop-color:#00897b;stop-opacity:0.2" />
+        </linearGradient>
+        
+        <!-- Define shadows -->
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="2" dy="2" result="offsetblur"/>
+            <feComponentTransfer>
+                <feFuncA type="linear" slope="0.2"/>
+            </feComponentTransfer>
+            <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+        
+        <!-- Arrow markers -->
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+        </marker>
+    </defs>
+    
+    <!-- Title -->
+    <text x="800" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333" font-family="Arial, sans-serif">OME (Operator for Machine learning Endpoints) Architecture</text>
+    
+    <!-- User Layer -->
+    <g id="userLayer">
+        <rect x="50" y="50" width="1500" height="120" rx="10" fill="url(#userGradient)" stroke="#1976d2" stroke-width="2"/>
+        <text x="800" y="80" text-anchor="middle" font-size="18" font-weight="bold" fill="#0d47a1" font-family="Arial, sans-serif">User/Client Layer</text>
+        
+        <!-- User components -->
+        <rect x="200" y="100" width="200" height="50" rx="5" fill="white" stroke="#1976d2" filter="url(#shadow)"/>
+        <text x="300" y="130" text-anchor="middle" font-size="14" fill="#333" font-family="Arial, sans-serif">User/Application</text>
+        
+        <rect x="500" y="100" width="200" height="50" rx="5" fill="white" stroke="#1976d2" filter="url(#shadow)"/>
+        <text x="600" y="130" text-anchor="middle" font-size="14" fill="#333" font-family="Arial, sans-serif">kubectl/API Client</text>
+        
+        <rect x="800" y="100" width="200" height="50" rx="5" fill="white" stroke="#1976d2" filter="url(#shadow)"/>
+        <text x="900" y="130" text-anchor="middle" font-size="14" fill="#333" font-family="Arial, sans-serif">Benchmark Client</text>
+        
+        <rect x="1100" y="100" width="200" height="50" rx="5" fill="white" stroke="#1976d2" filter="url(#shadow)"/>
+        <text x="1200" y="130" text-anchor="middle" font-size="14" fill="#333" font-family="Arial, sans-serif">Model Repository</text>
+    </g>
+    
+    <!-- Kubernetes API Layer -->
+    <g id="k8sLayer">
+        <rect x="50" y="200" width="1500" height="280" rx="10" fill="url(#k8sGradient)" stroke="#326ce5" stroke-width="2"/>
+        <text x="800" y="230" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a237e" font-family="Arial, sans-serif">Kubernetes API Layer</text>
+        
+        <!-- CRDs -->
+        <g id="crds">
+            <rect x="100" y="250" width="900" height="200" rx="5" fill="#e8eaf6" stroke="#5e35b1" stroke-width="1" stroke-dasharray="5,5"/>
+            <text x="550" y="270" text-anchor="middle" font-size="14" font-weight="bold" fill="#4527a0" font-family="Arial, sans-serif">Custom Resources (ome.io/v1beta1)</text>
+            
+            <!-- Individual CRDs -->
+            <rect x="120" y="290" width="160" height="140" rx="5" fill="white" stroke="#7e57c2" stroke-width="2" filter="url(#shadow)"/>
+            <text x="200" y="310" text-anchor="middle" font-size="12" font-weight="bold" fill="#5e35b1" font-family="Arial, sans-serif">InferenceService</text>
+            <text x="200" y="330" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Engine Component</text>
+            <text x="200" y="345" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Decoder Component</text>
+            <text x="200" y="360" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Router Component</text>
+            <text x="200" y="375" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Model Reference</text>
+            <text x="200" y="390" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Runtime Reference</text>
+            <text x="200" y="405" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Autoscaling Config</text>
+            
+            <rect x="300" y="290" width="140" height="140" rx="5" fill="white" stroke="#7e57c2" stroke-width="2" filter="url(#shadow)"/>
+            <text x="370" y="310" text-anchor="middle" font-size="12" font-weight="bold" fill="#5e35b1" font-family="Arial, sans-serif">BaseModel</text>
+            <text x="370" y="330" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Model Source</text>
+            <text x="370" y="345" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Format/Arch</text>
+            <text x="370" y="360" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Quantization</text>
+            <text x="370" y="375" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Capabilities</text>
+            <text x="370" y="390" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Storage Spec</text>
+            <text x="370" y="410" text-anchor="middle" font-size="9" fill="#999" font-family="Arial, sans-serif">(+ ClusterBaseModel)</text>
+            
+            <rect x="460" y="290" width="140" height="140" rx="5" fill="white" stroke="#7e57c2" stroke-width="2" filter="url(#shadow)"/>
+            <text x="530" y="310" text-anchor="middle" font-size="12" font-weight="bold" fill="#5e35b1" font-family="Arial, sans-serif">ServingRuntime</text>
+            <text x="530" y="330" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Container Specs</text>
+            <text x="530" y="345" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Model Formats</text>
+            <text x="530" y="360" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Resources</text>
+            <text x="530" y="375" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Runtime Type</text>
+            <text x="530" y="390" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Pod Template</text>
+            <text x="530" y="410" text-anchor="middle" font-size="9" fill="#999" font-family="Arial, sans-serif">(+ ClusterServingRuntime)</text>
+            
+            <rect x="620" y="290" width="140" height="140" rx="5" fill="white" stroke="#7e57c2" stroke-width="2" filter="url(#shadow)"/>
+            <text x="690" y="310" text-anchor="middle" font-size="12" font-weight="bold" fill="#5e35b1" font-family="Arial, sans-serif">BenchmarkJob</text>
+            <text x="690" y="330" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Traffic Patterns</text>
+            <text x="690" y="345" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Concurrency</text>
+            <text x="690" y="360" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Dataset Config</text>
+            <text x="690" y="375" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Target Service</text>
+            <text x="690" y="390" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Result Storage</text>
+            
+            <rect x="780" y="290" width="140" height="140" rx="5" fill="white" stroke="#7e57c2" stroke-width="2" filter="url(#shadow)"/>
+            <text x="850" y="310" text-anchor="middle" font-size="12" font-weight="bold" fill="#5e35b1" font-family="Arial, sans-serif">FineTunedWeight</text>
+            <text x="850" y="330" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• LoRA Adapters</text>
+            <text x="850" y="345" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Base Model Ref</text>
+            <text x="850" y="360" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Weight Source</text>
+            <text x="850" y="375" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• Adapter Config</text>
+        </g>
+        
+        <!-- Webhooks -->
+        <g id="webhooks">
+            <rect x="1050" y="250" width="450" height="200" rx="5" fill="#fff3cd" stroke="#ff6f00" stroke-width="1" stroke-dasharray="5,5"/>
+            <text x="1275" y="270" text-anchor="middle" font-size="14" font-weight="bold" fill="#e65100" font-family="Arial, sans-serif">Admission Webhooks</text>
+            
+            <rect x="1080" y="290" width="130" height="60" rx="5" fill="white" stroke="#ff8f00" stroke-width="2" filter="url(#shadow)"/>
+            <text x="1145" y="315" text-anchor="middle" font-size="11" font-weight="bold" fill="#ff6f00" font-family="Arial, sans-serif">Validating</text>
+            <text x="1145" y="335" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Resource Validation</text>
+            
+            <rect x="1230" y="290" width="130" height="60" rx="5" fill="white" stroke="#ff8f00" stroke-width="2" filter="url(#shadow)"/>
+            <text x="1295" y="315" text-anchor="middle" font-size="11" font-weight="bold" fill="#ff6f00" font-family="Arial, sans-serif">Mutating</text>
+            <text x="1295" y="335" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Default Values</text>
+            
+            <rect x="1080" y="370" width="280" height="75" rx="5" fill="white" stroke="#ff8f00" stroke-width="2" filter="url(#shadow)"/>
+            <text x="1220" y="395" text-anchor="middle" font-size="11" font-weight="bold" fill="#ff6f00" font-family="Arial, sans-serif">Pod Mutator</text>
+            <text x="1220" y="415" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Sidecar Injection / Init Containers</text>
+            <text x="1220" y="430" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">RDMA Config Injection (Profile-based)</text>
+        </g>
+    </g>
+    
+    <!-- Control Plane -->
+    <g id="controlPlane">
+        <rect x="50" y="510" width="1500" height="220" rx="10" fill="url(#controlGradient)" stroke="#7c4dff" stroke-width="2"/>
+        <text x="800" y="540" text-anchor="middle" font-size="18" font-weight="bold" fill="#4527a0" font-family="Arial, sans-serif">Control Plane</text>
+        
+        <!-- OME Manager -->
+        <rect x="100" y="560" width="300" height="140" rx="5" fill="white" stroke="#9c27b0" stroke-width="2" filter="url(#shadow)"/>
+        <text x="250" y="585" text-anchor="middle" font-size="14" font-weight="bold" fill="#7b1fa2" font-family="Arial, sans-serif">OME Manager</text>
+        <text x="250" y="605" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• InferenceService Controller</text>
+        <text x="250" y="620" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• BaseModel Controller</text>
+        <text x="250" y="635" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• BenchmarkJob Controller</text>
+        <text x="250" y="650" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• ServingRuntime Controller</text>
+        <text x="250" y="665" text-anchor="middle" font-size="10" fill="#666" font-family="Arial, sans-serif">• FineTunedWeight Controller</text>
+        
+        <!-- Reconcilers -->
+        <g id="reconcilers">
+            <rect x="450" y="560" width="1050" height="140" rx="5" fill="#f3e5f5" stroke="#ab47bc" stroke-width="1" stroke-dasharray="5,5"/>
+            <text x="975" y="580" text-anchor="middle" font-size="12" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Reconcilers</text>
+            
+            <rect x="470" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
+            <text x="540" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Deployment</text>
+            <text x="540" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Creates Pods</text>
+            <text x="540" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Manages Replicas</text>
+            <text x="540" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Rolling Updates</text>
+            
+            <rect x="630" y="595" width="140" height="95" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
+            <text x="700" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Ingress</text>
+            <text x="700" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">K8s Ingress</text>
+            <text x="700" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Gateway API</text>
+            <text x="700" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Istio VirtualService</text>
+            <text x="700" y="675" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Path/Host Routing</text>
+            
+            <rect x="790" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
+            <text x="860" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Autoscaling</text>
+            <text x="860" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">HPA Creation</text>
+            <text x="860" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">KEDA ScaledObject</text>
+            <text x="860" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Custom Metrics</text>
+            
+            <rect x="950" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
+            <text x="1020" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Multi-Node</text>
+            <text x="1020" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">LeaderWorkerSet</text>
+            <text x="1020" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Ray Cluster</text>
+            <text x="1020" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Pod Coordination</text>
+            
+            <rect x="1110" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
+            <text x="1180" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">Model Config</text>
+            <text x="1180" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">ConfigMap Gen</text>
+            <text x="1180" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Runtime Config</text>
+            <text x="1180" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Adapter Config</text>
+            
+            <rect x="1270" y="595" width="140" height="80" rx="5" fill="white" stroke="#ba68c8" stroke-width="1" filter="url(#shadow)"/>
+            <text x="1340" y="615" text-anchor="middle" font-size="10" font-weight="bold" fill="#8e24aa" font-family="Arial, sans-serif">RBAC</text>
+            <text x="1340" y="630" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">ServiceAccount</text>
+            <text x="1340" y="645" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Role Bindings</text>
+            <text x="1340" y="660" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">Security Policies</text>
+        </g>
+    </g>
+    
+    <!-- Data Plane -->
+    <g id="dataPlane">
+        <rect x="50" y="760" width="1500" height="320" rx="10" fill="url(#dataGradient)" stroke="#00897b" stroke-width="2"/>
+        <text x="800" y="790" text-anchor="middle" font-size="18" font-weight="bold" fill="#004d40" font-family="Arial, sans-serif">Data Plane</text>
+        
+        <!-- Node Agents -->
+        <g id="nodeAgents">
+            <rect x="100" y="810" width="400" height="240" rx="5" fill="#e0f2f1" stroke="#00796b" stroke-width="1" stroke-dasharray="5,5"/>
+            <text x="300" y="830" text-anchor="middle" font-size="12" font-weight="bold" fill="#00695c" font-family="Arial, sans-serif">Node Agents</text>
+            
+            <rect x="120" y="850" width="160" height="125" rx="5" fill="white" stroke="#26a69a" stroke-width="2" filter="url(#shadow)"/>
+            <text x="200" y="870" text-anchor="middle" font-size="11" font-weight="bold" fill="#00897b" font-family="Arial, sans-serif">Model Agent</text>
+            <text x="200" y="885" text-anchor="middle" font-size="8" fill="#f57c00" font-family="Arial, sans-serif">[DaemonSet]</text>
+            <text x="200" y="900" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Model Download</text>
+            <text x="200" y="915" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Config Parsing</text>
+            <text x="200" y="930" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Status Management</text>
+            <text x="200" y="945" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Node Labeling</text>
+            <text x="200" y="960" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Health Monitoring</text>
+            
+            <rect x="300" y="850" width="180" height="95" rx="5" fill="white" stroke="#26a69a" stroke-width="2" filter="url(#shadow)"/>
+            <text x="390" y="870" text-anchor="middle" font-size="11" font-weight="bold" fill="#00897b" font-family="Arial, sans-serif">OME Agent Suite</text>
+            <text x="390" y="885" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Enigma (Encryption)</text>
+            <text x="390" y="900" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• HF Download</text>
+            <text x="390" y="915" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Replica Management</text>
+            <text x="390" y="930" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• LoRA Adapter Mgmt</text>
+        </g>
+        
+        <!-- Inference Workloads -->
+        <g id="inferenceWorkloads">
+            <rect x="530" y="810" width="650" height="240" rx="5" fill="#c8e6c9" stroke="#388e3c" stroke-width="1" stroke-dasharray="5,5"/>
+            <text x="855" y="830" text-anchor="middle" font-size="12" font-weight="bold" fill="#2e7d32" font-family="Arial, sans-serif">Inference Workloads</text>
+            
+            <rect x="550" y="850" width="180" height="180" rx="5" fill="white" stroke="#66bb6a" stroke-width="2" filter="url(#shadow)"/>
+            <text x="640" y="870" text-anchor="middle" font-size="11" font-weight="bold" fill="#388e3c" font-family="Arial, sans-serif">Engine Pod(s)</text>
+            <text x="640" y="890" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Model Serving</text>
+            <text x="640" y="905" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Request Processing</text>
+            <text x="640" y="920" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Leader/Worker Mode</text>
+            <text x="640" y="940" text-anchor="middle" font-size="9" font-weight="bold" fill="#2e7d32" font-family="Arial, sans-serif">Runtimes:</text>
+            <text x="640" y="955" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• SGLang</text>
+            <text x="640" y="970" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• vLLM</text>
+            <text x="640" y="985" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• TensorRT-LLM</text>
+            <text x="640" y="1000" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Triton</text>
+            
+            <rect x="750" y="850" width="180" height="120" rx="5" fill="white" stroke="#66bb6a" stroke-width="2" filter="url(#shadow)"/>
+            <text x="840" y="870" text-anchor="middle" font-size="11" font-weight="bold" fill="#388e3c" font-family="Arial, sans-serif">Decoder Pod(s)</text>
+            <text x="840" y="890" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Token Decoding</text>
+            <text x="840" y="905" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Prefill-Decode Split</text>
+            <text x="840" y="920" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Stream Processing</text>
+            <text x="840" y="935" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Leader/Worker Mode</text>
+            <text x="840" y="955" text-anchor="middle" font-size="8" fill="#f57c00" font-family="Arial, sans-serif">[Optional Component]</text>
+            
+            <rect x="950" y="850" width="180" height="135" rx="5" fill="white" stroke="#66bb6a" stroke-width="2" filter="url(#shadow)"/>
+            <text x="1040" y="870" text-anchor="middle" font-size="11" font-weight="bold" fill="#388e3c" font-family="Arial, sans-serif">Router Pod</text>
+            <text x="1040" y="890" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Cache-Aware LB</text>
+            <text x="1040" y="905" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Prefill-Decode LB</text>
+            <text x="1040" y="920" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Power of Two LB</text>
+            <text x="1040" y="935" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Random/Round Robin</text>
+            <text x="1040" y="950" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Request Routing</text>
+            <text x="1040" y="970" text-anchor="middle" font-size="8" fill="#f57c00" font-family="Arial, sans-serif">[Optional Component]</text>
+        </g>
+        
+        <!-- Benchmark Workloads -->
+        <g id="benchmarkWorkloads">
+            <rect x="1210" y="810" width="290" height="240" rx="5" fill="#ffccbc" stroke="#d84315" stroke-width="1" stroke-dasharray="5,5"/>
+            <text x="1355" y="830" text-anchor="middle" font-size="12" font-weight="bold" fill="#bf360c" font-family="Arial, sans-serif">Benchmark Workloads</text>
+            
+            <rect x="1230" y="850" width="250" height="80" rx="5" fill="white" stroke="#ff5722" stroke-width="2" filter="url(#shadow)"/>
+            <text x="1355" y="870" text-anchor="middle" font-size="11" font-weight="bold" fill="#d84315" font-family="Arial, sans-serif">Benchmark Pod</text>
+            <text x="1355" y="890" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• genai-bench Tool</text>
+            <text x="1355" y="905" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Traffic Generation</text>
+            <text x="1355" y="920" text-anchor="middle" font-size="9" fill="#666" font-family="Arial, sans-serif">• Metrics Collection</text>
+        </g>
+    </g>
+    
+    <!-- External Integrations -->
+    <g id="externalIntegrations">
+        <rect x="50" y="1100" width="700" height="80" rx="10" fill="#fce4ec" stroke="#e91e63" stroke-width="2"/>
+        <text x="400" y="1125" text-anchor="middle" font-size="14" font-weight="bold" fill="#880e4f" font-family="Arial, sans-serif">External Integrations</text>
+        
+        <rect x="70" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="110" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">KEDA</text>
+        
+        <rect x="160" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="200" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Gateway API</text>
+        
+        <rect x="250" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="290" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Istio</text>
+        
+        <rect x="340" y="1140" width="100" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="390" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">LeaderWorkerSet</text>
+        
+        <rect x="450" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="490" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Ray</text>
+        
+        <rect x="540" y="1140" width="80" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="580" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Kueue</text>
+        
+        <rect x="630" y="1140" width="100" height="30" rx="5" fill="white" stroke="#f06292" stroke-width="1"/>
+        <text x="680" y="1158" text-anchor="middle" font-size="10" fill="#c2185b" font-family="Arial, sans-serif">Prometheus</text>
+    </g>
+    
+    <!-- Storage Layer -->
+    <g id="storageLayer">
+        <rect x="850" y="1100" width="700" height="80" rx="10" fill="#fff8e1" stroke="#ff8f00" stroke-width="2"/>
+        <text x="1200" y="1125" text-anchor="middle" font-size="14" font-weight="bold" fill="#e65100" font-family="Arial, sans-serif">Storage Layer</text>
+        
+        <rect x="870" y="1140" width="150" height="30" rx="5" fill="white" stroke="#ffb74d" stroke-width="1"/>
+        <text x="945" y="1158" text-anchor="middle" font-size="10" fill="#f57c00" font-family="Arial, sans-serif">OCI Object Storage</text>
+        
+        <rect x="1030" y="1140" width="100" height="30" rx="5" fill="white" stroke="#ffb74d" stroke-width="1"/>
+        <text x="1080" y="1158" text-anchor="middle" font-size="10" fill="#f57c00" font-family="Arial, sans-serif">PVC Storage</text>
+        
+        <rect x="1140" y="1140" width="120" height="30" rx="5" fill="white" stroke="#ffb74d" stroke-width="1"/>
+        <text x="1200" y="1158" text-anchor="middle" font-size="10" fill="#f57c00" font-family="Arial, sans-serif">HuggingFace Hub</text>
+        
+        <rect x="1270" y="1140" width="120" height="30" rx="5" fill="white" stroke="#ffb74d" stroke-width="1"/>
+        <text x="1330" y="1158" text-anchor="middle" font-size="10" fill="#f57c00" font-family="Arial, sans-serif">Vendor Storage</text>
+        
+        <rect x="1400" y="1140" width="130" height="30" rx="5" fill="white" stroke="#ffb74d" stroke-width="1"/>
+        <text x="1465" y="1158" text-anchor="middle" font-size="10" fill="#f57c00" font-family="Arial, sans-serif">Benchmark Results</text>
+    </g>
+    
+</svg>

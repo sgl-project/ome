@@ -45,7 +45,7 @@ jobs:
 
       - name: Install Hugo
         run: |
-          cd hack/internal/tools && GOBIN=$GITHUB_WORKSPACE/bin CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@v0.142.0
+          cd hack/internal/tools && GOBIN=$GITHUB_WORKSPACE/bin CGO_ENABLED=1 go install -tags extended github.com/gohugoio/hugo@v0.147.7
           echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
@@ -59,7 +59,7 @@ jobs:
           HUGO_BASEURL: https://docs.sglang.ai/ome/
         run: |
           # Build the site with local node_modules
-          $GITHUB_WORKSPACE/bin/hugo --baseURL https://docs.sglang.ai/ome/
+          $GITHUB_WORKSPACE/bin/hugo --gc --minify --baseURL https://docs.sglang.ai/ome/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
