@@ -124,54 +124,6 @@ jobs:
           name: sbom-${{ matrix.component.image }}
           path: ${{ matrix.component.image }}-sbom.spdx.json
 
-  build-binaries:
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        os: [linux, darwin, windows]
-        arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Build binaries
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-        run: |
-          mkdir -p dist
-          ext=""
-          if [[ "${{ matrix.os }}" == "windows" ]]; then
-            ext=".exe"
-          fi
-          
-          # Build manager
-          go build -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${{ needs.prepare.outputs.tag }} -X github.com/sgl-project/ome/pkg/version.GitCommit=${{ github.sha }}" \
-            -o dist/ome-manager-${{ matrix.os }}-${{ matrix.arch }}${ext} ./cmd/manager
-          
-          # Build model-agent
-          go build -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${{ needs.prepare.outputs.tag }} -X github.com/sgl-project/ome/pkg/version.GitCommit=${{ github.sha }}" \
-            -o dist/model-agent-${{ matrix.os }}-${{ matrix.arch }}${ext} ./cmd/model-agent
-          
-          # Build ome-agent
-          go build -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${{ needs.prepare.outputs.tag }} -X github.com/sgl-project/ome/pkg/version.GitCommit=${{ github.sha }}" \
-            -o dist/ome-agent-${{ matrix.os }}-${{ matrix.arch }}${ext} ./cmd/ome-agent
-
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/*
 
   publish-helm-charts:
     needs: [prepare, build-images]
@@ -252,7 +204,7 @@ jobs:
             *-source-sbom.*.json
 
   create-release:
-    needs: [prepare, build-images, build-binaries, publish-helm-charts, generate-sboms]
+    needs: [prepare, build-images, publish-helm-charts, generate-sboms]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -266,9 +218,6 @@ jobs:
       - name: Organize release assets
         run: |
           mkdir -p release-assets
-          
-          # Copy binaries
-          cp artifacts/binaries-*/* release-assets/ || true
           
           # Copy Helm charts
           cp artifacts/helm-charts/*.tgz release-assets/ || true
