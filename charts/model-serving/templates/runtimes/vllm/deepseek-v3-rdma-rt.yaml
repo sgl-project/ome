@@ -61,6 +61,12 @@ spec:
         path: /dev/infiniband
     - emptyDir: { }
       name: log-volume
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
   protocolVersions:
     - openAI
   containers:

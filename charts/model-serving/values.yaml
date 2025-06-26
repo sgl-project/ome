@@ -17,6 +17,9 @@ sglang:
     tag: v0.4.5.5e34fb5-cu124
   # If you need to add another image tag, please think twice about the impact, and the business justification
 
+oci:
+  realm: oc1
+
 command_a_032025:
   enabled: false
   minReplicas: 1
