@@ -26,10 +26,16 @@ spec:
       nodeSelector:
         {{- toYaml .Values.modelAgent.nodeSelector | nindent 8 }}
       volumes:
-        - name: host-models
-          hostPath:
-            path: {{ .Values.modelAgent.hostPath }}
-            type: Directory
+      - name: host-models
+        hostPath:
+          path: {{ .Values.modelAgent.hostPath }}
+          type: Directory
+      {{- if or (eq .Values.ome.ociETC.realm "oc5") (eq .Values.ome.ociETC.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+      {{- end }}
       containers:
       - name: model-agent
         image: "{{ .Values.modelAgent.image.repository }}:{{ .Values.modelAgent.image.tag }}"
@@ -48,10 +54,19 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        {{- if or (eq .Values.ome.ociETC.realm "oc5") (eq .Values.ome.ociETC.realm "oc6") }}
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+        {{- end }}
         volumeMounts:
         - name: host-models
           readOnly: false
           mountPath: {{ .Values.modelAgent.hostPath }}
+        {{- if or (eq .Values.ome.ociETC.realm "oc5") (eq .Values.ome.ociETC.realm "oc6") }}
+        - name: etc-pki
+          mountPath: /etc/pki
+          readOnly: true
+        {{- end }}
         livenessProbe:
           httpGet:
             path: /livez
