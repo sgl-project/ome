@@ -6,36 +6,65 @@ description: >
   Why OME?
 ---
 
-OME is a standard operator for managing the lifecycle of LLM models,
-serving, training, and dedicated AI clusters in a Kubernetes cluster.
-It is designed to be a generic operator
-that can be used to manage the lifecycle of any AI/ML workload in a Kubernetes cluster.
+OME (Oracle Machine learning Engine) is a Kubernetes operator designed to simplify and optimize the deployment and management of machine learning models in production environments. It provides a comprehensive solution for model lifecycle management, runtime optimization, service deployment, and intelligent resource scheduling.
 
-## Features
+## Core Capabilities
 
-- 💰 **Autoscaling**: Support modern serverless workload with Autoscaling including Scale to Zero.
+### 1. Model Management
 
-- 🔒 **Security**: Supports mTLS and RBAC for secure communication between components and the server *by default*.
+OME offers a unified platform for managing various types of models, providing comprehensive lifecycle management from storage to deployment:
 
-- ✅ **Advanced Deployments**: Advanced deployments with canary rollout, blue-green deployment, and A/B testing.
+- **Multi-Format Support**: Handles diverse model formats including Hugging Face models, ONNX, TensorRT, and custom formats
+- **Storage Backend Integration**: Seamlessly integrates with multiple storage solutions including OCI Object Storage, local file systems, and distributed storage systems
+- **Security Features**: Built-in encryption for model artifacts, secure model distribution, and access control
+- **Cross-Hardware Compatibility**: Automatically handles model distribution and optimization across different hardware accelerators (GPUs, TPUs, CPUs)
+- **Version Control**: Comprehensive model versioning with rollback capabilities and A/B testing support
 
-- 📊 **Metrics and Logging**: OME supports standard metrics and logging for efficient monitoring and debugging.
+### 2. Runtime Configuration Management
 
-- 🌐 **Multi-Node Model Serving and Training**: Supports multi-node model serving and multi-node model training leveraging Volcano for gang scheduling.
+OME intelligently selects and configures the optimal runtime environment based on model characteristics:
 
-- 🛠️ **Resource Management**: Supports dedicated resource reservation and resource sharing.
+- **Automatic Runtime Selection**: Analyzes model properties (size, architecture, quantization) to choose the best serving runtime
+- **Runtime Optimization**: Pre-configured optimizations for popular runtimes:
+  - **SGLang**: First-class support with cache-aware load balancing, RadixAttention for prefix caching, and optimized kernel selection
+- **Dynamic Configuration**: Adjusts runtime parameters based on workload patterns and resource availability
+- **Custom Runtime Support**: Extensible framework for integrating custom model serving runtimes
+- **Performance Profiling**: Continuous monitoring and optimization of runtime performance
 
-## Architecture
-![Architecture](/images/architecture.svg)
+### 3. Service Deployment and Management
 
-1. **Compute Layer**: Includes OC Cluster Network, GPU, and compute images that will be used to launch individual nodes forming a larger cluster.
-2. **Kubernetes Cluster**: Sits on top of compute nodes to manage workload and scheduling.
-3. **Network Layer**: Pods, the smallest unit in Kubernetes, have their own networking requirements and use CNI (Container Network Interface) to communicate with each other. RDMA capability requires additional CNI for GPUs to communicate directly.
-4. **Application Layer**:
-   - **Monitoring Components**: Responsible for surfacing all GPU and network device statuses through Kubernetes APIs.
-   - **OME**: An in-house operator that orchestrates model serving and training, with assistance from the monitoring stack to efficiently schedule workloads and auto-recover from failures. Additionally, OME allows users to run HPO and evaluation.
-      - **Training**: Supports common training frameworks such as Accelerate, DeepSpeed, PyTorch, TensorFlow, Cohere's TFew, and MPI.
-      - **Serving**: Focuses predominantly on LLMs such as vLLM, Cohere, TGI, NIM, but also supports Triton, covering all potential model formats such as ONNX.
-      - **Alfred**: A butler across all workloads that allows optimal scheduling, node patching and repairing, and GPU management such as MIG configuration.
-   - **Gang Scheduler**: Uses tools like Volcano for resource quota and scheduling training workloads.
-   - **Logging Component**: Runs on every node to collect logs and emit them to Lumberjack, typically done via Fluent Bit.
+OME automates the complex process of deploying ML models as scalable Kubernetes services:
+
+- **Kubernetes Native**: Creates and manages all necessary Kubernetes resources (Deployments, Services, Ingresses, ConfigMaps)
+- **Advanced Deployment Patterns**:
+  - **Prefill-Decode Disaggregation**: Separates compute-intensive prefill operations from memory-bound decode operations for optimal resource utilization
+  - **Multi-Node Inference**: Distributes large models across multiple GPUs/nodes with efficient communication
+  - Canary deployments with traffic splitting
+  - Blue-green deployments for zero-downtime updates
+  - A/B testing with metric-based routing
+- **Auto-scaling**: Intelligent scaling based on request patterns, GPU utilization, and custom metrics
+- **Service Mesh Integration**: Native integration with Istio for advanced traffic management and security
+- **Multi-Model Serving**: Efficient serving of multiple models on the same infrastructure with resource isolation
+- **Multi-LoRA Support**: Efficiently serves multiple LoRA adapters on the same base model
+
+### 4. Intelligent Scheduling and Resource Optimization
+
+OME implements sophisticated scheduling algorithms to maximize resource utilization:
+
+- **Bin-Packing Algorithm**: Optimally packs model workloads onto available GPUs to maximize utilization
+- **Dynamic Rescheduling**: Continuously rebalances workloads based on real-time usage patterns
+- **GPU Sharing**: Enables multiple models to share GPU resources with performance isolation
+- **Heterogeneous Hardware Support**: Intelligently schedules across different GPU types and generations
+- **Priority-Based Scheduling**: Ensures critical models get resources while maximizing overall cluster efficiency
+- **Spot Instance Support**: Leverages spot/preemptible instances for cost optimization with automatic failover
+
+## Additional Features
+
+- 💰 **Cost Optimization**: Automatic resource right-sizing and spot instance utilization
+- 🔒 **Enterprise Security**: mTLS, RBAC, and audit logging for compliance requirements
+- 📊 **Comprehensive Observability**: Integrated metrics, logging, and tracing for all components
+- 🌐 **Multi-Region Support**: Deploy and manage models across multiple Kubernetes clusters
+- 🛠️ **Extensible Architecture**: Plugin system for custom schedulers, runtimes, and storage backends
+- 🚀 **Automated Benchmarking**: Built-in BenchmarkJob resource for systematic performance evaluation
+- 🔄 **Kubernetes Ecosystem Integration**: Deep integration with Kueue, LeaderWorkerSet, KEDA, Gateway API, and K8s Inference Service
+

@@ -74,7 +74,6 @@ java-client/crd
 **/__debug_bin*
 coverage-*.out
 coverage-*.html
-package.json
-package-lock.json
+
 
 hack/python-sdk/openapi-generator-cli-*.jar
