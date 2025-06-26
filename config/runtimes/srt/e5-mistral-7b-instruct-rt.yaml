@@ -22,7 +22,7 @@ spec:
   engineConfig:
     runner:
       name: ome-container
-      image: ghcr.io/sgl-project/sgl:dev2
+      image: ghcr.io/moirai-internal/sgl:dev2
       ports:
         - containerPort: 8080
           name: http1

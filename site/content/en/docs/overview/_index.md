@@ -10,6 +10,10 @@ OME (Oracle Machine learning Engine) is a Kubernetes operator designed to simpli
 
 ## Core Capabilities
 
+## Architecture
+
+<img src="/ome/images/ome-architecture.svg" alt="OME Architecture" style="width: 100%; max-width: 2000px;" />
+
 ### 1. Model Management
 
 OME offers a unified platform for managing various types of models, providing comprehensive lifecycle management from storage to deployment:
@@ -67,4 +71,3 @@ OME implements sophisticated scheduling algorithms to maximize resource utilizat
 - 🛠️ **Extensible Architecture**: Plugin system for custom schedulers, runtimes, and storage backends
 - 🚀 **Automated Benchmarking**: Built-in BenchmarkJob resource for systematic performance evaluation
 - 🔄 **Kubernetes Ecosystem Integration**: Deep integration with Kueue, LeaderWorkerSet, KEDA, Gateway API, and K8s Inference Service
-

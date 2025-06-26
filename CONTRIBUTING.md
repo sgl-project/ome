@@ -21,7 +21,8 @@ When submitting a pull request:
 2. Ensure code is properly formatted by running `make fmt`, `make vet`, and `make tidy`.
 3. Add new test cases. In the case of a bug fix, the tests should fail without your code changes. For new features, try to cover as many variants as reasonably possible.
 4. Modify the documentation as necessary.
-5. Include a detailed description of the changes in the pull request. Explain why you made the changes you did.
+5. Fill out the pull request template completely. The template will guide you through providing all necessary information.
+6. Link any related issues using the "Fixes #123" syntax to automatically close them when the PR is merged.
 
 ### PR Template
 
