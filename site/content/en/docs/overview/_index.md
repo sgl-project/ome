@@ -6,7 +6,7 @@ description: >
   Why OME?
 ---
 
-OME (Oracle Machine learning Engine) is a Kubernetes operator designed to simplify and optimize the deployment and management of machine learning models in production environments. It provides a comprehensive solution for model lifecycle management, runtime optimization, service deployment, and intelligent resource scheduling.
+OME (Open Model Engine) is a Kubernetes operator designed to simplify and optimize the deployment and management of machine learning models in production environments. It provides a comprehensive solution for model lifecycle management, runtime optimization, service deployment, and intelligent resource scheduling.
 
 ## Core Capabilities
 
