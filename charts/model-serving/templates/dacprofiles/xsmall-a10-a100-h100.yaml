@@ -26,6 +26,7 @@ spec:
                   - BM.GPU.B4.8
                   - BM.GPU4.8
                   - BM.GPU.A10.4
+                  - BM.GPU.H100-NC.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           preference:
@@ -50,3 +51,4 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8

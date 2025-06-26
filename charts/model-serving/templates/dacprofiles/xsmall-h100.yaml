@@ -22,3 +22,4 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8

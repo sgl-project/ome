@@ -64,6 +64,7 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
   modelSizeRange:
     min: 100B
     max: 110B
