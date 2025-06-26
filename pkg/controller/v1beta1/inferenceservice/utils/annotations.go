@@ -3,7 +3,6 @@ package utils
 import (
 	"strings"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,25 +31,6 @@ func IsBlockListInjectionDisabled(annotations map[string]string) bool {
 func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
 	return annotations[constants.ModelInitInjectionKey] != "true" &&
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
-}
-
-// IsEntrypointRouter checks if the InferenceService has the
-// entrypoint-component annotation set to router.
-// Returns true if the annotation is set to router, false otherwise.
-func IsEntrypointRouter(annotations map[string]string) bool {
-	componentValue, hasAnnotation := annotations[constants.EntrypointComponent]
-	if !hasAnnotation {
-		return false
-	}
-
-	// Validate against known component types
-	switch v1beta1.ComponentType(componentValue) {
-	case v1beta1.RouterComponent:
-		return true
-	default:
-		// Invalid component type
-		return false
-	}
 }
 
 func IsEmptyModelDirVolumeRequired(annotations map[string]string) bool {

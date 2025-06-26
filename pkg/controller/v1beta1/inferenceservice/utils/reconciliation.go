@@ -79,7 +79,7 @@ func GetRuntimeForNewArchitecture(cl client.Client, isvc *v1beta1.InferenceServi
 		}
 
 		// Verify the runtime supports the model
-		if err := RuntimeSupportsModelNewArchitecture(baseModel, rt, isvc.Spec.Runtime.Name); err != nil {
+		if err := RuntimeSupportsModel(baseModel, rt, isvc.Spec.Runtime.Name); err != nil {
 			// Fill in model name in error if available
 			if compatErr, ok := err.(*RuntimeCompatibilityError); ok {
 				compatErr.ModelName = isvc.Spec.Model.Name
@@ -91,7 +91,7 @@ func GetRuntimeForNewArchitecture(cl client.Client, isvc *v1beta1.InferenceServi
 	}
 
 	// Auto-select runtime based on model
-	runtimes, excludedRuntimes, err := GetSupportingRuntimesNewArchitecture(baseModel, cl, isvc.Namespace)
+	runtimes, excludedRuntimes, err := GetSupportingRuntimes(baseModel, cl, isvc.Namespace)
 	if err != nil {
 		return nil, "", err
 	}

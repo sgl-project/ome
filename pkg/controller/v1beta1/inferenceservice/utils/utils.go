@@ -50,16 +50,6 @@ func GetScaledObjectName(isvcName string) string {
 	return fmt.Sprintf("%s%s", prefix, isvcName)
 }
 
-// GetBaseModelVendor returns the vendor of the base model.
-// If vendor is not set, it returns "Unknown".
-func GetBaseModelVendor(baseModel v1beta1.BaseModelSpec) string {
-	baseModelVendor := "Unknown"
-	if baseModel.Vendor != nil {
-		baseModelVendor = *baseModel.Vendor
-	}
-	return baseModelVendor
-}
-
 // GetValueFromRawExtension extracts a value by key from a JSON-encoded runtime.RawExtension.
 // It returns nil if the key does not exist or the data is not a map.
 func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}, error) {
