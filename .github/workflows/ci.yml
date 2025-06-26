@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Run fmt check
+        run: |
+          make fmt
+          git diff --exit-code || (echo "Please run 'make fmt' to format code" && exit 1)
+
+      - name: Run vet
+        run: make vet
+
+      - name: Run golangci-lint
+        run: make ci-lint
+
+      - name: Run Helm lint
+        run: make helm-lint
+
+  generate:
+    name: Generate and Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Generate code
+        run: make generate
+
+      - name: Generate manifests
+        run: make manifests
+
+      - name: Check for uncommitted changes
+        run: |
+          git diff --exit-code || (echo "Generated files are out of sync. Please run 'make generate manifests' and commit the changes." && exit 1)
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-suite: [unit, integration]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Run unit tests
+        if: matrix.test-suite == 'unit'
+        run: |
+          make test
+          make coverage
+
+      - name: Run integration tests
+        if: matrix.test-suite == 'integration'
+        run: make integration-test
+
+      - name: Upload coverage reports
+        if: matrix.test-suite == 'unit'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage-cmd.out
+            coverage-pkg.out
+            coverage-internal.out
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [ome-manager, model-agent, multinode-prober, ome-agent]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Build ${{ matrix.component }}
+        run: make ${{ matrix.component }}
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.component }}-binary
+          path: bin/${{ matrix.component }}
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [ome-image, model-agent-image, multinode-prober-image, ome-agent-image]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.image }}
+        run: |
+          make ${{ matrix.image }}
+        env:
+          TAG: pr-${{ github.event.pull_request.number }}
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  license-check:
+    name: License Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Check licenses
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses check ./... --disallowed_types=forbidden,restricted
+
+  all-checks-passed:
+    name: All CI Checks Passed
+    needs: [lint, generate, test, build, docker-build, security-scan, license-check]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all job statuses
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more CI checks failed"
+            exit 1
+          else
+            echo "All CI checks passed successfully"
+          fi
