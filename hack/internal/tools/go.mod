@@ -8,7 +8,7 @@ require (
 	github.com/mikefarah/yq/v4 v4.44.3
 	github.com/norwoodj/helm-docs v1.12.0
 	helm.sh/helm/v3 v3.17.3
-	k8s.io/code-generator v0.33.1
+	k8s.io/code-generator v0.33.2
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20241105200929-48ec3b71211f
 	sigs.k8s.io/controller-tools v0.18.0
 	sigs.k8s.io/kind v0.24.0
@@ -123,7 +123,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.33.0 // indirect
 	k8s.io/apiextensions-apiserver v0.33.0 // indirect
-	k8s.io/apimachinery v0.33.1 // indirect
+	k8s.io/apimachinery v0.33.2 // indirect
 	k8s.io/apiserver v0.33.0 // indirect
 	k8s.io/cli-runtime v0.32.2 // indirect
 	k8s.io/client-go v0.33.0 // indirect
