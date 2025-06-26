@@ -1,0 +1,69 @@
+name: Sync Dependabot PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'hack/internal/tools/go.mod'
+      - 'hack/internal/tools/go.sum'
+      - 'site/go.mod'
+      - 'site/go.sum'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: true
+
+      - name: Update dependencies
+        run: |
+          # Update main module
+          go mod tidy
+          go mod download
+          
+          # Update tools module
+          cd hack/internal/tools
+          go mod tidy
+          go mod download
+          cd -
+          
+          # Update site module
+          cd site
+          go mod tidy
+          go mod download
+          cd -
+
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git commit -m "Run go mod tidy"
+          git push

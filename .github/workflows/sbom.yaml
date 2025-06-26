@@ -1,0 +1,65 @@
+name: Generate SBOM
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to generate SBOM for'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  generate-sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: latest
+
+      - name: Generate SBOM
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          
+          # Generate SBOM for Go modules
+          syft dir:. -o spdx-json > ome-${TAG}-sbom.spdx.json
+          syft dir:. -o cyclonedx-json > ome-${TAG}-sbom.cyclonedx.json
+          
+          # Generate SBOM for container images
+          for image in ome-manager model-agent ome-agent multinode-prober; do
+            echo "Generating SBOM for ${image}..."
+            syft ghcr.io/moirai-internal/ome/${image}:${TAG} -o spdx-json > ${image}-${TAG}-sbom.spdx.json
+            syft ghcr.io/moirai-internal/ome/${image}:${TAG} -o cyclonedx-json > ${image}-${TAG}-sbom.cyclonedx.json
+          done
+
+      - name: Upload SBOMs to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            *-sbom.spdx.json
+            *-sbom.cyclonedx.json
+
+      - name: Upload SBOMs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.event.release.tag_name || inputs.tag }}
+          path: |
+            *-sbom.spdx.json
+            *-sbom.cyclonedx.json

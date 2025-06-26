@@ -20,14 +20,14 @@ ome:
     adNumberName: ad2
     namespace: ax0pqskufyud
   benchmarkJob:
-    image: ghcr.io/sgl-project/genai-bench
+    image: ghcr.io/moirai-internal/genai-bench
     tag: 0.1.113
     cpuRequest: "2"
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
   multinodeProber:
-    image: ghcr.io/sgl-project/multinode-prober
+    image: ghcr.io/moirai-internal/multinode-prober
     tag: v0.1
     memoryRequest: 100Mi
     cpuRequest: 100m
@@ -57,7 +57,7 @@ ome:
     tolerations: []
     topologySpreadConstraints: []
     affinity: {}
-    image: ghcr.io/sgl-project/ome/manager
+    image: ghcr.io/moirai-internal/ome/manager
     tag: *defaultVersion
     resources:
       limits:
@@ -68,15 +68,15 @@ ome:
         memory: 4Gi
   servingruntime:
     vllmMedium:
-      image: ghcr.io/sgl-project/official-vllm-openai
+      image: ghcr.io/moirai-internal/official-vllm-openai
       tag: e3c664b
   dac:
     reconcileWithKueue: true
-    image: ghcr.io/sgl-project/genai-dac-dummy-image
+    image: ghcr.io/moirai-internal/genai-dac-dummy-image
     tag: v1.0-58
     schedulerName: genai-kube-scheduler
   omeAgent:
-    image: ghcr.io/sgl-project/genai-ome-agent
+    image: ghcr.io/moirai-internal/genai-ome-agent
     tag: *defaultVersion
 
     authType: InstancePrincipal
@@ -102,7 +102,7 @@ modelAgent:
   serviceAccountName: ome-model-agent
 
   image:
-    repository: ghcr.io/sgl-project/model-agent
+    repository: ghcr.io/moirai-internal/model-agent
     pullPolicy: Always
     tag: v0.1
   
@@ -156,7 +156,7 @@ modelAgent:
 
 trainingSidecar:
   image:
-    repository: ghcr.io/sgl-project/genai-ome-agent
+    repository: ghcr.io/moirai-internal/genai-ome-agent
     tag: v1.1-322
 
   region: us-chicago-1

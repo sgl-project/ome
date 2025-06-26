@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: model-agent
-          image: ghcr.io/sgl-project/ome/model-agent:a198d28-dirty
+          image: ghcr.io/moirai-internal/ome/model-agent:a198d28-dirty

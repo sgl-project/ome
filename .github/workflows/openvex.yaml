@@ -1,0 +1,75 @@
+name: Generate OpenVEX
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to generate OpenVEX for'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  generate-vex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+
+      - name: Install vexctl
+        run: |
+          go install github.com/openvex/vexctl@latest
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-results.json'
+
+      - name: Generate VEX document
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          
+          # Create VEX document for known false positives or accepted risks
+          vexctl create \
+            --author="OME Maintainers" \
+            --role="Project Maintainer" \
+            --product="pkg:github/sgl-project/ome@${TAG}" \
+            --file="ome-${TAG}.vex.json"
+          
+          # Note: You would add statements here for any false positives
+          # Example:
+          # vexctl add \
+          #   --file="ome-${TAG}.vex.json" \
+          #   --vuln="CVE-2023-12345" \
+          #   --status="not_affected" \
+          #   --justification="vulnerable_code_not_in_execute_path"
+
+      - name: Upload VEX to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ome-*.vex.json
+
+      - name: Upload VEX as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vex-${{ github.event.release.tag_name || inputs.tag }}
+          path: |
+            ome-*.vex.json
