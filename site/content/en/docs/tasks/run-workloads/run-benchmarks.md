@@ -59,7 +59,7 @@ metadata:
   namespace: benchmark-demo
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+    image: "ghcr.io/sgl-project/genai-bench:0.1.132"
   endpoint:
     inferenceService:
       name: llama-3-2-1b-instruct
@@ -94,7 +94,7 @@ metadata:
   namespace: e5-mistral-7b-instruct
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+    image: "ghcr.io/sgl-project/genai-bench:0.1.132"
   endpoint:
     inferenceService:
       name: e5-mistral-7b-instruct
@@ -135,7 +135,7 @@ metadata:
   namespace: deepseek-r1
 spec:
   podOverride:
-    image: "phx.ocir.io/idqj093njucb/genai-bench:0.1.132"
+    image: "ghcr.io/sgl-project/genai-bench:0.1.132"
     resources:
       requests:
         cpu: "8"

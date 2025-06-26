@@ -59,7 +59,7 @@ spec:
                       - BM.GPU.H100.8
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev2
+        image: ghcr.io/sgl-project/sgl:dev2
         env:
           - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
             value: "1"
@@ -158,7 +158,7 @@ spec:
                       - BM.GPU.H100.8
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev2
+        image: ghcr.io/sgl-project/sgl:dev2
         command:
           - sh
           - -c
@@ -240,7 +240,7 @@ spec:
                       - BM.GPU.H100.8
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev2
+        image: ghcr.io/sgl-project/sgl:dev2
         env:
           - name: SGLANG_MOONCAKE_TRANS_THREAD
             value: "16"
@@ -330,7 +330,7 @@ spec:
                       - BM.GPU.H100.8
       runner:
         name: ome-container
-        image: fra.ocir.io/idqj093njucb/sgl:dev2
+        image: ghcr.io/sgl-project/sgl:dev2
         command:
           - sh
           - -c

@@ -2,7 +2,7 @@
 CHARTS_DIR := ./charts
 
 # Define the registry and image tagging
-REGISTRY     ?= ord.ocir.io/idqj093njucb/ome
+REGISTRY     ?= ghcr.io/sgl-project/ome
 TAG          ?= $(GIT_TAG)
 ARCH         ?= linux/amd64
 MANAGER_IMG  ?= $(REGISTRY)/manager:$(TAG)

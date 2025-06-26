@@ -50,7 +50,7 @@ spec:
     hostNetwork: true
     runner:
       name: ome-container
-      image: fra.ocir.io/idqj093njucb/sgl:dev2
+      image: ghcr.io/sgl-project/sgl:dev2
       ports:
         - containerPort: 8080
           name: http1
@@ -144,7 +144,7 @@ spec:
     hostNetwork: true
     runner:
       name: ome-container
-      image: fra.ocir.io/idqj093njucb/sgl:dev2
+      image: ghcr.io/sgl-project/sgl:dev2
       ports:
         - containerPort: 8080
           name: http1
@@ -210,7 +210,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: fra.ocir.io/idqj093njucb/sgl-router:dev13
+      image: ghcr.io/sgl-project/sgl-router:dev13
       resources:
         limits:
           cpu: "1"
