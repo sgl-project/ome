@@ -395,60 +395,55 @@ func (b *BaseComponentFields) deleteResourcesDirectly(
 	ctx := context.TODO()
 	var errors []error
 
-	// Delete Deployment
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectMeta.Name,
-			Namespace: objectMeta.Namespace,
+	resources := []struct {
+		obj  client.Object
+		kind string
+	}{
+		{
+			obj: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      objectMeta.Name,
+					Namespace: objectMeta.Namespace,
+				},
+			},
+			kind: "deployment",
 		},
-	}
-	if err := b.Client.Delete(ctx, deployment); err != nil && !apierrors.IsNotFound(err) {
-		log.Error(err, "Failed to delete deployment", "name", deployment.Name)
-		errors = append(errors, err)
-	} else if err == nil {
-		log.Info("Successfully deleted deployment", "name", deployment.Name)
+		{
+			obj: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      objectMeta.Name,
+					Namespace: objectMeta.Namespace,
+				},
+			},
+			kind: "service",
+		},
+		{
+			obj: &autoscalingv2.HorizontalPodAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      objectMeta.Name,
+					Namespace: objectMeta.Namespace,
+				},
+			},
+			kind: "HPA",
+		},
+		{
+			obj: &leaderworkerset.LeaderWorkerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      objectMeta.Name,
+					Namespace: objectMeta.Namespace,
+				},
+			},
+			kind: "LeaderWorkerSet",
+		},
 	}
 
-	// Delete Service
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectMeta.Name,
-			Namespace: objectMeta.Namespace,
-		},
-	}
-	if err := b.Client.Delete(ctx, service); err != nil && !apierrors.IsNotFound(err) {
-		log.Error(err, "Failed to delete service", "name", service.Name)
-		errors = append(errors, err)
-	} else if err == nil {
-		log.Info("Successfully deleted service", "name", service.Name)
-	}
-
-	// Delete HPA (if exists)
-	hpa := &autoscalingv2.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectMeta.Name,
-			Namespace: objectMeta.Namespace,
-		},
-	}
-	if err := b.Client.Delete(ctx, hpa); err != nil && !apierrors.IsNotFound(err) {
-		log.Error(err, "Failed to delete HPA", "name", hpa.Name)
-		errors = append(errors, err)
-	} else if err == nil {
-		log.Info("Successfully deleted HPA", "name", hpa.Name)
-	}
-
-	// Delete LeaderWorkerSet (for multi-node deployments)
-	lws := &leaderworkerset.LeaderWorkerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectMeta.Name,
-			Namespace: objectMeta.Namespace,
-		},
-	}
-	if err := b.Client.Delete(ctx, lws); err != nil && !apierrors.IsNotFound(err) {
-		log.Error(err, "Failed to delete LeaderWorkerSet", "name", lws.Name)
-		errors = append(errors, err)
-	} else if err == nil {
-		log.Info("Successfully deleted LeaderWorkerSet", "name", lws.Name)
+	for _, resource := range resources {
+		if err := b.Client.Delete(ctx, resource.obj); err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, "Failed to delete "+resource.kind, "name", resource.obj.GetName())
+			errors = append(errors, err)
+		} else if err == nil {
+			log.Info("Successfully deleted "+resource.kind, "name", resource.obj.GetName())
+		}
 	}
 
 	// If any deletion failed, return error
