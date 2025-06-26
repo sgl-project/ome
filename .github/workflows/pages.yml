@@ -34,7 +34,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24.1'
 
       - name: Install Hugo
         run: |
@@ -43,7 +43,7 @@ jobs:
 
       - name: Build Hugo site
         working-directory: ./site
-        run: $GITHUB_WORKSPACE/bin/hugo --minify --baseURL https://docs.sglang.ai/ome/
+        run: $GITHUB_WORKSPACE/bin/hugo --baseURL https://docs.sglang.ai/ome/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
