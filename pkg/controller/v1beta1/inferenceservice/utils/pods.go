@@ -6,7 +6,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,20 +18,6 @@ func ListPodsByLabel(cl client.Client, namespace string, labelKey string, labelV
 	}
 	err := cl.List(context.TODO(), podList, opts...)
 	if err != nil && !errors.IsNotFound(err) {
-		return nil, err
-	}
-	sortPodsByCreatedTimestampDesc(podList)
-	return podList, nil
-}
-
-func ListPodsByLabelSelector(cl client.Client, namespace string, selector labels.Selector) (*v1.PodList, error) {
-	podList := &v1.PodList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(namespace),
-		client.MatchingLabelsSelector{Selector: selector},
-	}
-	if err := cl.List(context.TODO(), podList, listOpts...); err != nil {
-		// Log error but don't fail reconciliation entirely
 		return nil, err
 	}
 	sortPodsByCreatedTimestampDesc(podList)

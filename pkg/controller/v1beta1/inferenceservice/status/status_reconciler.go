@@ -27,41 +27,41 @@ func NewStatusReconciler() *StatusReconciler {
 }
 
 // PropagateRawStatus propagates status from raw Kubernetes deployment
-func (sm *StatusReconciler) PropagateRawStatus(
+func (sr *StatusReconciler) PropagateRawStatus(
 	status *v1beta1.InferenceServiceStatus,
 	component v1beta1.ComponentType,
 	deployment *appsv1.Deployment,
 	url *apis.URL) {
 
-	statusSpec := sm.initializeComponentStatus(status, component)
+	statusSpec := sr.initializeComponentStatus(status, component)
 
 	statusSpec.LatestCreatedRevision = deployment.GetObjectMeta().GetAnnotations()["deployment.kubernetes.io/revision"]
-	condition := sm.getDeploymentCondition(deployment, appsv1.DeploymentAvailable)
+	condition := sr.getDeploymentCondition(deployment, appsv1.DeploymentAvailable)
 	if condition != nil && condition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
 	}
-	readyCondition := sm.getReadyConditionsMap()[component]
-	sm.setCondition(status, readyCondition, condition)
+	readyCondition := sr.getReadyConditionsMap()[component]
+	sr.setCondition(status, readyCondition, condition)
 	status.Components[component] = statusSpec
 	status.ObservedGeneration = deployment.Status.ObservedGeneration
 }
 
 // PropagateMultiNodeStatus propagates status from LeaderWorkerSet
-func (sm *StatusReconciler) PropagateMultiNodeStatus(
+func (sr *StatusReconciler) PropagateMultiNodeStatus(
 	status *v1beta1.InferenceServiceStatus,
 	component v1beta1.ComponentType,
 	lws *lwsspec.LeaderWorkerSet,
 	url *apis.URL) {
 
-	statusSpec := sm.initializeComponentStatus(status, component)
+	statusSpec := sr.initializeComponentStatus(status, component)
 
 	statusSpec.LatestCreatedRevision = lws.GetObjectMeta().GetAnnotations()["resourceVersion"]
-	lwsCondition := sm.getLWSConditions(lws, lwsspec.LeaderWorkerSetAvailable)
+	lwsCondition := sr.getLWSConditions(lws, lwsspec.LeaderWorkerSetAvailable)
 	if lwsCondition != nil && lwsCondition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
 	}
 
-	readyCondition := sm.getReadyConditionsMap()[component]
+	readyCondition := sr.getReadyConditionsMap()[component]
 
 	// Create a new condition with the correct component ready condition type
 	// instead of using the LWS condition type directly
@@ -73,7 +73,7 @@ func (sm *StatusReconciler) PropagateMultiNodeStatus(
 			Reason:             lwsCondition.Reason,
 			LastTransitionTime: lwsCondition.LastTransitionTime,
 		}
-		sm.setCondition(status, readyCondition, componentCondition)
+		sr.setCondition(status, readyCondition, componentCondition)
 	}
 
 	status.Components[component] = statusSpec
@@ -81,19 +81,19 @@ func (sm *StatusReconciler) PropagateMultiNodeStatus(
 }
 
 // PropagateMultiNodeRayVLLMStatus propagates status from multiple deployments
-func (sm *StatusReconciler) PropagateMultiNodeRayVLLMStatus(
+func (sr *StatusReconciler) PropagateMultiNodeRayVLLMStatus(
 	status *v1beta1.InferenceServiceStatus,
 	component v1beta1.ComponentType,
 	deployments []*appsv1.Deployment,
 	url *apis.URL) {
 
-	statusSpec := sm.initializeComponentStatus(status, component)
+	statusSpec := sr.initializeComponentStatus(status, component)
 
-	firstDeployment, err := sm.getFirstDeployment(deployments)
+	firstDeployment, err := sr.getFirstDeployment(deployments)
 	if err != nil {
 		// Handle error case gracefully - set a default state
-		sm.setCondition(status, sm.getReadyConditionsMap()[component], &apis.Condition{
-			Type:    sm.getReadyConditionsMap()[component],
+		sr.setCondition(status, sr.getReadyConditionsMap()[component], &apis.Condition{
+			Type:    sr.getReadyConditionsMap()[component],
 			Status:  v1.ConditionFalse,
 			Reason:  "NoDeployments",
 			Message: "No deployments available",
@@ -103,23 +103,23 @@ func (sm *StatusReconciler) PropagateMultiNodeRayVLLMStatus(
 
 	statusSpec.LatestCreatedRevision = firstDeployment.GetObjectMeta().GetAnnotations()["deployment.kubernetes.io/revision"]
 
-	condition := sm.getMultiDeploymentCondition(deployments, appsv1.DeploymentAvailable)
+	condition := sr.getMultiDeploymentCondition(deployments, appsv1.DeploymentAvailable)
 	if condition != nil && condition.Status == v1.ConditionTrue {
 		statusSpec.URL = url
 	}
-	readyCondition := sm.getReadyConditionsMap()[component]
-	sm.setCondition(status, readyCondition, condition)
+	readyCondition := sr.getReadyConditionsMap()[component]
+	sr.setCondition(status, readyCondition, condition)
 	status.Components[component] = statusSpec
 	status.ObservedGeneration = firstDeployment.Status.ObservedGeneration
 }
 
 // PropagateStatus propagates status from Knative Service
-func (sm *StatusReconciler) PropagateStatus(
+func (sr *StatusReconciler) PropagateStatus(
 	status *v1beta1.InferenceServiceStatus,
 	component v1beta1.ComponentType,
 	serviceStatus *knservingv1.ServiceStatus) {
 
-	statusSpec := sm.initializeComponentStatus(status, component)
+	statusSpec := sr.initializeComponentStatus(status, component)
 
 	statusSpec.LatestCreatedRevision = serviceStatus.LatestCreatedRevisionName
 	revisionTraffic := map[string]int64{}
@@ -130,21 +130,21 @@ func (sm *StatusReconciler) PropagateStatus(
 	}
 
 	// Handle traffic routing logic
-	sm.handleTrafficRouting(&statusSpec, serviceStatus, revisionTraffic)
+	sr.handleTrafficRouting(&statusSpec, serviceStatus, revisionTraffic)
 
 	if serviceStatus.LatestReadyRevisionName != statusSpec.LatestReadyRevision {
 		statusSpec.LatestReadyRevision = serviceStatus.LatestReadyRevisionName
 	}
 
 	// Propagate conditions
-	sm.propagateServiceConditions(status, component, serviceStatus, &statusSpec)
+	sr.propagateServiceConditions(status, component, serviceStatus, &statusSpec)
 
 	status.Components[component] = statusSpec
 	status.ObservedGeneration = serviceStatus.ObservedGeneration
 }
 
 // PropagateModelStatus propagates model status from pod information
-func (sm *StatusReconciler) PropagateModelStatus(
+func (sr *StatusReconciler) PropagateModelStatus(
 	status *v1beta1.InferenceServiceStatus,
 	statusSpec v1beta1.ComponentStatusSpec,
 	podList *v1.PodList,
@@ -153,34 +153,34 @@ func (sm *StatusReconciler) PropagateModelStatus(
 	// Check at least one pod is running for the latest revision of inferenceservice
 	totalCopies := len(podList.Items)
 	if totalCopies == 0 {
-		sm.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
+		sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 		return
 	}
 
 	// Use helper function to safely get the first pod
-	firstPod, err := sm.getFirstPod(podList)
+	firstPod, err := sr.getFirstPod(podList)
 	if err != nil {
-		sm.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
+		sr.UpdateModelRevisionStates(status, v1beta1.Pending, totalCopies, nil)
 		return
 	}
 
 	// Update model state to 'Loaded' if inferenceservice status is ready.
 	if status.IsReady() {
 		if rawDeployment {
-			sm.UpdateModelRevisionStates(status, v1beta1.Loaded, totalCopies, nil)
+			sr.UpdateModelRevisionStates(status, v1beta1.Loaded, totalCopies, nil)
 			return
 		} else if statusSpec.LatestCreatedRevision == statusSpec.LatestReadyRevision {
-			sm.UpdateModelRevisionStates(status, v1beta1.Loaded, totalCopies, nil)
+			sr.UpdateModelRevisionStates(status, v1beta1.Loaded, totalCopies, nil)
 			return
 		}
 	}
 
 	// Check container statuses
-	sm.checkContainerStatuses(status, firstPod, totalCopies)
+	sr.checkContainerStatuses(status, firstPod, totalCopies)
 }
 
 // UpdateModelRevisionStates updates the model revision states
-func (sm *StatusReconciler) UpdateModelRevisionStates(
+func (sr *StatusReconciler) UpdateModelRevisionStates(
 	status *v1beta1.InferenceServiceStatus,
 	modelState v1beta1.ModelState,
 	totalCopies int,
@@ -205,12 +205,12 @@ func (sm *StatusReconciler) UpdateModelRevisionStates(
 	}
 
 	if info != nil {
-		sm.SetModelFailureInfo(status, info)
+		sr.SetModelFailureInfo(status, info)
 	}
 }
 
 // UpdateModelTransitionStatus updates the model transition status
-func (sm *StatusReconciler) UpdateModelTransitionStatus(
+func (sr *StatusReconciler) UpdateModelTransitionStatus(
 	status *v1beta1.InferenceServiceStatus,
 	transitionStatus v1beta1.TransitionStatus,
 	info *v1beta1.FailureInfo) {
@@ -227,12 +227,12 @@ func (sm *StatusReconciler) UpdateModelTransitionStatus(
 	}
 
 	if info != nil {
-		sm.SetModelFailureInfo(status, info)
+		sr.SetModelFailureInfo(status, info)
 	}
 }
 
 // SetModelFailureInfo sets the model failure information
-func (sm *StatusReconciler) SetModelFailureInfo(status *v1beta1.InferenceServiceStatus, info *v1beta1.FailureInfo) bool {
+func (sr *StatusReconciler) SetModelFailureInfo(status *v1beta1.InferenceServiceStatus, info *v1beta1.FailureInfo) bool {
 	if reflect.DeepEqual(info, status.ModelStatus.LastFailureInfo) {
 		return false
 	}
@@ -241,12 +241,12 @@ func (sm *StatusReconciler) SetModelFailureInfo(status *v1beta1.InferenceService
 }
 
 // PropagateCrossComponentStatus aggregates conditions across components
-func (sm *StatusReconciler) PropagateCrossComponentStatus(
+func (sr *StatusReconciler) PropagateCrossComponentStatus(
 	status *v1beta1.InferenceServiceStatus,
 	componentList []v1beta1.ComponentType,
 	conditionType apis.ConditionType) {
 
-	conditionsMap, ok := sm.getConditionsMapIndex()[conditionType]
+	conditionsMap, ok := sr.getConditionsMapIndex()[conditionType]
 	if !ok {
 		return
 	}
@@ -266,5 +266,5 @@ func (sm *StatusReconciler) PropagateCrossComponentStatus(
 		}
 	}
 
-	sm.setCondition(status, conditionType, crossComponentCondition)
+	sr.setCondition(status, conditionType, crossComponentCondition)
 }

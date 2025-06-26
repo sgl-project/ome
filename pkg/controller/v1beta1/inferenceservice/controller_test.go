@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -335,6 +336,41 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				err = c.Create(context.TODO(), baseModel)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 
+				// Create an old predictor deployment to simulate existing resources
+				oldDeployment := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-legacy",
+						Namespace: "default",
+						Labels: map[string]string{
+							constants.InferenceServicePodLabelKey: "test-legacy",
+						},
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								constants.InferenceServicePodLabelKey: "test-legacy",
+							},
+						},
+						Template: v1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									constants.InferenceServicePodLabelKey: "test-legacy",
+								},
+							},
+							Spec: v1.PodSpec{
+								Containers: []v1.Container{
+									{
+										Name:  "predictor",
+										Image: "old-predictor-image:latest",
+									},
+								},
+							},
+						},
+					},
+				}
+				err = c.Create(context.TODO(), oldDeployment)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
 				// Create sklearn runtime
 				rt := &v1beta1.ServingRuntime{
 					ObjectMeta: metav1.ObjectMeta{
@@ -371,34 +407,42 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 			},
 			validate: func(t *testing.T, c client.Client, isvc *v1beta1.InferenceService) {
-				// Check that predictor deployment was created
-				// The deployment name should be either "test-legacy-predictor-default" or "test-legacy"
-				deployment := &appsv1.Deployment{}
-
-				// Try the default predictor name first
+				// The migration should have happened, check that the resource was updated
+				updatedIsvc := &v1beta1.InferenceService{}
 				err := c.Get(context.TODO(), types.NamespacedName{
-					Name:      "test-legacy-predictor-default",
+					Name:      "test-legacy",
+					Namespace: "default",
+				}, updatedIsvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Check that migration happened
+				g.Expect(updatedIsvc.Spec.Model).NotTo(gomega.BeNil(), "Expected model to be migrated")
+				g.Expect(updatedIsvc.Spec.Model.Name).To(gomega.Equal("sklearn-model"))
+				g.Expect(updatedIsvc.Spec.Engine).NotTo(gomega.BeNil(), "Expected engine to be created")
+
+				// Check that predictor is cleared
+				g.Expect(updatedIsvc.Spec.Predictor.Model).To(gomega.BeNil(), "Expected predictor.Model to be cleared")
+
+				// Check for deprecation warning
+				g.Expect(updatedIsvc.ObjectMeta.Annotations).NotTo(gomega.BeNil())
+				g.Expect(updatedIsvc.ObjectMeta.Annotations[constants.DeprecationWarning]).To(gomega.Equal("The Predictor field is deprecated and will be removed in a future release. Please use Engine and Model fields instead."))
+
+				// Check that old predictor deployment was deleted
+				deployment := &appsv1.Deployment{}
+				err = c.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-legacy", // predictor deployment uses inference service name
 					Namespace: "default",
 				}, deployment)
+				g.Expect(err).To(gomega.HaveOccurred(), "Expected old predictor deployment to be deleted")
+				g.Expect(apierrors.IsNotFound(err)).To(gomega.BeTrue(), "Expected deployment to not be found")
 
-				if err != nil {
-					// If not found, try the shorter name
-					err = c.Get(context.TODO(), types.NamespacedName{
-						Name:      "test-legacy",
-						Namespace: "default",
-					}, deployment)
-				}
-
-				// The deployment should exist
-				g.Expect(err).NotTo(gomega.HaveOccurred(), "Expected predictor deployment to be created")
-
-				// Verify it's using the sklearn runtime image
-				g.Expect(deployment.Spec.Template.Spec.Containers).To(gomega.HaveLen(1))
-				g.Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(gomega.Equal("sklearn-server:v1"))
-
-				// Verify labels
-				g.Expect(deployment.Spec.Template.Labels).To(gomega.HaveKey(constants.InferenceServicePodLabelKey))
-				g.Expect(deployment.Spec.Template.Labels[constants.InferenceServicePodLabelKey]).To(gomega.Equal("test-legacy"))
+				// Check that new engine deployment was created
+				engineDeployment := &appsv1.Deployment{}
+				err = c.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-legacy-engine",
+					Namespace: "default",
+				}, engineDeployment)
+				g.Expect(err).NotTo(gomega.HaveOccurred(), "Expected engine deployment to be created")
 			},
 		},
 		{
