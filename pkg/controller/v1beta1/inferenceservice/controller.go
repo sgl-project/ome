@@ -3,7 +3,6 @@ package inferenceservice
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
@@ -253,7 +252,66 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			r.Log.Info("PD-disaggregated deployment detected", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
 		}
 
-		// Step 5: Create reconcilers based on merged specs
+		// Step 5a: Check for existing deployed components and handle deletions
+		existingComponents, err := r.checkExistingComponents(ctx, isvc)
+		if err != nil {
+			r.Log.Error(err, "Failed to check existing components", "Name", isvc.Name)
+			return reconcile.Result{}, err
+		}
+
+		// Create deletion reconcilers for components that exist but are not in current spec
+		r.Log.Info("Checking for components to delete",
+			"existing", existingComponents,
+			"hasEngine", mergedEngine != nil,
+			"hasDecoder", mergedDecoder != nil,
+			"hasRouter", mergedRouter != nil,
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+
+		// Delete engine if it exists but is not in current spec
+		if existingComponents.Engine && mergedEngine == nil {
+			r.Log.Info("Creating engine deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+			// Use RawDeployment mode for deletion since we just need to clean up resources
+			engineDeletionReconciler := componentBuilderFactory.CreateEngineComponent(
+				constants.RawDeployment, // Use consistent deployment mode for deletion
+				baseModel,
+				baseModelMeta,
+				nil, // nil engine spec for deletion
+				rt,
+				rtName,
+			)
+			reconcilers = append(reconcilers, engineDeletionReconciler)
+		}
+
+		// Delete decoder if it exists but is not in current spec
+		if existingComponents.Decoder && mergedDecoder == nil {
+			r.Log.Info("Creating decoder deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+			decoderDeletionReconciler := componentBuilderFactory.CreateDecoderComponent(
+				constants.RawDeployment, // Use consistent deployment mode for deletion
+				baseModel,
+				baseModelMeta,
+				nil, // nil decoder spec for deletion
+				rt,
+				rtName,
+			)
+			reconcilers = append(reconcilers, decoderDeletionReconciler)
+		}
+
+		// Delete router if it exists but is not in current spec
+		if existingComponents.Router && mergedRouter == nil {
+			r.Log.Info("Creating router deletion reconciler", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+			routerDeletionReconciler := componentBuilderFactory.CreateRouterComponent(
+				constants.RawDeployment, // Use consistent deployment mode for deletion
+				baseModel,
+				baseModelMeta,
+				nil, // nil router spec for deletion
+				rt,
+				rtName,
+			)
+			reconcilers = append(reconcilers, routerDeletionReconciler)
+		}
+
+		// Step 5b: Create reconcilers based on merged specs
 		if mergedEngine != nil {
 			r.Log.Info("Creating engine reconciler",
 				"deploymentMode", engineDeploymentMode,
@@ -333,23 +391,39 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		ingressDeploymentMode = deploymentMode
 	}
 
-	// Reconcile components sequentially first
-	for _, component := range reconcilers {
-		componentType := reflect.TypeOf(component).String()
-		r.Log.Info("Reconciling component", "component", componentType)
-		result, err := component.Reconcile(isvc) // Call Reconcile directly
-		if err != nil {
-			r.Log.Error(err, "Failed to reconcile component", "component", componentType)
-			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "InternalError", fmt.Sprintf("Failed to reconcile component %s: %s", componentType, err.Error()))
-			// Attempt to update status before returning error
-			if updateErr := r.updateStatus(isvc, deploymentMode); updateErr != nil {
-				r.Log.Error(updateErr, "Failed to update status after component reconciliation error")
+	// Step 6: Run all reconcilers (both regular and deletion reconcilers)
+	for _, reconciler := range reconcilers {
+		// Check if this component should exist based on current spec
+		if !reconciler.ShouldExist(isvc) {
+			// Component should be deleted
+			r.Log.Info("Calling Delete on component that should not exist",
+				"component", fmt.Sprintf("%T", reconciler),
+				"namespace", isvc.Namespace,
+				"inferenceService", isvc.Name)
+			result, err := reconciler.Delete(isvc)
+			if err != nil {
+				r.Log.Error(err, "Failed to delete component",
+					"component", fmt.Sprintf("%T", reconciler),
+					"namespace", isvc.Namespace,
+					"inferenceService", isvc.Name)
+				return result, err
 			}
-			return reconcile.Result{}, err
-		}
-		if !result.IsZero() {
-			r.Log.Info("Component reconciliation returned non-zero result, requeuing", "component", componentType, "result", result)
-			return result, nil
+			if result.Requeue || result.RequeueAfter > 0 {
+				return result, nil
+			}
+		} else {
+			// Component should exist, do normal reconciliation
+			result, err := reconciler.Reconcile(isvc)
+			if err != nil {
+				r.Log.Error(err, "Failed to reconcile component",
+					"component", fmt.Sprintf("%T", reconciler),
+					"namespace", isvc.Namespace,
+					"inferenceService", isvc.Name)
+				return result, err
+			}
+			if result.Requeue || result.RequeueAfter > 0 {
+				return result, nil
+			}
 		}
 	}
 
@@ -592,4 +666,34 @@ func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, 
 	isvc.Status.Address = addressURL
 
 	return nil
+}
+
+type existingComponents struct {
+	Engine  bool
+	Decoder bool
+	Router  bool
+}
+
+func (r *InferenceServiceReconciler) checkExistingComponents(ctx context.Context, isvc *v1beta2.InferenceService) (existingComponents, error) {
+	existing := existingComponents{}
+
+	// Check status for existing components - this is more reliable than querying deployments
+	if isvc.Status.Components != nil {
+		// Check if engine component exists in status
+		if _, hasEngine := isvc.Status.Components[v1beta2.EngineComponent]; hasEngine {
+			existing.Engine = true
+		}
+
+		// Check if decoder component exists in status
+		if _, hasDecoder := isvc.Status.Components[v1beta2.DecoderComponent]; hasDecoder {
+			existing.Decoder = true
+		}
+
+		// Check if router component exists in status
+		if _, hasRouter := isvc.Status.Components[v1beta2.RouterComponent]; hasRouter {
+			existing.Router = true
+		}
+	}
+
+	return existing, nil
 }

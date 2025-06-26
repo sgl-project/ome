@@ -162,17 +162,20 @@ func (r *Router) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 
 // reconcileObjectMeta creates the object metadata for the router component
 func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
-	annotations, err := r.processAnnotations(isvc)
-	if err != nil {
-		return metav1.ObjectMeta{}, err
-	}
-
-	labels := r.processLabels(isvc)
-
 	routerName, err := r.determineRouterName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
+
+	annotations, err := r.processAnnotations(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:      routerName,
+			Namespace: isvc.Namespace,
+		}, err
+	}
+
+	labels := r.processLabels(isvc)
 
 	return metav1.ObjectMeta{
 		Name:        routerName,
@@ -189,7 +192,11 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 	})
 
 	// Merge with router annotations
-	mergedAnnotations := utils.Union(annotations, r.routerSpec.Annotations)
+	mergedAnnotations := annotations
+	if r.routerSpec != nil {
+		routerAnnotations := r.routerSpec.Annotations
+		mergedAnnotations = utils.Union(annotations, routerAnnotations)
+	}
 
 	// Use common function for base annotations processing
 	processedAnnotations, err := ProcessBaseAnnotations(&r.BaseComponentFields, isvc, mergedAnnotations)
@@ -202,13 +209,14 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 
 // processLabels processes the labels for the router
 func (r *Router) processLabels(isvc *v1beta1.InferenceService) map[string]string {
-	routerLabels := r.routerSpec.Labels
-
-	// Start with router-specific labels
-	labels := utils.Union(isvc.Labels, routerLabels)
+	mergedLabels := isvc.Labels
+	if r.routerSpec != nil {
+		routerLabels := r.routerSpec.Labels
+		mergedLabels = utils.Union(isvc.Labels, routerLabels)
+	}
 
 	// Use common function for base labels processing
-	return ProcessBaseLabels(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, labels)
+	return ProcessBaseLabels(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, mergedLabels)
 }
 
 // determineRouterName determines the name of the router service
@@ -253,4 +261,18 @@ func (r *Router) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 
 	r.Log.Info("Router PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
+}
+
+// Delete implements the Component interface for Router
+func (r *Router) Delete(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
+	return r.BaseComponentFields.DeleteComponent(
+		isvc,
+		v1beta1.RouterComponent,
+		r.reconcileObjectMeta,
+	)
+}
+
+// ShouldExist implements the Component interface for Router
+func (r *Router) ShouldExist(isvc *v1beta1.InferenceService) bool {
+	return r.BaseComponentFields.ShouldComponentExist(isvc, v1beta1.RouterComponent)
 }
