@@ -78,7 +78,6 @@ spec:
           cpu: 128
           memory: 512Gi
           nvidia.com/gpu: 8
-
       readinessProbe:
         httpGet:
           path: /health_generate
@@ -87,7 +86,6 @@ spec:
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 200
-
       livenessProbe:
         httpGet:
           path: /health
@@ -96,7 +94,6 @@ spec:
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
-
       startupProbe:
         httpGet:
           path: /health_generate
