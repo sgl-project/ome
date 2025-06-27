@@ -46,7 +46,7 @@ ome:
     tolerations: []
     topologySpreadConstraints: []
     affinity: {}
-    image: ghcr.io/moirai-internal/ome/manager
+    image: ghcr.io/moirai-internal/ome-manager
     tag: *defaultVersion
     resources:
       limits:
