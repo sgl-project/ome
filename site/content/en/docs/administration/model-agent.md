@@ -1,7 +1,7 @@
 ---
 title: "Model Agent Administration"
 date: 2023-03-14
-weight: 1
+weight: 5
 description: >
   Complete guide to Model Agent architecture, configuration, and operational management.
 ---

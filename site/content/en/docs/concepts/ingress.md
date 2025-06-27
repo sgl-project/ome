@@ -1,7 +1,7 @@
 ---
 title: "Ingress and External Access"
 date: 2024-06-21
-weight: 6
+weight: 40
 description: >
   Configure external access to your AI inference services through ingress controllers, load balancers, and service routing.
 ---

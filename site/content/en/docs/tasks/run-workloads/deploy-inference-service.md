@@ -1,7 +1,7 @@
 ---
 title: "Deploy a Simple Inference Service"
 linkTitle: "Deploy Inference Service"
-weight: 1
+weight: 5
 date: 2023-03-14
 description: >
   Learn how to deploy your first inference service with OME.
@@ -385,10 +385,10 @@ args:
 
 ## Next Steps
 
-- [Run Performance Benchmarks](/docs/tasks/run-workloads/run-benchmarks/) - Test your model's performance
-- [Setup Autoscaling](/docs/tasks/manage-ome/setup-autoscaling/) - Configure dynamic scaling
-- [Monitor with Prometheus](/docs/tasks/developer-tools/setup-prometheus/) - Set up comprehensive monitoring
-- [Deploy Multiple Models](/docs/tasks/run-workloads/deploy-multiple-models/) - Run multiple models efficiently
+- [Run Performance Benchmarks](/ome/docs/tasks/run-workloads/run-benchmarks/) - Test your model's performance
+- [Setup Autoscaling](/ome/docs/tasks/manage-ome/setup-autoscaling/) - Configure dynamic scaling
+- [Monitor with Prometheus](/ome/docs/tasks/developer-tools/setup-prometheus/) - Set up comprehensive monitoring
+- [Deploy Multiple Models](/ome/docs/tasks/run-workloads/deploy-multiple-models/) - Run multiple models efficiently
 
 ## Cleanup
 

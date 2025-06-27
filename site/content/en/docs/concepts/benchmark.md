@@ -1,7 +1,7 @@
 ---
 title: "Benchmark"
 date: 2023-03-14
-weight: 6
+weight: 35
 description: >
   BenchmarkJob is a resource that manages automated performance benchmarking of inference services.
 ---
