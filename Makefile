@@ -5,7 +5,7 @@ CHARTS_DIR := ./charts
 REGISTRY     ?= ghcr.io/moirai-internal
 TAG          ?= $(GIT_TAG)
 ARCH         ?= linux/amd64
-MANAGER_IMG  ?= $(REGISTRY)/manager:$(TAG)
+MANAGER_IMG  ?= $(REGISTRY)/ome-manager:$(TAG)
 
 # Git version and commit information for build
 version_pkg = github.com/sgl-project/ome/pkg/version
