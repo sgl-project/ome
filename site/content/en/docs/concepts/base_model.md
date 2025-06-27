@@ -1,7 +1,7 @@
 ---
 title: "Base Model"
 date: 2023-03-14
-weight: 4
+weight: 5
 description: >
   Base Model defines foundation models that can be automatically downloaded, parsed, and served across your cluster.
 ---
@@ -514,8 +514,8 @@ spec:
 
 ## Next Steps
 
-- [Deploy an Inference Service](/docs/tasks/run-workloads/deploy-inference-service/) using your BaseModel
-- [Model Agent Administration](/docs/administration/model-agent/) for operational details
-- [Advanced Storage Configuration](/docs/administration/storage/) for complex storage setups
+- [Deploy an Inference Service](/ome/docs/tasks/run-workloads/deploy-inference-service/) using your BaseModel
+- [Model Agent Administration](/ome/docs/administration/model-agent/) for operational details
+- [Advanced Storage Configuration](/ome/docs/administration/storage/) for complex storage setups
 
-For detailed technical and operational information, see the [Administration](/docs/administration/) section.
+For detailed technical and operational information, see the [Administration](/ome/docs/administration/) section.

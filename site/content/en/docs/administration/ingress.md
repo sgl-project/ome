@@ -1,7 +1,7 @@
 ---
 title: "Ingress Administration"
 linkTitle: "Ingress Administration"
-weight: 40
+weight: 50
 description: >
   Cluster administrator guide for configuring OME ingress and networking in production environments.
 ---
