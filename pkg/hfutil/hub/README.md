@@ -12,6 +12,7 @@ A production-ready Go implementation of the Hugging Face Hub client, providing s
 - **Authentication**: Full support for Hugging Face tokens and gated repositories
 
 ### Enterprise Features
+- **Flexible Progress Display**: Choose between progress bars, structured logs, or auto-detection
 - **Beautiful Progress Bars**: Real-time progress tracking using `github.com/schollz/progressbar/v3`
 - **Structured Logging**: Comprehensive logging integration with popular Go frameworks
 - **Dependency Injection**: Built-in support for dependency injection frameworks (fx, wire)
@@ -23,6 +24,7 @@ A production-ready Go implementation of the Hugging Face Hub client, providing s
 ### Production Ready
 - **Cross-Platform**: Full Windows, macOS, and Linux support
 - **Error Handling**: Comprehensive error types matching Python library
+- **Rate Limit Handling**: Graceful HTTP 429 handling with Retry-After support
 - **Backward Compatibility**: Seamless migration from existing implementations
 - **Performance Optimized**: Chunked downloads with configurable concurrency
 - **Resource Management**: Automatic cleanup and disk space validation
@@ -148,6 +150,7 @@ export HF_TOKEN=hf_your_token_here          # Authentication token
 export HF_HUB_CACHE=/custom/cache/path      # Custom cache directory  
 export HF_HUB_OFFLINE=1                     # Enable offline mode
 export HF_HUB_DISABLE_PROGRESS_BARS=1       # Disable progress bars
+export HF_PROGRESS_MODE=log                 # Progress display mode (auto/bars/log)
 ```
 
 #### Programmatic Configuration
@@ -292,26 +295,67 @@ if err != nil {
 
 ## 🎨 Progress Bars & Logging
 
-### Progress Bars
+### Progress Display Modes
 
-The library includes beautiful progress bars using `github.com/schollz/progressbar/v3`:
+The library supports three progress display modes to suit different environments:
+
+#### 1. **Auto Mode** (Default)
+Automatically detects the environment and chooses the appropriate display:
+- Uses progress bars for interactive terminals
+- Uses structured logs for non-interactive environments (e.g., CI/CD, containers)
 
 ```go
 config, err := hub.NewHubConfig(
-    hub.WithProgressBars(true),  // Enable progress bars
-    // ... other options
+    // No need to specify - auto mode is default
+    hub.WithLogger(logger),
 )
+```
 
-// Progress bars automatically appear for:
-// - Individual file downloads
-// - Snapshot downloads  
-// - Repository listing operations
+#### 2. **Progress Bars Mode**
+Forces visual progress bars for interactive terminals:
+
+```go
+config, err := hub.NewHubConfig(
+    hub.WithProgressDisplayMode(hub.ProgressModeBars),
+    // Or use the legacy option:
+    // hub.WithProgressBars(true),
+)
 ```
 
 Sample output:
 ```
 📄 config.json          ████████████████████████████████ 1.2KB/1.2KB [100%] 0s
 📄 pytorch_model.bin    ████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 2.1GB/3.4GB [62%] 45s
+```
+
+#### 3. **Log Mode**
+Uses structured logging for progress updates - perfect for production environments:
+
+```go
+config, err := hub.NewHubConfig(
+    hub.WithProgressDisplayMode(hub.ProgressModeLog),
+    hub.WithLogger(logger),
+)
+```
+
+Sample log output:
+```
+2025-06-27T12:30:45Z INFO Download progress filename=pytorch_model.bin progress=45.2% speed=25.3 MB/s downloaded=1.2 GB total=2.6 GB eta=52s
+2025-06-27T12:31:37Z INFO Download completed filename=pytorch_model.bin
+```
+
+#### Environment Variable Control
+Set the display mode globally using environment variables:
+
+```bash
+# Force log mode (recommended for production)
+export HF_PROGRESS_MODE=log
+
+# Force progress bars
+export HF_PROGRESS_MODE=bars
+
+# Auto-detect (default)
+unset HF_PROGRESS_MODE
 ```
 
 ### Structured Logging

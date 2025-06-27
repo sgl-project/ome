@@ -5,12 +5,30 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+// Package-level random source for jitter calculation
+var (
+	jitterRand     *rand.Rand
+	jitterRandOnce sync.Once
+)
+
+// initJitterRand initializes the random source for jitter calculation
+func initJitterRand() {
+	jitterRandOnce.Do(func() {
+		// Use current time nanoseconds as seed for non-deterministic randomness
+		source := rand.NewSource(time.Now().UnixNano())
+		jitterRand = rand.New(source)
+	})
+}
 
 // HFFileMetadata represents metadata about a file on the Hub
 type HFFileMetadata struct {
@@ -437,6 +455,35 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 				return lastErr
 			}
 
+			// Calculate delay based on response type
+			var delay time.Duration
+			if resp.StatusCode == 429 {
+				// First check for Retry-After header
+				if retryAfterDelay := parseRetryAfter(resp); retryAfterDelay > 0 {
+					delay = retryAfterDelay
+					if progressManager != nil && progressManager.enableDetailedLogs {
+						progressManager.logger.
+							WithField("repo_id", config.RepoID).
+							WithField("filename", config.Filename).
+							WithField("retry_after", delay.String()).
+							Warn("Rate limited, waiting as suggested by server")
+					}
+				} else {
+					// Fall back to exponential backoff with jitter
+					delay = exponentialBackoffWithJitter(attempt+1, retryInterval, 5*time.Minute)
+					if progressManager != nil && progressManager.enableDetailedLogs {
+						progressManager.logger.
+							WithField("repo_id", config.RepoID).
+							WithField("filename", config.Filename).
+							WithField("delay", delay.String()).
+							Warn("Rate limited, using exponential backoff with jitter")
+					}
+				}
+			} else {
+				// For other errors, use regular exponential backoff
+				delay = exponentialBackoff(attempt+1, retryInterval)
+			}
+
 			// Log retry attempt for HTTP errors
 			if progressManager != nil && progressManager.enableDetailedLogs {
 				progressManager.logger.
@@ -445,11 +492,11 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 					WithField("attempt", attempt+1).
 					WithField("max_retries", maxRetries+1).
 					WithField("status_code", resp.StatusCode).
+					WithField("delay", delay.String()).
 					Warn("HTTP error response, retrying...")
 			}
 
-			// Wait with exponential backoff before retrying
-			delay := exponentialBackoff(attempt+1, retryInterval)
+			// Wait before retrying
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -620,8 +667,22 @@ func getMetadataOrCatchError(ctx context.Context, config *DownloadConfig, storag
 				return nil, lastErr
 			}
 
-			// Wait with exponential backoff before retrying
-			delay := exponentialBackoff(attempt+1, retryInterval)
+			// Calculate delay based on response type
+			var delay time.Duration
+			if resp.StatusCode == 429 {
+				// First check for Retry-After header
+				if retryAfterDelay := parseRetryAfter(resp); retryAfterDelay > 0 {
+					delay = retryAfterDelay
+				} else {
+					// Fall back to exponential backoff with jitter
+					delay = exponentialBackoffWithJitter(attempt+1, retryInterval, 5*time.Minute)
+				}
+			} else {
+				// For other errors, use regular exponential backoff
+				delay = exponentialBackoff(attempt+1, retryInterval)
+			}
+
+			// Wait before retrying
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -770,6 +831,56 @@ func exponentialBackoff(attempt int, baseDelay time.Duration) time.Duration {
 	// Cap at 30 seconds to avoid extremely long delays
 	delay := time.Duration(math.Min(float64(baseDelay)*math.Pow(2, float64(attempt-1)), float64(30*time.Second)))
 	return delay
+}
+
+// exponentialBackoffWithJitter calculates the delay with jitter to prevent thundering herd
+func exponentialBackoffWithJitter(attempt int, baseDelay time.Duration, maxDelay time.Duration) time.Duration {
+	if attempt <= 0 {
+		return 0
+	}
+
+	// Ensure random source is initialized
+	initJitterRand()
+
+	// Calculate exponential delay
+	delay := time.Duration(math.Min(
+		float64(baseDelay)*math.Pow(2, float64(attempt-1)),
+		float64(maxDelay),
+	))
+
+	// Add jitter (±25% of calculated delay)
+	jitter := time.Duration(jitterRand.Float64() * 0.5 * float64(delay))
+	if jitterRand.Intn(2) == 0 {
+		delay -= jitter
+	} else {
+		delay += jitter
+	}
+
+	return delay
+}
+
+// parseRetryAfter parses the Retry-After header from HTTP 429 responses
+func parseRetryAfter(resp *http.Response) time.Duration {
+	if resp == nil {
+		return 0
+	}
+
+	retryAfter := resp.Header.Get("Retry-After")
+	if retryAfter == "" {
+		return 0
+	}
+
+	// Try to parse as seconds (integer)
+	if seconds, err := strconv.Atoi(retryAfter); err == nil {
+		return time.Duration(seconds) * time.Second
+	}
+
+	// Try to parse as HTTP date
+	if t, err := time.Parse(time.RFC1123, retryAfter); err == nil {
+		return time.Until(t)
+	}
+
+	return 0
 }
 
 // copyWithContext copies data from src to dst while respecting context cancellation

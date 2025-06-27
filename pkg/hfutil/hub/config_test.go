@@ -312,7 +312,10 @@ func TestCreateProgressManager(t *testing.T) {
 	pm := config.CreateProgressManager()
 	require.NotNil(t, pm)
 	assert.Equal(t, config.Logger, pm.logger)
-	assert.True(t, pm.enableProgressBars)
+	// enableProgressBars depends on the display mode which is auto-detected
+	// In test environment (non-terminal), it will be false even if DisableProgressBars is false
+	// So we check the displayMode instead
+	assert.Equal(t, ProgressModeAuto, config.ProgressDisplayMode)
 	assert.True(t, pm.enableDetailedLogs)
 }
 

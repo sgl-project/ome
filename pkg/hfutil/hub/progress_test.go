@@ -36,10 +36,14 @@ func TestCreateFileProgressBar(t *testing.T) {
 	bar := pm.CreateFileProgressBar("test_file.json", 1024)
 	assert.NotNil(t, bar)
 
-	// Test with progress bars disabled
+	// Test with progress bars disabled (log mode)
 	pm = NewProgressManager(logger, false, false)
 	bar = pm.CreateFileProgressBar("test_file.json", 1024)
-	assert.Nil(t, bar)
+	// In log mode, we still get a progress bar instance (LogProgressBar)
+	assert.NotNil(t, bar)
+	// Verify it's a LogProgressBar by checking if it implements the interface
+	_, ok := bar.(*LogProgressBar)
+	assert.True(t, ok, "Expected LogProgressBar when progress bars are disabled")
 
 	// Test with long filename
 	pm = NewProgressManager(logger, true, false)
@@ -56,10 +60,14 @@ func TestCreateSnapshotProgressBar(t *testing.T) {
 	bar := pm.CreateSnapshotProgressBar(10, 1024*1024)
 	assert.NotNil(t, bar)
 
-	// Test with progress bars disabled
+	// Test with progress bars disabled (log mode)
 	pm = NewProgressManager(logger, false, false)
 	bar = pm.CreateSnapshotProgressBar(10, 1024*1024)
-	assert.Nil(t, bar)
+	// In log mode, we still get a progress bar instance (LogProgressBar)
+	assert.NotNil(t, bar)
+	// Verify it's a LogProgressBar
+	_, ok := bar.(*LogProgressBar)
+	assert.True(t, ok, "Expected LogProgressBar when progress bars are disabled")
 }
 
 func TestCreateSpinner(t *testing.T) {
