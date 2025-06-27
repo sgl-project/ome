@@ -45,7 +45,7 @@ spec:
                     - BM.GPU.H100.8
     runner:
       name: ome-container
-      image: ghcr.io/moirai-internal/sgl:dev2
+      image: lmsysorg/sglang:v0.4.8.post1-cu126
       ports:
         - containerPort: 8080
           name: http1
