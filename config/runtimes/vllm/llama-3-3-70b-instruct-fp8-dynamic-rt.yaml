@@ -11,7 +11,7 @@ spec:
       quantization: compressed-tensors
       modelFormat:
         name: safetensors
-        version: "1"
+        version: "1.0.0"
       modelArchitecture: LlamaForCausalLM
       autoSelect: true
       priority: 1

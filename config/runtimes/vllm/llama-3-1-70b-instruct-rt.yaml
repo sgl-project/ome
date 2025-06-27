@@ -10,7 +10,7 @@ spec:
         version: "4.42.3"
       modelFormat:
         name: safetensors
-        version: "1"
+        version: "1.0.0"
       autoSelect: true
       modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
