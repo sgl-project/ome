@@ -6,25 +6,6 @@ spec:
   vendor: deepseek-ai
   disabled: false
   version: "1.0.0"
-  modelFormat:
-    name: safetensors
-    version: "1"
-  modelFramework:
-    name: transformers
-    version: "4.46.3"
-  modelArchitecture: DeepseekV3ForCausalLM
-  modelParameterSize: 685B
-  maxTokens: 163840
-  modelCapabilities:
-    - "TEXT_GENERATION"
   storage:
-    storageUri: oci://n/idqj093njucb/b/model-store/o/deepseek-ai/deepseek-r1
+    storageUri: hf://deepseek-ai/DeepSeek-R1
     path: /raid/models/deepseek-ai/deepseek-r1
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-          - matchExpressions:
-              - key: node.kubernetes.io/instance-type
-                operator: In
-                values:
-                  - BM.GPU.H100.8
