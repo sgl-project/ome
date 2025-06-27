@@ -17,7 +17,20 @@ type ProgressManager struct {
 	logger             logging.Interface
 	enableProgressBars bool
 	enableDetailedLogs bool
+	displayMode        ProgressDisplayMode
 	multiProgress      *MultiProgressManager
+	// Fields for log-only mode progress tracking
+	fileProgress map[string]*FileProgress
+	mu           sync.Mutex
+}
+
+// FileProgress tracks download progress for log-only mode
+type FileProgress struct {
+	filename    string
+	totalSize   int64
+	downloaded  int64
+	startTime   time.Time
+	lastLogTime time.Time
 }
 
 // MultiProgressManager coordinates multiple concurrent progress bars
@@ -248,11 +261,26 @@ func (cpb *ConcurrentProgressBar) SetTotal(total int64, wontAdd ...bool) error {
 
 // NewProgressManager creates a new progress manager
 func NewProgressManager(logger logging.Interface, enableBars, enableLogs bool) *ProgressManager {
-	return &ProgressManager{
-		logger:             logger,
-		enableProgressBars: enableBars,
-		enableDetailedLogs: enableLogs,
+	// For backward compatibility, determine display mode from enableBars
+	displayMode := ProgressModeLog
+	if enableBars {
+		displayMode = ProgressModeBars
 	}
+
+	return NewProgressManagerWithMode(logger, displayMode, enableLogs)
+}
+
+// NewProgressManagerWithMode creates a new progress manager with explicit display mode
+func NewProgressManagerWithMode(logger logging.Interface, displayMode ProgressDisplayMode, enableLogs bool) *ProgressManager {
+	pm := &ProgressManager{
+		logger:             logger,
+		enableProgressBars: displayMode == ProgressModeBars,
+		enableDetailedLogs: enableLogs,
+		displayMode:        displayMode,
+		fileProgress:       make(map[string]*FileProgress),
+	}
+
+	return pm
 }
 
 // InitializeMultiProgress initializes multi-progress support for concurrent downloads
@@ -287,42 +315,60 @@ func (pm *ProgressManager) CompleteWorkerProgress(workerID int) {
 
 // CreateSnapshotProgressBar creates a progress bar for snapshot downloads
 func (pm *ProgressManager) CreateSnapshotProgressBar(totalFiles int, totalSize int64) ProgressBar {
-	if !pm.enableProgressBars {
+	switch pm.displayMode {
+	case ProgressModeBars:
+		if pm.multiProgress != nil {
+			return pm.multiProgress.CreateSnapshotProgressBar(totalFiles, totalSize)
+		}
+
+		// Fallback to single progress bar
+		description := fmt.Sprintf("📦 Downloading %d files (%s)", totalFiles, formatSize(totalSize))
+		bar := schollzpb.NewOptions(totalFiles,
+			schollzpb.OptionSetDescription(description),
+			schollzpb.OptionSetWidth(40),
+			schollzpb.OptionShowCount(),
+			schollzpb.OptionEnableColorCodes(true),
+		)
+		return &SingleProgressBar{bar: bar}
+
+	case ProgressModeLog:
+		// For snapshot downloads in log mode, we'll track overall progress
+		description := fmt.Sprintf("snapshot_%d_files", totalFiles)
+		return &LogProgressBar{
+			manager:  pm,
+			filename: description,
+			total:    int64(totalFiles),
+		}
+
+	default:
 		return nil
 	}
-
-	if pm.multiProgress != nil {
-		return pm.multiProgress.CreateSnapshotProgressBar(totalFiles, totalSize)
-	}
-
-	// Fallback to single progress bar
-	description := fmt.Sprintf("📦 Downloading %d files (%s)", totalFiles, formatSize(totalSize))
-	bar := schollzpb.NewOptions(totalFiles,
-		schollzpb.OptionSetDescription(description),
-		schollzpb.OptionSetWidth(40),
-		schollzpb.OptionShowCount(),
-		schollzpb.OptionEnableColorCodes(true),
-	)
-
-	return &SingleProgressBar{bar: bar}
 }
 
 // CreateFileProgressBar creates a progress bar for a single file download
 func (pm *ProgressManager) CreateFileProgressBar(filename string, size int64) ProgressBar {
-	if !pm.enableProgressBars {
+	switch pm.displayMode {
+	case ProgressModeBars:
+		description := fmt.Sprintf("📄 %s", truncateFilename(filename, 40))
+		bar := schollzpb.NewOptions64(size,
+			schollzpb.OptionSetDescription(description),
+			schollzpb.OptionSetWidth(30),
+			schollzpb.OptionShowBytes(true),
+			schollzpb.OptionShowCount(),
+			schollzpb.OptionEnableColorCodes(true),
+		)
+		return &SingleProgressBar{bar: bar}
+
+	case ProgressModeLog:
+		return &LogProgressBar{
+			manager:  pm,
+			filename: filename,
+			total:    size,
+		}
+
+	default:
 		return nil
 	}
-
-	description := fmt.Sprintf("📄 %s", truncateFilename(filename, 40))
-	bar := schollzpb.NewOptions64(size,
-		schollzpb.OptionSetDescription(description),
-		schollzpb.OptionSetWidth(30),
-		schollzpb.OptionShowBytes(true),
-		schollzpb.OptionShowCount(),
-		schollzpb.OptionEnableColorCodes(true),
-	)
-
-	return &SingleProgressBar{bar: bar}
 }
 
 // CreateSpinner creates a spinner for unknown progress operations
@@ -437,4 +483,101 @@ func (pm *ProgressManager) LogRepoListing(repoID string, fileCount int) {
 		pm.logger.WithField("repo_id", repoID).WithField("file_count", fileCount).
 			Info("Repository files listed")
 	}
+}
+
+// LogProgressBar implements ProgressBar interface for log-only mode
+type LogProgressBar struct {
+	manager  *ProgressManager
+	filename string
+	total    int64
+	current  int64
+	mu       sync.Mutex
+}
+
+func (lpb *LogProgressBar) Add(n int) error {
+	lpb.mu.Lock()
+	lpb.current += int64(n)
+	current := lpb.current
+	lpb.mu.Unlock()
+
+	lpb.manager.logProgress(lpb.filename, current, lpb.total)
+	return nil
+}
+
+func (lpb *LogProgressBar) Finish() error {
+	lpb.manager.logProgress(lpb.filename, lpb.total, lpb.total)
+	if lpb.manager.logger != nil {
+		lpb.manager.logger.WithField("filename", lpb.filename).Info("Download completed")
+	}
+
+	// Clean up tracking
+	lpb.manager.mu.Lock()
+	delete(lpb.manager.fileProgress, lpb.filename)
+	lpb.manager.mu.Unlock()
+
+	return nil
+}
+
+func (lpb *LogProgressBar) Current() int64 {
+	lpb.mu.Lock()
+	defer lpb.mu.Unlock()
+	return lpb.current
+}
+
+func (lpb *LogProgressBar) SetTotal(total int64, wontAdd ...bool) error {
+	lpb.mu.Lock()
+	lpb.total = total
+	lpb.mu.Unlock()
+	return nil
+}
+
+// logProgress logs download progress at appropriate intervals
+func (pm *ProgressManager) logProgress(filename string, current, total int64) {
+	if pm.displayMode != ProgressModeLog || pm.logger == nil {
+		return
+	}
+
+	pm.mu.Lock()
+	progress, exists := pm.fileProgress[filename]
+	if !exists {
+		progress = &FileProgress{
+			filename:  filename,
+			totalSize: total,
+			startTime: time.Now(),
+		}
+		pm.fileProgress[filename] = progress
+	}
+
+	// Calculate progress percentages BEFORE updating downloaded
+	percentComplete := float64(current) / float64(total) * 100
+	lastPercent := float64(progress.downloaded) / float64(total) * 100
+
+	// Log progress at intervals (every 5 seconds or 10% progress)
+	now := time.Now()
+	shouldLog := now.Sub(progress.lastLogTime) > 5*time.Second ||
+		int(percentComplete/10) > int(lastPercent/10)
+
+	if shouldLog && current < total {
+		elapsed := now.Sub(progress.startTime)
+		speed := float64(current) / elapsed.Seconds()
+
+		logger := pm.logger.
+			WithField("filename", truncateFilename(filename, 40)).
+			WithField("progress", fmt.Sprintf("%.1f%%", percentComplete)).
+			WithField("speed", formatSize(int64(speed))+"/s").
+			WithField("downloaded", formatSize(current)).
+			WithField("total", formatSize(total))
+
+		// Estimate remaining time
+		if speed > 0 {
+			remaining := time.Duration(float64(total-current)/speed) * time.Second
+			logger = logger.WithField("eta", remaining.Round(time.Second).String())
+		}
+
+		logger.Info("Download progress")
+		// Only update downloaded amount after logging
+		progress.downloaded = current
+		progress.lastLogTime = now
+	}
+	pm.mu.Unlock()
 }

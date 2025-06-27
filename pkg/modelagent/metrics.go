@@ -17,11 +17,13 @@ type Metrics struct {
 	modelDownloadsFailedTotal  *prometheus.CounterVec
 	modelVerificationsTotal    *prometheus.CounterVec
 	mdChecksumsFailedTotal     *prometheus.CounterVec
+	rateLimitCounter           *prometheus.CounterVec
 
 	// Histogram metrics
 	modelDownloadDuration         *prometheus.HistogramVec
 	modelVerificationDuration     prometheus.Histogram
 	modelDownloadBytesTransferred *prometheus.CounterVec
+	rateLimitWaitDuration         *prometheus.HistogramVec
 
 	// Go runtime metrics
 	goGoroutines      prometheus.Gauge
@@ -161,6 +163,13 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			},
 			[]string{"model_type", "namespace", "name"},
 		),
+		rateLimitCounter: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "model_agent_rate_limit_total",
+				Help: "The total number of rate limit (429) responses encountered",
+			},
+			[]string{"model_type", "namespace", "name"},
+		),
 		modelDownloadDuration: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name:    "model_agent_download_duration_seconds",
@@ -178,6 +187,14 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 			prometheus.CounterOpts{
 				Name: "model_agent_download_bytes_total",
 				Help: "The total bytes transferred while downloading models",
+			},
+			[]string{"model_type", "namespace", "name"},
+		),
+		rateLimitWaitDuration: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "model_agent_rate_limit_wait_seconds",
+				Help:    "The duration waited due to rate limits in seconds",
+				Buckets: prometheus.ExponentialBuckets(1, 2, 10), // From 1s to ~17m
 			},
 			[]string{"model_type", "namespace", "name"},
 		),
@@ -232,6 +249,12 @@ func (m *Metrics) RecordBytesTransferred(modelType, namespace, name string, byte
 // RecordGCDuration records the duration of a garbage collection cycle
 func (m *Metrics) RecordGCDuration(duration time.Duration) {
 	m.goGCDuration.Observe(duration.Seconds())
+}
+
+// RecordRateLimit records a rate limit event
+func (m *Metrics) RecordRateLimit(modelType, namespace, name string, waitDuration time.Duration) {
+	m.rateLimitCounter.WithLabelValues(modelType, namespace, name).Inc()
+	m.rateLimitWaitDuration.WithLabelValues(modelType, namespace, name).Observe(waitDuration.Seconds())
 }
 
 // RegisterMetricsHandler registers the metrics HTTP handler

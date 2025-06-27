@@ -3,35 +3,50 @@ package hub
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/sgl-project/ome/pkg/configutils"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
+)
+
+// ProgressDisplayMode defines how download progress is displayed
+type ProgressDisplayMode int
+
+const (
+	// ProgressModeAuto automatically detects based on terminal type
+	ProgressModeAuto ProgressDisplayMode = iota
+	// ProgressModeBars forces progress bar display
+	ProgressModeBars
+	// ProgressModeLog forces log-only progress reporting
+	ProgressModeLog
 )
 
 // HubConfig represents the configuration for the Hugging Face Hub client
 type HubConfig struct {
 	Logger              logging.Interface
-	Token               string        `mapstructure:"hf_token"`
-	Endpoint            string        `mapstructure:"endpoint"`
-	CacheDir            string        `mapstructure:"cache_dir"`
-	UserAgent           string        `mapstructure:"user_agent"`
-	RequestTimeout      time.Duration `mapstructure:"request_timeout"`
-	EtagTimeout         time.Duration `mapstructure:"etag_timeout"`
-	DownloadTimeout     time.Duration `mapstructure:"download_timeout"`
-	MaxRetries          int           `mapstructure:"max_retries"`
-	RetryInterval       time.Duration `mapstructure:"retry_interval"`
-	MaxWorkers          int           `mapstructure:"max_workers"`
-	ChunkSize           int64         `mapstructure:"chunk_size"`
-	LocalFilesOnly      bool          `mapstructure:"local_files_only"`
-	DisableProgressBars bool          `mapstructure:"disable_progress_bars"`
-	EnableOfflineMode   bool          `mapstructure:"enable_offline_mode"`
-	EnableSymlinks      bool          `mapstructure:"enable_symlinks"`
-	VerifySSL           bool          `mapstructure:"verify_ssl"`
-	EnableDetailedLogs  bool          `mapstructure:"enable_detailed_logs"`
-	LogLevel            string        `mapstructure:"log_level"`
+	Token               string              `mapstructure:"hf_token"`
+	Endpoint            string              `mapstructure:"endpoint"`
+	CacheDir            string              `mapstructure:"cache_dir"`
+	UserAgent           string              `mapstructure:"user_agent"`
+	RequestTimeout      time.Duration       `mapstructure:"request_timeout"`
+	EtagTimeout         time.Duration       `mapstructure:"etag_timeout"`
+	DownloadTimeout     time.Duration       `mapstructure:"download_timeout"`
+	MaxRetries          int                 `mapstructure:"max_retries"`
+	RetryInterval       time.Duration       `mapstructure:"retry_interval"`
+	MaxWorkers          int                 `mapstructure:"max_workers"`
+	ChunkSize           int64               `mapstructure:"chunk_size"`
+	LocalFilesOnly      bool                `mapstructure:"local_files_only"`
+	DisableProgressBars bool                `mapstructure:"disable_progress_bars"`
+	EnableOfflineMode   bool                `mapstructure:"enable_offline_mode"`
+	EnableSymlinks      bool                `mapstructure:"enable_symlinks"`
+	VerifySSL           bool                `mapstructure:"verify_ssl"`
+	EnableDetailedLogs  bool                `mapstructure:"enable_detailed_logs"`
+	LogLevel            string              `mapstructure:"log_level"`
+	ProgressDisplayMode ProgressDisplayMode `mapstructure:"progress_display_mode"`
 }
 
 // defaultHubConfig returns a default configuration
@@ -55,6 +70,7 @@ func defaultHubConfig() *HubConfig {
 		EnableDetailedLogs:  false,
 		LogLevel:            "info",
 		Token:               GetHfToken(),
+		ProgressDisplayMode: getProgressModeFromEnv(),
 	}
 }
 
@@ -73,6 +89,23 @@ func (c *HubConfig) Apply(opts ...HubOption) error {
 		}
 	}
 	return nil
+}
+
+// getProgressModeFromEnv reads progress mode from environment variable
+func getProgressModeFromEnv() ProgressDisplayMode {
+	switch os.Getenv("HF_PROGRESS_MODE") {
+	case "bars", "progress":
+		return ProgressModeBars
+	case "log", "logs":
+		return ProgressModeLog
+	default:
+		return ProgressModeAuto
+	}
+}
+
+// isInteractiveTerminal checks if stdout is connected to an interactive terminal
+func isInteractiveTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
 // NewHubConfig builds and returns a new configuration from the given options
@@ -210,6 +243,14 @@ func WithProgressBars(enabled bool) HubOption {
 	}
 }
 
+// WithProgressDisplayMode sets the progress display mode
+func WithProgressDisplayMode(mode ProgressDisplayMode) HubOption {
+	return func(c *HubConfig) error {
+		c.ProgressDisplayMode = mode
+		return nil
+	}
+}
+
 // WithSSLVerification enables or disables SSL verification
 func WithSSLVerification(enabled bool) HubOption {
 	return func(c *HubConfig) error {
@@ -273,14 +314,29 @@ func (c *HubConfig) ValidateConfig() error {
 
 // CreateProgressManager creates a progress manager from the configuration
 func (c *HubConfig) CreateProgressManager() *ProgressManager {
-	pm := NewProgressManager(
+	// Determine actual display mode
+	displayMode := c.ProgressDisplayMode
+
+	// For backward compatibility, DisableProgressBars always forces log mode
+	if c.DisableProgressBars {
+		displayMode = ProgressModeLog
+	} else if displayMode == ProgressModeAuto {
+		// Auto mode: use bars for interactive terminals, logs otherwise
+		if isInteractiveTerminal() {
+			displayMode = ProgressModeBars
+		} else {
+			displayMode = ProgressModeLog
+		}
+	}
+
+	pm := NewProgressManagerWithMode(
 		c.Logger,
-		!c.DisableProgressBars,
+		displayMode,
 		c.EnableDetailedLogs,
 	)
 
-	// Initialize multi-progress support for concurrent downloads
-	if c.MaxWorkers > 1 {
+	// Initialize multi-progress support for concurrent downloads only if using progress bars
+	if displayMode == ProgressModeBars && c.MaxWorkers > 1 {
 		pm.InitializeMultiProgress(c.MaxWorkers)
 	}
 
