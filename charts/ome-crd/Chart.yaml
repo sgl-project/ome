@@ -1,6 +1,6 @@
 apiVersion: v2
 name: ome-crd
-description: A Helm chart for Kubernetes
+description: OME Custom Resource Definitions
 type: application
 version: 0.1.0
 appVersion: "1.16.0"

@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: manager
-          image: ghcr.io/moirai-internal/ome/manager:b643901-dirty
+          image: ghcr.io/moirai-internal/ome-manager:v0.1.0

@@ -27,34 +27,10 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: beta.kubernetes.io/instance-type
+                  - key: nvidia.com/gpu
                     operator: In
                     values:
-                      - BM.GPU2.2
-                      - BM.GPU3.8
-                      - BM.GPU4.8
-                      - VM.GPU2.1
-                      - VM.GPU3.1
-                      - VM.GPU3.2
-                      - VM.GPU3.4
-                      - BM.GPU.T1.2
-                      - BM.GPU.T1-2.4
-                      - BM.GPU.A100-v2.8
-                      - BM.GPU.GM4.8
-                      - BM.GPU.A10.4
-                      - BM.GPU.GU1.4
-                      - VM.GPU.A10.1
-                      - VM.GPU.GU1.1
-                      - VM.GPU.A10.2
-                      - VM.GPU.GU1.2
-                      - BM.GPU.B4.8
-                      - BM.GPU.H100.8
-                  - key: oci.oraclecloud.com/disable-gpu-device-plugin
-                    operator: NotIn
-                    values:
-                      - 'true'
-                  - key: node-role.kubernetes.io/virtual-node
-                    operator: DoesNotExist
+                      - "true"
       volumes:
       - name: host-models
         hostPath:
@@ -62,7 +38,7 @@ spec:
           type: Directory
       containers:
       - name: model-agent
-        image: ko://github.com/sgl-project/ome/cmd/model-agent
+        image: ghcr.io/moirai-internal/model-agent:v0.1.0
         imagePullPolicy: Always
         ports:
         - name: metrics

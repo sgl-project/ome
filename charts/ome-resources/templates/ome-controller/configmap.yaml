@@ -23,13 +23,18 @@ data:
         "ingressService" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.gatewayService }}",
         "localGateway" : "{{ .Values.ome.controller.ingressGateway.localGateway.gateway }}",
         "localGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
-        "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
+        "knativeLocalGatewayService" : "{{ .Values.ome.controller.ingressGateway.localGateway.gatewayService }}",
+        "omeIngressGateway" : "{{ .Values.ome.controller.ingressGateway.omeIngressGateway | default "" }}",
         "ingressDomain"  : "{{ .Values.ome.controller.ingressGateway.domain }}",
+        "ingressClassName" : "{{ .Values.ome.controller.ingressGateway.ingressGateway.className }}",
+        "additionalIngressDomains" : {{ .Values.ome.controller.ingressGateway.additionalIngressDomains | default "null" }},
         "domainTemplate": "{{ .Values.ome.controller.ingressGateway.domainTemplate }}",
         "urlScheme": "{{ .Values.ome.controller.ingressGateway.urlScheme }}",
-        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }}
+        "disableIstioVirtualHost": {{ .Values.ome.controller.ingressGateway.disableIstioVirtualHost }},
+        "pathTemplate": "{{ .Values.ome.controller.ingressGateway.pathTemplate | default "" }}",
+        "disableIngressCreation": {{ .Values.ome.controller.ingressGateway.disableIngressCreation | default false }},
+        "enableGatewayAPI": {{ .Values.ome.controller.ingressGateway.enableGatewayAPI | default false }}
     }
-
   deploy: |-
     {
       "defaultDeploymentMode": "{{ .Values.ome.controller.deploymentMode }}"
@@ -63,25 +68,13 @@ data:
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "region": "{{ .Values.ome.omeAgent.region }}"
     }
-  fineTunedAdapter: |-
+  kedaConfig: |-
     {
-        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
-        "memoryRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryRequest }}",
-        "memoryLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.memoryLimit }}",
-        "cpuRequest": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuRequest }}",
-        "cpuLimit": "{{ .Values.ome.omeAgent.fineTunedAdapter.cpuLimit }}",
-        "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
-        "authType" : "{{ .Values.ome.omeAgent.authType }}",
-        "region": "{{ .Values.ome.omeAgent.region }}"
-    }
-  trainingSidecar: |-
-    {
-      "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
-      "region" : "{{ .Values.trainingSidecar.region }}",
-      "namespace": "{{ .Values.trainingSidecar.namespace }}",
-      "fineTunedModelBucket": "{{ .Values.trainingSidecar.fineTunedModelBucket }}",
-      "trainingMetricsBucket": "{{ .Values.trainingSidecar.trainingMetricsBucket }}",
-      "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}"
+      "enableKeda" : {{ .Values.ome.kedaConfig.enableKeda | default true }},
+      "promServerAddress": "{{ .Values.ome.kedaConfig.promServerAddress | default "http://prometheus-operated.monitoring.svc.cluster.local:9090" }}",
+      "customPromQuery": "{{ .Values.ome.kedaConfig.customPromQuery | default "" }}",
+      "scalingThreshold": "{{ .Values.ome.kedaConfig.scalingThreshold | default "10" }}",
+      "scalingOperator": "{{ .Values.ome.kedaConfig.scalingOperator | default "GreaterThanOrEqual" }}"
     }
 ---
 apiVersion: v1
