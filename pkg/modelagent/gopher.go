@@ -2,6 +2,7 @@ package modelagent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -747,31 +748,53 @@ func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1
 		s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
 	}
 
-	// Perform snapshot download with retries
-	err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-		downloadPath, downloadErr := s.hubClient.SnapshotDownload(
-			ctx,
-			hfComponents.ModelID,
-			destPath,
-			downloadOptions...,
-		)
-		if downloadErr != nil {
-			s.logger.Errorf("Failed to download HuggingFace model %s (attempt %d/%d): %v",
-				modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
-			return downloadErr
+	// Perform snapshot download - the hub client already has built-in retry logic
+	// with exponential backoff and proper 429 handling
+	downloadPath, err := s.hubClient.SnapshotDownload(
+		ctx,
+		hfComponents.ModelID,
+		destPath,
+		downloadOptions...,
+	)
+	if err != nil {
+		// Check error type for better handling
+		var rateLimitErr *hub.RateLimitError
+		var httpErr *hub.HTTPError
+
+		switch {
+		case errors.As(err, &rateLimitErr):
+			// Proper rate limit error with retry-after information
+			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
+			if rateLimitErr.RetryAfter > 0 {
+				s.metrics.RecordRateLimit(modelType, namespace, name, rateLimitErr.RetryAfter)
+			} else {
+				s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Default estimate
+			}
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
+
+		case errors.As(err, &httpErr) && httpErr.StatusCode == 429:
+			// HTTP 429 without proper RateLimitError type
+			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
+			s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Estimate
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
+
+		case strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit"):
+			// Fallback string matching for backwards compatibility
+			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
+			s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Estimate
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
+
+		default:
+			s.logger.Errorf("Failed to download HuggingFace model %s: %v", modelInfo, err)
+			s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
 		}
 
-		s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
-			modelInfo, downloadPath)
-		return nil
-	})
-
-	if err != nil {
-		s.logger.Errorf("All HuggingFace download attempts failed for model %s: %v", modelInfo, err)
-		s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
 		s.markModelOnNodeFailed(task)
 		return err
 	}
+
+	s.logger.Infof("Successfully downloaded HuggingFace model %s to %s",
+		modelInfo, downloadPath)
 
 	// Parse model config and update ConfigMap
 	var baseModel *v1beta1.BaseModel

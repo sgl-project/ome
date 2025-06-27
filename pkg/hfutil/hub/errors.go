@@ -3,6 +3,7 @@ package hub
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // HubError represents a generic Hub error
@@ -230,5 +231,23 @@ func NewValidationError(field string, value interface{}, message string) *Valida
 		HubError: &HubError{Message: message},
 		Field:    field,
 		Value:    value,
+	}
+}
+
+// RateLimitError represents an HTTP 429 rate limit error
+type RateLimitError struct {
+	*HTTPError
+	RetryAfter time.Duration // Duration to wait before retrying (0 if not specified)
+}
+
+func NewRateLimitError(response *http.Response, retryAfter time.Duration) *RateLimitError {
+	message := "Rate limit exceeded (HTTP 429)"
+	if retryAfter > 0 {
+		message = fmt.Sprintf("Rate limit exceeded (HTTP 429), retry after %v", retryAfter)
+	}
+
+	return &RateLimitError{
+		HTTPError:  NewHTTPError(message, 429, response),
+		RetryAfter: retryAfter,
 	}
 }
