@@ -2,7 +2,7 @@
 CHARTS_DIR := ./charts
 
 # Define the registry and image tagging
-REGISTRY     ?= ghcr.io/moirai-internal/ome
+REGISTRY     ?= ghcr.io/moirai-internal
 TAG          ?= $(GIT_TAG)
 ARCH         ?= linux/amd64
 MANAGER_IMG  ?= $(REGISTRY)/manager:$(TAG)

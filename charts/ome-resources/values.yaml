@@ -56,7 +56,7 @@ ome:
         cpu: 2
         memory: 4Gi
   omeAgent:
-    image: ghcr.io/moirai-internal/genai-ome-agent
+    image: ghcr.io/moirai-internal/ome-agent
     tag: *defaultVersion
     authType: InstancePrincipal
     compartmentId: ocid1.compartment.oc1..dummy-compartment
