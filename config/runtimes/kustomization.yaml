@@ -5,6 +5,9 @@ resources:
 - srt/deepseek-rdma-pd-rt.yaml
 - srt/deepseek-rdma-rt.yaml
 - srt/llama-4-maverick-17b-128e-instruct-fp8-rt.yaml
+- srt/llama-4-maverick-17b-128e-instruct-fp8-pd-rt.yaml
 - srt/llama-4-scout-17b-16e-instruct-rt.yaml
+- srt/llama-4-scout-17b-16e-instruct-pd-rt.yaml
 - srt/e5-mistral-7b-instruct-rt.yaml
 - srt/llama-3-3-70b-instruct-rt.yaml
+- srt/llama-3-3-70b-instruct-pd-rt.yaml

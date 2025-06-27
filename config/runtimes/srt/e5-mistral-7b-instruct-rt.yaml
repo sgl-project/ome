@@ -22,7 +22,7 @@ spec:
   engineConfig:
     runner:
       name: ome-container
-      image: lmsysorg/sglang:v0.4.8.post1-cu126
+      image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
       ports:
         - containerPort: 8080
           name: http1
@@ -94,15 +94,3 @@ spec:
       - name: dshm
         emptyDir:
           medium: Memory
-    affinity:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: node.kubernetes.io/instance-type
-                  operator: In
-                  values:
-                    - BM.GPU.B4.8
-                    - BM.GPU4.8
-                    - BM.GPU.A100-v2.8
-                    - BM.GPU.H100.8
