@@ -1,7 +1,7 @@
 ---
 title: "Run Performance Benchmarks"
 linkTitle: "Run Benchmarks"
-weight: 3
+weight: 10
 date: 2023-03-14
 description: >
   Learn how to benchmark inference services with realistic traffic patterns and comprehensive performance metrics.
@@ -503,10 +503,10 @@ kubectl exec -it <benchmark-pod> -- df -h
 
 ## Next Steps
 
-- [Analyze Performance Results](/docs/tasks/developer-tools/analyze-performance/) - Deep dive into benchmark data
-- [Setup Continuous Benchmarking](/docs/tasks/manage-ome/setup-continuous-benchmarking/) - Automate performance testing
-- [Optimize Model Performance](/docs/tasks/run-workloads/optimize-performance/) - Improve model efficiency
-- [Compare Model Variants](/docs/tasks/run-workloads/compare-models/) - A/B test different models
+- [Analyze Performance Results](/ome/docs/tasks/developer-tools/analyze-performance/) - Deep dive into benchmark data
+- [Setup Continuous Benchmarking](/ome/docs/tasks/manage-ome/setup-continuous-benchmarking/) - Automate performance testing
+- [Optimize Model Performance](/ome/docs/tasks/run-workloads/optimize-performance/) - Improve model efficiency
+- [Compare Model Variants](/ome/docs/tasks/run-workloads/compare-models/) - A/B test different models
 
 ## Cleanup
 

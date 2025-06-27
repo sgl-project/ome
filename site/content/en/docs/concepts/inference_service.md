@@ -1,7 +1,7 @@
 ---
 title: "Inference Service"
 date: 2023-03-14
-weight: 5
+weight: 30
 description: >
   InferenceService is the primary resource that manages the deployment and serving of machine learning models in OME.
 ---

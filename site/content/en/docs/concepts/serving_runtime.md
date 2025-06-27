@@ -1,7 +1,7 @@
 ---
 title: "Serving Runtime"
 date: 2023-03-14
-weight: 3
+weight: 25
 description: >
   Cluster Serving Runtime is a cluster-scoped resource that manages the runtime environment for model serving.
 ---

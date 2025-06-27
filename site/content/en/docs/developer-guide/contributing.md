@@ -1,7 +1,7 @@
 ---
 title: "Contributing to OME"
 linkTitle: "Contributing"
-weight: 1
+weight: 5
 date: 2023-03-14
 description: >
   Learn how to contribute to the OME project, set up your development environment, and follow our coding guidelines.
