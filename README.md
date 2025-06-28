@@ -45,7 +45,21 @@ Read the [documentation](https://sgl-project.github.io/ome/docs/) to learn more 
 
 **Requires Kubernetes 1.28 or newer**
 
-To install OME in your cluster using Helm:
+### Option 1: OCI Registry (Recommended)
+
+Install OME directly from the OCI registry:
+
+```bash
+# Install OME CRDs
+helm upgrade --install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --namespace ome --create-namespace
+
+# Install OME resources
+helm upgrade --install ome oci://ghcr.io/moirai-internal/charts/ome-resources --namespace ome
+```
+
+### Option 2: Helm Repository
+
+Install using the traditional Helm repository:
 
 ```bash
 # Add the OME Helm repository
@@ -53,13 +67,15 @@ helm repo add ome https://sgl-project.github.io/ome
 helm repo update
 
 # Install OME CRDs first
-helm install ome-crd ome/ome-crd --namespace ome --create-namespace
+helm upgrade --install ome-crd ome/ome-crd --namespace ome --create-namespace
 
 # Install OME resources
-helm install ome ome/ome-resources --namespace ome
+helm upgrade --install ome ome/ome-resources --namespace ome
 ```
 
-For installation from source:
+### Option 3: Install from Source
+
+For development or customization:
 
 ```bash
 # Clone the repository
