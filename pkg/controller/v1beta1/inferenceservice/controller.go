@@ -10,7 +10,7 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	"knative.dev/pkg/network"
 
-	v1beta2 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
@@ -110,7 +110,7 @@ type InferenceServiceReconciler struct {
 
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Fetch the InferenceService instance
-	isvc := &v1beta2.InferenceService{}
+	isvc := &v1beta1.InferenceService{}
 	if err := r.Get(ctx, req.NamespacedName, isvc); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -175,7 +175,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Initialize status if not already initialized
 	if isvc.Status.Components == nil {
-		isvc.Status.Components = make(map[v1beta2.ComponentType]v1beta2.ComponentStatusSpec)
+		isvc.Status.Components = make(map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec)
 	}
 
 	// Setup reconcilers
@@ -432,25 +432,25 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Propagate status for all components
-	var componentList []v1beta2.ComponentType
+	var componentList []v1beta1.ComponentType
 	if deploymentMode == constants.Serverless {
 		// In Serverless mode, we only care about the engine component which is a Knative service.
-		componentList = []v1beta2.ComponentType{v1beta2.EngineComponent}
+		componentList = []v1beta1.ComponentType{v1beta1.EngineComponent}
 
 		// For serverless, we only have one component, and we need to propagate its route and deployment readiness.
 		// For other modes, these are handled by the component-specific reconcilers.
-		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
-		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.LatestDeploymentReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta1.RoutesReady)
+		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta1.LatestDeploymentReady)
 	} else {
 		// For other modes (RawDeployment, etc.), we check all defined components.
 		if mergedEngine != nil {
-			componentList = append(componentList, v1beta2.EngineComponent)
+			componentList = append(componentList, v1beta1.EngineComponent)
 		}
 		if mergedDecoder != nil {
-			componentList = append(componentList, v1beta2.DecoderComponent)
+			componentList = append(componentList, v1beta1.DecoderComponent)
 		}
 		if mergedRouter != nil {
-			componentList = append(componentList, v1beta2.RouterComponent)
+			componentList = append(componentList, v1beta1.RouterComponent)
 		}
 	}
 
@@ -464,7 +464,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.InferenceService) (ctrl.Result, error) {
+func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 	// We directly set URL and inference service status to Ready in VirtualDeployment mode
 
 	// Set URL across all Status components
@@ -478,8 +478,8 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.Infer
 	}
 	isvc.Status.URL = openAIURL
 	isvc.Status.Address = addressURL
-	isvc.Status.Components = map[v1beta2.ComponentType]v1beta2.ComponentStatusSpec{
-		v1beta2.PredictorComponent: {
+	isvc.Status.Components = map[v1beta1.ComponentType]v1beta1.ComponentStatusSpec{
+		v1beta1.PredictorComponent: {
 			URL: openAIURL,
 		},
 	}
@@ -500,7 +500,7 @@ func (r *InferenceServiceReconciler) handleVirtualDeployment(isvc *v1beta2.Infer
 	return ctrl.Result{}, nil
 }
 
-func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta2.InferenceService) (ctrl.Result, error) {
+func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta1.InferenceService) (ctrl.Result, error) {
 	// Abort early if the resolved deployment mode is Serverless, but Knative Services are not available
 	ksvcAvailable, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if err != nil {
@@ -517,8 +517,8 @@ func (r *InferenceServiceReconciler) handleServerlessPrerequisites(isvc *v1beta2
 	return ctrl.Result{}, nil
 }
 
-func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta2.InferenceService, deploymentMode constants.DeploymentModeType) error {
-	existingService := &v1beta2.InferenceService{}
+func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta1.InferenceService, deploymentMode constants.DeploymentModeType) error {
+	existingService := &v1beta1.InferenceService{}
 	namespacedName := types.NamespacedName{Name: desiredService.Name, Namespace: desiredService.Namespace}
 	if err := r.Get(context.TODO(), namespacedName, existingService); err != nil {
 		return err
@@ -548,13 +548,13 @@ func (r *InferenceServiceReconciler) updateStatus(desiredService *v1beta2.Infere
 	return nil
 }
 
-func inferenceServiceReadiness(status v1beta2.InferenceServiceStatus) bool {
+func inferenceServiceReadiness(status v1beta1.InferenceServiceStatus) bool {
 	return status.Conditions != nil &&
 		status.GetCondition(knapis.ConditionReady) != nil &&
 		status.GetCondition(knapis.ConditionReady).Status == v1.ConditionTrue
 }
 
-func inferenceServiceStatusEqual(s1, s2 v1beta2.InferenceServiceStatus) bool {
+func inferenceServiceStatusEqual(s1, s2 v1beta1.InferenceServiceStatus) bool {
 	return equality.Semantic.DeepEqual(s1, s2)
 }
 
@@ -590,7 +590,7 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	}
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
-		For(&v1beta2.InferenceService{}).
+		For(&v1beta1.InferenceService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&v1.Service{}).
 		Owns(&v1.ConfigMap{}).
@@ -631,7 +631,7 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	return ctrlBuilder.Complete(r)
 }
 
-func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, isvc *v1beta2.InferenceService, ingressConfig *controllerconfig.IngressConfig) error {
+func (r *InferenceServiceReconciler) setExternalServiceURL(ctx context.Context, isvc *v1beta1.InferenceService, ingressConfig *controllerconfig.IngressConfig) error {
 	// Get the external service
 	externalService := &v1.Service{}
 	if err := r.Get(ctx, types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, externalService); err != nil {
@@ -659,23 +659,23 @@ type existingComponents struct {
 	Router  bool
 }
 
-func (r *InferenceServiceReconciler) checkExistingComponents(ctx context.Context, isvc *v1beta2.InferenceService) (existingComponents, error) {
+func (r *InferenceServiceReconciler) checkExistingComponents(ctx context.Context, isvc *v1beta1.InferenceService) (existingComponents, error) {
 	existing := existingComponents{}
 
 	// Check status for existing components - this is more reliable than querying deployments
 	if isvc.Status.Components != nil {
 		// Check if engine component exists in status
-		if _, hasEngine := isvc.Status.Components[v1beta2.EngineComponent]; hasEngine {
+		if _, hasEngine := isvc.Status.Components[v1beta1.EngineComponent]; hasEngine {
 			existing.Engine = true
 		}
 
 		// Check if decoder component exists in status
-		if _, hasDecoder := isvc.Status.Components[v1beta2.DecoderComponent]; hasDecoder {
+		if _, hasDecoder := isvc.Status.Components[v1beta1.DecoderComponent]; hasDecoder {
 			existing.Decoder = true
 		}
 
 		// Check if router component exists in status
-		if _, hasRouter := isvc.Status.Components[v1beta2.RouterComponent]; hasRouter {
+		if _, hasRouter := isvc.Status.Components[v1beta1.RouterComponent]; hasRouter {
 			existing.Router = true
 		}
 	}
@@ -684,6 +684,6 @@ func (r *InferenceServiceReconciler) checkExistingComponents(ctx context.Context
 }
 
 // migratePredictorToNewArchitecture delegates to the migration utility
-func (r *InferenceServiceReconciler) migratePredictorToNewArchitecture(isvc *v1beta2.InferenceService) error {
+func (r *InferenceServiceReconciler) migratePredictorToNewArchitecture(isvc *v1beta1.InferenceService) error {
 	return isvcutils.MigratePredictorToNewArchitecture(context.Background(), r.Client, r.Log, isvc)
 }
