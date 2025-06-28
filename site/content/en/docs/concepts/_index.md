@@ -24,15 +24,6 @@ This resource has both namespace-scoped and cluster-scoped which can be used to 
 The FineTunedWeight CRD manages the weights of models fine-tuned from a base model, allowing for task-specific optimization.
 
 
-### [Dedicated AI Cluster](/ome/docs/concepts/dedicated_ai_cluster)
-
-The DedicatedAICluster CRD defines a dedicated cluster for AI workloads,
-ensuring resource isolation and optimal performance for large-scale model serving and training.
-
-### [Dedicated AI Cluster Profile](/ome/docs/concepts/dedicated_ai_cluster_profile)
-
-The DedicatedAIClusterProfile CRD defines cluster profiles that can be applied to dedicated AI clusters, specifying resource constraints and scheduling preferences.
-
 ### [Serving Runtime](/ome/docs/concepts/serving_runtime)
 
 The ServingRuntime CRD manages the runtime environment for model serving, allowing for dynamic scaling and configuration of model-serving containers.
@@ -44,3 +35,13 @@ This resource has both namespace-scoped and cluster-scoped which can be used to 
 The InferenceService CRD manages the entire lifecycle of model-serving workloads, including model versioning, scaling, and traffic routing. 
 It supports real-time inference for both single-node and multi-node deployments, ensuring seamless model updates and efficient scaling.
 
+### [Ingress](/ome/docs/concepts/ingress)
+
+OME supports a range of ingress controllers for external access to model serving workloads. 
+This section provides an overview of the available ingress controller options, including their capabilities, configuration, and features.
+
+
+### [Benchmarks](/ome/docs/concepts/benchmarks)
+
+OME integrates with the latest GenAI-Bench benchmarks to provide real-time benchmarking capabilities for AI models. 
+This section provides an overview of the GenAI-Bench benchmarks, how they work, and how to use them with OME.
