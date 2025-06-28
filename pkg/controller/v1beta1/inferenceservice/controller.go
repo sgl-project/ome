@@ -431,11 +431,30 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// Propagate status for all components
+	var componentList []v1beta2.ComponentType
 	if deploymentMode == constants.Serverless {
-		componentList := []v1beta2.ComponentType{v1beta2.EngineComponent}
+		// In Serverless mode, we only care about the engine component which is a Knative service.
+		componentList = []v1beta2.ComponentType{v1beta2.EngineComponent}
+
+		// For serverless, we only have one component, and we need to propagate its route and deployment readiness.
+		// For other modes, these are handled by the component-specific reconcilers.
 		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.RoutesReady)
 		r.StatusManager.PropagateCrossComponentStatus(&isvc.Status, componentList, v1beta2.LatestDeploymentReady)
+	} else {
+		// For other modes (RawDeployment, etc.), we check all defined components.
+		if mergedEngine != nil {
+			componentList = append(componentList, v1beta2.EngineComponent)
+		}
+		if mergedDecoder != nil {
+			componentList = append(componentList, v1beta2.DecoderComponent)
+		}
+		if mergedRouter != nil {
+			componentList = append(componentList, v1beta2.RouterComponent)
+		}
 	}
+
+	r.StatusManager.AggregateComponentReadyCondition(&isvc.Status, componentList)
 
 	if err = r.updateStatus(isvc, deploymentMode); err != nil {
 		r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
