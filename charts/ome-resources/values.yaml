@@ -148,6 +148,7 @@ modelAgent:
               - VM.GPU.GU1.2
               - BM.GPU.B4.8
               - BM.GPU.H100.8
+              - BM.GPU.H100-NC.8
           - key: oci.oraclecloud.com/disable-gpu-device-plugin
             operator: NotIn
             values:

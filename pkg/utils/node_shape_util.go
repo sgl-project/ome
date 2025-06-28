@@ -13,6 +13,7 @@ var shapeMap = map[string]string{
 	"BM.GPU4.8":        "A100-40G",
 	"BM.GPU.B4.8":      "A100-40G",
 	"BM.GPU.H100.8":    "H100",
+	"BM.GPU.H100-NC.8": "H100",
 }
 
 func GetOCINodeShape(logger logging.Interface) (string, error) {
