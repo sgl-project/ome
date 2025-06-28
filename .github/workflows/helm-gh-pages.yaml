@@ -1,4 +1,4 @@
-name: Publish Helm Charts to GitHub Pages
+name: Publish Helm Charts to GitHub Pages and OCI Registry
 
 on:
   push:
@@ -14,6 +14,11 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_ORG: moirai-internal
 
 jobs:
   publish-charts:
@@ -34,6 +39,13 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+
       - name: Prepare charts directory
         run: |
           mkdir -p .charts-repo
@@ -53,6 +65,12 @@ jobs:
         run: |
           for chart in charts/*/; do
             helm package "${chart}" -d .charts-repo
+          done
+
+      - name: Push charts to OCI registry
+        run: |
+          for chart in .charts-repo/*.tgz; do
+            helm push ${chart} oci://${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/charts
           done
 
       - name: Checkout gh-pages branch
@@ -98,6 +116,14 @@ jobs:
               
               <div class="instructions">
                   <h2>Installation Instructions</h2>
+                  
+                  <h3>Option 1: OCI Registry (Recommended)</h3>
+                  <pre>
+# Install directly from OCI registry
+helm install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --namespace ome --create-namespace
+helm install ome oci://ghcr.io/moirai-internal/charts/ome-resources --namespace ome</pre>
+
+                  <h3>Option 2: Helm Repository</h3>
                   <pre>
 # Add the OME Helm repository
 helm repo add ome https://sgl-project.github.io/ome

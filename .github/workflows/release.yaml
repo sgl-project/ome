@@ -137,21 +137,33 @@ jobs:
         with:
           version: 'latest'
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+
       - name: Update chart versions
         run: |
           VERSION=${{ needs.prepare.outputs.version }}
+          TAG=${{ needs.prepare.outputs.tag }}
           
           # Update chart versions
           for chart in charts/*/; do
             yq eval -i ".version = \"${VERSION}\"" ${chart}Chart.yaml
             yq eval -i ".appVersion = \"${VERSION}\"" ${chart}Chart.yaml
             
-            # Update image tags in values.yaml
-            if [[ -f ${chart}values.yaml ]]; then
-              yq eval -i ".image.tag = \"${{ needs.prepare.outputs.tag }}\"" ${chart}values.yaml
-              yq eval -i ".image.repository = \"ghcr.io/moirai-internal/ome-manager\"" ${chart}values.yaml
-              yq eval -i ".modelAgent.image.repository = \"ghcr.io/moirai-internal/model-agent\"" ${chart}values.yaml
-              yq eval -i ".modelAgent.image.tag = \"${{ needs.prepare.outputs.tag }}\"" ${chart}values.yaml
+            # Update image tags in values.yaml for ome-resources chart
+            if [[ -f ${chart}values.yaml ]] && [[ $(basename ${chart}) == "ome-resources" ]]; then
+              # Update the defaultVersion anchor
+              yq eval -i ".ome.version = \"${TAG}\"" ${chart}values.yaml
+              
+              # Update specific image tags that don't use the anchor
+              yq eval -i ".ome.benchmarkJob.tag = \"${TAG}\"" ${chart}values.yaml
+              yq eval -i ".ome.multinodeProber.tag = \"${TAG}\"" ${chart}values.yaml
+              yq eval -i ".ome.omeAgent.tag = \"${TAG}\"" ${chart}values.yaml
+              yq eval -i ".modelAgent.image.tag = \"${TAG}\"" ${chart}values.yaml
             fi
           done
 
@@ -162,7 +174,14 @@ jobs:
             helm package ${chart} -d .charts
           done
 
-      - name: Create chart index
+      - name: Push charts to OCI registry
+        run: |
+          for chart in .charts/*.tgz; do
+            chart_name=$(basename ${chart%.tgz} | cut -d- -f1)
+            helm push ${chart} oci://${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/charts
+          done
+
+      - name: Create chart index for GitHub Pages
         run: |
           helm repo index .charts --url https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
 
@@ -261,6 +280,16 @@ jobs:
           \`\`\`
           
           ## ⎈ Helm Installation
+          
+          ### Option 1: OCI Registry (Recommended)
+          
+          \`\`\`bash
+          # Install directly from OCI registry
+          helm install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --version ${{ needs.prepare.outputs.version }} --namespace ome --create-namespace
+          helm install ome oci://ghcr.io/moirai-internal/charts/ome-resources --version ${{ needs.prepare.outputs.version }} --namespace ome
+          \`\`\`
+          
+          ### Option 2: GitHub Releases
           
           \`\`\`bash
           # Add the OME Helm repository

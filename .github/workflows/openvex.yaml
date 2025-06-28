@@ -48,7 +48,7 @@ jobs:
           # Create VEX document for known false positives or accepted risks
           vexctl create \
             --author="OME Maintainers" \
-            --role="Project Maintainer" \
+            --author-role="Project Maintainer" \
             --product="pkg:github/sgl-project/ome@${TAG}" \
             --file="ome-${TAG}.vex.json"
           
