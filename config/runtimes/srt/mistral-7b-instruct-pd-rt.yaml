@@ -10,7 +10,7 @@ spec:
         version: "4.36.2"
       modelFormat:
         name: safetensors
-        version: "1"
+        version: "1.0.0"
       modelArchitecture: MistralForCausalLM
       autoSelect: false
       priority: 1

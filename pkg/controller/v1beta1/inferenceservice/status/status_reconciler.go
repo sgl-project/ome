@@ -241,6 +241,51 @@ func (sr *StatusReconciler) SetModelFailureInfo(status *v1beta1.InferenceService
 }
 
 // PropagateCrossComponentStatus aggregates conditions across components
+// AggregateComponentReadyCondition creates the top-level Ready condition
+// based on the readiness of all specified components.
+func (sr *StatusReconciler) AggregateComponentReadyCondition(
+	status *v1beta1.InferenceServiceStatus,
+	componentList []v1beta1.ComponentType) {
+
+	// If there are no components, the service is not ready.
+	if len(componentList) == 0 {
+		status.SetCondition(apis.ConditionReady, &apis.Condition{
+			Type:    apis.ConditionReady,
+			Status:  v1.ConditionFalse,
+			Reason:  "NoComponents",
+			Message: "No components are defined for this InferenceService.",
+		})
+		return
+	}
+
+	readyCondition := &apis.Condition{
+		Type:    apis.ConditionReady,
+		Status:  v1.ConditionTrue,
+		Reason:  "AllComponentsReady",
+		Message: "All components are ready",
+	}
+
+	readyConditionsMap := sr.getReadyConditionsMap()
+
+	for _, component := range componentList {
+		componentReadyCondition := readyConditionsMap[component]
+		if !status.IsConditionReady(componentReadyCondition) {
+			readyCondition.Status = v1.ConditionFalse
+			readyCondition.Reason = string(component) + "NotReady"
+			// Get the actual condition to propagate the message
+			compCond := status.GetCondition(componentReadyCondition)
+			if compCond != nil {
+				readyCondition.Message = compCond.Message
+			} else {
+				readyCondition.Message = "Component " + string(component) + " is not ready"
+			}
+			break // one not ready is enough
+		}
+	}
+
+	status.SetCondition(apis.ConditionReady, readyCondition)
+}
+
 func (sr *StatusReconciler) PropagateCrossComponentStatus(
 	status *v1beta1.InferenceServiceStatus,
 	componentList []v1beta1.ComponentType,
