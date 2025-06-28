@@ -41,11 +41,25 @@ jobs:
           syft dir:. -o spdx-json > ome-${TAG}-sbom.spdx.json
           syft dir:. -o cyclonedx-json > ome-${TAG}-sbom.cyclonedx.json
           
-          # Generate SBOM for container images
+          # Generate SBOM for container images with retry logic
           for image in ome-manager model-agent ome-agent multinode-prober; do
             echo "Generating SBOM for ${image}..."
-            syft ghcr.io/moirai-internal/ome/${image}:${TAG} -o spdx-json > ${image}-${TAG}-sbom.spdx.json
-            syft ghcr.io/moirai-internal/ome/${image}:${TAG} -o cyclonedx-json > ${image}-${TAG}-sbom.cyclonedx.json
+            
+            # Retry up to 5 times with 30 second delays
+            for attempt in {1..5}; do
+              if syft ghcr.io/moirai-internal/${image}:${TAG} -o spdx-json > ${image}-${TAG}-sbom.spdx.json 2>/dev/null; then
+                syft ghcr.io/moirai-internal/${image}:${TAG} -o cyclonedx-json > ${image}-${TAG}-sbom.cyclonedx.json
+                echo "✅ Successfully generated SBOM for ${image}"
+                break
+              else
+                echo "⏳ Attempt ${attempt}/5 failed. Image might not be available yet. Retrying in 30s..."
+                if [ ${attempt} -lt 5 ]; then
+                  sleep 30
+                else
+                  echo "❌ Failed to generate SBOM for ${image} after 5 attempts"
+                fi
+              fi
+            done
           done
 
       - name: Upload SBOMs to release
