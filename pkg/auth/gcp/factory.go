@@ -9,7 +9,6 @@ import (
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/compute/v1"
 )
 
 // Factory creates GCP credentials
@@ -146,17 +145,41 @@ func (f *Factory) createServiceAccountCredentials(ctx context.Context, config au
 
 // createWorkloadIdentityCredentials creates workload identity credentials
 func (f *Factory) createWorkloadIdentityCredentials(ctx context.Context, config auth.Config) (*google.Credentials, string, error) {
-	// Workload identity uses Application Default Credentials
-	// with specific configuration
+	// GKE Workload Identity uses Application Default Credentials
+	// The GKE metadata service provides tokens for the bound service account
 
-	var projectID string
+	var wiConfig WorkloadIdentityConfig
+
 	if config.Extra != nil {
-		if pid, ok := config.Extra["project_id"].(string); ok {
-			projectID = pid
+		// Extract workload identity config
+		if wi, ok := config.Extra["workload_identity"].(map[string]interface{}); ok {
+			if projectID, ok := wi["project_id"].(string); ok {
+				wiConfig.ProjectID = projectID
+			}
+			if sa, ok := wi["service_account"].(string); ok {
+				wiConfig.ServiceAccount = sa
+			}
+			if ksa, ok := wi["kubernetes_service_account"].(string); ok {
+				wiConfig.KubernetesServiceAccount = ksa
+			}
+			if clusterName, ok := wi["cluster_name"].(string); ok {
+				wiConfig.ClusterName = clusterName
+			}
+			if clusterLocation, ok := wi["cluster_location"].(string); ok {
+				wiConfig.ClusterLocation = clusterLocation
+			}
+		}
+
+		// Also check for direct project_id
+		if wiConfig.ProjectID == "" {
+			if pid, ok := config.Extra["project_id"].(string); ok {
+				wiConfig.ProjectID = pid
+			}
 		}
 	}
 
 	// Find credentials using Application Default Credentials
+	// In GKE with Workload Identity, this will use the metadata service
 	creds, err := google.FindDefaultCredentials(ctx,
 		"https://www.googleapis.com/auth/cloud-platform",
 		"https://www.googleapis.com/auth/devstorage.full_control",
@@ -165,10 +188,20 @@ func (f *Factory) createWorkloadIdentityCredentials(ctx context.Context, config 
 		return nil, "", fmt.Errorf("failed to find workload identity credentials: %w", err)
 	}
 
-	// Try to get project ID from metadata if not provided
+	// Try to get project ID from various sources
+	projectID := wiConfig.ProjectID
 	if projectID == "" && creds.ProjectID != "" {
 		projectID = creds.ProjectID
 	}
+	if projectID == "" {
+		// Try to get from metadata service
+		projectID = getProjectIDFromMetadata(ctx)
+	}
+
+	f.logger.WithField("project_id", projectID).
+		WithField("service_account", wiConfig.ServiceAccount).
+		WithField("kubernetes_service_account", wiConfig.KubernetesServiceAccount).
+		Debug("Created GKE Workload Identity credentials")
 
 	return creds, projectID, nil
 }
@@ -203,20 +236,11 @@ func (f *Factory) createDefaultCredentials(ctx context.Context, config auth.Conf
 
 // getProjectIDFromMetadata tries to get project ID from GCE metadata
 func getProjectIDFromMetadata(ctx context.Context) string {
-	client, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
+	// Use the metadata package to get project ID from GCE metadata service
+	// This is more reliable than trying to use the compute API
+	creds, err := google.FindDefaultCredentials(ctx)
 	if err != nil {
 		return ""
 	}
-
-	computeService, err := compute.New(client)
-	if err != nil {
-		return ""
-	}
-
-	project, err := computeService.Projects.Get("").Context(ctx).Do()
-	if err != nil {
-		return ""
-	}
-
-	return project.Name
+	return creds.ProjectID
 }

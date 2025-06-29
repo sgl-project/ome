@@ -7,10 +7,11 @@ import (
 
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestFactory_SupportedAuthTypes(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 
 	authTypes := factory.SupportedAuthTypes()
@@ -19,6 +20,8 @@ func TestFactory_SupportedAuthTypes(t *testing.T) {
 		auth.AWSAssumeRole,
 		auth.AWSInstanceProfile,
 		auth.AWSWebIdentity,
+		auth.AWSECSTaskRole,
+		auth.AWSProcess,
 		auth.AWSDefault,
 	}
 
@@ -39,7 +42,7 @@ func TestFactory_SupportedAuthTypes(t *testing.T) {
 }
 
 func TestFactory_Create_InvalidProvider(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -55,7 +58,7 @@ func TestFactory_Create_InvalidProvider(t *testing.T) {
 }
 
 func TestFactory_Create_UnsupportedAuthType(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -143,7 +146,7 @@ func TestFactory_AssumeRoleConfig_Validate(t *testing.T) {
 }
 
 func TestFactory_Create_AccessKey(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -180,7 +183,7 @@ func TestFactory_Create_AccessKey_FromEnvironment(t *testing.T) {
 	defer os.Unsetenv("AWS_ACCESS_KEY_ID")
 	defer os.Unsetenv("AWS_SECRET_ACCESS_KEY")
 
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -201,7 +204,7 @@ func TestFactory_Create_AccessKey_FromEnvironment(t *testing.T) {
 }
 
 func TestFactory_Create_AccessKey_MissingRequired(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -223,7 +226,7 @@ func TestFactory_Create_AccessKey_MissingRequired(t *testing.T) {
 }
 
 func TestFactory_Create_AssumeRole(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -249,7 +252,7 @@ func TestFactory_Create_AssumeRole(t *testing.T) {
 }
 
 func TestFactory_Create_WebIdentity(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -275,7 +278,7 @@ func TestFactory_Create_WebIdentity(t *testing.T) {
 }
 
 func TestFactory_Create_InstanceProfile(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -299,7 +302,7 @@ func TestFactory_Create_InstanceProfile(t *testing.T) {
 }
 
 func TestFactory_Create_Default(t *testing.T) {
-	logger := logging.NewNopLogger()
+	logger := logging.ForZap(zaptest.NewLogger(t))
 	factory := NewFactory(logger)
 	ctx := context.Background()
 
@@ -315,5 +318,132 @@ func TestFactory_Create_Default(t *testing.T) {
 	// We might get an error here because we don't have real AWS creds
 	if err == nil {
 		t.Log("Unexpected success - normally would fail without real AWS credentials")
+	}
+}
+
+func TestFactory_Create_Process(t *testing.T) {
+	logger := logging.ForZap(zaptest.NewLogger(t))
+	factory := NewFactory(logger)
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		config  auth.Config
+		wantErr bool
+	}{
+		{
+			name: "Valid process config with string timeout",
+			config: auth.Config{
+				Provider: auth.ProviderAWS,
+				AuthType: auth.AWSProcess,
+				Extra: map[string]interface{}{
+					"process": map[string]interface{}{
+						"command": "/usr/local/bin/aws-credential-process",
+						"timeout": "30s",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid process config with numeric timeout",
+			config: auth.Config{
+				Provider: auth.ProviderAWS,
+				AuthType: auth.AWSProcess,
+				Extra: map[string]interface{}{
+					"process": map[string]interface{}{
+						"command": "/usr/local/bin/aws-credential-process",
+						"timeout": 30.0, // seconds as float64
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Missing command",
+			config: auth.Config{
+				Provider: auth.ProviderAWS,
+				AuthType: auth.AWSProcess,
+				Extra: map[string]interface{}{
+					"process": map[string]interface{}{
+						"timeout": "30s",
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := factory.Create(ctx, tt.config)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Create() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && creds == nil {
+				t.Error("Expected credentials to be created")
+			}
+		})
+	}
+}
+
+func TestFactory_Create_ECSTaskRole(t *testing.T) {
+	logger := logging.ForZap(zaptest.NewLogger(t))
+	factory := NewFactory(logger)
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		config  auth.Config
+		wantErr bool
+	}{
+		{
+			name: "Valid ECS config with relative URI",
+			config: auth.Config{
+				Provider: auth.ProviderAWS,
+				AuthType: auth.AWSECSTaskRole,
+				Extra: map[string]interface{}{
+					"ecs_task_role": map[string]interface{}{
+						"relative_uri": "/v2/credentials/12345",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid ECS config with full URI",
+			config: auth.Config{
+				Provider: auth.ProviderAWS,
+				AuthType: auth.AWSECSTaskRole,
+				Extra: map[string]interface{}{
+					"ecs_task_role": map[string]interface{}{
+						"full_uri":            "http://localhost:8080/credentials",
+						"authorization_token": "secret-token",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Missing both URIs",
+			config: auth.Config{
+				Provider: auth.ProviderAWS,
+				AuthType: auth.AWSECSTaskRole,
+				Extra:    map[string]interface{}{},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := factory.Create(ctx, tt.config)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Create() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && creds == nil {
+				t.Error("Expected credentials to be created")
+			}
+		})
 	}
 }

@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 )
 
@@ -19,6 +19,9 @@ type GCPCredentials struct {
 	authType    auth.AuthType
 	projectID   string
 	logger      logging.Interface
+
+	// Mutex protects cached token
+	mu          sync.RWMutex
 	cachedToken *oauth2.Token
 }
 
@@ -34,21 +37,37 @@ func (c *GCPCredentials) Type() auth.AuthType {
 
 // Token retrieves the GCP access token
 func (c *GCPCredentials) Token(ctx context.Context) (string, error) {
+	if c.tokenSource == nil {
+		return "", fmt.Errorf("token source is not initialized")
+	}
+
 	token, err := c.tokenSource.Token()
 	if err != nil {
 		return "", fmt.Errorf("failed to get token: %w", err)
 	}
 
+	c.mu.Lock()
 	c.cachedToken = token
+	c.mu.Unlock()
+
 	return token.AccessToken, nil
 }
 
 // SignRequest signs an HTTP request with GCP credentials
 func (c *GCPCredentials) SignRequest(ctx context.Context, req *http.Request) error {
+	if c.tokenSource == nil {
+		return fmt.Errorf("token source is not initialized")
+	}
+
 	token, err := c.tokenSource.Token()
 	if err != nil {
 		return fmt.Errorf("failed to get token: %w", err)
 	}
+
+	// Cache the token for consistency with Token() method
+	c.mu.Lock()
+	c.cachedToken = token
+	c.mu.Unlock()
 
 	token.SetAuthHeader(req)
 	return nil
@@ -56,14 +75,30 @@ func (c *GCPCredentials) SignRequest(ctx context.Context, req *http.Request) err
 
 // Refresh refreshes the credentials
 func (c *GCPCredentials) Refresh(ctx context.Context) error {
+	if c.tokenSource == nil {
+		return fmt.Errorf("token source is not initialized")
+	}
+
 	// OAuth2 token sources handle refresh automatically
 	// Force a new token to be fetched
-	_, err := c.tokenSource.Token()
-	return err
+	token, err := c.tokenSource.Token()
+	if err != nil {
+		return err
+	}
+
+	// Update cached token
+	c.mu.Lock()
+	c.cachedToken = token
+	c.mu.Unlock()
+
+	return nil
 }
 
 // IsExpired checks if the credentials are expired
 func (c *GCPCredentials) IsExpired() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if c.cachedToken == nil {
 		return true
 	}
@@ -117,37 +152,34 @@ func (c *ServiceAccountConfig) ToJSON() ([]byte, error) {
 }
 
 // WorkloadIdentityConfig represents GCP workload identity configuration
+// This is specifically for GKE Workload Identity
 type WorkloadIdentityConfig struct {
-	ProjectID        string `json:"project_id"`
-	PoolID           string `json:"pool_id"`
-	ProviderID       string `json:"provider_id"`
-	ServiceAccount   string `json:"service_account"`
-	CredentialSource string `json:"credential_source"`
+	// ProjectID is the GCP project ID
+	ProjectID string `json:"project_id"`
+
+	// ServiceAccount is the GCP service account email to impersonate
+	// Format: <name>@<project>.iam.gserviceaccount.com
+	ServiceAccount string `json:"service_account,omitempty"`
+
+	// KubernetesServiceAccount is the Kubernetes service account
+	// Format: <namespace>/<name>
+	KubernetesServiceAccount string `json:"kubernetes_service_account,omitempty"`
+
+	// ClusterName is the GKE cluster name (optional)
+	ClusterName string `json:"cluster_name,omitempty"`
+
+	// ClusterLocation is the GKE cluster location (optional)
+	ClusterLocation string `json:"cluster_location,omitempty"`
 }
 
 // Validate validates the workload identity configuration
 func (c *WorkloadIdentityConfig) Validate() error {
+	// For GKE Workload Identity, we just need project ID
+	// The rest is handled by the metadata service
 	if c.ProjectID == "" {
 		return fmt.Errorf("project_id is required")
 	}
-	if c.PoolID == "" {
-		return fmt.Errorf("pool_id is required")
-	}
-	if c.ProviderID == "" {
-		return fmt.Errorf("provider_id is required")
-	}
 	return nil
-}
-
-// createTokenSource creates an OAuth2 token source from credentials
-func createTokenSource(ctx context.Context, creds *google.Credentials, scopes []string) oauth2.TokenSource {
-	if len(scopes) == 0 {
-		scopes = []string{
-			"https://www.googleapis.com/auth/cloud-platform",
-			"https://www.googleapis.com/auth/devstorage.full_control",
-		}
-	}
-	return creds.TokenSource
 }
 
 // GetClientOption returns a client option for use with Google APIs

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"path/filepath"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/ome/pkg/auth"
@@ -131,7 +132,27 @@ func (s *OCIStorage) Download(ctx context.Context, source storage.ObjectURI, tar
 	}
 	defer reader.Close()
 
-	return writeToFile(target, reader)
+	// Compute actual target path based on download options
+	actualTarget := target
+	if downloadOpts.StripPrefix || downloadOpts.UseBaseNameOnly || downloadOpts.JoinWithTailOverlap {
+		targetDir := filepath.Dir(target)
+		actualTarget = storage.ComputeLocalPath(targetDir, source.ObjectName, downloadOpts)
+	}
+
+	// Check if we should skip existing valid files
+	if !downloadOpts.DisableOverride {
+		if exists, _ := storage.FileExists(actualTarget); exists {
+			// Convert ObjectInfo to Metadata for validation
+			metadata := storage.Metadata{
+				ObjectInfo: *info,
+			}
+			if valid, _ := storage.IsLocalFileValid(actualTarget, metadata); valid {
+				return nil // Skip download, file is already valid
+			}
+		}
+	}
+
+	return writeToFile(actualTarget, reader)
 }
 
 // Upload stores the file at source path as the target object
@@ -314,8 +335,82 @@ func (s *OCIStorage) GetObjectInfo(ctx context.Context, uri storage.ObjectURI) (
 	if resp.ContentType != nil {
 		info.ContentType = *resp.ContentType
 	}
+	if resp.OpcMeta != nil {
+		info.Metadata = resp.OpcMeta
+	}
 
 	return info, nil
+}
+
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *OCIStorage) Stat(ctx context.Context, uri storage.ObjectURI) (*storage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get additional metadata via HeadObject
+	req := objectstorage.HeadObjectRequest{
+		NamespaceName: &uri.Namespace,
+		BucketName:    &uri.BucketName,
+		ObjectName:    &uri.ObjectName,
+	}
+
+	resp, err := s.client.HeadObject(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object metadata: %w", err)
+	}
+
+	// Create Metadata struct with all fields
+	metadata := &storage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// Add additional metadata fields
+	if resp.CacheControl != nil {
+		metadata.CacheControl = *resp.CacheControl
+	}
+	// OCI doesn't have Expires in HeadObject response
+	if resp.VersionId != nil {
+		metadata.VersionID = *resp.VersionId
+	}
+	if resp.ContentMd5 != nil {
+		metadata.ContentMD5 = *resp.ContentMd5
+	}
+	// Check if it's a multipart upload by looking for multipart MD5
+	if resp.OpcMultipartMd5 != nil && *resp.OpcMultipartMd5 != "" {
+		metadata.IsMultipart = true
+		// For multipart uploads, check if actual MD5 is stored in metadata
+		if resp.OpcMeta != nil {
+			if md5, ok := resp.OpcMeta["md5"]; ok && md5 != "" {
+				metadata.ContentMD5 = md5
+			}
+		}
+		// OCI doesn't expose parts count in HeadObject response
+	}
+
+	// Collect additional headers
+	metadata.Headers = make(map[string]string)
+	if resp.ContentEncoding != nil {
+		metadata.Headers["Content-Encoding"] = *resp.ContentEncoding
+	}
+	if resp.ContentLanguage != nil {
+		metadata.Headers["Content-Language"] = *resp.ContentLanguage
+	}
+	if resp.ContentDisposition != nil {
+		metadata.Headers["Content-Disposition"] = *resp.ContentDisposition
+	}
+	// ArchivalState is an enum, not a pointer
+	if resp.ArchivalState != "" {
+		metadata.Headers["archival-state"] = string(resp.ArchivalState)
+	}
+	// StorageTier is also an enum
+	if resp.StorageTier != "" {
+		metadata.Headers["storage-tier"] = string(resp.StorageTier)
+	}
+
+	return metadata, nil
 }
 
 // Copy copies an object within the same storage system
@@ -363,6 +458,11 @@ func (s *OCIStorage) InitiateMultipartUpload(ctx context.Context, uri storage.Ob
 	if uploadOpts.StorageClass != "" {
 		storageTier := objectstorage.StorageTierEnum(uploadOpts.StorageClass)
 		req.CreateMultipartUploadDetails.StorageTier = storageTier
+	}
+
+	// Add metadata including MD5 if provided
+	if uploadOpts.Metadata != nil && len(uploadOpts.Metadata) > 0 {
+		req.CreateMultipartUploadDetails.Metadata = uploadOpts.Metadata
 	}
 
 	resp, err := s.client.CreateMultipartUpload(ctx, req)

@@ -93,6 +93,12 @@ func openFile(path string) (*os.File, error) {
 
 // multipartDownload performs a multipart download
 func (s *OCIStorage) multipartDownload(ctx context.Context, source storage.ObjectURI, target string, size int64, opts *storage.DownloadOptions) error {
+	// Compute actual target path based on download options
+	actualTarget := target
+	if opts.StripPrefix || opts.UseBaseNameOnly || opts.JoinWithTailOverlap {
+		targetDir := filepath.Dir(target)
+		actualTarget = storage.ComputeLocalPath(targetDir, source.ObjectName, *opts)
+	}
 	// Calculate parts
 	chunkSize := int64(opts.ChunkSizeInMB) * 1024 * 1024
 	numParts := (size + chunkSize - 1) / chunkSize
@@ -149,7 +155,7 @@ func (s *OCIStorage) multipartDownload(ctx context.Context, source storage.Objec
 	}
 
 	// Combine parts
-	err := s.combineParts(downloadedParts, target)
+	err := s.combineParts(downloadedParts, actualTarget)
 
 	// Clean up temp files
 	for _, p := range downloadedParts {
@@ -158,7 +164,31 @@ func (s *OCIStorage) multipartDownload(ctx context.Context, source storage.Objec
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Validate MD5 if requested
+	if opts.ValidateMD5 {
+		// Get object metadata for MD5
+		metadata, err := s.Stat(ctx, source)
+		if err != nil {
+			return fmt.Errorf("failed to get metadata for MD5 validation: %w", err)
+		}
+
+		if metadata.ContentMD5 != "" || metadata.IsMultipart {
+			valid, err := s.validateMultipartMD5(actualTarget, metadata)
+			if err != nil {
+				return fmt.Errorf("MD5 validation error: %w", err)
+			}
+			if !valid {
+				os.Remove(actualTarget) // Remove invalid file
+				return fmt.Errorf("MD5 validation failed for %s", source.ObjectName)
+			}
+		}
+	}
+
+	return nil
 }
 
 // downloadPart downloads a single part

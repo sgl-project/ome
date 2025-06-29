@@ -10,6 +10,8 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go-v2/credentials/endpointcreds"
+	"github.com/aws/aws-sdk-go-v2/credentials/processcreds"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/sgl-project/ome/pkg/auth"
@@ -46,6 +48,10 @@ func (f *Factory) Create(ctx context.Context, config auth.Config) (auth.Credenti
 		credProvider, err = f.createInstanceProfileProvider(ctx, config)
 	case auth.AWSWebIdentity:
 		credProvider, err = f.createWebIdentityProvider(ctx, config)
+	case auth.AWSECSTaskRole:
+		credProvider, err = f.createECSTaskRoleProvider(ctx, config)
+	case auth.AWSProcess:
+		credProvider, err = f.createProcessProvider(config)
 	case auth.AWSDefault:
 		credProvider, err = f.createDefaultProvider(ctx, config)
 	default:
@@ -71,6 +77,8 @@ func (f *Factory) SupportedAuthTypes() []auth.AuthType {
 		auth.AWSAssumeRole,
 		auth.AWSInstanceProfile,
 		auth.AWSWebIdentity,
+		auth.AWSECSTaskRole,
+		auth.AWSProcess,
 		auth.AWSDefault,
 	}
 }
@@ -152,8 +160,13 @@ func (f *Factory) createAssumeRoleProvider(ctx context.Context, config auth.Conf
 		return nil, err
 	}
 
-	// Load base config
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	// Load base config with region if specified
+	configOpts := []func(*awsconfig.LoadOptions) error{}
+	if config.Region != "" {
+		configOpts = append(configOpts, awsconfig.WithRegion(config.Region))
+	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
@@ -187,8 +200,13 @@ func (f *Factory) createInstanceProfileProvider(ctx context.Context, config auth
 
 // createDefaultProvider creates a default credentials provider chain
 func (f *Factory) createDefaultProvider(ctx context.Context, config auth.Config) (aws.CredentialsProvider, error) {
-	// Load default config which includes the full credential chain
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	// Load default config with region if specified
+	configOpts := []func(*awsconfig.LoadOptions) error{}
+	if config.Region != "" {
+		configOpts = append(configOpts, awsconfig.WithRegion(config.Region))
+	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
@@ -234,8 +252,13 @@ func (f *Factory) createWebIdentityProvider(ctx context.Context, config auth.Con
 		return nil, err
 	}
 
-	// Load base config
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	// Load base config with region if specified
+	configOpts := []func(*awsconfig.LoadOptions) error{}
+	if config.Region != "" {
+		configOpts = append(configOpts, awsconfig.WithRegion(config.Region))
+	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
@@ -254,4 +277,110 @@ func (f *Factory) createWebIdentityProvider(ctx context.Context, config auth.Con
 	)
 
 	return provider, nil
+}
+
+// createECSTaskRoleProvider creates an ECS task role credentials provider
+func (f *Factory) createECSTaskRoleProvider(ctx context.Context, config auth.Config) (aws.CredentialsProvider, error) {
+	// Extract ECS task role config
+	ecsConfig := ECSTaskRoleConfig{}
+
+	if config.Extra != nil {
+		if ecs, ok := config.Extra["ecs_task_role"].(map[string]interface{}); ok {
+			if relativeURI, ok := ecs["relative_uri"].(string); ok {
+				ecsConfig.RelativeURI = relativeURI
+			}
+			if fullURI, ok := ecs["full_uri"].(string); ok {
+				ecsConfig.FullURI = fullURI
+			}
+			if authToken, ok := ecs["authorization_token"].(string); ok {
+				ecsConfig.AuthorizationToken = authToken
+			}
+		}
+	}
+
+	// Check environment variables as fallback
+	if ecsConfig.RelativeURI == "" {
+		ecsConfig.RelativeURI = os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+	}
+	if ecsConfig.FullURI == "" {
+		ecsConfig.FullURI = os.Getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
+	}
+	if ecsConfig.AuthorizationToken == "" {
+		ecsConfig.AuthorizationToken = os.Getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN")
+	}
+
+	// Validate
+	if err := ecsConfig.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Create endpoint credentials provider based on whether we have relative or full URI
+	if ecsConfig.FullURI != "" {
+		// Use full URI endpoint
+		options := []func(*endpointcreds.Options){}
+		if ecsConfig.AuthorizationToken != "" {
+			options = append(options, func(o *endpointcreds.Options) {
+				o.AuthorizationToken = ecsConfig.AuthorizationToken
+			})
+		}
+		return endpointcreds.New(ecsConfig.FullURI, options...), nil
+	}
+
+	// Use relative URI with the ECS credentials endpoint base
+	ecsEndpoint := fmt.Sprintf("http://169.254.170.2%s", ecsConfig.RelativeURI)
+	return endpointcreds.New(ecsEndpoint), nil
+}
+
+// createProcessProvider creates a process credentials provider
+func (f *Factory) createProcessProvider(config auth.Config) (aws.CredentialsProvider, error) {
+	// Extract process config
+	procConfig := ProcessConfig{}
+
+	if config.Extra != nil {
+		if proc, ok := config.Extra["process"].(map[string]interface{}); ok {
+			if command, ok := proc["command"].(string); ok {
+				procConfig.Command = command
+			}
+			// Handle timeout - could be string, int64, or float64 from JSON/YAML
+			if timeoutVal, ok := proc["timeout"]; ok {
+				switch v := timeoutVal.(type) {
+				case string:
+					if duration, err := time.ParseDuration(v); err == nil {
+						procConfig.Timeout = duration
+					}
+				case float64:
+					procConfig.Timeout = time.Duration(v) * time.Second
+				case int64:
+					procConfig.Timeout = time.Duration(v) * time.Second
+				case int:
+					procConfig.Timeout = time.Duration(v) * time.Second
+				}
+			}
+		}
+	}
+
+	// Check environment variable as fallback
+	if procConfig.Command == "" {
+		procConfig.Command = os.Getenv("AWS_CREDENTIAL_PROCESS")
+	}
+
+	// Set default timeout if not specified
+	if procConfig.Timeout == 0 {
+		procConfig.Timeout = 1 * time.Minute
+	}
+
+	// Validate
+	if err := procConfig.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Create process credentials provider with timeout if specified
+	options := []func(*processcreds.Options){}
+	if procConfig.Timeout > 0 {
+		options = append(options, func(o *processcreds.Options) {
+			o.Timeout = procConfig.Timeout
+		})
+	}
+
+	return processcreds.NewProvider(procConfig.Command, options...), nil
 }

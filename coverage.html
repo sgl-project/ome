@@ -1,0 +1,537 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>gcp: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/sgl-project/ome/pkg/auth/gcp/credentials.go (92.5%)</option>
+				
+				<option value="file1">github.com/sgl-project/ome/pkg/auth/gcp/factory.go (69.3%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package gcp
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "sync"
+
+        "github.com/sgl-project/ome/pkg/auth"
+        "github.com/sgl-project/ome/pkg/logging"
+        "golang.org/x/oauth2"
+        "golang.org/x/oauth2/google"
+        "google.golang.org/api/option"
+)
+
+// GCPCredentials implements auth.Credentials for GCP
+type GCPCredentials struct {
+        tokenSource oauth2.TokenSource
+        authType    auth.AuthType
+        projectID   string
+        logger      logging.Interface
+
+        // Mutex protects cached token
+        mu          sync.RWMutex
+        cachedToken *oauth2.Token
+}
+
+// Provider returns the provider type
+func (c *GCPCredentials) Provider() auth.Provider <span class="cov8" title="1">{
+        return auth.ProviderGCP
+}</span>
+
+// Type returns the authentication type
+func (c *GCPCredentials) Type() auth.AuthType <span class="cov8" title="1">{
+        return c.authType
+}</span>
+
+// Token retrieves the GCP access token
+func (c *GCPCredentials) Token(ctx context.Context) (string, error) <span class="cov8" title="1">{
+        token, err := c.tokenSource.Token()
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("failed to get token: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">c.mu.Lock()
+        c.cachedToken = token
+        c.mu.Unlock()
+
+        return token.AccessToken, nil</span>
+}
+
+// SignRequest signs an HTTP request with GCP credentials
+func (c *GCPCredentials) SignRequest(ctx context.Context, req *http.Request) error <span class="cov8" title="1">{
+        token, err := c.tokenSource.Token()
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("failed to get token: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">token.SetAuthHeader(req)
+        return nil</span>
+}
+
+// Refresh refreshes the credentials
+func (c *GCPCredentials) Refresh(ctx context.Context) error <span class="cov8" title="1">{
+        // OAuth2 token sources handle refresh automatically
+        // Force a new token to be fetched
+        _, err := c.tokenSource.Token()
+        return err
+}</span>
+
+// IsExpired checks if the credentials are expired
+func (c *GCPCredentials) IsExpired() bool <span class="cov8" title="1">{
+        c.mu.RLock()
+        defer c.mu.RUnlock()
+
+        if c.cachedToken == nil </span><span class="cov8" title="1">{
+                return true
+        }</span>
+        <span class="cov8" title="1">return !c.cachedToken.Valid()</span>
+}
+
+// GetTokenSource returns the underlying token source
+func (c *GCPCredentials) GetTokenSource() oauth2.TokenSource <span class="cov8" title="1">{
+        return c.tokenSource
+}</span>
+
+// GetProjectID returns the GCP project ID
+func (c *GCPCredentials) GetProjectID() string <span class="cov8" title="1">{
+        return c.projectID
+}</span>
+
+// ServiceAccountConfig represents GCP service account configuration
+type ServiceAccountConfig struct {
+        Type                    string `json:"type"`
+        ProjectID               string `json:"project_id"`
+        PrivateKeyID            string `json:"private_key_id"`
+        PrivateKey              string `json:"private_key"`
+        ClientEmail             string `json:"client_email"`
+        ClientID                string `json:"client_id"`
+        AuthURI                 string `json:"auth_uri"`
+        TokenURI                string `json:"token_uri"`
+        AuthProviderX509CertURL string `json:"auth_provider_x509_cert_url"`
+        ClientX509CertURL       string `json:"client_x509_cert_url"`
+}
+
+// Validate validates the service account configuration
+func (c *ServiceAccountConfig) Validate() error <span class="cov8" title="1">{
+        if c.Type != "service_account" </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid service account type: %s", c.Type)
+        }</span>
+        <span class="cov8" title="1">if c.ProjectID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("project_id is required")
+        }</span>
+        <span class="cov8" title="1">if c.PrivateKey == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("private_key is required")
+        }</span>
+        <span class="cov8" title="1">if c.ClientEmail == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("client_email is required")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// ToJSON converts the service account config to JSON
+func (c *ServiceAccountConfig) ToJSON() ([]byte, error) <span class="cov8" title="1">{
+        return json.Marshal(c)
+}</span>
+
+// WorkloadIdentityConfig represents GCP workload identity configuration
+// This is specifically for GKE Workload Identity
+type WorkloadIdentityConfig struct {
+        // ProjectID is the GCP project ID
+        ProjectID string `json:"project_id"`
+
+        // ServiceAccount is the GCP service account email to impersonate
+        // Format: &lt;name&gt;@&lt;project&gt;.iam.gserviceaccount.com
+        ServiceAccount string `json:"service_account,omitempty"`
+
+        // KubernetesServiceAccount is the Kubernetes service account
+        // Format: &lt;namespace&gt;/&lt;name&gt;
+        KubernetesServiceAccount string `json:"kubernetes_service_account,omitempty"`
+
+        // ClusterName is the GKE cluster name (optional)
+        ClusterName string `json:"cluster_name,omitempty"`
+
+        // ClusterLocation is the GKE cluster location (optional)
+        ClusterLocation string `json:"cluster_location,omitempty"`
+}
+
+// Validate validates the workload identity configuration
+func (c *WorkloadIdentityConfig) Validate() error <span class="cov8" title="1">{
+        // For GKE Workload Identity, we just need project ID
+        // The rest is handled by the metadata service
+        if c.ProjectID == "" </span><span class="cov8" title="1">{
+                return fmt.Errorf("project_id is required")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// createTokenSource creates an OAuth2 token source from credentials
+func createTokenSource(ctx context.Context, creds *google.Credentials, scopes []string) oauth2.TokenSource <span class="cov0" title="0">{
+        if len(scopes) == 0 </span><span class="cov0" title="0">{
+                scopes = []string{
+                        "https://www.googleapis.com/auth/cloud-platform",
+                        "https://www.googleapis.com/auth/devstorage.full_control",
+                }
+        }</span>
+        <span class="cov0" title="0">return creds.TokenSource</span>
+}
+
+// GetClientOption returns a client option for use with Google APIs
+func GetClientOption(creds *GCPCredentials) option.ClientOption <span class="cov8" title="1">{
+        return option.WithTokenSource(creds.tokenSource)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package gcp
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "os"
+
+        "github.com/sgl-project/ome/pkg/auth"
+        "github.com/sgl-project/ome/pkg/logging"
+        "golang.org/x/oauth2/google"
+        "google.golang.org/api/compute/v1"
+)
+
+// Factory creates GCP credentials
+type Factory struct {
+        logger logging.Interface
+}
+
+// NewFactory creates a new GCP auth factory
+func NewFactory(logger logging.Interface) *Factory <span class="cov8" title="1">{
+        return &amp;Factory{
+                logger: logger,
+        }
+}</span>
+
+// Create creates GCP credentials based on config
+func (f *Factory) Create(ctx context.Context, config auth.Config) (auth.Credentials, error) <span class="cov8" title="1">{
+        if config.Provider != auth.ProviderGCP </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid provider: expected %s, got %s", auth.ProviderGCP, config.Provider)
+        }</span>
+
+        <span class="cov8" title="1">var creds *google.Credentials
+        var projectID string
+        var err error
+
+        switch config.AuthType </span>{
+        case auth.GCPServiceAccount:<span class="cov8" title="1">
+                creds, projectID, err = f.createServiceAccountCredentials(ctx, config)</span>
+        case auth.GCPWorkloadIdentity:<span class="cov8" title="1">
+                creds, projectID, err = f.createWorkloadIdentityCredentials(ctx, config)</span>
+        case auth.GCPDefault:<span class="cov8" title="1">
+                creds, projectID, err = f.createDefaultCredentials(ctx, config)</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("unsupported GCP auth type: %s", config.AuthType)</span>
+        }
+
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to create GCP credentials: %w", err)
+        }</span>
+
+        // Use explicit project ID from config if provided
+        <span class="cov8" title="1">if config.Extra != nil </span><span class="cov8" title="1">{
+                if pid, ok := config.Extra["project_id"].(string); ok &amp;&amp; pid != "" </span><span class="cov0" title="0">{
+                        projectID = pid
+                }</span>
+        }
+
+        <span class="cov8" title="1">return &amp;GCPCredentials{
+                tokenSource: creds.TokenSource,
+                authType:    config.AuthType,
+                projectID:   projectID,
+                logger:      f.logger,
+        }, nil</span>
+}
+
+// SupportedAuthTypes returns supported GCP auth types
+func (f *Factory) SupportedAuthTypes() []auth.AuthType <span class="cov8" title="1">{
+        return []auth.AuthType{
+                auth.GCPServiceAccount,
+                auth.GCPWorkloadIdentity,
+                auth.GCPDefault,
+        }
+}</span>
+
+// createServiceAccountCredentials creates service account credentials
+func (f *Factory) createServiceAccountCredentials(ctx context.Context, config auth.Config) (*google.Credentials, string, error) <span class="cov8" title="1">{
+        var saConfig ServiceAccountConfig
+        var jsonData []byte
+
+        if config.Extra != nil </span><span class="cov8" title="1">{
+                // Check for direct service account config
+                if sa, ok := config.Extra["service_account"].(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                        // Convert map to ServiceAccountConfig
+                        jsonBytes, err := json.Marshal(sa)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, "", fmt.Errorf("failed to marshal service account config: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">if err := json.Unmarshal(jsonBytes, &amp;saConfig); err != nil </span><span class="cov0" title="0">{
+                                return nil, "", fmt.Errorf("failed to unmarshal service account config: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">jsonData = jsonBytes</span>
+                } else<span class="cov8" title="1"> if keyFile, ok := config.Extra["key_file"].(string); ok </span><span class="cov8" title="1">{
+                        // Read from file
+                        data, err := os.ReadFile(keyFile)
+                        if err != nil </span><span class="cov8" title="1">{
+                                return nil, "", fmt.Errorf("failed to read service account key file: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">if err := json.Unmarshal(data, &amp;saConfig); err != nil </span><span class="cov0" title="0">{
+                                return nil, "", fmt.Errorf("failed to parse service account key file: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">jsonData = data</span>
+                } else<span class="cov8" title="1"> if keyJSON, ok := config.Extra["key_json"].(string); ok </span><span class="cov8" title="1">{
+                        // Use JSON string directly
+                        if err := json.Unmarshal([]byte(keyJSON), &amp;saConfig); err != nil </span><span class="cov8" title="1">{
+                                return nil, "", fmt.Errorf("failed to parse service account JSON: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">jsonData = []byte(keyJSON)</span>
+                }
+        }
+
+        // Check environment variable
+        <span class="cov8" title="1">if len(jsonData) == 0 </span><span class="cov8" title="1">{
+                if keyFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); keyFile != "" </span><span class="cov8" title="1">{
+                        data, err := os.ReadFile(keyFile)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, "", fmt.Errorf("failed to read GOOGLE_APPLICATION_CREDENTIALS file: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">if err := json.Unmarshal(data, &amp;saConfig); err != nil </span><span class="cov0" title="0">{
+                                return nil, "", fmt.Errorf("failed to parse GOOGLE_APPLICATION_CREDENTIALS: %w", err)
+                        }</span>
+                        <span class="cov8" title="1">jsonData = data</span>
+                }
+        }
+
+        <span class="cov8" title="1">if len(jsonData) == 0 </span><span class="cov8" title="1">{
+                return nil, "", fmt.Errorf("no service account credentials provided")
+        }</span>
+
+        // Validate config
+        <span class="cov8" title="1">if err := saConfig.Validate(); err != nil </span><span class="cov8" title="1">{
+                return nil, "", err
+        }</span>
+
+        // Create credentials
+        <span class="cov8" title="1">creds, err := google.CredentialsFromJSON(ctx, jsonData,
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/devstorage.full_control",
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, "", fmt.Errorf("failed to create credentials from JSON: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return creds, saConfig.ProjectID, nil</span>
+}
+
+// createWorkloadIdentityCredentials creates workload identity credentials
+func (f *Factory) createWorkloadIdentityCredentials(ctx context.Context, config auth.Config) (*google.Credentials, string, error) <span class="cov8" title="1">{
+        // GKE Workload Identity uses Application Default Credentials
+        // The GKE metadata service provides tokens for the bound service account
+
+        var wiConfig WorkloadIdentityConfig
+
+        if config.Extra != nil </span><span class="cov8" title="1">{
+                // Extract workload identity config
+                if wi, ok := config.Extra["workload_identity"].(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                        if projectID, ok := wi["project_id"].(string); ok </span><span class="cov8" title="1">{
+                                wiConfig.ProjectID = projectID
+                        }</span>
+                        <span class="cov8" title="1">if sa, ok := wi["service_account"].(string); ok </span><span class="cov8" title="1">{
+                                wiConfig.ServiceAccount = sa
+                        }</span>
+                        <span class="cov8" title="1">if ksa, ok := wi["kubernetes_service_account"].(string); ok </span><span class="cov8" title="1">{
+                                wiConfig.KubernetesServiceAccount = ksa
+                        }</span>
+                        <span class="cov8" title="1">if clusterName, ok := wi["cluster_name"].(string); ok </span><span class="cov8" title="1">{
+                                wiConfig.ClusterName = clusterName
+                        }</span>
+                        <span class="cov8" title="1">if clusterLocation, ok := wi["cluster_location"].(string); ok </span><span class="cov8" title="1">{
+                                wiConfig.ClusterLocation = clusterLocation
+                        }</span>
+                }
+
+                // Also check for direct project_id
+                <span class="cov8" title="1">if wiConfig.ProjectID == "" </span><span class="cov8" title="1">{
+                        if pid, ok := config.Extra["project_id"].(string); ok </span><span class="cov8" title="1">{
+                                wiConfig.ProjectID = pid
+                        }</span>
+                }
+        }
+
+        // Find credentials using Application Default Credentials
+        // In GKE with Workload Identity, this will use the metadata service
+        <span class="cov8" title="1">creds, err := google.FindDefaultCredentials(ctx,
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/devstorage.full_control",
+        )
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, "", fmt.Errorf("failed to find workload identity credentials: %w", err)
+        }</span>
+
+        // Try to get project ID from various sources
+        <span class="cov0" title="0">projectID := wiConfig.ProjectID
+        if projectID == "" &amp;&amp; creds.ProjectID != "" </span><span class="cov0" title="0">{
+                projectID = creds.ProjectID
+        }</span>
+        <span class="cov0" title="0">if projectID == "" </span><span class="cov0" title="0">{
+                // Try to get from metadata service
+                projectID = getProjectIDFromMetadata(ctx)
+        }</span>
+
+        <span class="cov0" title="0">f.logger.WithField("project_id", projectID).
+                WithField("service_account", wiConfig.ServiceAccount).
+                WithField("kubernetes_service_account", wiConfig.KubernetesServiceAccount).
+                Debug("Created GKE Workload Identity credentials")
+
+        return creds, projectID, nil</span>
+}
+
+// createDefaultCredentials creates default credentials
+func (f *Factory) createDefaultCredentials(ctx context.Context, config auth.Config) (*google.Credentials, string, error) <span class="cov8" title="1">{
+        // Use Application Default Credentials
+        creds, err := google.FindDefaultCredentials(ctx,
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/devstorage.full_control",
+        )
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, "", fmt.Errorf("failed to find default credentials: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">projectID := creds.ProjectID
+
+        // Try to get project ID from metadata if not available
+        if projectID == "" </span><span class="cov0" title="0">{
+                projectID = getProjectIDFromMetadata(ctx)
+        }</span>
+
+        // Override with explicit project ID from config
+        <span class="cov0" title="0">if config.Extra != nil </span><span class="cov0" title="0">{
+                if pid, ok := config.Extra["project_id"].(string); ok &amp;&amp; pid != "" </span><span class="cov0" title="0">{
+                        projectID = pid
+                }</span>
+        }
+
+        <span class="cov0" title="0">return creds, projectID, nil</span>
+}
+
+// getProjectIDFromMetadata tries to get project ID from GCE metadata
+func getProjectIDFromMetadata(ctx context.Context) string <span class="cov0" title="0">{
+        client, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
+        if err != nil </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+
+        <span class="cov0" title="0">computeService, err := compute.New(client)
+        if err != nil </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+
+        <span class="cov0" title="0">project, err := computeService.Projects.Get("").Context(ctx).Do()
+        if err != nil </span><span class="cov0" title="0">{
+                return ""
+        }</span>
+
+        <span class="cov0" title="0">return project.Name</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

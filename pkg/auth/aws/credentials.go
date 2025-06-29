@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
 )
@@ -19,8 +20,11 @@ type AWSCredentials struct {
 	authType     auth.AuthType
 	region       string
 	logger       logging.Interface
-	cachedCreds  *aws.Credentials
-	cacheExpiry  time.Time
+
+	// Mutex protects cached credentials
+	mu          sync.RWMutex
+	cachedCreds *aws.Credentials
+	cacheExpiry time.Time
 }
 
 // Provider returns the provider type
@@ -55,10 +59,16 @@ func (c *AWSCredentials) SignRequest(ctx context.Context, req *http.Request) err
 	signer := v4.NewSigner()
 
 	// Determine service from host
-	service := "s3" // Default to S3, can be extended based on URL
+	service := extractServiceFromHost(req.Host)
+
+	// Calculate payload hash (empty for GET requests, unsigned for others)
+	payloadHash := "UNSIGNED-PAYLOAD"
+	if req.Method == http.MethodGet || req.Method == http.MethodHead {
+		payloadHash = ""
+	}
 
 	// Sign the request
-	err = signer.SignHTTP(ctx, *creds, req, "", service, c.region, time.Now())
+	err = signer.SignHTTP(ctx, *creds, req, payloadHash, service, c.region, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to sign request: %w", err)
 	}
@@ -69,8 +79,10 @@ func (c *AWSCredentials) SignRequest(ctx context.Context, req *http.Request) err
 // Refresh refreshes the credentials
 func (c *AWSCredentials) Refresh(ctx context.Context) error {
 	// Clear cache to force refresh
+	c.mu.Lock()
 	c.cachedCreds = nil
 	c.cacheExpiry = time.Time{}
+	c.mu.Unlock()
 
 	// Try to get new credentials
 	_, err := c.getCredentials(ctx)
@@ -79,6 +91,9 @@ func (c *AWSCredentials) Refresh(ctx context.Context) error {
 
 // IsExpired checks if the credentials are expired
 func (c *AWSCredentials) IsExpired() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if c.cachedCreds == nil {
 		return true
 	}
@@ -97,7 +112,20 @@ func (c *AWSCredentials) GetCredentialsProvider() aws.CredentialsProvider {
 
 // getCredentials retrieves and caches AWS credentials
 func (c *AWSCredentials) getCredentials(ctx context.Context) (*aws.Credentials, error) {
-	// Check cache
+	// Check cache with read lock
+	c.mu.RLock()
+	if c.cachedCreds != nil && time.Now().Before(c.cacheExpiry) {
+		creds := *c.cachedCreds
+		c.mu.RUnlock()
+		return &creds, nil
+	}
+	c.mu.RUnlock()
+
+	// Need to refresh - acquire write lock
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Double-check after acquiring write lock
 	if c.cachedCreds != nil && time.Now().Before(c.cacheExpiry) {
 		return c.cachedCreds, nil
 	}
@@ -121,64 +149,27 @@ func (c *AWSCredentials) getCredentials(ctx context.Context) (*aws.Credentials, 
 	return &creds, nil
 }
 
-// AccessKeyConfig represents AWS access key configuration
-type AccessKeyConfig struct {
-	AccessKeyID     string `mapstructure:"access_key_id" json:"access_key_id"`
-	SecretAccessKey string `mapstructure:"secret_access_key" json:"secret_access_key"`
-	SessionToken    string `mapstructure:"session_token" json:"session_token,omitempty"`
-}
-
-// Validate validates the access key configuration
-func (c *AccessKeyConfig) Validate() error {
-	if c.AccessKeyID == "" {
-		return fmt.Errorf("access_key_id is required")
+// extractServiceFromHost extracts the AWS service name from the host
+func extractServiceFromHost(host string) string {
+	// Remove port if present
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		host = host[:idx]
 	}
-	if c.SecretAccessKey == "" {
-		return fmt.Errorf("secret_access_key is required")
+
+	// Extract service from standard AWS domain pattern
+	// Examples: s3.amazonaws.com, dynamodb.us-east-1.amazonaws.com
+	parts := strings.Split(host, ".")
+	if len(parts) >= 2 {
+		// Check for service.region.amazonaws.com pattern
+		if len(parts) >= 3 && parts[len(parts)-2] == "amazonaws" {
+			return parts[0]
+		}
+		// Check for service.amazonaws.com pattern
+		if parts[1] == "amazonaws" {
+			return parts[0]
+		}
 	}
-	return nil
-}
 
-// AssumeRoleConfig represents AWS assume role configuration
-type AssumeRoleConfig struct {
-	RoleARN         string            `mapstructure:"role_arn" json:"role_arn"`
-	RoleSessionName string            `mapstructure:"role_session_name" json:"role_session_name,omitempty"`
-	ExternalID      string            `mapstructure:"external_id" json:"external_id,omitempty"`
-	Duration        time.Duration     `mapstructure:"duration" json:"duration,omitempty"`
-	Tags            map[string]string `mapstructure:"tags" json:"tags,omitempty"`
-}
-
-// Validate validates the assume role configuration
-func (c *AssumeRoleConfig) Validate() error {
-	if c.RoleARN == "" {
-		return fmt.Errorf("role_arn is required")
-	}
-	return nil
-}
-
-// createStaticCredentialsProvider creates a static credentials provider
-func createStaticCredentialsProvider(config AccessKeyConfig) aws.CredentialsProvider {
-	return credentials.NewStaticCredentialsProvider(
-		config.AccessKeyID,
-		config.SecretAccessKey,
-		config.SessionToken,
-	)
-}
-
-// WebIdentityConfig represents AWS web identity configuration
-type WebIdentityConfig struct {
-	RoleARN         string `mapstructure:"role_arn" json:"role_arn"`
-	TokenFile       string `mapstructure:"token_file" json:"token_file"`
-	RoleSessionName string `mapstructure:"role_session_name" json:"role_session_name,omitempty"`
-}
-
-// Validate validates the web identity configuration
-func (c *WebIdentityConfig) Validate() error {
-	if c.RoleARN == "" {
-		return fmt.Errorf("role_arn is required for web identity")
-	}
-	if c.TokenFile == "" {
-		return fmt.Errorf("token_file is required for web identity")
-	}
-	return nil
+	// Default to s3 for unknown patterns
+	return "s3"
 }

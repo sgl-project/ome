@@ -66,7 +66,6 @@ var _ = Describe("OME Agent Framework", Ordered, func() {
 			Expect(stdout).To(ContainSubstring("enigma"))
 			Expect(stdout).To(ContainSubstring("hf-download"))
 			Expect(stdout).To(ContainSubstring("replica"))
-			Expect(stdout).To(ContainSubstring("training-agent"))
 			Expect(stdout).To(ContainSubstring("serving-agent"))
 			Expect(stdout).To(ContainSubstring("fine-tuned-adapter"))
 		})
@@ -101,16 +100,6 @@ var _ = Describe("OME Agent Framework", Ordered, func() {
 			Expect(stderr).To(BeEmpty())
 
 			Expect(stdout).To(ContainSubstring("OME Agent Object Storage Replica Agent"))
-			Expect(stdout).To(ContainSubstring("--config"))
-			Expect(stdout).To(ContainSubstring("--debug"))
-		})
-
-		It("should display the training-agent help", func() {
-			stdout, stderr, err := RunAgent(binaryPath, "training-agent", "--help")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(stderr).To(BeEmpty())
-
-			Expect(stdout).To(ContainSubstring("OME Training Agent"))
 			Expect(stdout).To(ContainSubstring("--config"))
 			Expect(stdout).To(ContainSubstring("--debug"))
 		})
@@ -153,13 +142,6 @@ var _ = Describe("OME Agent Framework", Ordered, func() {
 
 		It("should report an error for replica agent", func() {
 			_, stderr, err := RunAgent(binaryPath, "replica")
-
-			Expect(err).To(HaveOccurred())
-			Expect(stderr).To(ContainSubstring("no config file provided"))
-		})
-
-		It("should report an error for training-agent", func() {
-			_, stderr, err := RunAgent(binaryPath, "training-agent")
 
 			Expect(err).To(HaveOccurred())
 			Expect(stderr).To(ContainSubstring("no config file provided"))
@@ -306,7 +288,6 @@ debug: false
 				"enigma",
 				"hf-download",
 				"replica",
-				"training-agent",
 				"serving-agent",
 				"fine-tuned-adapter",
 			}
@@ -376,15 +357,6 @@ output: ` + mockDataDir + `/output
 			// This is just an example of how to structure the test
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stdout).To(ContainSubstring("Replica agent started"))
-		})
-
-		XIt("should start the training-agent", func() {
-			stdout, _, err := RunAgent(binaryPath, "training-agent", "--config", configPaths["training-agent"])
-
-			// In a real test, you would need to mock the dependencies
-			// This is just an example of how to structure the test
-			Expect(err).NotTo(HaveOccurred())
-			Expect(stdout).To(ContainSubstring("Training agent started"))
 		})
 
 		XIt("should start the serving-agent", func() {

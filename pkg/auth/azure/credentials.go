@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -14,11 +15,15 @@ import (
 
 // AzureCredentials implements auth.Credentials for Azure
 type AzureCredentials struct {
-	credential  azcore.TokenCredential
-	authType    auth.AuthType
-	tenantID    string
-	clientID    string
-	logger      logging.Interface
+	credential azcore.TokenCredential
+	authType   auth.AuthType
+	tenantID   string
+	clientID   string
+	scopes     []string
+	logger     logging.Interface
+
+	// Mutex protects cached token
+	mu          sync.RWMutex
 	cachedToken *azcore.AccessToken
 }
 
@@ -34,23 +39,41 @@ func (c *AzureCredentials) Type() auth.AuthType {
 
 // Token retrieves the Azure access token
 func (c *AzureCredentials) Token(ctx context.Context) (string, error) {
-	// Get token for Azure Storage scope
+	if c.credential == nil {
+		return "", fmt.Errorf("credential is not initialized")
+	}
+
+	// Use configured scopes or default to Azure Storage
+	scopes := c.scopes
+	if len(scopes) == 0 {
+		scopes = []string{"https://storage.azure.com/.default"}
+	}
+
 	token, err := c.credential.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://storage.azure.com/.default"},
+		Scopes: scopes,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get token: %w", err)
 	}
 
+	c.mu.Lock()
 	c.cachedToken = &token
+	c.mu.Unlock()
+
 	return token.Token, nil
 }
 
 // SignRequest signs an HTTP request with Azure credentials
 func (c *AzureCredentials) SignRequest(ctx context.Context, req *http.Request) error {
+	// Use configured scopes or default to Azure Storage
+	scopes := c.scopes
+	if len(scopes) == 0 {
+		scopes = []string{"https://storage.azure.com/.default"}
+	}
+
 	// Get token
 	token, err := c.credential.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://storage.azure.com/.default"},
+		Scopes: scopes,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to get token: %w", err)
@@ -65,14 +88,22 @@ func (c *AzureCredentials) SignRequest(ctx context.Context, req *http.Request) e
 func (c *AzureCredentials) Refresh(ctx context.Context) error {
 	// Azure SDK handles token refresh automatically
 	// Force a new token to be fetched
+	scopes := c.scopes
+	if len(scopes) == 0 {
+		scopes = []string{"https://storage.azure.com/.default"}
+	}
+
 	_, err := c.credential.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://storage.azure.com/.default"},
+		Scopes: scopes,
 	})
 	return err
 }
 
 // IsExpired checks if the credentials are expired
 func (c *AzureCredentials) IsExpired() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if c.cachedToken == nil {
 		return true
 	}
@@ -84,11 +115,6 @@ func (c *AzureCredentials) GetCredential() azcore.TokenCredential {
 	return c.credential
 }
 
-// GetTokenCredential returns the Azure token credential (same as GetCredential)
-func (c *AzureCredentials) GetTokenCredential() azcore.TokenCredential {
-	return c.credential
-}
-
 // GetTenantID returns the Azure tenant ID
 func (c *AzureCredentials) GetTenantID() string {
 	return c.tenantID
@@ -97,6 +123,14 @@ func (c *AzureCredentials) GetTenantID() string {
 // GetClientID returns the Azure client ID
 func (c *AzureCredentials) GetClientID() string {
 	return c.clientID
+}
+
+// GetScopes returns the configured scopes for the credentials
+func (c *AzureCredentials) GetScopes() []string {
+	if len(c.scopes) == 0 {
+		return []string{"https://storage.azure.com/.default"}
+	}
+	return c.scopes
 }
 
 // ClientSecretConfig represents Azure client secret configuration
@@ -196,6 +230,16 @@ func NewSharedKeyCredential(accountName, accountKey string) *SharedKeyCredential
 	}
 }
 
+// GetAccountName returns the storage account name
+func (s *SharedKeyCredential) GetAccountName() string {
+	return s.accountName
+}
+
+// GetAccountKey returns the storage account key
+func (s *SharedKeyCredential) GetAccountKey() string {
+	return s.accountKey
+}
+
 // DeviceFlowConfig represents Azure device flow configuration
 type DeviceFlowConfig struct {
 	TenantID string `mapstructure:"tenant_id" json:"tenant_id"`
@@ -210,5 +254,20 @@ func (c *DeviceFlowConfig) Validate() error {
 	if c.ClientID == "" {
 		return fmt.Errorf("client_id is required")
 	}
+	return nil
+}
+
+// PodIdentityConfig represents Azure Kubernetes Service Pod Identity configuration
+type PodIdentityConfig struct {
+	ClientID         string `mapstructure:"client_id" json:"client_id,omitempty"`
+	ResourceID       string `mapstructure:"resource_id" json:"resource_id,omitempty"`
+	IdentityEndpoint string `mapstructure:"identity_endpoint" json:"identity_endpoint,omitempty"`
+	IdentityHeader   string `mapstructure:"identity_header" json:"identity_header,omitempty"`
+}
+
+// Validate validates the pod identity configuration
+func (c *PodIdentityConfig) Validate() error {
+	// Pod identity can work with system-assigned identity (no client/resource ID)
+	// or with user-assigned identity (requires client ID or resource ID)
 	return nil
 }

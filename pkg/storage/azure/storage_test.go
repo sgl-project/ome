@@ -96,9 +96,9 @@ func TestBase64Encode(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"000001", "000001"},
-		{"test block", "test+block"},
-		{"hello/world", "hello%2Fworld"},
+		{"000001", "MDAwMDAx"},
+		{"test block", "dGVzdCBibG9jaw=="},
+		{"hello/world", "aGVsbG8vd29ybGQ="},
 	}
 
 	for _, tt := range tests {

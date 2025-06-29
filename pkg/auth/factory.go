@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/sgl-project/ome/pkg/logging"
+	"go.uber.org/zap"
 )
 
 // DefaultFactory is the default auth factory implementation
@@ -42,8 +43,21 @@ func (f *DefaultFactory) RegisterProvider(provider Provider, factory ProviderFac
 	f.providers[provider] = factory
 }
 
+// maxFallbackDepth is the maximum number of fallback attempts allowed
+const maxFallbackDepth = 10
+
 // Create creates credentials for the given provider and config
 func (f *DefaultFactory) Create(ctx context.Context, config Config) (Credentials, error) {
+	return f.createWithDepth(ctx, config, 0)
+}
+
+// createWithDepth creates credentials with fallback depth tracking
+func (f *DefaultFactory) createWithDepth(ctx context.Context, config Config, depth int) (Credentials, error) {
+	// Check recursion depth limit
+	if depth >= maxFallbackDepth {
+		return nil, fmt.Errorf("maximum fallback depth (%d) exceeded - possible circular dependency in auth configuration", maxFallbackDepth)
+	}
+
 	f.mu.RLock()
 	factory, exists := f.providers[config.Provider]
 	f.mu.RUnlock()
@@ -52,7 +66,7 @@ func (f *DefaultFactory) Create(ctx context.Context, config Config) (Credentials
 		return nil, fmt.Errorf("unsupported provider: %s", config.Provider)
 	}
 
-	f.logger.WithField("provider", config.Provider).WithField("auth_type", config.AuthType).Info("Creating credentials")
+	f.logger.WithField("provider", config.Provider).WithField("auth_type", config.AuthType).WithField("depth", depth).Info("Creating credentials")
 
 	// Try primary config
 	creds, err := factory.Create(ctx, config)
@@ -62,8 +76,8 @@ func (f *DefaultFactory) Create(ctx context.Context, config Config) (Credentials
 
 	// If primary fails and fallback is configured, try fallback
 	if config.Fallback != nil {
-		f.logger.WithError(err).Warn("Primary auth failed, trying fallback")
-		return f.Create(ctx, *config.Fallback)
+		f.logger.WithError(err).WithField("fallback_depth", depth+1).Warn("Primary auth failed, trying fallback")
+		return f.createWithDepth(ctx, *config.Fallback, depth+1)
 	}
 
 	return nil, err
@@ -97,18 +111,36 @@ func (f *DefaultFactory) SupportedAuthTypes(provider Provider) []AuthType {
 // defaultFactory is the global default factory instance
 var (
 	defaultFactory Factory
-	defaultOnce    sync.Once
+	defaultMu      sync.RWMutex
 )
 
-// GetDefaultFactory returns the global default factory
+// GetDefaultFactory returns the global default factory. It is thread-safe.
 func GetDefaultFactory() Factory {
-	defaultOnce.Do(func() {
-		defaultFactory = NewDefaultFactory(logging.NewNopLogger())
-	})
+	defaultMu.RLock()
+	if defaultFactory != nil {
+		defer defaultMu.RUnlock()
+		return defaultFactory
+	}
+	defaultMu.RUnlock()
+
+	defaultMu.Lock()
+	defer defaultMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if defaultFactory == nil {
+		// Create a simple zap production logger
+		logger, err := zap.NewProduction()
+		if err != nil {
+			panic(fmt.Sprintf("failed to create default logger for auth factory: %v", err))
+		}
+		defaultFactory = NewDefaultFactory(logging.ForZap(logger))
+	}
 	return defaultFactory
 }
 
-// SetDefaultFactory sets the global default factory
+// SetDefaultFactory sets the global default factory. It is thread-safe.
 func SetDefaultFactory(factory Factory) {
+	defaultMu.Lock()
+	defer defaultMu.Unlock()
 	defaultFactory = factory
 }

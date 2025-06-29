@@ -3,9 +3,9 @@ package azure
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,8 +111,46 @@ func (s *AzureStorage) Download(ctx context.Context, source storage.ObjectURI, t
 		}
 	}
 
+	// Compute actual target path based on download options
+	actualTarget := target
+	if downloadOpts.StripPrefix || downloadOpts.UseBaseNameOnly || downloadOpts.JoinWithTailOverlap {
+		targetDir := filepath.Dir(target)
+		actualTarget = storage.ComputeLocalPath(targetDir, source.ObjectName, downloadOpts)
+	}
+
+	// Check if we should skip existing valid files
+	if !downloadOpts.DisableOverride {
+		if exists, _ := storage.FileExists(actualTarget); exists {
+			// Get blob properties for validation
+			blobClient := s.client.ServiceClient().NewContainerClient(source.BucketName).NewBlobClient(source.ObjectName)
+			props, err := blobClient.GetProperties(ctx, nil)
+			if err == nil {
+				// Convert to storage.Metadata
+				metadata := storage.Metadata{
+					ObjectInfo: storage.ObjectInfo{
+						Name: source.ObjectName,
+					},
+				}
+				if props.ContentLength != nil {
+					metadata.Size = *props.ContentLength
+				}
+				if props.ETag != nil {
+					metadata.ETag = string(*props.ETag)
+				}
+				if props.ContentMD5 != nil && len(props.ContentMD5) > 0 {
+					// Azure returns MD5 as base64
+					metadata.ContentMD5 = base64.StdEncoding.EncodeToString(props.ContentMD5)
+				}
+
+				if valid, _ := storage.IsLocalFileValid(actualTarget, metadata); valid {
+					return nil // Skip download, file is already valid
+				}
+			}
+		}
+	}
+
 	// Create directory if needed
-	dir := filepath.Dir(target)
+	dir := filepath.Dir(actualTarget)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
@@ -143,14 +181,14 @@ func (s *AzureStorage) Download(ctx context.Context, source storage.ObjectURI, t
 
 	if useMultipart && objectSize > 0 {
 		// Use advanced multipart download with validation
-		return s.multipartDownload(ctx, source, target, objectSize, &downloadOpts)
+		return s.multipartDownload(ctx, source, actualTarget, objectSize, &downloadOpts)
 	}
 
 	// Use standard download for small files
 	blobClient := s.client.ServiceClient().NewContainerClient(source.BucketName).NewBlobClient(source.ObjectName)
 
 	// Create file
-	file, err := os.Create(target)
+	file, err := os.Create(actualTarget)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
@@ -404,8 +442,71 @@ func (s *AzureStorage) GetObjectInfo(ctx context.Context, uri storage.ObjectURI)
 	if props.AccessTier != nil {
 		info.StorageClass = string(*props.AccessTier)
 	}
+	if props.Metadata != nil {
+		// Convert map[string]*string to map[string]string
+		metadata := make(map[string]string)
+		for k, v := range props.Metadata {
+			if v != nil {
+				metadata[k] = *v
+			}
+		}
+		info.Metadata = metadata
+	}
 
 	return info, nil
+}
+
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *AzureStorage) Stat(ctx context.Context, uri storage.ObjectURI) (*storage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get additional metadata via GetProperties
+	blobClient := s.client.ServiceClient().NewContainerClient(uri.BucketName).NewBlobClient(uri.ObjectName)
+	props, err := blobClient.GetProperties(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blob metadata: %w", err)
+	}
+
+	// Create Metadata struct with all fields
+	metadata := &storage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// Add additional metadata fields
+	if props.CacheControl != nil {
+		metadata.CacheControl = *props.CacheControl
+	}
+	if props.ExpiresOn != nil {
+		metadata.Expires = props.ExpiresOn.Format(time.RFC3339)
+	}
+	if props.VersionID != nil {
+		metadata.VersionID = *props.VersionID
+	}
+	if props.ContentMD5 != nil && len(props.ContentMD5) > 0 {
+		// Convert byte array to base64 string
+		metadata.ContentMD5 = base64Encode(string(props.ContentMD5))
+	}
+
+	// Azure doesn't directly expose multipart info, but we can infer from block list
+	// For now, we'll leave IsMultipart as false and Parts as 0
+
+	// Collect additional headers
+	metadata.Headers = make(map[string]string)
+	if props.ContentEncoding != nil {
+		metadata.Headers["Content-Encoding"] = *props.ContentEncoding
+	}
+	if props.ContentLanguage != nil {
+		metadata.Headers["Content-Language"] = *props.ContentLanguage
+	}
+	if props.ContentDisposition != nil {
+		metadata.Headers["Content-Disposition"] = *props.ContentDisposition
+	}
+
+	return metadata, nil
 }
 
 // Copy copies an object within Azure
@@ -532,7 +633,7 @@ func isNotFoundError(err error) bool {
 }
 
 func base64Encode(s string) string {
-	return url.QueryEscape(s)
+	return base64.StdEncoding.EncodeToString([]byte(s))
 }
 
 // nopCloserSeeker wraps a bytes.Reader to implement io.ReadSeekCloser

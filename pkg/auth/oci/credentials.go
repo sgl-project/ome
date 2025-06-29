@@ -68,11 +68,13 @@ func (c *OCICredentials) GetRegion() string {
 
 	// Try to get region from config provider
 	region, err := c.configProvider.Region()
-	if err == nil {
-		return region
+	if err != nil {
+		// Log the error for visibility instead of silently ignoring it
+		c.logger.WithError(err).Warn("Failed to get region from configuration provider")
+		return ""
 	}
 
-	return ""
+	return region
 }
 
 // OCIHTTPClient creates an HTTP client with OCI authentication
@@ -85,7 +87,7 @@ type OCIHTTPClient struct {
 func NewOCIHTTPClient(credentials *OCICredentials) *OCIHTTPClient {
 	return &OCIHTTPClient{
 		client: &http.Client{
-			Timeout: 20 * time.Minute,
+			Timeout: 2 * time.Minute, // Reduced from 20 minutes to prevent resource exhaustion
 			Transport: &http.Transport{
 				MaxIdleConns:        200,
 				MaxIdleConnsPerHost: 200,

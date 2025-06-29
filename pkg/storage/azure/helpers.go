@@ -35,6 +35,7 @@ type DownloadedPart struct {
 
 // multipartDownload performs a parallel multipart download with validation
 func (s *AzureStorage) multipartDownload(ctx context.Context, source storage.ObjectURI, target string, size int64, opts *storage.DownloadOptions) error {
+	// Note: target path has already been computed with path manipulation in Download()
 	// Calculate parts
 	chunkSize := int64(opts.ChunkSizeInMB) * 1024 * 1024
 	numParts := (size + chunkSize - 1) / chunkSize
@@ -98,7 +99,35 @@ func (s *AzureStorage) multipartDownload(ctx context.Context, source storage.Obj
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Validate MD5 if requested
+	if opts.ValidateMD5 {
+		// Get blob properties for MD5
+		blobClient := s.client.ServiceClient().NewContainerClient(source.BucketName).NewBlobClient(source.ObjectName)
+		props, err := blobClient.GetProperties(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to get properties for MD5 validation: %w", err)
+		}
+
+		if props.ContentMD5 != nil && len(props.ContentMD5) > 0 {
+			// Azure returns MD5 as byte array, convert to base64
+			expectedMD5 := base64.StdEncoding.EncodeToString(props.ContentMD5)
+
+			valid, err := storage.ValidateFileMD5(target, expectedMD5)
+			if err != nil {
+				return fmt.Errorf("MD5 validation error: %w", err)
+			}
+			if !valid {
+				os.Remove(target) // Remove invalid file
+				return fmt.Errorf("MD5 validation failed for %s", source.ObjectName)
+			}
+		}
+	}
+
+	return nil
 }
 
 // downloadPart downloads a single part

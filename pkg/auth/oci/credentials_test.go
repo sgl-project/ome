@@ -3,16 +3,19 @@ package oci
 import (
 	"context"
 	"crypto/rsa"
+	"errors"
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
+	"go.uber.org/zap/zaptest"
 )
 
 // mockConfigProvider is a mock implementation of common.ConfigurationProvider
 type mockConfigProvider struct {
-	region string
+	region      string
+	regionError error
 }
 
 func (m *mockConfigProvider) TenancyOCID() (string, error) {
@@ -28,6 +31,9 @@ func (m *mockConfigProvider) KeyFingerprint() (string, error) {
 }
 
 func (m *mockConfigProvider) Region() (string, error) {
+	if m.regionError != nil {
+		return "", m.regionError
+	}
 	if m.region != "" {
 		return m.region, nil
 	}
@@ -56,7 +62,7 @@ func TestOCICredentials_Provider(t *testing.T) {
 	creds := &OCICredentials{
 		configProvider: &mockConfigProvider{},
 		authType:       auth.OCIInstancePrincipal,
-		logger:         logging.NewNopLogger(),
+		logger:         logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	if provider := creds.Provider(); provider != auth.ProviderOCI {
@@ -92,7 +98,7 @@ func TestOCICredentials_Type(t *testing.T) {
 			creds := &OCICredentials{
 				configProvider: &mockConfigProvider{},
 				authType:       tt.authType,
-				logger:         logging.NewNopLogger(),
+				logger:         logging.ForZap(zaptest.NewLogger(t)),
 			}
 
 			if authType := creds.Type(); authType != tt.authType {
@@ -106,7 +112,7 @@ func TestOCICredentials_Token(t *testing.T) {
 	creds := &OCICredentials{
 		configProvider: &mockConfigProvider{},
 		authType:       auth.OCIInstancePrincipal,
-		logger:         logging.NewNopLogger(),
+		logger:         logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	ctx := context.Background()
@@ -125,7 +131,7 @@ func TestOCICredentials_IsExpired(t *testing.T) {
 	creds := &OCICredentials{
 		configProvider: &mockConfigProvider{},
 		authType:       auth.OCIInstancePrincipal,
-		logger:         logging.NewNopLogger(),
+		logger:         logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	// OCI SDK handles expiration internally, so this should always return false
@@ -139,6 +145,7 @@ func TestOCICredentials_GetRegion(t *testing.T) {
 		name           string
 		configRegion   string
 		credsRegion    string
+		regionError    error
 		expectedRegion string
 	}{
 		{
@@ -159,15 +166,25 @@ func TestOCICredentials_GetRegion(t *testing.T) {
 			credsRegion:    "",
 			expectedRegion: "us-ashburn-1", // Mock returns default region
 		},
+		{
+			name:           "Region error from provider",
+			configRegion:   "",
+			credsRegion:    "",
+			regionError:    errors.New("failed to get region"),
+			expectedRegion: "",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			creds := &OCICredentials{
-				configProvider: &mockConfigProvider{region: tt.configRegion},
-				authType:       auth.OCIInstancePrincipal,
-				region:         tt.credsRegion,
-				logger:         logging.NewNopLogger(),
+				configProvider: &mockConfigProvider{
+					region:      tt.configRegion,
+					regionError: tt.regionError,
+				},
+				authType: auth.OCIInstancePrincipal,
+				region:   tt.credsRegion,
+				logger:   logging.ForZap(zaptest.NewLogger(t)),
 			}
 
 			region := creds.GetRegion()
@@ -183,7 +200,7 @@ func TestOCICredentials_GetConfigurationProvider(t *testing.T) {
 	creds := &OCICredentials{
 		configProvider: mockProvider,
 		authType:       auth.OCIInstancePrincipal,
-		logger:         logging.NewNopLogger(),
+		logger:         logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	provider := creds.GetConfigurationProvider()
@@ -199,7 +216,7 @@ func TestNewOCIHTTPClient(t *testing.T) {
 	creds := &OCICredentials{
 		configProvider: &mockConfigProvider{},
 		authType:       auth.OCIInstancePrincipal,
-		logger:         logging.NewNopLogger(),
+		logger:         logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	client := NewOCIHTTPClient(creds)

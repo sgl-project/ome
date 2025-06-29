@@ -142,6 +142,32 @@ func (s *GitHubLFSStorage) Download(ctx context.Context, source storage.ObjectUR
 		}
 	}
 
+	// Compute actual target path based on download options
+	actualTarget := target
+	if downloadOpts.StripPrefix || downloadOpts.UseBaseNameOnly || downloadOpts.JoinWithTailOverlap {
+		targetDir := filepath.Dir(target)
+		actualTarget = storage.ComputeLocalPath(targetDir, source.ObjectName, downloadOpts)
+	}
+
+	// Check if we should skip existing valid files
+	if !downloadOpts.DisableOverride {
+		if exists, _ := storage.FileExists(actualTarget); exists {
+			// Get object info for validation
+			info, err := s.GetObjectInfo(ctx, source)
+			if err == nil {
+				// Convert to storage.Metadata
+				metadata := storage.Metadata{
+					ObjectInfo: *info,
+				}
+				// GitHub LFS uses SHA256, not MD5
+				// For now, we'll skip validation if file exists with matching size
+				if valid, _ := storage.IsLocalFileValid(actualTarget, metadata); valid {
+					return nil // Skip download, file is already valid
+				}
+			}
+		}
+	}
+
 	// Get download URL from LFS
 	downloadURL, headers, err := s.getDownloadURL(ctx, source.ObjectName)
 	if err != nil {
@@ -149,7 +175,7 @@ func (s *GitHubLFSStorage) Download(ctx context.Context, source storage.ObjectUR
 	}
 
 	// Create directory if needed
-	dir := filepath.Dir(target)
+	dir := filepath.Dir(actualTarget)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
@@ -177,7 +203,7 @@ func (s *GitHubLFSStorage) Download(ctx context.Context, source storage.ObjectUR
 	}
 
 	// Create file
-	file, err := os.Create(target)
+	file, err := os.Create(actualTarget)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
@@ -377,6 +403,37 @@ func (s *GitHubLFSStorage) GetObjectInfo(ctx context.Context, uri storage.Object
 		Name: obj.OID,
 		Size: obj.Size,
 	}, nil
+}
+
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *GitHubLFSStorage) Stat(ctx context.Context, uri storage.ObjectURI) (*storage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create Metadata struct with available fields
+	metadata := &storage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// GitHub LFS has limited metadata available
+	// The OID is effectively the content hash
+	metadata.ContentMD5 = info.Name // OID is SHA256, not MD5, but we store it here
+
+	// GitHub LFS doesn't expose most metadata fields like:
+	// - CacheControl
+	// - Expires
+	// - VersionID
+	// - IsMultipart/Parts
+	// So we leave them at their zero values
+
+	// Headers are also minimal in LFS
+	metadata.Headers = make(map[string]string)
+	metadata.Headers["x-lfs-oid"] = info.Name
+
+	return metadata, nil
 }
 
 // Copy is not supported by GitHub LFS

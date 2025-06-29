@@ -1,0 +1,29 @@
+title: Multi-Cloud Storage and Authentication Support
+oep-number: 0002
+authors:
+  - "@sgl-project"
+status: implementable
+creation-date: 2024-01-15
+reviewers:
+  - TBD
+approvers:
+  - TBD
+see-also:
+replaces:
+superseded-by:
+
+# The target maturity stage. Valid values are "alpha", "beta", "stable"
+stage: alpha
+
+# The milestones where this feature will be enabled by default
+milestone:
+  alpha: "v1.0"
+  beta: "v1.1"
+  stable: "v1.2"
+
+# Metrics to monitor feature adoption and performance
+metrics:
+  - provider-usage-count
+  - operation-latency-by-provider
+  - error-rate-by-provider
+  - multipart-operation-count

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
@@ -29,6 +30,18 @@ func (f *Factory) Create(ctx context.Context, config auth.Config) (auth.Credenti
 		return nil, fmt.Errorf("invalid provider: expected %s, got %s", auth.ProviderGitHub, config.Provider)
 	}
 
+	// Validate base URL if provided
+	var baseURL string
+	if config.Extra != nil {
+		if url, ok := config.Extra["base_url"].(string); ok && url != "" {
+			baseURL = url
+			// Basic validation - ensure it's a valid URL format
+			if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+				return nil, fmt.Errorf("invalid base_url: must start with http:// or https://")
+			}
+		}
+	}
+
 	var tokenSource oauth2.TokenSource
 	var err error
 
@@ -38,7 +51,7 @@ func (f *Factory) Create(ctx context.Context, config auth.Config) (auth.Credenti
 	case auth.GitHubApp:
 		tokenSource, err = f.createGitHubAppTokenSource(ctx, config)
 	case auth.GitHubOAuth:
-		tokenSource, err = f.createOAuthTokenSource(config)
+		tokenSource, err = f.createOAuthTokenSource(ctx, config)
 	default:
 		return nil, fmt.Errorf("unsupported GitHub auth type: %s", config.AuthType)
 	}
@@ -69,8 +82,7 @@ func (f *Factory) SupportedAuthTypes() []auth.AuthType {
 
 // createPersonalAccessTokenSource creates a token source for PAT
 func (f *Factory) createPersonalAccessTokenSource(config auth.Config) (oauth2.TokenSource, error) {
-	// Extract PAT config
-	patConfig := PersonalAccessTokenConfig{}
+	patConfig := &PersonalAccessTokenConfig{}
 
 	if config.Extra != nil {
 		if pat, ok := config.Extra["personal_access_token"].(map[string]interface{}); ok {
@@ -78,44 +90,32 @@ func (f *Factory) createPersonalAccessTokenSource(config auth.Config) (oauth2.To
 				patConfig.Token = token
 			}
 		} else if token, ok := config.Extra["token"].(string); ok {
-			// Also support direct token in extra
 			patConfig.Token = token
 		}
 	}
 
-	// Check environment variable
 	if patConfig.Token == "" {
-		patConfig.Token = os.Getenv("GITHUB_TOKEN")
-		if patConfig.Token == "" {
-			patConfig.Token = os.Getenv("GH_TOKEN")
+		envConfig := LoadFromEnv()
+		if envConfig.PersonalAccessToken != nil {
+			patConfig = envConfig.PersonalAccessToken
 		}
 	}
 
-	// Validate
 	if err := patConfig.Validate(); err != nil {
 		return nil, err
 	}
 
-	return NewStaticTokenSource(patConfig.Token), nil
+	return newStaticTokenSource(patConfig.Token), nil
 }
 
 // createGitHubAppTokenSource creates a token source for GitHub App
 func (f *Factory) createGitHubAppTokenSource(ctx context.Context, config auth.Config) (oauth2.TokenSource, error) {
-	// Extract GitHub App config
-	appConfig := GitHubAppConfig{}
+	appConfig := &GitHubAppConfig{}
 
 	if config.Extra != nil {
 		if app, ok := config.Extra["github_app"].(map[string]interface{}); ok {
-			if appID, ok := app["app_id"].(float64); ok {
-				appConfig.AppID = int64(appID)
-			} else if appID, ok := app["app_id"].(int64); ok {
-				appConfig.AppID = appID
-			}
-			if installationID, ok := app["installation_id"].(float64); ok {
-				appConfig.InstallationID = int64(installationID)
-			} else if installationID, ok := app["installation_id"].(int64); ok {
-				appConfig.InstallationID = installationID
-			}
+			appConfig.AppID = getInt64Value(app["app_id"])
+			appConfig.InstallationID = getInt64Value(app["installation_id"])
 			if privateKey, ok := app["private_key"].(string); ok {
 				appConfig.PrivateKey = privateKey
 			}
@@ -125,31 +125,28 @@ func (f *Factory) createGitHubAppTokenSource(ctx context.Context, config auth.Co
 		}
 	}
 
-	// Check environment variables
-	if appConfig.AppID == 0 {
-		if appIDStr := os.Getenv("GITHUB_APP_ID"); appIDStr != "" {
-			var appID int64
-			fmt.Sscanf(appIDStr, "%d", &appID)
-			appConfig.AppID = appID
+	if appConfig.AppID == 0 || appConfig.InstallationID == 0 {
+		envConfig := LoadFromEnv()
+		if envConfig.GitHubApp != nil {
+			if appConfig.AppID == 0 {
+				appConfig.AppID = envConfig.GitHubApp.AppID
+			}
+			if appConfig.InstallationID == 0 {
+				appConfig.InstallationID = envConfig.GitHubApp.InstallationID
+			}
+			if appConfig.PrivateKey == "" {
+				appConfig.PrivateKey = envConfig.GitHubApp.PrivateKey
+			}
+			if appConfig.PrivateKeyPath == "" {
+				appConfig.PrivateKeyPath = envConfig.GitHubApp.PrivateKeyPath
+			}
 		}
-	}
-	if appConfig.InstallationID == 0 {
-		if installIDStr := os.Getenv("GITHUB_APP_INSTALLATION_ID"); installIDStr != "" {
-			var installID int64
-			fmt.Sscanf(installIDStr, "%d", &installID)
-			appConfig.InstallationID = installID
-		}
-	}
-	if appConfig.PrivateKeyPath == "" {
-		appConfig.PrivateKeyPath = os.Getenv("GITHUB_APP_PRIVATE_KEY_PATH")
 	}
 
-	// Validate
 	if err := appConfig.Validate(); err != nil {
 		return nil, err
 	}
 
-	// Read private key if path provided
 	privateKey := appConfig.PrivateKey
 	if privateKey == "" && appConfig.PrivateKeyPath != "" {
 		data, err := os.ReadFile(appConfig.PrivateKeyPath)
@@ -159,7 +156,6 @@ func (f *Factory) createGitHubAppTokenSource(ctx context.Context, config auth.Co
 		privateKey = string(data)
 	}
 
-	// Create GitHub App transport
 	transport, err := NewGitHubAppTransport(appConfig.AppID, appConfig.InstallationID, []byte(privateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitHub App transport: %w", err)
@@ -169,9 +165,8 @@ func (f *Factory) createGitHubAppTokenSource(ctx context.Context, config auth.Co
 }
 
 // createOAuthTokenSource creates a token source for OAuth
-func (f *Factory) createOAuthTokenSource(config auth.Config) (oauth2.TokenSource, error) {
-	// Extract OAuth config
-	oauthConfig := OAuthConfig{}
+func (f *Factory) createOAuthTokenSource(ctx context.Context, config auth.Config) (oauth2.TokenSource, error) {
+	oauthConfig := &OAuthConfig{}
 
 	if config.Extra != nil {
 		if oauth, ok := config.Extra["oauth"].(map[string]interface{}); ok {
@@ -190,23 +185,28 @@ func (f *Factory) createOAuthTokenSource(config auth.Config) (oauth2.TokenSource
 		}
 	}
 
-	// Check environment variables
-	if oauthConfig.ClientID == "" {
-		oauthConfig.ClientID = os.Getenv("GITHUB_CLIENT_ID")
-	}
-	if oauthConfig.ClientSecret == "" {
-		oauthConfig.ClientSecret = os.Getenv("GITHUB_CLIENT_SECRET")
-	}
-	if oauthConfig.AccessToken == "" {
-		oauthConfig.AccessToken = os.Getenv("GITHUB_ACCESS_TOKEN")
+	if oauthConfig.ClientID == "" || oauthConfig.ClientSecret == "" || oauthConfig.AccessToken == "" {
+		envConfig := LoadFromEnv()
+		if envConfig.OAuth != nil {
+			if oauthConfig.ClientID == "" {
+				oauthConfig.ClientID = envConfig.OAuth.ClientID
+			}
+			if oauthConfig.ClientSecret == "" {
+				oauthConfig.ClientSecret = envConfig.OAuth.ClientSecret
+			}
+			if oauthConfig.AccessToken == "" {
+				oauthConfig.AccessToken = envConfig.OAuth.AccessToken
+			}
+			if oauthConfig.RefreshToken == "" {
+				oauthConfig.RefreshToken = envConfig.OAuth.RefreshToken
+			}
+		}
 	}
 
-	// Validate
 	if err := oauthConfig.Validate(); err != nil {
 		return nil, err
 	}
 
-	// If we have an access token, use it directly
 	if oauthConfig.AccessToken != "" {
 		token := &oauth2.Token{
 			AccessToken:  oauthConfig.AccessToken,
@@ -214,7 +214,6 @@ func (f *Factory) createOAuthTokenSource(config auth.Config) (oauth2.TokenSource
 			TokenType:    "Bearer",
 		}
 
-		// If we have OAuth app credentials, create a refreshable token source
 		if oauthConfig.ClientID != "" && oauthConfig.ClientSecret != "" {
 			conf := &oauth2.Config{
 				ClientID:     oauthConfig.ClientID,
@@ -224,10 +223,9 @@ func (f *Factory) createOAuthTokenSource(config auth.Config) (oauth2.TokenSource
 					TokenURL: "https://github.com/login/oauth/access_token",
 				},
 			}
-			return conf.TokenSource(context.Background(), token), nil
+			return conf.TokenSource(ctx, token), nil
 		}
 
-		// Otherwise, just use the static token
 		return oauth2.StaticTokenSource(token), nil
 	}
 
@@ -244,8 +242,6 @@ type GitHubAppTransport struct {
 
 // NewGitHubAppTransport creates a new GitHub App transport
 func NewGitHubAppTransport(appID, installationID int64, privateKey []byte) (*GitHubAppTransport, error) {
-	// TODO: Implement JWT signing and installation token exchange
-	// This is a simplified implementation
 	return &GitHubAppTransport{
 		appID:          appID,
 		installationID: installationID,
@@ -256,11 +252,24 @@ func NewGitHubAppTransport(appID, installationID int64, privateKey []byte) (*Git
 
 // Token returns an installation access token
 func (t *GitHubAppTransport) Token() (*oauth2.Token, error) {
-	// TODO: Implement proper GitHub App authentication
-	// 1. Create JWT signed with private key
-	// 2. Exchange JWT for installation access token
-	// 3. Cache and refresh as needed
+	// TODO: Implement GitHub App authentication
+	// This requires:
+	// 1. Creating a JWT token signed with the app's private key
+	// 2. Using the JWT to request an installation access token
+	// 3. Caching and refreshing the installation token as needed
+	return nil, fmt.Errorf("github app authentication not yet implemented")
+}
 
-	// For now, return an error
-	return nil, fmt.Errorf("GitHub App authentication not fully implemented")
+// getInt64Value extracts an int64 value from an interface{}
+func getInt64Value(v interface{}) int64 {
+	switch val := v.(type) {
+	case float64:
+		return int64(val)
+	case int64:
+		return val
+	case int:
+		return int64(val)
+	default:
+		return 0
+	}
 }

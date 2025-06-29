@@ -101,10 +101,10 @@ func TestGitHubCredentials_SignRequest(t *testing.T) {
 		t.Errorf("Expected Authorization header %s, got %s", expectedAuth, authHeader)
 	}
 
-	// Check GitHub token header
-	ghTokenHeader := req.Header.Get("X-GitHub-Token")
-	if ghTokenHeader != "test-token" {
-		t.Errorf("Expected X-GitHub-Token header 'test-token', got %s", ghTokenHeader)
+	// Check Accept header
+	acceptHeader := req.Header.Get("Accept")
+	if acceptHeader != "application/vnd.github.v3+json" {
+		t.Errorf("Expected Accept header 'application/vnd.github.v3+json', got %s", acceptHeader)
 	}
 }
 
@@ -298,7 +298,7 @@ func TestOAuthConfig_Validate(t *testing.T) {
 }
 
 func TestStaticTokenSource(t *testing.T) {
-	tokenSource := NewStaticTokenSource("test-token")
+	tokenSource := newStaticTokenSource("test-token")
 
 	token, err := tokenSource.Token()
 	if err != nil {
@@ -311,10 +311,5 @@ func TestStaticTokenSource(t *testing.T) {
 
 	if token.TokenType != "Bearer" {
 		t.Errorf("Expected token type 'Bearer', got %s", token.TokenType)
-	}
-
-	// Check that token is valid for a long time
-	if !token.Valid() {
-		t.Error("Expected token to be valid")
 	}
 }

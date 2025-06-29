@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
+	"go.uber.org/zap/zaptest"
 )
 
 // mockCredentialsProvider implements aws.CredentialsProvider for testing
@@ -25,11 +27,20 @@ func (m *mockCredentialsProvider) Retrieve(ctx context.Context) (aws.Credentials
 	return m.creds, nil
 }
 
+// createStaticCredentialsProvider creates a static credentials provider for testing
+func createStaticCredentialsProvider(config AccessKeyConfig) aws.CredentialsProvider {
+	return credentials.NewStaticCredentialsProvider(
+		config.AccessKeyID,
+		config.SecretAccessKey,
+		config.SessionToken,
+	)
+}
+
 func TestAWSCredentials_Provider(t *testing.T) {
 	creds := &AWSCredentials{
 		authType: auth.AWSAccessKey,
 		region:   "us-east-1",
-		logger:   logging.NewNopLogger(),
+		logger:   logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	if provider := creds.Provider(); provider != auth.ProviderAWS {
@@ -138,7 +149,7 @@ func TestAWSCredentials_SignRequest(t *testing.T) {
 			SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 		}),
 		region: "us-east-1",
-		logger: logging.NewNopLogger(),
+		logger: logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	req, _ := http.NewRequest("GET", "https://s3.amazonaws.com/test-bucket/test-key", nil)
@@ -164,7 +175,7 @@ func TestAWSCredentials_SignRequest_Error(t *testing.T) {
 	creds := &AWSCredentials{
 		credProvider: mockProvider,
 		region:       "us-west-2",
-		logger:       logging.NewNopLogger(),
+		logger:       logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	req, _ := http.NewRequest("GET", "https://s3.amazonaws.com/test-bucket/test-object", nil)
@@ -208,7 +219,7 @@ func TestAWSCredentials_Token(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			creds := &AWSCredentials{
 				credProvider: tt.provider,
-				logger:       logging.NewNopLogger(),
+				logger:       logging.ForZap(zaptest.NewLogger(t)),
 			}
 
 			token, err := creds.Token(ctx)
@@ -241,7 +252,7 @@ func TestAWSCredentials_Refresh(t *testing.T) {
 
 	creds := &AWSCredentials{
 		credProvider: mockProvider,
-		logger:       logging.NewNopLogger(),
+		logger:       logging.ForZap(zaptest.NewLogger(t)),
 		cachedCreds: &aws.Credentials{
 			AccessKeyID: "old-key",
 		},
@@ -271,7 +282,7 @@ func TestAWSCredentials_Refresh_Error(t *testing.T) {
 
 	creds := &AWSCredentials{
 		credProvider: mockProvider,
-		logger:       logging.NewNopLogger(),
+		logger:       logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	err := creds.Refresh(ctx)
@@ -308,7 +319,7 @@ func TestAWSCredentials_getCredentials_Caching(t *testing.T) {
 
 	creds := &AWSCredentials{
 		credProvider: countingProvider,
-		logger:       logging.NewNopLogger(),
+		logger:       logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	// First call should retrieve credentials
@@ -343,7 +354,7 @@ func TestAWSCredentials_getCredentials_NoExpiry(t *testing.T) {
 
 	creds := &AWSCredentials{
 		credProvider: provider,
-		logger:       logging.NewNopLogger(),
+		logger:       logging.ForZap(zaptest.NewLogger(t)),
 	}
 
 	_, err := creds.getCredentials(ctx)
@@ -538,5 +549,63 @@ func TestCreateStaticCredentialsProvider(t *testing.T) {
 	}
 	if creds.SessionToken != config.SessionToken {
 		t.Errorf("Expected session token %s, got %s", config.SessionToken, creds.SessionToken)
+	}
+}
+
+func TestExtractServiceFromHost(t *testing.T) {
+	tests := []struct {
+		name     string
+		host     string
+		expected string
+	}{
+		{
+			name:     "S3 global endpoint",
+			host:     "s3.amazonaws.com",
+			expected: "s3",
+		},
+		{
+			name:     "S3 regional endpoint",
+			host:     "s3.us-east-1.amazonaws.com",
+			expected: "s3",
+		},
+		{
+			name:     "DynamoDB regional endpoint",
+			host:     "dynamodb.us-west-2.amazonaws.com",
+			expected: "dynamodb",
+		},
+		{
+			name:     "EC2 endpoint",
+			host:     "ec2.eu-west-1.amazonaws.com",
+			expected: "ec2",
+		},
+		{
+			name:     "STS endpoint",
+			host:     "sts.amazonaws.com",
+			expected: "sts",
+		},
+		{
+			name:     "Host with port",
+			host:     "s3.amazonaws.com:443",
+			expected: "s3",
+		},
+		{
+			name:     "Custom domain",
+			host:     "my-bucket.example.com",
+			expected: "s3",
+		},
+		{
+			name:     "Localhost",
+			host:     "localhost:9000",
+			expected: "s3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractServiceFromHost(tt.host)
+			if result != tt.expected {
+				t.Errorf("Expected service %s for host %s, got %s", tt.expected, tt.host, result)
+			}
+		})
 	}
 }

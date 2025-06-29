@@ -104,8 +104,43 @@ func (s *GCSStorage) Download(ctx context.Context, source pkgstorage.ObjectURI, 
 		}
 	}
 
+	// Compute actual target path based on download options
+	actualTarget := target
+	if downloadOpts.StripPrefix || downloadOpts.UseBaseNameOnly || downloadOpts.JoinWithTailOverlap {
+		targetDir := filepath.Dir(target)
+		actualTarget = pkgstorage.ComputeLocalPath(targetDir, source.ObjectName, downloadOpts)
+	}
+
+	// Check if we should skip existing valid files
+	if !downloadOpts.DisableOverride {
+		if exists, _ := pkgstorage.FileExists(actualTarget); exists {
+			// Get object attributes for validation
+			attrs, err := s.client.Bucket(source.BucketName).Object(source.ObjectName).Attrs(ctx)
+			if err == nil {
+				// Convert to storage.Metadata
+				metadata := pkgstorage.Metadata{
+					ObjectInfo: pkgstorage.ObjectInfo{
+						Name: source.ObjectName,
+						Size: attrs.Size,
+					},
+				}
+				if attrs.Etag != "" {
+					metadata.ETag = attrs.Etag
+				}
+				if attrs.MD5 != nil {
+					// GCS returns MD5 as byte array, convert to base64
+					metadata.ContentMD5 = base64.StdEncoding.EncodeToString(attrs.MD5)
+				}
+
+				if valid, _ := pkgstorage.IsLocalFileValid(actualTarget, metadata); valid {
+					return nil // Skip download, file is already valid
+				}
+			}
+		}
+	}
+
 	// Create directory if needed
-	dir := filepath.Dir(target)
+	dir := filepath.Dir(actualTarget)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
@@ -132,7 +167,7 @@ func (s *GCSStorage) Download(ctx context.Context, source pkgstorage.ObjectURI, 
 
 	if useMultipart {
 		// Use multipart download for large files
-		return s.multipartDownload(ctx, source, target, objectSize, &downloadOpts)
+		return s.multipartDownload(ctx, source, actualTarget, objectSize, &downloadOpts)
 	}
 
 	// Use standard download for small files
@@ -148,7 +183,7 @@ func (s *GCSStorage) Download(ctx context.Context, source pkgstorage.ObjectURI, 
 	defer reader.Close()
 
 	// Create file
-	file, err := os.Create(target)
+	file, err := os.Create(actualTarget)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
@@ -379,7 +414,71 @@ func (s *GCSStorage) GetObjectInfo(ctx context.Context, uri pkgstorage.ObjectURI
 		info.StorageClass = attrs.StorageClass
 	}
 
+	if attrs.Metadata != nil {
+		info.Metadata = attrs.Metadata
+	}
+
 	return info, nil
+}
+
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *GCSStorage) Stat(ctx context.Context, uri pkgstorage.ObjectURI) (*pkgstorage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get additional metadata via Attrs
+	bucket := s.client.Bucket(uri.BucketName)
+	object := bucket.Object(uri.ObjectName)
+	attrs, err := object.Attrs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object metadata: %w", err)
+	}
+
+	// Create Metadata struct with all fields
+	metadata := &pkgstorage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// Add additional metadata fields
+	if attrs.CacheControl != "" {
+		metadata.CacheControl = attrs.CacheControl
+	}
+	// GCS doesn't have a direct Expires field, but we can check custom metadata
+	if attrs.Metadata != nil {
+		if expires, ok := attrs.Metadata["expires"]; ok {
+			metadata.Expires = expires
+		}
+	}
+	// GCS uses generation numbers instead of version IDs
+	if attrs.Generation > 0 {
+		metadata.VersionID = fmt.Sprintf("%d", attrs.Generation)
+	}
+	if attrs.MD5 != nil && len(attrs.MD5) > 0 {
+		metadata.ContentMD5 = base64.StdEncoding.EncodeToString(attrs.MD5)
+	}
+
+	// GCS doesn't directly expose multipart info
+	// We'll leave IsMultipart as false and Parts as 0
+
+	// Collect additional headers
+	metadata.Headers = make(map[string]string)
+	if attrs.ContentEncoding != "" {
+		metadata.Headers["Content-Encoding"] = attrs.ContentEncoding
+	}
+	if attrs.ContentLanguage != "" {
+		metadata.Headers["Content-Language"] = attrs.ContentLanguage
+	}
+	if attrs.ContentDisposition != "" {
+		metadata.Headers["Content-Disposition"] = attrs.ContentDisposition
+	}
+	if attrs.Metageneration > 0 {
+		metadata.Headers["x-goog-metageneration"] = fmt.Sprintf("%d", attrs.Metageneration)
+	}
+
+	return metadata, nil
 }
 
 // Copy copies an object within GCS

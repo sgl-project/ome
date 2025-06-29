@@ -32,6 +32,8 @@ const (
 	AWSInstanceProfile AuthType = "AWSInstanceProfile"
 	AWSAssumeRole      AuthType = "AWSAssumeRole"
 	AWSWebIdentity     AuthType = "AWSWebIdentity"
+	AWSECSTaskRole     AuthType = "AWSECSTaskRole"
+	AWSProcess         AuthType = "AWSProcess"
 	AWSDefault         AuthType = "AWSDefault"
 
 	// GCP auth types
@@ -48,6 +50,7 @@ const (
 	AzureClientCertificate AuthType = "AzureClientCertificate"
 	AzureDefault           AuthType = "AzureDefault"
 	AzureAccountKey        AuthType = "AzureAccountKey"
+	AzurePodIdentity       AuthType = "AzurePodIdentity"
 
 	// GitHub auth types
 	GitHubToken               AuthType = "GitHubToken"
@@ -83,7 +86,10 @@ type Config struct {
 	AuthType AuthType               `json:"auth_type" validate:"required"`
 	Region   string                 `json:"region,omitempty"`
 	Extra    map[string]interface{} `json:"extra,omitempty"`
-	// Fallback configuration to use if primary fails
+	// Fallback configuration to use if primary fails.
+	// Note: The factory implementation limits fallback depth to prevent
+	// infinite recursion from circular dependencies (e.g., A->B->A).
+	// Maximum fallback depth is 10.
 	Fallback *Config `json:"fallback,omitempty"`
 }
 

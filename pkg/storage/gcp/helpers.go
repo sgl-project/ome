@@ -151,7 +151,34 @@ func (s *GCSStorage) multipartDownload(ctx context.Context, source pkgstorage.Ob
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Validate MD5 if requested
+	if opts.ValidateMD5 {
+		// Get object attributes for MD5
+		attrs, err := s.client.Bucket(source.BucketName).Object(source.ObjectName).Attrs(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get attributes for MD5 validation: %w", err)
+		}
+
+		if attrs.MD5 != nil {
+			// GCS returns MD5 as byte array, convert to base64
+			expectedMD5 := base64.StdEncoding.EncodeToString(attrs.MD5)
+
+			valid, err := pkgstorage.ValidateFileMD5(target, expectedMD5)
+			if err != nil {
+				return fmt.Errorf("MD5 validation error: %w", err)
+			}
+			if !valid {
+				os.Remove(target) // Remove invalid file
+				return fmt.Errorf("MD5 validation failed for %s", source.ObjectName)
+			}
+		}
+	}
+
+	return nil
 }
 
 // downloadPart downloads a single part
