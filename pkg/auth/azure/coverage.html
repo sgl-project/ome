@@ -1,0 +1,654 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>azure: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/sgl-project/ome/pkg/auth/azure/credentials.go (60.4%)</option>
+				
+				<option value="file1">github.com/sgl-project/ome/pkg/auth/azure/factory.go (59.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package azure
+
+import (
+        "context"
+        "fmt"
+        "net/http"
+        "time"
+
+        "github.com/Azure/azure-sdk-for-go/sdk/azcore"
+        "github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+        "github.com/sgl-project/ome/pkg/auth"
+        "github.com/sgl-project/ome/pkg/logging"
+)
+
+// AzureCredentials implements auth.Credentials for Azure
+type AzureCredentials struct {
+        credential  azcore.TokenCredential
+        authType    auth.AuthType
+        tenantID    string
+        clientID    string
+        logger      logging.Interface
+        cachedToken *azcore.AccessToken
+}
+
+// Provider returns the provider type
+func (c *AzureCredentials) Provider() auth.Provider <span class="cov4" title="2">{
+        return auth.ProviderAzure
+}</span>
+
+// Type returns the authentication type
+func (c *AzureCredentials) Type() auth.AuthType <span class="cov9" title="6">{
+        return c.authType
+}</span>
+
+// Token retrieves the Azure access token
+func (c *AzureCredentials) Token(ctx context.Context) (string, error) <span class="cov0" title="0">{
+        // Get token for Azure Storage scope
+        token, err := c.credential.GetToken(ctx, policy.TokenRequestOptions{
+                Scopes: []string{"https://storage.azure.com/.default"},
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to get token: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">c.cachedToken = &amp;token
+        return token.Token, nil</span>
+}
+
+// SignRequest signs an HTTP request with Azure credentials
+func (c *AzureCredentials) SignRequest(ctx context.Context, req *http.Request) error <span class="cov0" title="0">{
+        // Get token
+        token, err := c.credential.GetToken(ctx, policy.TokenRequestOptions{
+                Scopes: []string{"https://storage.azure.com/.default"},
+        })
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to get token: %w", err)
+        }</span>
+
+        // Set authorization header
+        <span class="cov0" title="0">req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.Token))
+        return nil</span>
+}
+
+// Refresh refreshes the credentials
+func (c *AzureCredentials) Refresh(ctx context.Context) error <span class="cov0" title="0">{
+        // Azure SDK handles token refresh automatically
+        // Force a new token to be fetched
+        _, err := c.credential.GetToken(ctx, policy.TokenRequestOptions{
+                Scopes: []string{"https://storage.azure.com/.default"},
+        })
+        return err
+}</span>
+
+// IsExpired checks if the credentials are expired
+func (c *AzureCredentials) IsExpired() bool <span class="cov6" title="3">{
+        if c.cachedToken == nil </span><span class="cov1" title="1">{
+                return true
+        }</span>
+        <span class="cov4" title="2">return time.Now().After(c.cachedToken.ExpiresOn)</span>
+}
+
+// GetCredential returns the underlying Azure credential
+func (c *AzureCredentials) GetCredential() azcore.TokenCredential <span class="cov0" title="0">{
+        return c.credential
+}</span>
+
+// GetTokenCredential returns the Azure token credential (same as GetCredential)
+func (c *AzureCredentials) GetTokenCredential() azcore.TokenCredential <span class="cov0" title="0">{
+        return c.credential
+}</span>
+
+// GetTenantID returns the Azure tenant ID
+func (c *AzureCredentials) GetTenantID() string <span class="cov1" title="1">{
+        return c.tenantID
+}</span>
+
+// GetClientID returns the Azure client ID
+func (c *AzureCredentials) GetClientID() string <span class="cov1" title="1">{
+        return c.clientID
+}</span>
+
+// ClientSecretConfig represents Azure client secret configuration
+type ClientSecretConfig struct {
+        TenantID     string `mapstructure:"tenant_id" json:"tenant_id"`
+        ClientID     string `mapstructure:"client_id" json:"client_id"`
+        ClientSecret string `mapstructure:"client_secret" json:"client_secret"`
+}
+
+// Validate validates the client secret configuration
+func (c *ClientSecretConfig) Validate() error <span class="cov10" title="7">{
+        if c.TenantID == "" </span><span class="cov6" title="3">{
+                return fmt.Errorf("tenant_id is required")
+        }</span>
+        <span class="cov7" title="4">if c.ClientID == "" </span><span class="cov1" title="1">{
+                return fmt.Errorf("client_id is required")
+        }</span>
+        <span class="cov6" title="3">if c.ClientSecret == "" </span><span class="cov4" title="2">{
+                return fmt.Errorf("client_secret is required")
+        }</span>
+        <span class="cov1" title="1">return nil</span>
+}
+
+// ClientCertificateConfig represents Azure client certificate configuration
+type ClientCertificateConfig struct {
+        TenantID        string `mapstructure:"tenant_id" json:"tenant_id"`
+        ClientID        string `mapstructure:"client_id" json:"client_id"`
+        CertificatePath string `mapstructure:"certificate_path" json:"certificate_path"`
+        CertificateData []byte `mapstructure:"certificate_data" json:"certificate_data"`
+        Password        string `mapstructure:"password" json:"password"`
+}
+
+// Validate validates the client certificate configuration
+func (c *ClientCertificateConfig) Validate() error <span class="cov9" title="6">{
+        if c.TenantID == "" </span><span class="cov1" title="1">{
+                return fmt.Errorf("tenant_id is required")
+        }</span>
+        <span class="cov8" title="5">if c.ClientID == "" </span><span class="cov1" title="1">{
+                return fmt.Errorf("client_id is required")
+        }</span>
+        <span class="cov7" title="4">if c.CertificatePath == "" &amp;&amp; len(c.CertificateData) == 0 </span><span class="cov4" title="2">{
+                return fmt.Errorf("either certificate_path or certificate_data is required")
+        }</span>
+        <span class="cov4" title="2">return nil</span>
+}
+
+// ManagedIdentityConfig represents Azure managed identity configuration
+type ManagedIdentityConfig struct {
+        ClientID   string `mapstructure:"client_id" json:"client_id,omitempty"`
+        ResourceID string `mapstructure:"resource_id" json:"resource_id,omitempty"`
+}
+
+// Validate validates the managed identity configuration
+func (c *ManagedIdentityConfig) Validate() error <span class="cov7" title="4">{
+        // Both ClientID and ResourceID are optional for system-assigned managed identity
+        return nil
+}</span>
+
+// AccountKeyConfig represents Azure storage account key configuration
+type AccountKeyConfig struct {
+        AccountName string `mapstructure:"account_name" json:"account_name"`
+        AccountKey  string `mapstructure:"account_key" json:"account_key"`
+}
+
+// Validate validates the account key configuration
+func (c *AccountKeyConfig) Validate() error <span class="cov9" title="6">{
+        if c.AccountName == "" </span><span class="cov4" title="2">{
+                return fmt.Errorf("account_name is required")
+        }</span>
+        <span class="cov7" title="4">if c.AccountKey == "" </span><span class="cov4" title="2">{
+                return fmt.Errorf("account_key is required")
+        }</span>
+        <span class="cov4" title="2">return nil</span>
+}
+
+// SharedKeyCredential implements azcore.TokenCredential for account key auth
+type SharedKeyCredential struct {
+        accountName string
+        accountKey  string
+}
+
+// GetToken returns a static token for shared key auth
+func (s *SharedKeyCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) <span class="cov1" title="1">{
+        // For shared key, we don't use OAuth tokens
+        // The actual signing happens in the storage client
+        return azcore.AccessToken{
+                Token:     s.accountKey,
+                ExpiresOn: time.Now().Add(24 * time.Hour), // Doesn't expire
+        }, nil
+}</span>
+
+// NewSharedKeyCredential creates a new shared key credential
+func NewSharedKeyCredential(accountName, accountKey string) *SharedKeyCredential <span class="cov4" title="2">{
+        return &amp;SharedKeyCredential{
+                accountName: accountName,
+                accountKey:  accountKey,
+        }
+}</span>
+
+// DeviceFlowConfig represents Azure device flow configuration
+type DeviceFlowConfig struct {
+        TenantID string `mapstructure:"tenant_id" json:"tenant_id"`
+        ClientID string `mapstructure:"client_id" json:"client_id"`
+}
+
+// Validate validates the device flow configuration
+func (c *DeviceFlowConfig) Validate() error <span class="cov0" title="0">{
+        if c.TenantID == "" </span><span class="cov0" title="0">{
+                return fmt.Errorf("tenant_id is required")
+        }</span>
+        <span class="cov0" title="0">if c.ClientID == "" </span><span class="cov0" title="0">{
+                return fmt.Errorf("client_id is required")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package azure
+
+import (
+        "context"
+        "fmt"
+        "os"
+
+        "github.com/Azure/azure-sdk-for-go/sdk/azcore"
+        "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+        "github.com/sgl-project/ome/pkg/auth"
+        "github.com/sgl-project/ome/pkg/logging"
+)
+
+// Factory creates Azure credentials
+type Factory struct {
+        logger logging.Interface
+}
+
+// NewFactory creates a new Azure auth factory
+func NewFactory(logger logging.Interface) *Factory <span class="cov9" title="9">{
+        return &amp;Factory{
+                logger: logger,
+        }
+}</span>
+
+// Create creates Azure credentials based on config
+func (f *Factory) Create(ctx context.Context, config auth.Config) (auth.Credentials, error) <span class="cov10" title="10">{
+        if config.Provider != auth.ProviderAzure </span><span class="cov1" title="1">{
+                return nil, fmt.Errorf("invalid provider: expected %s, got %s", auth.ProviderAzure, config.Provider)
+        }</span>
+
+        <span class="cov9" title="9">var credential azcore.TokenCredential
+        var tenantID, clientID string
+        var err error
+
+        switch config.AuthType </span>{
+        case auth.AzureClientSecret:<span class="cov3" title="2">
+                credential, tenantID, clientID, err = f.createClientSecretCredential(config)</span>
+        case auth.AzureClientCertificate:<span class="cov1" title="1">
+                credential, tenantID, clientID, err = f.createClientCertificateCredential(config)</span>
+        case auth.AzureManagedIdentity:<span class="cov5" title="3">
+                credential, tenantID, clientID, err = f.createManagedIdentityCredential(config)</span>
+        case auth.AzureDeviceFlow:<span class="cov0" title="0">
+                credential, tenantID, clientID, err = f.createDeviceFlowCredential(config)</span>
+        case auth.AzureDefault:<span class="cov0" title="0">
+                credential, tenantID, clientID, err = f.createDefaultCredential(config)</span>
+        case auth.AzureAccountKey:<span class="cov3" title="2">
+                credential, tenantID, clientID, err = f.createAccountKeyCredential(config)</span>
+        default:<span class="cov1" title="1">
+                return nil, fmt.Errorf("unsupported Azure auth type: %s", config.AuthType)</span>
+        }
+
+        <span class="cov9" title="8">if err != nil </span><span class="cov6" title="4">{
+                return nil, fmt.Errorf("failed to create Azure credentials: %w", err)
+        }</span>
+
+        <span class="cov6" title="4">return &amp;AzureCredentials{
+                credential: credential,
+                authType:   config.AuthType,
+                tenantID:   tenantID,
+                clientID:   clientID,
+                logger:     f.logger,
+        }, nil</span>
+}
+
+// SupportedAuthTypes returns supported Azure auth types
+func (f *Factory) SupportedAuthTypes() []auth.AuthType <span class="cov1" title="1">{
+        return []auth.AuthType{
+                auth.AzureClientSecret,
+                auth.AzureClientCertificate,
+                auth.AzureManagedIdentity,
+                auth.AzureDeviceFlow,
+                auth.AzureDefault,
+                auth.AzureAccountKey,
+        }
+}</span>
+
+// createClientSecretCredential creates client secret credentials
+func (f *Factory) createClientSecretCredential(config auth.Config) (azcore.TokenCredential, string, string, error) <span class="cov3" title="2">{
+        // Extract client secret config
+        csConfig := ClientSecretConfig{}
+
+        if config.Extra != nil </span><span class="cov3" title="2">{
+                if cs, ok := config.Extra["client_secret"].(map[string]interface{}); ok </span><span class="cov1" title="1">{
+                        if tenantID, ok := cs["tenant_id"].(string); ok </span><span class="cov1" title="1">{
+                                csConfig.TenantID = tenantID
+                        }</span>
+                        <span class="cov1" title="1">if clientID, ok := cs["client_id"].(string); ok </span><span class="cov1" title="1">{
+                                csConfig.ClientID = clientID
+                        }</span>
+                        <span class="cov1" title="1">if clientSecret, ok := cs["client_secret"].(string); ok </span><span class="cov0" title="0">{
+                                csConfig.ClientSecret = clientSecret
+                        }</span>
+                }
+        }
+
+        // Check environment variables
+        <span class="cov3" title="2">if csConfig.TenantID == "" </span><span class="cov1" title="1">{
+                csConfig.TenantID = os.Getenv("AZURE_TENANT_ID")
+        }</span>
+        <span class="cov3" title="2">if csConfig.ClientID == "" </span><span class="cov1" title="1">{
+                csConfig.ClientID = os.Getenv("AZURE_CLIENT_ID")
+        }</span>
+        <span class="cov3" title="2">if csConfig.ClientSecret == "" </span><span class="cov3" title="2">{
+                csConfig.ClientSecret = os.Getenv("AZURE_CLIENT_SECRET")
+        }</span>
+
+        // Validate
+        <span class="cov3" title="2">if err := csConfig.Validate(); err != nil </span><span class="cov3" title="2">{
+                return nil, "", "", err
+        }</span>
+
+        // Create credential
+        <span class="cov0" title="0">cred, err := azidentity.NewClientSecretCredential(csConfig.TenantID, csConfig.ClientID, csConfig.ClientSecret, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", fmt.Errorf("failed to create client secret credential: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return cred, csConfig.TenantID, csConfig.ClientID, nil</span>
+}
+
+// createClientCertificateCredential creates client certificate credentials
+func (f *Factory) createClientCertificateCredential(config auth.Config) (azcore.TokenCredential, string, string, error) <span class="cov1" title="1">{
+        // Extract client certificate config
+        ccConfig := ClientCertificateConfig{}
+
+        if config.Extra != nil </span><span class="cov1" title="1">{
+                if cc, ok := config.Extra["client_certificate"].(map[string]interface{}); ok </span><span class="cov1" title="1">{
+                        if tenantID, ok := cc["tenant_id"].(string); ok </span><span class="cov1" title="1">{
+                                ccConfig.TenantID = tenantID
+                        }</span>
+                        <span class="cov1" title="1">if clientID, ok := cc["client_id"].(string); ok </span><span class="cov1" title="1">{
+                                ccConfig.ClientID = clientID
+                        }</span>
+                        <span class="cov1" title="1">if certPath, ok := cc["certificate_path"].(string); ok </span><span class="cov0" title="0">{
+                                ccConfig.CertificatePath = certPath
+                        }</span>
+                        <span class="cov1" title="1">if certData, ok := cc["certificate_data"].([]byte); ok </span><span class="cov0" title="0">{
+                                ccConfig.CertificateData = certData
+                        }</span>
+                        <span class="cov1" title="1">if password, ok := cc["password"].(string); ok </span><span class="cov0" title="0">{
+                                ccConfig.Password = password
+                        }</span>
+                }
+        }
+
+        // Check environment variables
+        <span class="cov1" title="1">if ccConfig.TenantID == "" </span><span class="cov0" title="0">{
+                ccConfig.TenantID = os.Getenv("AZURE_TENANT_ID")
+        }</span>
+        <span class="cov1" title="1">if ccConfig.ClientID == "" </span><span class="cov0" title="0">{
+                ccConfig.ClientID = os.Getenv("AZURE_CLIENT_ID")
+        }</span>
+        <span class="cov1" title="1">if ccConfig.CertificatePath == "" </span><span class="cov1" title="1">{
+                ccConfig.CertificatePath = os.Getenv("AZURE_CLIENT_CERTIFICATE_PATH")
+        }</span>
+
+        // Validate
+        <span class="cov1" title="1">if err := ccConfig.Validate(); err != nil </span><span class="cov1" title="1">{
+                return nil, "", "", err
+        }</span>
+
+        // Read certificate if path provided
+        <span class="cov0" title="0">var certData []byte
+        if ccConfig.CertificatePath != "" </span><span class="cov0" title="0">{
+                data, err := os.ReadFile(ccConfig.CertificatePath)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, "", "", fmt.Errorf("failed to read certificate file: %w", err)
+                }</span>
+                <span class="cov0" title="0">certData = data</span>
+        } else<span class="cov0" title="0"> {
+                certData = ccConfig.CertificateData
+        }</span>
+
+        // Parse certificate
+        <span class="cov0" title="0">certs, key, err := azidentity.ParseCertificates(certData, []byte(ccConfig.Password))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", fmt.Errorf("failed to parse certificate: %w", err)
+        }</span>
+
+        // Create credential
+        <span class="cov0" title="0">cred, err := azidentity.NewClientCertificateCredential(ccConfig.TenantID, ccConfig.ClientID, certs, key, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", fmt.Errorf("failed to create client certificate credential: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return cred, ccConfig.TenantID, ccConfig.ClientID, nil</span>
+}
+
+// createManagedIdentityCredential creates managed identity credentials
+func (f *Factory) createManagedIdentityCredential(config auth.Config) (azcore.TokenCredential, string, string, error) <span class="cov5" title="3">{
+        // Extract managed identity config
+        miConfig := ManagedIdentityConfig{}
+
+        if config.Extra != nil </span><span class="cov3" title="2">{
+                if mi, ok := config.Extra["managed_identity"].(map[string]interface{}); ok </span><span class="cov3" title="2">{
+                        if clientID, ok := mi["client_id"].(string); ok </span><span class="cov1" title="1">{
+                                miConfig.ClientID = clientID
+                        }</span>
+                        <span class="cov3" title="2">if resourceID, ok := mi["resource_id"].(string); ok </span><span class="cov1" title="1">{
+                                miConfig.ResourceID = resourceID
+                        }</span>
+                }
+        }
+
+        // Check environment variables
+        <span class="cov5" title="3">if miConfig.ClientID == "" </span><span class="cov3" title="2">{
+                miConfig.ClientID = os.Getenv("AZURE_CLIENT_ID")
+        }</span>
+
+        // Create options
+        <span class="cov5" title="3">options := &amp;azidentity.ManagedIdentityCredentialOptions{}
+        if miConfig.ClientID != "" </span><span class="cov1" title="1">{
+                options.ID = azidentity.ClientID(miConfig.ClientID)
+        }</span> else<span class="cov3" title="2"> if miConfig.ResourceID != "" </span><span class="cov1" title="1">{
+                options.ID = azidentity.ResourceID(miConfig.ResourceID)
+        }</span>
+
+        // Create credential
+        <span class="cov5" title="3">cred, err := azidentity.NewManagedIdentityCredential(options)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", fmt.Errorf("failed to create managed identity credential: %w", err)
+        }</span>
+
+        <span class="cov5" title="3">return cred, "", miConfig.ClientID, nil</span>
+}
+
+// createDefaultCredential creates default Azure credentials
+func (f *Factory) createDefaultCredential(config auth.Config) (azcore.TokenCredential, string, string, error) <span class="cov0" title="0">{
+        // Create default credential chain
+        cred, err := azidentity.NewDefaultAzureCredential(nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", fmt.Errorf("failed to create default credential: %w", err)
+        }</span>
+
+        // Try to get tenant and client ID from environment
+        <span class="cov0" title="0">tenantID := os.Getenv("AZURE_TENANT_ID")
+        clientID := os.Getenv("AZURE_CLIENT_ID")
+
+        return cred, tenantID, clientID, nil</span>
+}
+
+// createAccountKeyCredential creates storage account key credentials
+func (f *Factory) createAccountKeyCredential(config auth.Config) (azcore.TokenCredential, string, string, error) <span class="cov3" title="2">{
+        // Extract account key config
+        akConfig := AccountKeyConfig{}
+
+        if config.Extra != nil </span><span class="cov3" title="2">{
+                if ak, ok := config.Extra["account_key"].(map[string]interface{}); ok </span><span class="cov3" title="2">{
+                        if accountName, ok := ak["account_name"].(string); ok </span><span class="cov3" title="2">{
+                                akConfig.AccountName = accountName
+                        }</span>
+                        <span class="cov3" title="2">if accountKey, ok := ak["account_key"].(string); ok </span><span class="cov1" title="1">{
+                                akConfig.AccountKey = accountKey
+                        }</span>
+                }
+        }
+
+        // Check environment variables
+        <span class="cov3" title="2">if akConfig.AccountName == "" </span><span class="cov0" title="0">{
+                akConfig.AccountName = os.Getenv("AZURE_STORAGE_ACCOUNT")
+        }</span>
+        <span class="cov3" title="2">if akConfig.AccountKey == "" </span><span class="cov1" title="1">{
+                akConfig.AccountKey = os.Getenv("AZURE_STORAGE_KEY")
+        }</span>
+
+        // Validate
+        <span class="cov3" title="2">if err := akConfig.Validate(); err != nil </span><span class="cov1" title="1">{
+                return nil, "", "", err
+        }</span>
+
+        // Create shared key credential
+        <span class="cov1" title="1">cred := NewSharedKeyCredential(akConfig.AccountName, akConfig.AccountKey)
+
+        return cred, "", "", nil</span>
+}
+
+// createDeviceFlowCredential creates device flow credentials
+func (f *Factory) createDeviceFlowCredential(config auth.Config) (azcore.TokenCredential, string, string, error) <span class="cov0" title="0">{
+        // Extract device flow config
+        dfConfig := DeviceFlowConfig{}
+
+        if config.Extra != nil </span><span class="cov0" title="0">{
+                if df, ok := config.Extra["device_flow"].(map[string]interface{}); ok </span><span class="cov0" title="0">{
+                        if tenantID, ok := df["tenant_id"].(string); ok </span><span class="cov0" title="0">{
+                                dfConfig.TenantID = tenantID
+                        }</span>
+                        <span class="cov0" title="0">if clientID, ok := df["client_id"].(string); ok </span><span class="cov0" title="0">{
+                                dfConfig.ClientID = clientID
+                        }</span>
+                }
+        }
+
+        // Check environment variables
+        <span class="cov0" title="0">if dfConfig.TenantID == "" </span><span class="cov0" title="0">{
+                dfConfig.TenantID = os.Getenv("AZURE_TENANT_ID")
+        }</span>
+        <span class="cov0" title="0">if dfConfig.ClientID == "" </span><span class="cov0" title="0">{
+                dfConfig.ClientID = os.Getenv("AZURE_CLIENT_ID")
+        }</span>
+
+        // Validate
+        <span class="cov0" title="0">if err := dfConfig.Validate(); err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", err
+        }</span>
+
+        // Create device code credential
+        <span class="cov0" title="0">cred, err := azidentity.NewDeviceCodeCredential(&amp;azidentity.DeviceCodeCredentialOptions{
+                TenantID: dfConfig.TenantID,
+                ClientID: dfConfig.ClientID,
+                UserPrompt: func(ctx context.Context, message azidentity.DeviceCodeMessage) error </span><span class="cov0" title="0">{
+                        f.logger.WithField("code", message.UserCode).
+                                WithField("url", message.VerificationURL).
+                                WithField("message", message.Message).
+                                Info("Device code authentication required")
+                        return nil
+                }</span>,
+        })
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return nil, "", "", fmt.Errorf("failed to create device code credential: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return cred, dfConfig.TenantID, dfConfig.ClientID, nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
