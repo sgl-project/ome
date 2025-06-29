@@ -379,7 +379,71 @@ func (s *GCSStorage) GetObjectInfo(ctx context.Context, uri pkgstorage.ObjectURI
 		info.StorageClass = attrs.StorageClass
 	}
 
+	if attrs.Metadata != nil {
+		info.Metadata = attrs.Metadata
+	}
+
 	return info, nil
+}
+
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *GCSStorage) Stat(ctx context.Context, uri pkgstorage.ObjectURI) (*pkgstorage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get additional metadata via Attrs
+	bucket := s.client.Bucket(uri.BucketName)
+	object := bucket.Object(uri.ObjectName)
+	attrs, err := object.Attrs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object metadata: %w", err)
+	}
+
+	// Create Metadata struct with all fields
+	metadata := &pkgstorage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// Add additional metadata fields
+	if attrs.CacheControl != "" {
+		metadata.CacheControl = attrs.CacheControl
+	}
+	// GCS doesn't have a direct Expires field, but we can check custom metadata
+	if attrs.Metadata != nil {
+		if expires, ok := attrs.Metadata["expires"]; ok {
+			metadata.Expires = expires
+		}
+	}
+	// GCS uses generation numbers instead of version IDs
+	if attrs.Generation > 0 {
+		metadata.VersionID = fmt.Sprintf("%d", attrs.Generation)
+	}
+	if attrs.MD5 != nil && len(attrs.MD5) > 0 {
+		metadata.ContentMD5 = base64.StdEncoding.EncodeToString(attrs.MD5)
+	}
+
+	// GCS doesn't directly expose multipart info
+	// We'll leave IsMultipart as false and Parts as 0
+
+	// Collect additional headers
+	metadata.Headers = make(map[string]string)
+	if attrs.ContentEncoding != "" {
+		metadata.Headers["Content-Encoding"] = attrs.ContentEncoding
+	}
+	if attrs.ContentLanguage != "" {
+		metadata.Headers["Content-Language"] = attrs.ContentLanguage
+	}
+	if attrs.ContentDisposition != "" {
+		metadata.Headers["Content-Disposition"] = attrs.ContentDisposition
+	}
+	if attrs.Metageneration > 0 {
+		metadata.Headers["x-goog-metageneration"] = fmt.Sprintf("%d", attrs.Metageneration)
+	}
+
+	return metadata, nil
 }
 
 // Copy copies an object within GCS

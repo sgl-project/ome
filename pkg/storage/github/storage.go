@@ -379,6 +379,37 @@ func (s *GitHubLFSStorage) GetObjectInfo(ctx context.Context, uri storage.Object
 	}, nil
 }
 
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *GitHubLFSStorage) Stat(ctx context.Context, uri storage.ObjectURI) (*storage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create Metadata struct with available fields
+	metadata := &storage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// GitHub LFS has limited metadata available
+	// The OID is effectively the content hash
+	metadata.ContentMD5 = info.Name // OID is SHA256, not MD5, but we store it here
+
+	// GitHub LFS doesn't expose most metadata fields like:
+	// - CacheControl
+	// - Expires
+	// - VersionID
+	// - IsMultipart/Parts
+	// So we leave them at their zero values
+
+	// Headers are also minimal in LFS
+	metadata.Headers = make(map[string]string)
+	metadata.Headers["x-lfs-oid"] = info.Name
+
+	return metadata, nil
+}
+
 // Copy is not supported by GitHub LFS
 func (s *GitHubLFSStorage) Copy(ctx context.Context, source, target storage.ObjectURI) error {
 	return fmt.Errorf("copy operation not supported by GitHub LFS")

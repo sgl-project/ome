@@ -367,8 +367,65 @@ func (s *S3Storage) GetObjectInfo(ctx context.Context, uri storage.ObjectURI) (*
 	if resp.StorageClass != "" {
 		info.StorageClass = string(resp.StorageClass)
 	}
+	if resp.Metadata != nil {
+		info.Metadata = resp.Metadata
+	}
 
 	return info, nil
+}
+
+// Stat retrieves metadata about an object (alias for GetObjectInfo)
+func (s *S3Storage) Stat(ctx context.Context, uri storage.ObjectURI) (*storage.Metadata, error) {
+	// First get the basic object info
+	info, err := s.GetObjectInfo(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get additional metadata via HeadObject
+	resp, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(uri.BucketName),
+		Key:    aws.String(uri.ObjectName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object metadata: %w", err)
+	}
+
+	// Create Metadata struct with all fields
+	metadata := &storage.Metadata{
+		ObjectInfo: *info,
+	}
+
+	// Add additional metadata fields
+	if resp.CacheControl != nil {
+		metadata.CacheControl = *resp.CacheControl
+	}
+	if resp.Expires != nil {
+		metadata.Expires = resp.Expires.Format("2006-01-02T15:04:05Z")
+	}
+	if resp.VersionId != nil {
+		metadata.VersionID = *resp.VersionId
+	}
+	if resp.PartsCount != nil && *resp.PartsCount > 1 {
+		metadata.IsMultipart = true
+		metadata.Parts = int(*resp.PartsCount)
+	}
+
+	// ContentMD5 is typically in the ETag for non-multipart objects
+	if !metadata.IsMultipart && metadata.ETag != "" {
+		metadata.ContentMD5 = metadata.ETag
+	}
+
+	// Collect additional headers
+	metadata.Headers = make(map[string]string)
+	if resp.ServerSideEncryption != "" {
+		metadata.Headers["x-amz-server-side-encryption"] = string(resp.ServerSideEncryption)
+	}
+	if resp.WebsiteRedirectLocation != nil {
+		metadata.Headers["x-amz-website-redirect-location"] = *resp.WebsiteRedirectLocation
+	}
+
+	return metadata, nil
 }
 
 // Copy copies an object within S3

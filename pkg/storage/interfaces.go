@@ -27,6 +27,18 @@ type ObjectInfo struct {
 	StorageClass string
 }
 
+// Metadata represents detailed metadata about a storage object
+type Metadata struct {
+	ObjectInfo
+	ContentMD5   string            // MD5 checksum of the content
+	CacheControl string            // Cache control header
+	Expires      string            // Expiration time
+	VersionID    string            // Version ID for versioned objects
+	IsMultipart  bool              // Whether object was uploaded via multipart
+	Parts        int               // Number of parts (for multipart objects)
+	Headers      map[string]string // Additional headers
+}
+
 // ListOptions provides options for listing objects
 type ListOptions struct {
 	Prefix     string
@@ -59,6 +71,10 @@ type DownloadOptions struct {
 	UseBaseNameOnly bool
 	// Join paths with tail overlap detection
 	JoinWithTailOverlap bool
+	// Skip downloading files that already exist locally
+	SkipExisting bool
+	// Validate MD5 checksums
+	ValidateMD5 bool
 }
 
 // UploadOptions provides options for uploading objects
@@ -120,6 +136,9 @@ type Storage interface {
 
 	// GetObjectInfo retrieves metadata about an object
 	GetObjectInfo(ctx context.Context, uri ObjectURI) (*ObjectInfo, error)
+
+	// Stat retrieves metadata about an object (alias for GetObjectInfo)
+	Stat(ctx context.Context, uri ObjectURI) (*Metadata, error)
 
 	// Copy copies an object within the same storage system
 	Copy(ctx context.Context, source, target ObjectURI) error

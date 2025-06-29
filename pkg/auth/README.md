@@ -191,10 +191,3 @@ go test ./pkg/auth/...
 ## Future Enhancements
 
 - Complete implementation of AWS, GCP, Azure, and GitHub providers
-- Add support for:
-  - Credential caching
-  - Automatic credential refresh
-  - MFA/2FA support
-  - Certificate-based authentication
-- Integration with secret management services
-- Metrics and audit logging
