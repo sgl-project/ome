@@ -384,6 +384,19 @@ func (b *BaseComponentFields) DeleteComponent(
 	return b.deleteResourcesDirectly(isvc, objectMeta, componentType)
 }
 
+// componentOwnedResources is a list of all resource types that a component can create.
+// The deletion logic iterates through this list to ensure all associated resources are cleaned up
+// when a component is deleted.
+var componentOwnedResources = []struct {
+	obj  client.Object
+	kind string
+}{
+	{obj: &appsv1.Deployment{}, kind: "deployment"},
+	{obj: &corev1.Service{}, kind: "service"},
+	{obj: &autoscalingv2.HorizontalPodAutoscaler{}, kind: "HPA"},
+	{obj: &leaderworkerset.LeaderWorkerSet{}, kind: "LeaderWorkerSet"},
+}
+
 // deleteResourcesDirectly deletes component resources directly without using deployment reconcilers
 func (b *BaseComponentFields) deleteResourcesDirectly(
 	isvc *v1beta1.InferenceService,
@@ -395,54 +408,16 @@ func (b *BaseComponentFields) deleteResourcesDirectly(
 	ctx := context.TODO()
 	var errors []error
 
-	resources := []struct {
-		obj  client.Object
-		kind string
-	}{
-		{
-			obj: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "deployment",
-		},
-		{
-			obj: &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "service",
-		},
-		{
-			obj: &autoscalingv2.HorizontalPodAutoscaler{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "HPA",
-		},
-		{
-			obj: &leaderworkerset.LeaderWorkerSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "LeaderWorkerSet",
-		},
-	}
+	for _, resource := range componentOwnedResources {
+		objToDelete := resource.obj.DeepCopyObject().(client.Object)
+		objToDelete.SetName(objectMeta.Name)
+		objToDelete.SetNamespace(objectMeta.Namespace)
 
-	for _, resource := range resources {
-		if err := b.Client.Delete(ctx, resource.obj); err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, "Failed to delete "+resource.kind, "name", resource.obj.GetName())
+		if err := b.Client.Delete(ctx, objToDelete); err != nil && !apierrors.IsNotFound(err) {
+			log.Error(err, "Failed to delete "+resource.kind, "name", objToDelete.GetName())
 			errors = append(errors, err)
 		} else if err == nil {
-			log.Info("Successfully deleted "+resource.kind, "name", resource.obj.GetName())
+			log.Info("Successfully deleted "+resource.kind, "name", objToDelete.GetName())
 		}
 	}
 
