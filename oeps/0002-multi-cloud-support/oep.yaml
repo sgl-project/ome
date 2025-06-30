@@ -1,0 +1,29 @@
+title: Multi-Cloud Storage and Authentication Support
+oep-number: 0002
+authors:
+  - "@slin1237"
+status: implementable
+creation-date: 2025-06-30
+reviewers:
+  - TBD
+approvers:
+  - TBD
+see-also:
+replaces:
+superseded-by:
+
+# The target maturity stage. Valid values are "alpha", "beta", "stable"
+stage: beta
+
+# The milestones where this feature will be enabled by default
+milestone:
+  alpha: "v1.0"
+  beta: "v1.1"
+  stable: "v1.2"
+
+# Metrics to monitor feature adoption and performance
+metrics:
+  - provider-usage-count
+  - operation-latency-by-provider
+  - error-rate-by-provider
+  - multipart-operation-count
