@@ -100,6 +100,7 @@ OME uses a component-based architecture built on Kubernetes custom resources:
 - **BaseModel/ClusterBaseModel:** Define model sources and metadata
 - **ServingRuntime/ClusterServingRuntime:** Define how models are served
 - **InferenceService:** Connects models to runtimes for deployment
+- **BenchmarkJob:** Measures model performance under different workloads
 
 OME's controller automatically:
 1. Downloads and parses models to understand their characteristics
