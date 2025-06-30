@@ -32,6 +32,8 @@ const (
 	AWSInstanceProfile AuthType = "AWSInstanceProfile"
 	AWSAssumeRole      AuthType = "AWSAssumeRole"
 	AWSWebIdentity     AuthType = "AWSWebIdentity"
+	AWSECSTaskRole     AuthType = "AWSECSTaskRole"
+	AWSProcess         AuthType = "AWSProcess"
 	AWSDefault         AuthType = "AWSDefault"
 
 	// GCP auth types
