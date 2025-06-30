@@ -1,3 +1,4 @@
+{{- if index .Values "cohere-command-plus-latest" "enabled" -}}
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
@@ -12,7 +13,7 @@ spec:
   displayName: cohere.command-plus-latest
   storage:
     storageUri: "vendor://cohere/models/{{ index .Values "cohere-command-plus-latest" "osPrefixOverride" }}"
-  vendor: {{ index .Values "cohere-command-r-plus-082024-v1-6-128k" "vendor" }}
+  vendor: {{ index .Values "cohere-command-plus-latest" "vendor" }}
   version: "1.6"
   modelFormat:
     name: tensorrtllm
@@ -28,3 +29,4 @@ spec:
   additionalMetadata:
     internalName: "command-plus-latest"
     type: "Serving"
+{{- end }}
