@@ -10,11 +10,21 @@ import (
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/sgl-project/ome/pkg/auth"
+	authaws "github.com/sgl-project/ome/pkg/auth/aws"
+	authazure "github.com/sgl-project/ome/pkg/auth/azure"
+	authgcp "github.com/sgl-project/ome/pkg/auth/gcp"
+	authoci "github.com/sgl-project/ome/pkg/auth/oci"
 	omev1beta1client "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/modelagent"
+	"github.com/sgl-project/ome/pkg/storage"
+	storageaws "github.com/sgl-project/ome/pkg/storage/aws"
+	storageazure "github.com/sgl-project/ome/pkg/storage/azure"
+	storagegcp "github.com/sgl-project/ome/pkg/storage/gcp"
+	storageoci "github.com/sgl-project/ome/pkg/storage/oci"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -198,6 +208,23 @@ func initializeComponents(
 	// Convert sugared logger back to a regular zap logger to use ForZap
 	zapLogger := logger.Desugar()
 
+	// Initialize storage factory with providers
+	authFactory := auth.NewDefaultFactory(logging.ForZap(zapLogger))
+
+	// Register auth providers
+	authFactory.RegisterProvider(auth.ProviderOCI, authoci.NewFactory(logging.ForZap(zapLogger)))
+	authFactory.RegisterProvider(auth.ProviderAWS, authaws.NewFactory(logging.ForZap(zapLogger)))
+	authFactory.RegisterProvider(auth.ProviderGCP, authgcp.NewFactory(logging.ForZap(zapLogger)))
+	authFactory.RegisterProvider(auth.ProviderAzure, authazure.NewFactory(logging.ForZap(zapLogger)))
+
+	storageFactory := storage.NewDefaultFactory(authFactory, logging.ForZap(zapLogger))
+
+	// Register storage providers
+	storageFactory.RegisterProvider(storage.ProviderOCI, storageoci.NewFactory(logging.ForZap(zapLogger)))
+	storageFactory.RegisterProvider(storage.ProviderAWS, storageaws.NewFactory(logging.ForZap(zapLogger)))
+	storageFactory.RegisterProvider(storage.ProviderGCP, storagegcp.NewFactory(logging.ForZap(zapLogger)))
+	storageFactory.RegisterProvider(storage.ProviderAzure, storageazure.NewFactory(logging.ForZap(zapLogger)))
+
 	// Create a ModelConfigParser instance
 	modelConfigParser := modelagent.NewModelConfigParser(omeClient, logger)
 
@@ -247,6 +274,7 @@ func initializeComponents(
 		configMapReconciler,
 		hfHubClient,
 		kubeClient, // Pass the Kubernetes client for secret access
+		storageFactory,
 		cfg.concurrency,
 		cfg.multipartConcurrency,
 		cfg.downloadRetry,

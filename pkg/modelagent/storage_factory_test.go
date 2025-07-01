@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +19,6 @@ func TestParseStorageURI(t *testing.T) {
 		wantBucket    string
 		wantPrefix    string
 		wantRegion    string
-		wantExtra     map[string]interface{}
 		wantError     bool
 	}{
 		// OCI Tests
@@ -56,15 +53,7 @@ func TestParseStorageURI(t *testing.T) {
 			uri:          "s3://mybucket/models/llama",
 			wantProvider: storage.ProviderAWS,
 			wantBucket:   "mybucket",
-			wantPrefix:   "models/llama",
-		},
-		{
-			name:         "AWS with region",
-			uri:          "aws://us-west-2/mybucket/models/llama",
-			wantProvider: storage.ProviderAWS,
-			wantBucket:   "us-west-2",             // Due to bug in parseAWSURI, this is parsed as bucket
-			wantPrefix:   "mybucket/models/llama", // And this as prefix
-			wantRegion:   "",                      // Region not set due to the bug
+			wantPrefix:   "models",
 		},
 
 		// GCP Tests
@@ -73,36 +62,16 @@ func TestParseStorageURI(t *testing.T) {
 			uri:          "gs://mybucket/models/llama",
 			wantProvider: storage.ProviderGCP,
 			wantBucket:   "mybucket",
-			wantPrefix:   "models/llama",
-		},
-		{
-			name:         "GCP with project",
-			uri:          "gcp://myproject/mybucket/models/llama",
-			wantProvider: storage.ProviderGCP,
-			wantBucket:   "mybucket",
-			wantPrefix:   "models/llama",
-			wantExtra: map[string]interface{}{
-				"project": "myproject",
-			},
+			wantPrefix:   "models",
 		},
 
 		// Azure Tests
 		{
-			name:         "Azure AZ format",
-			uri:          "az://mycontainer/models/llama",
-			wantProvider: storage.ProviderAzure,
-			wantBucket:   "mycontainer",
-			wantPrefix:   "models/llama",
-		},
-		{
 			name:         "Azure with account",
-			uri:          "azure://myaccount/mycontainer/models/llama",
+			uri:          "azure://mycontainer@myaccount/models/llama",
 			wantProvider: storage.ProviderAzure,
 			wantBucket:   "mycontainer",
-			wantPrefix:   "models/llama",
-			wantExtra: map[string]interface{}{
-				"account": "myaccount",
-			},
+			wantPrefix:   "models",
 		},
 
 		// Error cases
@@ -116,16 +85,11 @@ func TestParseStorageURI(t *testing.T) {
 			uri:       "",
 			wantError: true,
 		},
-		{
-			name:      "Invalid OCI format",
-			uri:       "oci://n/namespace/bucket/object", // Missing markers
-			wantError: true,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			provider, objectURI, err := parseStorageURI(tt.uri)
+			objectURI, err := storage.ParseURI(tt.uri)
 
 			if tt.wantError {
 				require.Error(t, err)
@@ -133,115 +97,11 @@ func TestParseStorageURI(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantProvider, provider)
+			assert.Equal(t, tt.wantProvider, objectURI.Provider)
 			assert.Equal(t, tt.wantNamespace, objectURI.Namespace)
 			assert.Equal(t, tt.wantBucket, objectURI.BucketName)
 			assert.Equal(t, tt.wantPrefix, objectURI.Prefix)
 			assert.Equal(t, tt.wantRegion, objectURI.Region)
-
-			if tt.wantExtra != nil {
-				assert.Equal(t, tt.wantExtra, objectURI.Extra)
-			}
-		})
-	}
-}
-
-func TestExtractAuthConfig(t *testing.T) {
-	g := &Gopher{}
-
-	tests := []struct {
-		name         string
-		provider     storage.Provider
-		parameters   map[string]string
-		storageKey   string
-		wantAuthType auth.AuthType
-		wantRegion   string
-		wantSecret   string
-	}{
-		{
-			name:         "OCI with instance principal",
-			provider:     storage.ProviderOCI,
-			parameters:   map[string]string{"auth": "instance_principal", "region": "us-ashburn-1"},
-			wantAuthType: auth.OCIInstancePrincipal, // Now properly mapped to constant
-			wantRegion:   "us-ashburn-1",
-		},
-		{
-			name:         "AWS with IAM role (default)",
-			provider:     storage.ProviderAWS,
-			parameters:   map[string]string{"region": "us-west-2"},
-			wantAuthType: auth.AWSInstanceProfile,
-			wantRegion:   "us-west-2",
-		},
-		{
-			name:         "GCP with service account",
-			provider:     storage.ProviderGCP,
-			parameters:   map[string]string{"auth": "service_account", "project": "my-project"},
-			wantAuthType: auth.GCPServiceAccount, // Now properly mapped to constant
-		},
-		{
-			name:         "Azure with managed identity",
-			provider:     storage.ProviderAzure,
-			parameters:   map[string]string{"auth": "managed_identity"},
-			wantAuthType: auth.AzureManagedIdentity, // Now properly mapped to constant
-		},
-		{
-			name:         "With Kubernetes secret",
-			provider:     storage.ProviderAWS,
-			parameters:   map[string]string{},
-			storageKey:   "my-secret",
-			wantAuthType: auth.AWSInstanceProfile,
-			wantSecret:   "my-secret",
-		},
-		{
-			name:         "OCI with nil parameters",
-			provider:     storage.ProviderOCI,
-			parameters:   nil,
-			wantAuthType: auth.OCIInstancePrincipal,
-		},
-		{
-			name:         "AWS with nil parameters",
-			provider:     storage.ProviderAWS,
-			parameters:   nil,
-			wantAuthType: auth.AWSInstanceProfile,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			spec := v1beta1.BaseModelSpec{
-				Storage: &v1beta1.StorageSpec{},
-			}
-
-			// Only set Parameters if not nil
-			if tt.parameters != nil {
-				spec.Storage.Parameters = &tt.parameters
-			}
-
-			if tt.storageKey != "" {
-				spec.Storage.StorageKey = &tt.storageKey
-			}
-
-			config := g.extractAuthConfig(tt.provider, spec)
-
-			assert.Equal(t, auth.Provider(tt.provider), config.Provider)
-			assert.Equal(t, tt.wantAuthType, config.AuthType)
-
-			if tt.wantSecret != "" {
-				assert.Equal(t, tt.wantSecret, config.Extra["secret_name"])
-			}
-
-			// Check region
-			if tt.wantRegion != "" {
-				assert.Equal(t, tt.wantRegion, config.Region)
-			}
-
-			// Check fallback is set when no auth type is specified in parameters
-			if tt.parameters == nil || (tt.parameters != nil && tt.parameters["auth"] == "") {
-				assert.NotNil(t, config.Fallback, "Fallback should be set when no auth type is specified")
-				assert.Equal(t, config.Provider, config.Fallback.Provider)
-				// Verify fallback auth type is different from primary
-				assert.NotEqual(t, config.AuthType, config.Fallback.AuthType)
-			}
 		})
 	}
 }

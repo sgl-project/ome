@@ -14,12 +14,21 @@ func (s *OCIStorage) BulkDownload(ctx context.Context, objects []storage.ObjectU
 	// Convert ObjectURIs to include namespace if missing
 	for i := range objects {
 		if objects[i].Namespace == "" {
-			ns, err := s.getNamespace(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get namespace: %w", err)
-			}
-			if ns != nil {
-				objects[i].Namespace = *ns
+			// Try to use cached namespace first
+			if s.namespace != nil {
+				objects[i].Namespace = *s.namespace
+			} else {
+				// Try to get namespace, but don't fail if it errors
+				ns, err := s.getNamespace(ctx)
+				if err != nil {
+					// Log warning but continue - the namespace might already be in the URI
+					// or the operation might still work without it
+					s.logger.WithError(err).Warn("Failed to get namespace for bulk download, continuing anyway")
+				} else if ns != nil {
+					objects[i].Namespace = *ns
+					// Cache it for future use
+					s.namespace = ns
+				}
 			}
 		}
 	}

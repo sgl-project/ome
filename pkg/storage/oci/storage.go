@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
+	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/ome/pkg/auth"
 	authoci "github.com/sgl-project/ome/pkg/auth/oci"
@@ -264,13 +265,29 @@ func (s *OCIStorage) Exists(ctx context.Context, uri storage.ObjectURI) (bool, e
 
 // List returns a list of objects matching the criteria
 func (s *OCIStorage) List(ctx context.Context, uri storage.ObjectURI, opts storage.ListOptions) ([]storage.ObjectInfo, error) {
+	// Ensure namespace
+	if uri.Namespace == "" {
+		if s.namespace == nil {
+			ns, err := s.getNamespace(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get namespace: %w", err)
+			}
+			s.namespace = ns
+		}
+		uri.Namespace = *s.namespace
+	}
+
 	req := objectstorage.ListObjectsRequest{
 		NamespaceName: &uri.Namespace,
 		BucketName:    &uri.BucketName,
+		Fields:        common.String("name,size,md5"),
 	}
 
+	// Use prefix from options if provided, otherwise use URI prefix
 	if opts.Prefix != "" {
 		req.Prefix = &opts.Prefix
+	} else if uri.Prefix != "" {
+		req.Prefix = &uri.Prefix
 	}
 	if opts.Delimiter != "" {
 		req.Delimiter = &opts.Delimiter
@@ -283,24 +300,63 @@ func (s *OCIStorage) List(ctx context.Context, uri storage.ObjectURI, opts stora
 		req.Limit = &limit
 	}
 
-	resp, err := s.client.ListObjects(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list objects: %w", err)
-	}
-
 	var objects []storage.ObjectInfo
-	for _, obj := range resp.Objects {
-		info := storage.ObjectInfo{
-			Name: *obj.Name,
-			Size: *obj.Size,
+	page := 0
+
+	for {
+		resp, err := s.client.ListObjects(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list objects at page %d: %w", page, err)
 		}
-		if obj.TimeCreated != nil {
-			info.LastModified = obj.TimeCreated.String()
+
+		for i, obj := range resp.Objects {
+			// Skip objects with nil required fields
+			if obj.Name == nil || obj.Size == nil {
+				logger := s.logger.
+					WithField("page", page).
+					WithField("index", i).
+					WithField("has_name", obj.Name != nil).
+					WithField("has_size", obj.Size != nil)
+
+				if obj.Name != nil {
+					logger = logger.WithField("name", *obj.Name)
+				}
+				if obj.Md5 != nil {
+					logger = logger.WithField("has_md5", true)
+				}
+
+				logger.Debug("Skipping object with nil required field")
+				continue
+			}
+
+			info := storage.ObjectInfo{
+				Name: *obj.Name,
+				Size: *obj.Size,
+			}
+			if obj.TimeCreated != nil {
+				info.LastModified = obj.TimeCreated.String()
+			}
+			if obj.Etag != nil {
+				info.ETag = *obj.Etag
+			}
+			objects = append(objects, info)
 		}
-		if obj.Etag != nil {
-			info.ETag = *obj.Etag
+
+		// Check if there are more results
+		if resp.NextStartWith == nil {
+			break
 		}
-		objects = append(objects, info)
+
+		// Update request for next page
+		req.Start = resp.NextStartWith
+		page++
+
+		// If MaxKeys is set and we've already fetched enough objects, break
+		if opts.MaxKeys > 0 && len(objects) >= opts.MaxKeys {
+			// Trim to exact MaxKeys count
+			objects = objects[:opts.MaxKeys]
+			break
+		}
 	}
 
 	return objects, nil

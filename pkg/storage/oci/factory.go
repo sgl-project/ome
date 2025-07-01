@@ -26,8 +26,25 @@ func (f *Factory) Create(ctx context.Context, config interface{}, credentials au
 	// Type assert config
 	ociConfig, ok := config.(*Config)
 	if !ok {
-		// Try to convert from generic map
-		if mapConfig, ok := config.(map[string]interface{}); ok {
+		// Try to convert from storage.StorageConfig
+		if storageConfig, ok := config.(*storage.StorageConfig); ok {
+			ociConfig = &Config{}
+			if region, ok := storageConfig.Extra["region"].(string); ok {
+				ociConfig.Region = region
+			} else if storageConfig.Region != "" {
+				ociConfig.Region = storageConfig.Region
+			}
+			if compartmentID, ok := storageConfig.Extra["compartment_id"].(string); ok {
+				ociConfig.CompartmentID = compartmentID
+			}
+			if enableOboToken, ok := storageConfig.Extra["enable_obo_token"].(bool); ok {
+				ociConfig.EnableOboToken = enableOboToken
+			}
+			if oboToken, ok := storageConfig.Extra["obo_token"].(string); ok {
+				ociConfig.OboToken = oboToken
+			}
+		} else if mapConfig, ok := config.(map[string]interface{}); ok {
+			// Try to convert from generic map
 			ociConfig = &Config{}
 			if compartmentID, ok := mapConfig["compartment_id"].(string); ok {
 				ociConfig.CompartmentID = compartmentID
@@ -43,7 +60,7 @@ func (f *Factory) Create(ctx context.Context, config interface{}, credentials au
 			}
 			// Note: auth is now handled separately through credentials parameter
 		} else {
-			return nil, fmt.Errorf("invalid config type: expected *Config or map[string]interface{}")
+			return nil, fmt.Errorf("invalid config type: expected *Config, *storage.StorageConfig, or map[string]interface{}")
 		}
 	}
 

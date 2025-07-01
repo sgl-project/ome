@@ -17,7 +17,6 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/storage"
 	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
 	"go.uber.org/zap"
@@ -66,6 +65,7 @@ func NewGopher(
 	configMapReconciler *ConfigMapReconciler,
 	hubClient *hub.HubClient,
 	kubeClient kubernetes.Interface,
+	storageFactory storage.StorageFactory,
 	concurrency int,
 	multipartConcurrency int,
 	downloadRetry int,
@@ -79,10 +79,8 @@ func NewGopher(
 		return nil, fmt.Errorf("hugging face hub client cannot be nil")
 	}
 
-	// Initialize storage factory
-	storageFactory, err := initializeStorageFactory(logging.ForZap(logger.Desugar()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize storage factory: %w", err)
+	if storageFactory == nil {
+		return nil, fmt.Errorf("storage factory cannot be nil")
 	}
 
 	return &Gopher{
@@ -488,282 +486,101 @@ func getDestPath(baseModel *v1beta1.BaseModelSpec, modelRootDir string) string {
 func getTargetDirPath(baseModel *v1beta1.BaseModelSpec) (*storage.ObjectURI, error) {
 	storagePath := *baseModel.Storage.StorageUri
 
-	// Parse the storage URI using the new multi-cloud parser
-	_, objectURI, err := parseStorageURI(storagePath)
+	// Parse the storage URI using the storage package parser
+	objectURI, err := storage.ParseURI(storagePath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Ensure prefix ends with / for consistency
-	if objectURI.Prefix != "" && !strings.HasSuffix(objectURI.Prefix, "/") {
-		objectURI.Prefix = objectURI.Prefix + "/"
-	}
+	// Note: We don't add a trailing slash to the prefix as it might affect OCI API behavior
 
 	return objectURI, nil
 }
 
 // createStorageClient creates a storage client based on the model's storage configuration
 func (s *Gopher) createStorageClient(ctx context.Context, baseModelSpec v1beta1.BaseModelSpec) (storage.Storage, storage.Provider, *storage.ObjectURI, error) {
-	// Parse the storage URI
-	provider, objectURI, err := parseStorageURI(*baseModelSpec.Storage.StorageUri)
+	// Parse the storage URI using the storage package's parser
+	objectURI, err := storage.ParseURI(*baseModelSpec.Storage.StorageUri)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to parse storage URI: %w", err)
 	}
 
-	// Extract auth config from parameters
-	authConfig := s.extractAuthConfig(provider, baseModelSpec)
-
-	// Create storage config with embedded auth config
+	// Use StorageConfig which properly implements AuthConfigExtractor
 	storageConfig := &storage.StorageConfig{
-		Provider:   provider,
-		Region:     objectURI.Region,
-		AuthConfig: *authConfig,
-		Extra:      make(map[string]interface{}),
+		Provider: objectURI.Provider,
+		Region:   objectURI.Region,
+		AuthConfig: auth.Config{
+			Provider: auth.Provider(objectURI.Provider),
+			AuthType: getDefaultAuthType(objectURI.Provider),
+			Extra:    make(map[string]interface{}),
+		},
+		Extra: make(map[string]interface{}),
 	}
 
-	// Add extra configuration
-	storageConfig.Extra["concurrency"] = s.concurrency
-	storageConfig.Extra["part_size_mb"] = BigFileSizeInMB
-	storageConfig.Extra["retries"] = s.downloadRetry
-	storageConfig.Extra["request_timeout"] = 300 // 5 minutes
+	// Set provider-specific fields in Extra map
+	storageConfig.Extra["region"] = objectURI.Region
+	// Note: For OCI, namespace is not the same as compartment ID
+	// Compartment ID should come from parameters or use tenancy root compartment
 
-	// Add provider-specific configuration from parameters
+	// Override with parameters if provided
 	if baseModelSpec.Storage.Parameters != nil {
 		params := *baseModelSpec.Storage.Parameters
 
-		// Common parameters
-		if endpoint, ok := params["endpoint"]; ok {
-			storageConfig.Extra["endpoint"] = endpoint
-		}
-		if forcePathStyle, ok := params["force_path_style"]; ok {
-			storageConfig.Extra["force_path_style"] = forcePathStyle == "true"
+		// Update auth type if specified
+		if authType, ok := params["auth"]; ok {
+			storageConfig.AuthConfig.AuthType = auth.AuthType(authType)
 		}
 
-		// Provider-specific parameters
-		switch provider {
-		case storage.ProviderOCI:
-			if compartmentID, ok := params["compartment_id"]; ok {
-				storageConfig.Extra["compartment_id"] = compartmentID
+		// Update region if specified
+		if region, ok := params["region"]; ok {
+			storageConfig.Region = region
+			storageConfig.AuthConfig.Region = region
+			storageConfig.Extra["region"] = region
+		}
+
+		// Copy all parameters to Extra map and auth Extra
+		for k, v := range params {
+			if k != "auth" {
+				storageConfig.Extra[k] = v
 			}
-		case storage.ProviderGCP:
-			if project, ok := params["project"]; ok {
-				storageConfig.Extra["project_id"] = project
-			}
-		case storage.ProviderAzure:
-			if accountName, ok := params["account_name"]; ok {
-				storageConfig.Extra["account_name"] = accountName
-			}
+			storageConfig.AuthConfig.Extra[k] = v
 		}
 	}
 
-	// Create storage client
-	storageClient, err := s.storageFactory.Create(ctx, provider, storageConfig)
+	// Add storage operation configuration
+	storageConfig.Extra["concurrency"] = s.concurrency
+	storageConfig.Extra["part_size_mb"] = BigFileSizeInMB
+	storageConfig.Extra["retries"] = s.downloadRetry
+
+	// Handle Kubernetes secret if specified
+	if baseModelSpec.Storage.StorageKey != nil && *baseModelSpec.Storage.StorageKey != "" {
+		storageConfig.AuthConfig.Extra["secret_name"] = *baseModelSpec.Storage.StorageKey
+	}
+
+	// Create storage client using StorageConfig
+	// The factory will extract auth config from it and pass it to provider factory
+	storageClient, err := s.storageFactory.Create(ctx, objectURI.Provider, storageConfig)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to create storage client: %w", err)
 	}
 
-	return storageClient, provider, objectURI, nil
+	return storageClient, objectURI.Provider, objectURI, nil
 }
 
-// copyExtra creates a shallow copy of the Extra map
-func copyExtra(src map[string]interface{}) map[string]interface{} {
-	if src == nil {
-		return make(map[string]interface{})
-	}
-	dst := make(map[string]interface{}, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
-}
-
-// mapAuthType maps string auth types from parameters to auth package constants
-func mapAuthType(provider storage.Provider, authTypeStr string) auth.AuthType {
+// getDefaultAuthType returns the default auth type for a provider
+func getDefaultAuthType(provider storage.Provider) auth.AuthType {
 	switch provider {
 	case storage.ProviderOCI:
-		switch authTypeStr {
-		case "instance_principal":
-			return auth.OCIInstancePrincipal
-		case "user_principal":
-			return auth.OCIUserPrincipal
-		case "resource_principal":
-			return auth.OCIResourcePrincipal
-		case "oke_workload_identity":
-			return auth.OCIOkeWorkloadIdentity
-		default:
-			// Default for OCI if auth type is not recognized
-			return auth.OCIInstancePrincipal
-		}
+		return auth.OCIInstancePrincipal
 	case storage.ProviderAWS:
-		switch authTypeStr {
-		case "access_key":
-			return auth.AWSAccessKey
-		case "instance_profile", "iam_role":
-			return auth.AWSInstanceProfile
-		case "assume_role":
-			return auth.AWSAssumeRole
-		case "web_identity":
-			return auth.AWSWebIdentity
-		case "ecs_task_role":
-			return auth.AWSECSTaskRole
-		case "process":
-			return auth.AWSProcess
-		case "default":
-			return auth.AWSDefault
-		default:
-			// Default for AWS
-			return auth.AWSInstanceProfile
-		}
+		return auth.AWSInstanceProfile
 	case storage.ProviderGCP:
-		switch authTypeStr {
-		case "service_account":
-			return auth.GCPServiceAccount
-		case "application_default":
-			return auth.GCPApplicationDefault
-		case "workload_identity":
-			return auth.GCPWorkloadIdentity
-		case "default":
-			return auth.GCPDefault
-		default:
-			// Default for GCP
-			return auth.GCPWorkloadIdentity
-		}
+		return auth.GCPApplicationDefault
 	case storage.ProviderAzure:
-		switch authTypeStr {
-		case "service_principal":
-			return auth.AzureServicePrincipal
-		case "managed_identity":
-			return auth.AzureManagedIdentity
-		case "device_flow":
-			return auth.AzureDeviceFlow
-		case "client_secret":
-			return auth.AzureClientSecret
-		case "client_certificate":
-			return auth.AzureClientCertificate
-		case "default":
-			return auth.AzureDefault
-		case "account_key":
-			return auth.AzureAccountKey
-		case "pod_identity":
-			return auth.AzurePodIdentity
-		default:
-			// Default for Azure
-			return auth.AzureManagedIdentity
-		}
+		return auth.AzureManagedIdentity
 	default:
-		// Should not happen, but return a default
-		return auth.AuthType("")
+		return ""
 	}
-}
-
-// extractAuthConfig extracts authentication configuration from model parameters
-func (s *Gopher) extractAuthConfig(provider storage.Provider, baseModelSpec v1beta1.BaseModelSpec) *auth.Config {
-	config := &auth.Config{
-		Provider: auth.Provider(provider),
-		Extra:    make(map[string]interface{}),
-	}
-
-	// Check for Kubernetes secret
-	if baseModelSpec.Storage.StorageKey != nil && *baseModelSpec.Storage.StorageKey != "" {
-		config.Extra["secret_name"] = *baseModelSpec.Storage.StorageKey
-		// Note: namespace will be set from the BaseModel or ClusterBaseModel context
-	}
-
-	// Extract auth type and parameters
-	if baseModelSpec.Storage.Parameters != nil {
-		params := *baseModelSpec.Storage.Parameters
-
-		// Set region first if available
-		if region, ok := params["region"]; ok {
-			config.Region = region
-		}
-
-		// Get auth type
-		if authTypeStr, ok := params["auth"]; ok {
-			config.AuthType = mapAuthType(provider, authTypeStr)
-		} else {
-			// Set defaults based on provider with fallback for resilience
-			switch provider {
-			case storage.ProviderOCI:
-				// Try instance principal first, with resource principal as fallback
-				config.AuthType = auth.OCIInstancePrincipal
-				config.Fallback = &auth.Config{
-					Provider: auth.Provider(provider),
-					AuthType: auth.OCIResourcePrincipal,
-					Region:   config.Region,           // Propagate region
-					Extra:    copyExtra(config.Extra), // Propagate secret and other extras
-				}
-			case storage.ProviderAWS:
-				// Try instance profile first, with default chain as fallback
-				config.AuthType = auth.AWSInstanceProfile
-				config.Fallback = &auth.Config{
-					Provider: auth.Provider(provider),
-					AuthType: auth.AWSDefault,
-					Region:   config.Region,           // Propagate region
-					Extra:    copyExtra(config.Extra), // Propagate secret and other extras
-				}
-			case storage.ProviderGCP:
-				// Try workload identity first, with application default as fallback
-				config.AuthType = auth.GCPWorkloadIdentity
-				config.Fallback = &auth.Config{
-					Provider: auth.Provider(provider),
-					AuthType: auth.GCPApplicationDefault,
-					Extra:    copyExtra(config.Extra), // Propagate secret and other extras
-				}
-			case storage.ProviderAzure:
-				// Try managed identity first, with default as fallback
-				config.AuthType = auth.AzureManagedIdentity
-				config.Fallback = &auth.Config{
-					Provider: auth.Provider(provider),
-					AuthType: auth.AzureDefault,
-					Extra:    copyExtra(config.Extra), // Propagate secret and other extras
-				}
-			}
-		}
-
-		// Copy all parameters to Extra field for provider-specific handling
-		for k, v := range params {
-			config.Extra[k] = v
-		}
-	} else {
-		// No parameters specified, set defaults based on provider with fallback for resilience
-		switch provider {
-		case storage.ProviderOCI:
-			// Try instance principal first, with resource principal as fallback
-			config.AuthType = auth.OCIInstancePrincipal
-			config.Fallback = &auth.Config{
-				Provider: auth.Provider(provider),
-				AuthType: auth.OCIResourcePrincipal,
-				Extra:    make(map[string]interface{}),
-			}
-		case storage.ProviderAWS:
-			// Try instance profile first, with default chain as fallback
-			config.AuthType = auth.AWSInstanceProfile
-			config.Fallback = &auth.Config{
-				Provider: auth.Provider(provider),
-				AuthType: auth.AWSDefault,
-				Extra:    make(map[string]interface{}),
-			}
-		case storage.ProviderGCP:
-			// Try workload identity first, with application default as fallback
-			config.AuthType = auth.GCPWorkloadIdentity
-			config.Fallback = &auth.Config{
-				Provider: auth.Provider(provider),
-				AuthType: auth.GCPApplicationDefault,
-				Extra:    make(map[string]interface{}),
-			}
-		case storage.ProviderAzure:
-			// Try managed identity first, with default as fallback
-			config.AuthType = auth.AzureManagedIdentity
-			config.Fallback = &auth.Config{
-				Provider: auth.Provider(provider),
-				AuthType: auth.AzureDefault,
-				Extra:    make(map[string]interface{}),
-			}
-		}
-	}
-
-	return config
 }
 
 func (s *Gopher) downloadModel(uri *storage.ObjectURI, destPath string, task *GopherTask) error {
@@ -791,10 +608,9 @@ func (s *Gopher) downloadModel(uri *storage.ObjectURI, destPath string, task *Go
 	}
 
 	// List objects in the bucket
+	// Note: The URI already contains the prefix, so we don't need to specify it again in ListOptions
 	s.logger.Infof("Listing objects in bucket %s with prefix %s", uri.BucketName, uri.Prefix)
-	listOpts := storage.ListOptions{
-		Prefix: uri.Prefix,
-	}
+	listOpts := storage.ListOptions{}
 	objects, err := storageClient.List(ctx, *uri, listOpts)
 	if err != nil {
 		return fmt.Errorf("failed to list objects: %w", err)
