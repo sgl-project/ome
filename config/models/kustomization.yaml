@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - meta/Llama-3.3-70B-instruct.yaml
-  - meta/Llama-3.3-70B-instruct-FP8-Dynamic.yaml
   - meta/llama-4-maverick-17b-128e-instruct-fp8.yaml
   - meta/llama-4-scout-17b-16e-instruct.yaml
   - intfloat/e5-mistral-7b-instruct.yaml
