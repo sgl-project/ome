@@ -29,7 +29,7 @@ spec:
         - name: host-models
           hostPath:
             path: {{ .Values.modelAgent.hostPath }}
-            type: Directory
+            type: DirectoryOrCreate
       containers:
       - name: model-agent
         image: "{{ .Values.modelAgent.image.repository }}:{{ .Values.modelAgent.image.tag }}"
