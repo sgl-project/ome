@@ -50,6 +50,7 @@ const (
 	AzureClientCertificate AuthType = "AzureClientCertificate"
 	AzureDefault           AuthType = "AzureDefault"
 	AzureAccountKey        AuthType = "AzureAccountKey"
+	AzurePodIdentity       AuthType = "AzurePodIdentity"
 
 	// GitHub auth types
 	GitHubToken               AuthType = "GitHubToken"
