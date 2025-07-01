@@ -52,41 +52,75 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 		return nil, fmt.Errorf("invalid repo type: %s", repoType)
 	}
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
+	// Retry logic for rate limiting
+	maxRetries := 3
+	baseDelay := 1 * time.Second
 
-	// Add headers
-	headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Create request
+		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 
-	// Perform request
-	client := &http.Client{
-		Timeout: DefaultRequestTimeout,
-	}
+		// Add headers
+		headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform request: %w", err)
-	}
-	defer resp.Body.Close()
+		// Perform request
+		client := &http.Client{
+			Timeout: DefaultRequestTimeout,
+		}
 
-	// Handle error responses
-	if resp.StatusCode != http.StatusOK {
+		resp, err := client.Do(req)
+		if err != nil {
+			// Network errors are retryable
+			if attempt < maxRetries {
+				delay := exponentialBackoffWithJitter(attempt+1, baseDelay, 30*time.Second)
+				select {
+				case <-time.After(delay):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			return nil, fmt.Errorf("failed to perform request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Handle successful response
+		if resp.StatusCode == http.StatusOK {
+			var files []RepoFile
+			if err := json.NewDecoder(resp.Body).Decode(&files); err != nil {
+				return nil, fmt.Errorf("failed to decode response: %w", err)
+			}
+			return files, nil
+		}
+
+		// Handle rate limiting
+		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxRetries {
+			retryAfter := parseRetryAfter(resp)
+			if retryAfter == 0 {
+				// Use exponential backoff if no Retry-After header
+				retryAfter = exponentialBackoffWithJitter(attempt+1, baseDelay, 30*time.Second)
+			}
+
+			select {
+			case <-time.After(retryAfter):
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		// Handle other error responses
 		return nil, handleHTTPError(resp, config.RepoID, repoType, revision, "")
 	}
 
-	// Parse response
-	var files []RepoFile
-	if err := json.NewDecoder(resp.Body).Decode(&files); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return files, nil
+	// Should not reach here
+	return nil, fmt.Errorf("failed to list repository files after %d attempts", maxRetries+1)
 }
 
 // downloadTask represents a file download task
@@ -226,7 +260,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 			}
 
 			// Log progress if detailed logging is enabled
-			if progressManager != nil && progressManager.enableDetailedLogs {
+			if progressManager != nil && progressManager.enableDetailedLogs && progressManager.logger != nil {
 				progressManager.logger.
 					WithField("repo_id", config.RepoID).
 					WithField("completed", completedFiles).
@@ -281,7 +315,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 			}
 		}
 
-		if progressManager != nil {
+		if progressManager != nil && progressManager.logger != nil {
 			progressManager.logger.
 				WithField("repo_id", config.RepoID).
 				WithField("failed_files", errorFiles).
@@ -307,7 +341,7 @@ func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadT
 
 			startTime := time.Now()
 
-			if progressManager != nil && progressManager.enableDetailedLogs {
+			if progressManager != nil && progressManager.enableDetailedLogs && progressManager.logger != nil {
 				progressManager.logger.
 					WithField("worker_id", workerID).
 					WithField("repo_id", task.config.RepoID).
@@ -337,7 +371,7 @@ func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadT
 				size:     task.file.Size,
 			}
 
-			if progressManager != nil && progressManager.enableDetailedLogs {
+			if progressManager != nil && progressManager.enableDetailedLogs && progressManager.logger != nil {
 				if err != nil {
 					progressManager.logger.
 						WithField("worker_id", workerID).

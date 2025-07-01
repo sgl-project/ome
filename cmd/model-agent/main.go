@@ -224,9 +224,10 @@ func initializeComponents(
 	// Create default Hugging Face hub config
 	// Use log-only mode for cleaner logs in production
 	hfHubConfig, err := hub.NewHubConfig(
-		hub.WithLogger(logging.ForZap(zapLogger)),
+		hub.WithViper(v), // Apply viper config first to set defaults
+		hub.WithLogger(logging.ForZap(zapLogger)),        // Then set the logger
 		hub.WithProgressDisplayMode(hub.ProgressModeLog), // Use log mode for clean production logs
-		hub.WithViper(v),
+		hub.WithDetailedLogs(true),                       // Enable detailed progress logging
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create HuggingFace hub config: %w", err)

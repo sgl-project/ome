@@ -369,8 +369,8 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Skipping deletion for model %s", modelInfo)
 		case storage.StorageTypeHuggingFace:
 			s.logger.Infof("Removing Hugging Face model %s", modelInfo)
-			modelRepo := strings.TrimPrefix(*baseModelSpec.Storage.StorageUri, "hf://")
-			destPath := filepath.Join(s.modelRootDir, modelRepo)
+			// Use getDestPath to get the same path used during download
+			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 			err = s.deleteModel(destPath, task)
 			if err != nil {
 				s.logger.Errorf("Failed to delete Hugging Face model %s: %v", modelInfo, err)
@@ -434,23 +434,24 @@ func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.Bas
 	if task.BaseModel != nil {
 		namespace = task.BaseModel.Namespace
 	} else if task.ClusterBaseModel != nil {
-		namespace = "" // ClusterBaseModels use the default namespace for secrets
+		// ClusterBaseModels look for secrets in the ome namespace by default
+		namespace = "ome"
 	}
 
 	// Try to get token from storage key first (Kubernetes secret)
 	if baseModelSpec.Storage.StorageKey != nil && *baseModelSpec.Storage.StorageKey != "" {
 		// Get the token from the referenced Kubernetes secret
 		if s.kubeClient != nil {
-			s.logger.Infof("Fetching Hugging Face token from secret %s for model %s", *baseModelSpec.Storage.StorageKey, modelInfo)
+			s.logger.Infof("Fetching Hugging Face token from secret %s in namespace %s for model %s", *baseModelSpec.Storage.StorageKey, namespace, modelInfo)
 
 			secret, err := s.kubeClient.CoreV1().Secrets(namespace).Get(context.Background(), *baseModelSpec.Storage.StorageKey, metav1.GetOptions{})
 			if err != nil {
-				s.logger.Warnf("Failed to retrieve secret %s for Hugging Face token: %v", *baseModelSpec.Storage.StorageKey, err)
+				s.logger.Warnf("Failed to retrieve secret %s in namespace %s for Hugging Face token: %v. Opc-Request-Id: %v", *baseModelSpec.Storage.StorageKey, namespace, err, nil)
 			} else if tokenBytes, exists := secret.Data["token"]; exists {
 				hfToken = string(tokenBytes)
-				s.logger.Infof("Successfully retrieved Hugging Face token from secret %s", *baseModelSpec.Storage.StorageKey)
+				s.logger.Infof("Successfully retrieved Hugging Face token from secret %s in namespace %s", *baseModelSpec.Storage.StorageKey, namespace)
 			} else {
-				s.logger.Warnf("Secret %s does not contain 'token' key", *baseModelSpec.Storage.StorageKey)
+				s.logger.Warnf("Secret %s in namespace %s does not contain 'token' key", *baseModelSpec.Storage.StorageKey, namespace)
 			}
 		} else {
 			s.logger.Warnf("Cannot fetch token: Kubernetes client not initialized")
