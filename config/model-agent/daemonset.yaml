@@ -35,7 +35,7 @@ spec:
       - name: host-models
         hostPath:
           path: /raid/models
-          type: Directory
+          type: DirectoryOrCreate
       containers:
       - name: model-agent
         image: ghcr.io/moirai-internal/model-agent:v0.1.0
