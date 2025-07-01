@@ -63,7 +63,7 @@ spec:
             MC_TE_METRIC=true;
             SGLANG_TBO_DEBUG=1;
             python3 -m sglang.launch_server
-            --port 30000
+            --port 8080
             --host 0.0.0.0
             --model-path ${MODEL_PATH}
             --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
@@ -158,7 +158,7 @@ spec:
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
-            --port 30000
+            --port 8080
             --trust-remote-code
             --ep-num-redundant-experts 32
             --moe-dense-tp-size 1
@@ -214,7 +214,7 @@ spec:
           - -c
           - >
             python3 -m sglang.launch_server
-            --port 30000
+            --port 8080
             --host 0.0.0.0
             --chunked-prefill-size 262144
             --page-size 64
@@ -302,7 +302,7 @@ spec:
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
             --node-rank ${LWS_WORKER_INDEX}
-            --port 30000
+            --port 8080
             --decode-log-interval 1
             --host 0.0.0.0
             --trust-remote-code
@@ -326,3 +326,37 @@ spec:
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
+  routerConfig:
+    runner:
+      name: router
+      image: ghcr.io/moirai-internal/sgl-router:0.1.4.30f2a44
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      ports:
+        - containerPort: 8080
+          name: http
+      command:
+        - sh
+        - -c
+        - >
+          python3 -m sglang_router.launch_router
+          --host 0.0.0.0
+          --port 8080
+          --pd-disaggregation
+          --policy power_of_two
+          --service-discovery
+          --service-discovery-namespace "${NAMESPACE}"
+          --service-discovery-port 8080
+          --prefill-selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --decode-selector component=decoder ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
