@@ -60,46 +60,47 @@ Several out-of-the-box _ClusterServingRuntimes_ are provided with OME so that us
 
 > **Note:** SRT (SGLang) is our flagship supporting runtime, offering the latest serving engine with the most optimal performance. It provides cutting-edge features including multi-node serving capabilities, prefill-decode disaggregated serving, and Large-scale Cross-node Expert Parallelism (EP) for optimal performance at scale.
 
-| Name                                       | Model Framework | Model Format | Model Architecture             |
-|--------------------------------------------|-----------------|--------------|--------------------------------|
-| srt-deepseek-pd-rdma                       | transformers    | safetensors  | DeepseekV3ForCausalLM          |
-| srt-deepseek-rdma                          | transformers    | safetensors  | DeepseekV3ForCausalLM          |
-| srt-e5-7b-mistral-instruct                 | transformers    | safetensors  | MistralModel                   |
-| srt-llama-3-1-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
-| srt-llama-3-1-405b-instruct-fp8            | transformers    | safetensors  | LlamaForCausalLM               |
-| srt-llama-3-2-1b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
-| srt-llama-3-2-3b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
-| srt-llama-3-2-11b-vision-instruct          | transformers    | safetensors  | MllamaForConditionalGeneration |
-| srt-llama-3-2-90b-vision-instruct-fp8      | transformers    | safetensors  | MllamaForConditionalGeneration |
-| srt-llama-3-3-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
-| srt-llama-4-maverick-17b-128e-instruct-fp8 | transformers    | safetensors  | Llama4ForConditionalGeneration |
-| srt-llama-4-scout-17b-16e-instruct         | transformers    | safetensors  | Llama4ForConditionalGeneration |
-| srt-mistral-7b-instruct                    | transformers    | safetensors  | MistralForCausalLM             |
-| srt-mmixtral-8x7b-instruct                 | transformers    | safetensors  | MixtralForCausalLM             |
+| Name                                         | Model Framework | Model Format | Model Architecture             |
+|----------------------------------------------|-----------------|--------------|--------------------------------|
+| deepseek-rdma-pd-rt                          | transformers    | safetensors  | DeepseekV3ForCausalLM          |
+| deepseek-rdma-rt                             | transformers    | safetensors  | DeepseekV3ForCausalLM          |
+| e5-mistral-7b-instruct-rt                    | transformers    | safetensors  | MistralModel                   |
+| llama-3-1-70b-instruct-pd-rt                 | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-1-70b-instruct-rt                    | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-2-11b-vision-instruct-rt             | transformers    | safetensors  | MllamaForConditionalGeneration |
+| llama-3-2-1b-instruct-pd-rt                  | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-2-1b-instruct-rt                     | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-2-3b-instruct-pd-rt                  | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-2-3b-instruct-rt                     | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-2-90b-vision-instruct-rt             | transformers    | safetensors  | MllamaForConditionalGeneration |
+| llama-3-3-70b-instruct-pd-rt                 | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-3-70b-instruct-rt                    | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-4-maverick-17b-128e-instruct-fp8-pd-rt | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| llama-4-maverick-17b-128e-instruct-fp8-rt    | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| llama-4-scout-17b-16e-instruct-pd-rt         | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| llama-4-scout-17b-16e-instruct-rt            | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| mistral-7b-instruct-pd-rt                    | transformers    | safetensors  | MistralForCausalLM             |
+| mistral-7b-instruct-rt                       | transformers    | safetensors  | MistralForCausalLM             |
+| mixtral-8x7b-instruct-pd-rt                  | transformers    | safetensors  | MixtralForCausalLM             |
+| mixtral-8x7b-instruct-rt                     | transformers    | safetensors  | MixtralForCausalLM             |
 
 ### VLLM Runtimes
 
 | Name                                        | Model Framework | Model Format | Model Architecture             |
 |---------------------------------------------|-----------------|--------------|--------------------------------|
-| vllm-ray-multi-node-deepseek-v3-rdma        | transformers    | safetensors  | DeepseekV3ForCausalLM          |
-| vllm-e5-mistral-7b-instruct                 | transformers    | safetensors  | MistralModel                   |
-| vllm-llama-3-1-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-1-405b-instruct-fp8            | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-1-nemotron-nano-8b-v1          | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-1-nemotron-ultra-253b-v1       | transformers    | safetensors  | DeciLMForCausalLM              |
-| vllm-llama-3-2-1b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-2-3b-instruct                  | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-2-11b-vision-instruct          | transformers    | safetensors  | MllamaForConditionalGeneration |
-| vllm-llama-3-2-90b-vision-instruct-fp8      | transformers    | safetensors  | MllamaForConditionalGeneration |
-| vllm-llama-3-3-70b-instruct-fp8-dynamic     | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-3-70b-instruct                 | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-3-3-nemotron-super-49b-v1        | transformers    | safetensors  | DeciLMForCausalLM              |
-| vllm-llama-3-70b-instruct                   | transformers    | safetensors  | LlamaForCausalLM               |
-| vllm-llama-4-maverick-17b-128e-instruct-fp8 | transformers    | safetensors  | Llama4ForConditionalGeneration |
-| vllm-llama-4-scout-17b-16e-instruct         | transformers    | safetensors  | Llama4ForConditionalGeneration |
-| vllm-mistral-7b-instruct                    | transformers    | safetensors  | MistralForCausalLM             |
-| vllm-mixtral-8x7b-instruct                  | transformers    | safetensors  | MixtralForCausalLM             |
-| vllm-phi-3-vision-128k-instruct             | transformers    | safetensors  | Phi3VForCausalLM               |
+| e5-mistral-7b-instruct-rt                   | transformers    | safetensors  | MistralModel                   |
+| llama-3-1-405b-instruct-fp8-rt              | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-1-nemotron-nano-8b-v1-rt            | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-1-nemotron-ultra-253b-v1-rt         | transformers    | safetensors  | DeciLMForCausalLM              |
+| llama-3-2-11b-vision-instruct-rt            | transformers    | safetensors  | MllamaForConditionalGeneration |
+| llama-3-2-1b-instruct-rt                    | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-2-3b-instruct-rt                    | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-3-70b-instruct-rt                   | transformers    | safetensors  | LlamaForCausalLM               |
+| llama-3-3-nemotron-super-49b-v1-rt          | transformers    | safetensors  | DeciLMForCausalLM              |
+| llama-4-maverick-17b-128e-instruct-fp8-rt   | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| llama-4-scout-17b-16e-instruct-rt           | transformers    | safetensors  | Llama4ForConditionalGeneration |
+| mistral-7b-instruct-rt                      | transformers    | safetensors  | MistralForCausalLM             |
+| mixtral-8x7b-instruct-rt                    | transformers    | safetensors  | MixtralForCausalLM             |
 
 ## Spec Attributes
 

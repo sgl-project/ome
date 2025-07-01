@@ -41,7 +41,7 @@ OME supports a range of ingress controllers for external access to model serving
 This section provides an overview of the available ingress controller options, including their capabilities, configuration, and features.
 
 
-### [Benchmarks](/ome/docs/concepts/benchmarks)
+### [Benchmark](/ome/docs/concepts/benchmark)
 
-OME integrates with the latest GenAI-Bench benchmarks to provide real-time benchmarking capabilities for AI models. 
+OME integrates with the latest GenAI-Bench to provide real-time benchmarking capabilities for AI models. 
 This section provides an overview of the GenAI-Bench benchmarks, how they work, and how to use them with OME.
