@@ -760,6 +760,9 @@ func handleHTTPError(resp *http.Response, repoID, repoType, revision, filename s
 		return NewRepositoryNotFoundError(repoID, repoType, resp)
 	case http.StatusForbidden:
 		return NewGatedRepoError(repoID, repoType, resp)
+	case http.StatusTooManyRequests:
+		retryAfter := parseRetryAfter(resp)
+		return NewRateLimitError(resp, retryAfter)
 	default:
 		return NewHTTPError(fmt.Sprintf("HTTP %d", resp.StatusCode), resp.StatusCode, resp)
 	}

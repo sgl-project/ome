@@ -8,4 +8,5 @@ spec:
   version: "1.0.0"
   storage:
     storageUri: hf://meta-llama/Meta-Llama-3.1-405B-Instruct-FP8
-    path: /raid/models/meta/Llama-3.1-405B-Instruct-FP8/64a54b704768dfd589a3e4ac05d546052f67f4fd
+    path: /raid/models/meta/Llama-3.1-405B-Instruct-FP8
+    key: "hf-token"

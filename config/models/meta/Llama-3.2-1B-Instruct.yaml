@@ -2,14 +2,6 @@ apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
   name: llama-3-2-1b-instruct
-  labels:
-    genai-managed-base-model-v1beta1: "true"
-  annotations:
-    models.ome.io/runtime: "vllm-llama-3-2-1b-instruct"
-    models.ome.io/category: "SMALL"
-    models.ome.io/experimental: "false"
-    models.ome.io/internal: "true"
-    models.ome.io/lifecycle-phase: "ACTIVE"
 spec:
   displayName: meta.llama-3.2-1b-instruct
   vendor: meta
@@ -18,3 +10,4 @@ spec:
   storage:
     storageUri: hf://meta-llama/Llama-3.2-1B-Instruct
     path: /raid/models/meta/llama-3-2-1b-instruct
+    key: "hf-token"
