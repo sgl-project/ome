@@ -55,6 +55,10 @@ type Gopher struct {
 	metrics              *Metrics
 	logger               *zap.SugaredLogger
 	configMapMutex       sync.Mutex // Mutex to coordinate ConfigMap access
+
+	// Track active downloads for cancellation
+	activeDownloads      map[string]context.CancelFunc // key: model UID
+	activeDownloadsMutex sync.RWMutex
 }
 
 const (
@@ -92,6 +96,7 @@ func NewGopher(
 		nodeLabelReconciler:  nodeLabelReconciler,
 		metrics:              metrics,
 		logger:               logger,
+		activeDownloads:      make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -120,6 +125,18 @@ func (s *Gopher) runWorker() {
 		select {
 		case task, ok := <-s.gopherChan:
 			if ok {
+				// Process delete tasks immediately by checking active downloads
+				if task.TaskType == Delete {
+					modelUID := getModelUID(task)
+					s.activeDownloadsMutex.RLock()
+					_, isDownloading := s.activeDownloads[modelUID]
+					s.activeDownloadsMutex.RUnlock()
+
+					if isDownloading {
+						s.logger.Infof("Model %s is currently downloading, will cancel it", getModelInfoForLogging(task))
+					}
+				}
+
 				err := s.processTask(task)
 				if err != nil {
 					s.logger.Errorf("Gopher task failed with error: %s", err.Error())
@@ -214,6 +231,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 
 	// Get model info for logging
 	modelInfo := getModelInfoForLogging(task)
+	modelUID := getModelUID(task)
 	s.logger.Infof("Processing gopher task: %s, type: %s", modelInfo, task.TaskType)
 
 	// Get model type, namespace, and name for metrics
@@ -225,6 +243,10 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	} else {
 		baseModelSpec = task.ClusterBaseModel.Spec
 	}
+
+	// Create context - will be cancellable for downloads
+	ctx := context.Background()
+	var cancel context.CancelFunc
 
 	// For Download and DownloadOverride tasks, set the node label to "Updating"
 	if task.TaskType == Download || task.TaskType == DownloadOverride {
@@ -239,6 +261,22 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Errorf("Failed to set model %s status to Updating: %v", modelInfo, err)
 			// Continue with download anyway
 		}
+
+		// Create a cancellable context for this download
+		ctx, cancel = context.WithCancel(context.Background())
+
+		// Register the cancel function
+		s.activeDownloadsMutex.Lock()
+		s.activeDownloads[modelUID] = cancel
+		s.activeDownloadsMutex.Unlock()
+
+		// Ensure cleanup on completion
+		defer func() {
+			s.activeDownloadsMutex.Lock()
+			delete(s.activeDownloads, modelUID)
+			s.activeDownloadsMutex.Unlock()
+			cancel() // Ensure context is cancelled
+		}()
 	}
 
 	storageType, err := storage.GetStorageType(*baseModelSpec.Storage.StorageUri)
@@ -274,8 +312,13 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				return err
 			}
 			err = utils.Retry(s.downloadRetry, 100*time.Millisecond, func() error {
-				downloadErr := s.downloadModel(osUri, destPath, task)
+				downloadErr := s.downloadModel(ctx, osUri, destPath, task)
 				if downloadErr != nil {
+					// Check if context was cancelled
+					if ctx.Err() != nil {
+						s.logger.Infof("Download cancelled for model %s: %v", modelInfo, ctx.Err())
+						return ctx.Err()
+					}
 					s.logger.Errorf("Failed to download model %s (attempt %d/%d): %v",
 						modelInfo, s.downloadRetry, s.downloadRetry, downloadErr)
 				}
@@ -317,7 +360,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Starting Hugging Face download for model %s", modelInfo)
 
 			// Handle Hugging Face model download
-			if err := s.processHuggingFaceModel(task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
+			if err := s.processHuggingFaceModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
 				// Error is already logged and metrics recorded in the method
 				return err
 			}
@@ -351,6 +394,18 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			return err
 		}
 	case Delete:
+		// First, cancel any ongoing download for this model
+		s.activeDownloadsMutex.RLock()
+		if cancelFunc, exists := s.activeDownloads[modelUID]; exists {
+			s.logger.Infof("Cancelling ongoing download for model %s", modelInfo)
+			cancelFunc() // This will cancel the download context
+		}
+		s.activeDownloadsMutex.RUnlock()
+
+		// Wait a bit for download to stop
+		time.Sleep(2 * time.Second)
+
+		// Now proceed with deletion
 		switch storageType {
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
@@ -391,6 +446,11 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Errorf("Failed to mark model %s as deleted: %v", modelInfo, err)
 			return err
 		}
+
+		// Clean up the active downloads map
+		s.activeDownloadsMutex.Lock()
+		delete(s.activeDownloads, modelUID)
+		s.activeDownloadsMutex.Unlock()
 	}
 
 	return nil
@@ -403,6 +463,16 @@ func getModelInfoForLogging(task *GopherTask) string {
 		return fmt.Sprintf("ClusterBaseModel %s", task.ClusterBaseModel.Name)
 	}
 	return "unknown model"
+}
+
+// getModelUID returns the unique identifier for a model
+func getModelUID(task *GopherTask) string {
+	if task.BaseModel != nil {
+		return string(task.BaseModel.UID)
+	} else if task.ClusterBaseModel != nil {
+		return string(task.ClusterBaseModel.UID)
+	}
+	return ""
 }
 
 func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
@@ -446,12 +516,24 @@ func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.Bas
 
 			secret, err := s.kubeClient.CoreV1().Secrets(namespace).Get(context.Background(), *baseModelSpec.Storage.StorageKey, metav1.GetOptions{})
 			if err != nil {
-				s.logger.Warnf("Failed to retrieve secret %s in namespace %s for Hugging Face token: %v. Opc-Request-Id: %v", *baseModelSpec.Storage.StorageKey, namespace, err, nil)
-			} else if tokenBytes, exists := secret.Data["token"]; exists {
-				hfToken = string(tokenBytes)
-				s.logger.Infof("Successfully retrieved Hugging Face token from secret %s in namespace %s", *baseModelSpec.Storage.StorageKey, namespace)
+				s.logger.Warnf("Failed to retrieve secret %s in namespace %s for Hugging Face token: %v", *baseModelSpec.Storage.StorageKey, namespace, err)
 			} else {
-				s.logger.Warnf("Secret %s in namespace %s does not contain 'token' key", *baseModelSpec.Storage.StorageKey, namespace)
+				// Check if a custom secret key name is specified in parameters
+				secretKeyName := "token" // default key name
+				if baseModelSpec.Storage.Parameters != nil {
+					if customKey, exists := (*baseModelSpec.Storage.Parameters)["secretKey"]; exists && customKey != "" {
+						secretKeyName = customKey
+						s.logger.Infof("Using custom secret key name '%s' for model %s", secretKeyName, modelInfo)
+					}
+				}
+
+				// Try to get the token using the determined key name
+				if tokenBytes, exists := secret.Data[secretKeyName]; exists {
+					hfToken = string(tokenBytes)
+					s.logger.Infof("Successfully retrieved Hugging Face token from secret %s in namespace %s using key '%s'", *baseModelSpec.Storage.StorageKey, namespace, secretKeyName)
+				} else {
+					s.logger.Warnf("Secret %s in namespace %s does not contain key '%s'", *baseModelSpec.Storage.StorageKey, namespace, secretKeyName)
+				}
 			}
 		} else {
 			s.logger.Warnf("Cannot fetch token: Kubernetes client not initialized")
@@ -544,7 +626,7 @@ func (s *Gopher) createOCIOSDataStore(baseModelSpec v1beta1.BaseModelSpec) (*oci
 	return ociOSDS, nil
 }
 
-func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
+func (s *Gopher) downloadModel(ctx context.Context, uri *ociobjectstore.ObjectURI, destPath string, task *GopherTask) error {
 	startTime := time.Now()
 	defer func() {
 		s.logger.Infof("Download process took %v", time.Since(startTime).Round(time.Millisecond))
@@ -565,6 +647,13 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 	ociOSDataStore, err := s.createOCIOSDataStore(baseModelSpec)
 	if err != nil {
 		return fmt.Errorf("failed to create object storage client: %w", err)
+	}
+
+	// Check context before making expensive operations
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("download cancelled before listing objects: %w", ctx.Err())
+	default:
 	}
 
 	s.logger.Infof("Making call to object storage with endpoint %s", ociOSDataStore.Client.Endpoint())
@@ -615,6 +704,16 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 		})
 	}
 
+	// Check context before starting bulk download
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("download cancelled before starting bulk download: %w", ctx.Err())
+	default:
+	}
+
+	// TODO: BulkDownload doesn't support context cancellation yet
+	// This means downloads may continue even after deletion request
+	// Future enhancement: modify ociobjectstore to support context
 	errs := ociOSDataStore.BulkDownload(objectUris, destPath, s.concurrency,
 		ociobjectstore.WithThreads(s.multipartConcurrency),
 		ociobjectstore.WithChunkSize(BigFileSizeInMB),
@@ -622,7 +721,13 @@ func (s *Gopher) downloadModel(uri *ociobjectstore.ObjectURI, destPath string, t
 		ociobjectstore.WithOverrideEnabled(false),
 		ociobjectstore.WithStripPrefix(uri.Prefix))
 	if errs != nil {
-		return fmt.Errorf("failed to download objects: %v", errs)
+		// Check if we were cancelled during download
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("download cancelled during bulk download: %w", ctx.Err())
+		default:
+			return fmt.Errorf("failed to download objects: %v", errs)
+		}
 	}
 
 	// Perform final verification of all downloaded files
@@ -708,7 +813,7 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 // processHuggingFaceModel handles downloading models from Hugging Face Hub.
 // It extracts model information from the URI, configures the download with proper authentication,
 // performs the download using the hub client, and updates model configuration.
-func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
 	modelInfo, modelType, namespace, name string) error {
 	// Parse the Hugging Face URI to get modelID and branch
 	hfComponents, err := storage.ParseHuggingFaceStorageURI(*baseModelSpec.Storage.StorageUri)
@@ -739,14 +844,10 @@ func (s *Gopher) processHuggingFaceModel(task *GopherTask, baseModelSpec v1beta1
 	// Set repository type (always model for HuggingFace)
 	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
-	// Use the hub client to download the entire model repository
-	ctx := context.Background()
-
-	// If we have a token, we need to set it in the hub config
-	// For now, we'll assume the token is already configured in the hub client
-	// In a future enhancement, we could create a new client with the specific token
+	// If we have a token, pass it as a download option
 	if hfToken != "" {
 		s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
+		downloadOptions = append(downloadOptions, hub.WithDownloadToken(hfToken))
 	}
 
 	// Perform snapshot download - the hub client already has built-in retry logic

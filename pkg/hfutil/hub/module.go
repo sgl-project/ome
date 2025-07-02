@@ -185,6 +185,14 @@ func WithPatterns(allowPatterns, ignorePatterns []string) DownloadOption {
 	}
 }
 
+// WithDownloadToken sets the authentication token for the download
+func WithDownloadToken(token string) DownloadOption {
+	return func(config *DownloadConfig) error {
+		config.Token = token
+		return nil
+	}
+}
+
 // Module provides the fx module for dependency injection
 var Module = fx.Provide(
 	func(v *viper.Viper, params HubClientParams) (*HubClient, error) {

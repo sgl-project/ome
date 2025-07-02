@@ -279,8 +279,17 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 		return err
 	}
 
+	// Ensure the incomplete file exists before trying to rename
+	if _, err := os.Stat(incompletePath); err != nil {
+		return fmt.Errorf("incomplete file missing before rename: %w", err)
+	}
+
 	// Move the file to final destination
 	if err := os.Rename(incompletePath, destPath); err != nil {
+		// Check if it's a cross-device error and try copy instead
+		if os.IsNotExist(err) {
+			return fmt.Errorf("failed to move file to final destination: %w (incomplete file may have been deleted)", err)
+		}
 		return fmt.Errorf("failed to move file to final destination: %w", err)
 	}
 
