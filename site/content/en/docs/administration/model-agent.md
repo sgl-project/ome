@@ -63,6 +63,26 @@ The download process varies by storage backend but follows this general pattern:
 4. **Progressive Download**: Download files with progress tracking
 5. **Cache Management**: Manage local cache for efficiency
 
+##### Authentication
+
+The Model Agent supports flexible authentication for Hugging Face models:
+
+1. **Secret-based Authentication**: Use Kubernetes secrets to store tokens
+2. **Parameter-based Authentication**: Include tokens directly in model parameters
+3. **Custom Secret Key Names**: Configure the secret key name (defaults to "token")
+
+Example with custom secret key:
+```yaml
+spec:
+  storage:
+    storageUri: "hf://meta-llama/Llama-2-7b-hf"
+    key: "hf-credentials"
+    parameters:
+      secretKey: "access-token"  # Custom key name in the secret
+```
+
+This allows you to store Hugging Face tokens in secrets with any key name, not just "token".
+
 ### 5. Model Parsing and Analysis
 
 After successful download, the agent performs comprehensive model analysis:
@@ -101,6 +121,9 @@ The Model Agent supports extensive configuration through command-line arguments:
 | `--concurrency`           | 4       | Number of concurrent file downloads per model         |
 | `--multipart-concurrency` | 4       | Number of concurrent chunks for large file downloads  |
 | `--num-download-worker`   | 5       | Number of parallel download workers across all models |
+| `--hf-max-workers`        | 4       | Maximum concurrent workers for Hugging Face downloads |
+| `--hf-max-retries`        | 10      | Maximum retry attempts for Hugging Face API calls     |
+| `--hf-retry-interval`     | 15s     | Base retry interval for Hugging Face API errors       |
 
 #### Storage Configuration
 
@@ -282,6 +305,19 @@ When an existing model is updated:
 4. **Verification**: Verify new download before removing old version
 5. **Atomic Switch**: Atomically replace old model with new version
 
+### Download Cancellation
+
+The Model Agent supports graceful cancellation of ongoing downloads:
+
+1. **Active Download Tracking**: Maintains a registry of all active downloads
+2. **Immediate Cancellation**: When a model is deleted, any ongoing download is cancelled immediately
+3. **Context Propagation**: Uses Go contexts to propagate cancellation throughout the download pipeline
+4. **Cleanup**: Ensures partial downloads are cleaned up after cancellation
+
+This prevents the issue where deleting a model resource would wait for the entire download to complete before deletion.
+
+**Note**: For OCI Object Storage downloads, cancellation is best-effort as the underlying bulk download doesn't support granular cancellation yet. However, Hugging Face downloads support immediate cancellation.
+
 ### Worker Pool Management
 
 The agent uses worker pools for concurrent operations:
@@ -388,6 +424,37 @@ model_agent_task_queue_depth 2
 
 # ConfigMap update operations
 model_agent_configmap_operations_total{operation="update", result="success"} 15
+```
+
+### Rate Limiting Protection
+
+The Model Agent includes sophisticated rate limiting protection for Hugging Face API:
+
+#### Automatic Backoff
+- **Exponential Backoff**: Automatically increases wait time between retries
+- **Jitter**: Adds randomness to prevent thundering herd
+- **Retry-After**: Respects server-provided retry delays
+- **Max Retries**: Configurable retry limit (default: 10)
+
+#### Staggered Start
+When multiple agents start simultaneously (e.g., after cluster restart), they automatically stagger their initialization:
+- Each node gets a deterministic delay based on its name (0-30 seconds)
+- Prevents all agents from hitting the API at once
+- Reduces initial rate limiting issues
+
+#### Best Practices for Large Clusters
+1. **Limit concurrent downloads**: Use fewer download workers for large clusters
+2. **Increase retry intervals**: Set longer base retry intervals
+3. **Monitor rate limits**: Watch for 429 errors in logs
+4. **Use regional endpoints**: Consider using region-specific Hugging Face endpoints
+
+Example configuration for large clusters:
+```yaml
+args:
+- --hf-max-workers=2
+- --hf-max-retries=15
+- --hf-retry-interval=30s
+- --num-download-worker=3
 ```
 
 ## Troubleshooting Guide

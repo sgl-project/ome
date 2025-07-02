@@ -52,10 +52,18 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 		return nil, fmt.Errorf("invalid repo type: %s", repoType)
 	}
 
-	// Retry logic for rate limiting
-	maxRetries := 3
-	baseDelay := 1 * time.Second
+	// Get retry configuration from context (HubConfig)
+	maxRetries := 3                   // default
+	retryInterval := 10 * time.Second // default
 
+	var progressManager *ProgressManager
+	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
+		maxRetries = hubConfig.MaxRetries
+		retryInterval = hubConfig.RetryInterval
+		progressManager = hubConfig.CreateProgressManager()
+	}
+
+	// Use exponential backoff with jitter for rate limiting
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		// Create request
 		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -78,7 +86,16 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 		if err != nil {
 			// Network errors are retryable
 			if attempt < maxRetries {
-				delay := exponentialBackoffWithJitter(attempt+1, baseDelay, 30*time.Second)
+				delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
+				if progressManager != nil && progressManager.logger != nil && progressManager.enableDetailedLogs {
+					progressManager.logger.
+						WithField("repo_id", config.RepoID).
+						WithField("attempt", attempt+1).
+						WithField("max_retries", maxRetries+1).
+						WithField("delay", delay.String()).
+						WithField("error", err.Error()).
+						Warn("ListRepoFiles request failed, retrying...")
+				}
 				select {
 				case <-time.After(delay):
 					continue
@@ -100,22 +117,55 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 		}
 
 		// Handle rate limiting
-		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxRetries {
+		if resp.StatusCode == http.StatusTooManyRequests {
 			retryAfter := parseRetryAfter(resp)
 			if retryAfter == 0 {
-				// Use exponential backoff if no Retry-After header
-				retryAfter = exponentialBackoffWithJitter(attempt+1, baseDelay, 30*time.Second)
+				// Use exponential backoff with jitter if no Retry-After header
+				retryAfter = exponentialBackoffWithJitter(attempt+1, retryInterval, 300*time.Second) // Max 5 minutes
 			}
 
+			if progressManager != nil && progressManager.logger != nil {
+				progressManager.logger.
+					WithField("repo_id", config.RepoID).
+					WithField("attempt", attempt+1).
+					WithField("max_retries", maxRetries+1).
+					WithField("retry_after", retryAfter.String()).
+					WithField("status_code", resp.StatusCode).
+					Warn("Rate limited by Hugging Face API, waiting before retry...")
+			}
+
+			// Only retry if we haven't exhausted attempts
+			if attempt < maxRetries {
+				select {
+				case <-time.After(retryAfter):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+		}
+
+		// Handle other HTTP errors with retry for server errors
+		if resp.StatusCode >= 500 && attempt < maxRetries {
+			delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
+			if progressManager != nil && progressManager.logger != nil && progressManager.enableDetailedLogs {
+				progressManager.logger.
+					WithField("repo_id", config.RepoID).
+					WithField("attempt", attempt+1).
+					WithField("max_retries", maxRetries+1).
+					WithField("status_code", resp.StatusCode).
+					WithField("delay", delay.String()).
+					Warn("Server error, retrying...")
+			}
 			select {
-			case <-time.After(retryAfter):
+			case <-time.After(delay):
 				continue
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
 		}
 
-		// Handle other error responses
+		// Handle non-retryable error responses
 		return nil, handleHTTPError(resp, config.RepoID, repoType, revision, "")
 	}
 

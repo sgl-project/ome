@@ -332,6 +332,38 @@ data:
   token: <base64-encoded-token>
 ```
 
+#### Using Custom Secret Key Names
+
+By default, the Model Agent looks for a key named "token" in your secret. However, you can specify a custom key name using the `secretKey` parameter:
+
+```yaml
+# Create a secret with a custom key name
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hf-credentials
+data:
+  access-token: <base64-encoded-token>
+  
+---
+# Reference it in your BaseModel
+apiVersion: ome.io/v1beta1
+kind: BaseModel
+metadata:
+  name: private-model
+spec:
+  storage:
+    storageUri: "hf://my-org/private-model"
+    storageKey: "hf-credentials"
+    parameters:
+      secretKey: "access-token"  # Specify the custom key name
+```
+
+This is useful when:
+- You have existing secrets with different key names
+- You're following specific naming conventions in your organization
+- You need to store multiple tokens in the same secret
+
 ## Complete Configuration Example
 
 Here's a comprehensive BaseModel configuration showing all available options:
