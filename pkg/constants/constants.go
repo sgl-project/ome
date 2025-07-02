@@ -129,6 +129,10 @@ var (
 	AgentKeyNameEnvVarKey       = AgentAppName + "_" + "KEY_NAME"
 	AgentSecretNameEnvVarKey    = AgentAppName + "_" + "SECRET_NAME"
 
+	// OCI Object Storage
+	AgentEnableOboTokenEnvVarKey = AgentAppName + "_" + "ENABLE_OBO_TOKEN"
+	AgentOboTokenEnvVarKey       = AgentAppName + "_" + "OBO_TOKEN"
+
 	// Serving Sidecar Configuration
 	AgentFineTunedWeightInfoFilePath      = AgentAppName + "_" + "FINE_TUNED_WEIGHT_INFO_FILE_PATH"
 	AgentUnzippedFineTunedWeightDirectory = AgentAppName + "_" + "UNZIPPED_FINE_TUNED_WEIGHT_DIRECTORY"

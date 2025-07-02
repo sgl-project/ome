@@ -66,8 +66,8 @@ func TestBuildEnvVars_SuccessOCI(t *testing.T) {
 		constants.AgentTargetBucketNameEnvVarKey:     "dest_bucket",
 		constants.AgentTargetPrefixEnvVarKey:         "dest_prefix",
 		constants.AgentTargetRegionEnvVarKey:         "us-phoenix-1",
-		constants.EnableOboTokenEnvVarKey:            "true",
-		constants.OboTokenEnvVarKey:                  "oboToken",
+		constants.AgentEnableOboTokenEnvVarKey:       "true",
+		constants.AgentOboTokenEnvVarKey:             "oboToken",
 	}
 
 	for _, envVar := range envVars {

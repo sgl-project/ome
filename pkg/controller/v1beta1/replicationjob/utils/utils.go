@@ -139,8 +139,8 @@ func buildOsEnvVars(storageSpec *v1beta1.StorageSpec, storagePrefix string) ([]v
 		}
 		if oboToken, ok := params[constants.OboTokenConfigKey]; ok {
 			envVars = append(envVars,
-				v1.EnvVar{Name: constants.OboTokenEnvVarKey, Value: oboToken},
-				v1.EnvVar{Name: constants.EnableOboTokenEnvVarKey, Value: "true"},
+				v1.EnvVar{Name: constants.AgentOboTokenEnvVarKey, Value: oboToken},
+				v1.EnvVar{Name: constants.AgentEnableOboTokenEnvVarKey, Value: "true"},
 			)
 		}
 	case destinationPrefix:
