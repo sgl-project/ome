@@ -412,6 +412,30 @@ o4-mini-2025-04-16:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-4o-mini-realtime-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-mini-realtime-preview-2024-12-17:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-realtime-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-realtime-preview-2025-06-03:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-realtime-preview-2024-12-17:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-4o-realtime-preview-2024-10-01:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 text-embedding-3-small:
   enabled: false
   lifecyclePhase: "ACTIVE"
