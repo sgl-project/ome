@@ -281,6 +281,16 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 
 	// Ensure the incomplete file exists before trying to rename
 	if _, err := os.Stat(incompletePath); err != nil {
+		// Check if the destination file already exists (might have been moved by another worker)
+		if _, destErr := os.Stat(destPath); destErr == nil {
+			// Destination exists, verify size
+			destInfo, _ := os.Stat(destPath)
+			if metadata.Size > 0 && destInfo.Size() == metadata.Size {
+				// File already moved successfully, remove incomplete file if it exists
+				os.Remove(incompletePath)
+				return nil
+			}
+		}
 		return fmt.Errorf("incomplete file missing before rename: %w", err)
 	}
 

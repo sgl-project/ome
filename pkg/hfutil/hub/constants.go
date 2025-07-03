@@ -45,7 +45,7 @@ const (
 	// Request timeouts
 	DefaultRequestTimeout = 10 * time.Second
 	DefaultEtagTimeout    = 10 * time.Second
-	DownloadTimeout       = 10 * time.Minute
+	DownloadTimeout       = 2 * time.Hour // Increased from 10 minutes to 2 hours for large model files
 
 	// Download configuration
 	DefaultMaxWorkers    = 4                // Reduced to minimize concurrent API calls
