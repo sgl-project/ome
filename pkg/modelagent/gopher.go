@@ -828,7 +828,7 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 
 	// Get Hugging Face token from storage key or parameters
-	hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo)
+	hfToken := s.getHuggingFaceToken(task, baseModelSpec, modelInfo) // TODO: pass hf token
 
 	s.logger.Infof("Downloading HuggingFace model %s (revision: %s) to %s",
 		hfComponents.ModelID, hfComponents.Branch, destPath)

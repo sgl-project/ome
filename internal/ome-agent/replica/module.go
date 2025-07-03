@@ -3,6 +3,7 @@ package replica
 import (
 	"fmt"
 
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/spf13/viper"
@@ -14,6 +15,7 @@ type replicaParams struct {
 
 	AnotherLogger           logging.Interface `name:"another_log"`
 	ObjectStorageDataStores *ociobjectstore.OCIOSDataStore
+	HubClient               *hub.HubClient
 }
 
 var Module = fx.Provide(

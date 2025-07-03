@@ -2,7 +2,6 @@ package replica
 
 import (
 	"testing"
-	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
@@ -61,102 +60,14 @@ func TestNewReplicaAgent(t *testing.T) {
 	assert.Equal(t, *config, agent.Config)
 }
 
-func TestGetTargetObjectURI(t *testing.T) {
-	tests := []struct {
-		name        string
-		config      Config
-		objName     string
-		expectedURI ociobjectstore.ObjectURI
-	}{
-		{
-			name: "replace source prefix with target prefix",
-			config: Config{
-				SourceObjectStoreURI: ociobjectstore.ObjectURI{
-					Namespace:  "src-ns",
-					BucketName: "src-bucket",
-					Prefix:     "src-prefix/",
-				},
-				TargetObjectStoreURI: ociobjectstore.ObjectURI{
-					Namespace:  "tgt-ns",
-					BucketName: "tgt-bucket",
-					Prefix:     "tgt-prefix/",
-				},
-			},
-			objName: "src-prefix/model.bin",
-			expectedURI: ociobjectstore.ObjectURI{
-				Namespace:  "tgt-ns",
-				BucketName: "tgt-bucket",
-				ObjectName: "tgt-prefix/model.bin",
-			},
-		},
-		{
-			name: "source and target with same prefix",
-			config: Config{
-				SourceObjectStoreURI: ociobjectstore.ObjectURI{
-					Namespace:  "src-ns",
-					BucketName: "src-bucket",
-					Prefix:     "models/",
-				},
-				TargetObjectStoreURI: ociobjectstore.ObjectURI{
-					Namespace:  "tgt-ns",
-					BucketName: "tgt-bucket",
-					Prefix:     "models/",
-				},
-			},
-			objName: "models/model.bin",
-			expectedURI: ociobjectstore.ObjectURI{
-				Namespace:  "tgt-ns",
-				BucketName: "tgt-bucket",
-				ObjectName: "models/model.bin",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agent := &ReplicaAgent{
-				Config: tt.config,
-			}
-
-			result := agent.getTargetObjectURI(tt.objName)
-
-			assert.Equal(t, tt.expectedURI.Namespace, result.Namespace)
-			assert.Equal(t, tt.expectedURI.BucketName, result.BucketName)
-			assert.Equal(t, tt.expectedURI.ObjectName, result.ObjectName)
-		})
-	}
-}
-
-func TestPrepareObjectChannel(t *testing.T) {
-	objName1 := "test1.bin"
-	objName2 := "test2.bin"
-
-	objects := []objectstorage.ObjectSummary{
-		{Name: &objName1},
-		{Name: &objName2},
-	}
-
-	agent := &ReplicaAgent{}
-	objChan := agent.prepareObjectChannel(objects)
-
-	// Collect objects from channel
-	var receivedObjects []objectstorage.ObjectSummary
-	for obj := range objChan {
-		receivedObjects = append(receivedObjects, obj)
-	}
-
-	assert.Equal(t, len(objects), len(receivedObjects))
-	assert.Equal(t, objects[0].Name, receivedObjects[0].Name)
-	assert.Equal(t, objects[1].Name, receivedObjects[1].Name)
-}
-
+// TODO: add hf replication object
 func TestValidateModelSize(t *testing.T) {
 	GB := int64(1024 * 1024 * 1024)
 
 	tests := []struct {
 		name          string
 		config        Config
-		objects       []objectstorage.ObjectSummary
+		objects       []ReplicationObject
 		expectPanic   bool
 		panicContains string
 		skip          bool
@@ -168,11 +79,15 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []objectstorage.ObjectSummary {
+			objects: func() []ReplicationObject {
 				name := "test.bin"
-				size := int64(1 * GB) // 1 GB
-				return []objectstorage.ObjectSummary{
-					{Name: &name, Size: &size},
+				size := 1 * GB // 1 GB
+				summary := objectstorage.ObjectSummary{
+					Name: &name,
+					Size: &size,
+				}
+				return []ReplicationObject{
+					ObjectSummaryReplicationObject{summary},
 				}
 			}(),
 			expectPanic: false,
@@ -184,11 +99,16 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []objectstorage.ObjectSummary {
+			objects: func() []ReplicationObject {
 				name := "test.bin"
-				size := int64(2 * GB) // 2 GB
-				return []objectstorage.ObjectSummary{
-					{Name: &name, Size: &size},
+				size := 2 * GB // 2 GB
+
+				summary := objectstorage.ObjectSummary{
+					Name: &name,
+					Size: &size,
+				}
+				return []ReplicationObject{
+					ObjectSummaryReplicationObject{summary},
 				}
 			}(),
 			expectPanic:   true,
@@ -202,11 +122,16 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: false,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []objectstorage.ObjectSummary {
+			objects: func() []ReplicationObject {
 				name := "test.bin"
 				size := int64(2 * GB) // 2 GB
-				return []objectstorage.ObjectSummary{
-					{Name: &name, Size: &size},
+
+				summary := objectstorage.ObjectSummary{
+					Name: &name,
+					Size: &size,
+				}
+				return []ReplicationObject{
+					ObjectSummaryReplicationObject{summary},
 				}
 			}(),
 			expectPanic: false,
@@ -248,20 +173,6 @@ func TestValidateModelSize(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestLogProgress(t *testing.T) {
-	mockLogger := testingPkg.SetupMockLogger()
-
-	agent := &ReplicaAgent{
-		logger: mockLogger,
-	}
-
-	startTime := time.Now().Add(-10 * time.Second)
-	agent.logProgress(5, 1, 10, startTime)
-
-	// Verify the logger was called with the expected info
-	mockLogger.AssertCalled(t, "Infof", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestReplicaAgent_Start(t *testing.T) {

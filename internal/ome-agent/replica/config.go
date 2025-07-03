@@ -6,21 +6,28 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/sgl-project/ome/pkg/configutils"
+	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath              string                         `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB    int                            `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck   bool                           `mapstructure:"enable_size_limit_check"`
-	NumConnections         int                            `mapstructure:"num_connections"`
-	SourceObjectStoreURI   ociobjectstore.ObjectURI       `mapstructure:"source" validate:"required"`
-	TargetObjectStoreURI   ociobjectstore.ObjectURI       `mapstructure:"target" validate:"required"`
-	ObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
+	LocalPath            string                   `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB  int                      `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck bool                     `mapstructure:"enable_size_limit_check"`
+	NumConnections       int                      `mapstructure:"num_connections"`
+	SourceObjectStoreURI ociobjectstore.ObjectURI `mapstructure:"source" validate:"required"`
+	TargetObjectStoreURI ociobjectstore.ObjectURI `mapstructure:"target" validate:"required"`
+
+	SourceStorageType storage.StorageType
+	TargetStorageType storage.StorageType
+
+	ObjectStorageDataStore *ociobjectstore.OCIOSDataStore
+	HubClient              *hf.HubClient
 }
 
 type Option func(*Config) error
@@ -62,6 +69,7 @@ func NewReplicaConfig(opts ...Option) (*Config, error) {
 func WithAppParams(params replicaParams) Option {
 	return func(c *Config) error {
 		c.ObjectStorageDataStore = params.ObjectStorageDataStores
+		c.HubClient = params.HubClient
 		return nil
 	}
 }
