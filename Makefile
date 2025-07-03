@@ -299,6 +299,11 @@ run-ome-agent-fine-tuned-adapter: fmt vet ome-agent ## Run ome-agent binary from
 	@echo "🏃‍♂️ Running ome-agent fine-tuned-adapter..."
 	bin/ome-agent fine-tuned-adapter -d -c config/ome-agent/ome-agent.yaml
 
+.PHONY: run-ome-agent-replica
+run-ome-agent-replica: fmt vet ome-agent ## Run ome-agent binary from local host against the configured Kubernetes cluster in ~/.kube/config or KUBECONFIG env.
+	@echo "🏃‍♂️ Running ome-agent replica..."
+	bin/ome-agent replica -d -c config/ome-agent/ome-agent.yaml
+
 .PHONY: ome-image
 ome-image: fmt vet ## Build ome-manager image.
 	@echo "🚀 Building ome-manager image..."

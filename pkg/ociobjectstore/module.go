@@ -58,13 +58,10 @@ func ProvideSourceOCIOSDataStoreConfig(v *viper.Viper, logger logging.Interface)
 // ProvideTargetOCIOSDataStoreConfig constructs a Config instance for the destination (target) OCI Object Storage
 // location using Viper configuration, environment context, and a logger. This function is intended to be
 // used as an fx provider. The resulting Config is wrapped in OSDataStoreConfigWrapper and added to the
-// "oSDataStoreConfig" value group for collective injection.
+// "OCIOSDataStoreConfigs" value group for collective injection.
 //
 // Note: Destination object storage locations are currently expected to reside under service tenancies
 // where customer OBO tokens are not permitted.
-//
-// TODO: Refactor to separate source and target configuration in OME agent config, and read specifically
-// from the target config.
 //
 // Returns:
 //   - OSDataStoreConfigWrapper containing the initialized Config if successful
@@ -93,7 +90,7 @@ var OCIOSDataStoreListProvider = fx.Provide(
 // appParams defines the fx input struct for dependency injection.
 // It demonstrates two advanced fx features:
 //   - Named logger injection using `name:"another_log"`
-//   - Config list injection using fx.ValueGroup (`group:"casperConfigs"`)
+//   - Config list injection using fx.ValueGroup (`group:"OCIOSDataStoreConfigs"`)
 type appParams struct {
 	fx.In
 
@@ -101,7 +98,7 @@ type appParams struct {
 	AnotherLogger logging.Interface `name:"another_log"`
 
 	// Configs is a list of Object Storage configuration instances injected via value group.
-	Configs []*Config `group:"casperConfigs"`
+	Configs []*Config `group:"OCIOSDataStoreConfigs"`
 }
 
 // ProvideListOfOCIOSDataStoreWithAppParams initializes a list of OCIOSDataStore instances
@@ -126,7 +123,7 @@ func ProvideListOfOCIOSDataStoreWithAppParams(params appParams) ([]*OCIOSDataSto
 		dataStore, err := NewOCIOSDataStore(config)
 		if err != nil {
 			return osDataStoreList, fmt.Errorf(
-				"error initializing OCIOSDataStore using CasperConfig %+v: %+v", config, err,
+				"error initializing OCIOSDataStore using OCIOSDataStoreConfig %s: %+v", config.String(), err,
 			)
 		}
 		osDataStoreList = append(osDataStoreList, dataStore)

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica"
 	"github.com/sgl-project/ome/pkg/afero"
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
@@ -44,7 +48,9 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		ociobjectstore.OCIOSDataStoreListProvider,
+		logging.ModuleNamed("hub_logger"),
+		OCIOSDataStoreListProvider(),
+		hub.Module,
 		replica.Module,
 		fx.Populate(&r.agent),
 	}
@@ -58,4 +64,59 @@ func (r *ReplicaAgent) Start() error {
 // NewReplicaAgent creates a new replica agent
 func NewReplicaAgent() *ReplicaAgent {
 	return &ReplicaAgent{}
+}
+
+type OCIOSDataStoreConfigWrapper struct {
+	fx.Out
+
+	OCIOSDataStoreConfig *ociobjectstore.Config `group:"OCIOSDataStoreConfigs"`
+}
+
+func OCIOSDataStoreListProvider() fx.Option {
+	return fx.Provide(
+		provideSourceOCIOSDataSourceConfig,
+		provideTargetOCIOSDataStoreConfig,
+		ociobjectstore.ProvideListOfOCIOSDataStoreWithAppParams,
+	)
+}
+
+func provideSourceOCIOSDataSourceConfig(logger logging.Interface, v *viper.Viper) OCIOSDataStoreConfigWrapper {
+	sourceOCIEnabled := v.GetBool("source.oci.enabled")
+	if !sourceOCIEnabled {
+		return OCIOSDataStoreConfigWrapper{
+			OCIOSDataStoreConfig: nil,
+		}
+	}
+
+	sourceOCIOSDataStoreConfig := &ociobjectstore.Config{}
+	if err := v.UnmarshalKey("source.oci", sourceOCIOSDataStoreConfig); err != nil {
+		panic(fmt.Errorf("error occurred when unmarshalling key source: %+v", err))
+	}
+	sourceOCIOSDataStoreConfig.AnotherLogger = logger
+	sourceOCIOSDataStoreConfig.Name = replica.SourceStorageConfigKeyName
+
+	return OCIOSDataStoreConfigWrapper{
+		OCIOSDataStoreConfig: sourceOCIOSDataStoreConfig,
+	}
+}
+
+func provideTargetOCIOSDataStoreConfig(logger logging.Interface, v *viper.Viper) OCIOSDataStoreConfigWrapper {
+	targetOCIEnabled := v.GetBool("target.oci.enabled")
+	if !targetOCIEnabled {
+		return OCIOSDataStoreConfigWrapper{
+			OCIOSDataStoreConfig: nil,
+		}
+	}
+
+	targetOCIOSDataStoreConfig := &ociobjectstore.Config{}
+	if err := v.UnmarshalKey("target.oci", targetOCIOSDataStoreConfig); err != nil {
+		panic(fmt.Errorf("error occurred when unmarshalling key source: %+v", err))
+	}
+
+	targetOCIOSDataStoreConfig.AnotherLogger = logger
+	targetOCIOSDataStoreConfig.Name = replica.TargetStorageConfigKeyName
+
+	return OCIOSDataStoreConfigWrapper{
+		OCIOSDataStoreConfig: targetOCIOSDataStoreConfig,
+	}
 }
