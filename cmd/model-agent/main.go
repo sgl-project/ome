@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -221,12 +222,27 @@ func initializeComponents(
 		return nil, nil, fmt.Errorf("failed to create scout: %w", err)
 	}
 
+	// Add random jitter to prevent thundering herd when multiple agents start
+	// This helps avoid hitting rate limits when many agents start simultaneously
+	if cfg.nodeName != "" {
+		// Use node name hash to create deterministic but distributed start delay
+		hash := 0
+		for _, c := range cfg.nodeName {
+			hash = hash*31 + int(c)
+		}
+		// Create delay between 0-30 seconds based on node name
+		jitterDelay := time.Duration(hash%30) * time.Second
+		logger.Infof("Adding %v jitter delay before initializing HF client to prevent API rate limiting", jitterDelay)
+		time.Sleep(jitterDelay)
+	}
+
 	// Create default Hugging Face hub config
 	// Use log-only mode for cleaner logs in production
 	hfHubConfig, err := hub.NewHubConfig(
-		hub.WithLogger(logging.ForZap(zapLogger)),
+		hub.WithViper(v), // Apply viper config first to set defaults
+		hub.WithLogger(logging.ForZap(zapLogger)),        // Then set the logger
 		hub.WithProgressDisplayMode(hub.ProgressModeLog), // Use log mode for clean production logs
-		hub.WithViper(v),
+		hub.WithDetailedLogs(true),                       // Enable detailed progress logging
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create HuggingFace hub config: %w", err)

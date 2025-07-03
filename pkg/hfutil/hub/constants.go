@@ -48,10 +48,10 @@ const (
 	DownloadTimeout       = 10 * time.Minute
 
 	// Download configuration
-	DefaultMaxWorkers    = 8
+	DefaultMaxWorkers    = 4                // Reduced to minimize concurrent API calls
 	DefaultChunkSize     = 10 * 1024 * 1024 // 10MB
-	DefaultMaxRetries    = 5
-	DefaultRetryInterval = 10 * time.Second
+	DefaultMaxRetries    = 10               // Increased for better 429 handling
+	DefaultRetryInterval = 15 * time.Second // Increased base interval
 
 	// File size thresholds
 	LfsFileSizeThreshold = 10 * 1024 * 1024 // 10MB

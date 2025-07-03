@@ -56,9 +56,9 @@ spec:
 
 Several out-of-the-box _ClusterServingRuntimes_ are provided with OME so that users can quickly deploy common models without having to define the runtimes themselves.
 
-### SRT (SGLang) Runtimes
+### SGLang Runtimes
 
-> **Note:** SRT (SGLang) is our flagship supporting runtime, offering the latest serving engine with the most optimal performance. It provides cutting-edge features including multi-node serving capabilities, prefill-decode disaggregated serving, and Large-scale Cross-node Expert Parallelism (EP) for optimal performance at scale.
+> **Note:** SGLang is our flagship supporting runtime, offering the latest serving engine with the most optimal performance. It provides cutting-edge features including multi-node serving capabilities, prefill-decode disaggregated serving, and Large-scale Cross-node Expert Parallelism (EP) for optimal performance at scale.
 
 | Name                                         | Model Framework | Model Format | Model Architecture             |
 |----------------------------------------------|-----------------|--------------|--------------------------------|

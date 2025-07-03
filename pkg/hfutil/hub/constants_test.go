@@ -194,9 +194,9 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "https://huggingface.co", DefaultEndpoint)
 	assert.Equal(t, "main", DefaultRevision)
 	assert.Equal(t, ".cache/huggingface/hub", DefaultCacheDir)
-	assert.Equal(t, 8, DefaultMaxWorkers)
+	assert.Equal(t, 4, DefaultMaxWorkers) // Updated to reduce concurrent API calls
 	assert.Equal(t, 10*1024*1024, DefaultChunkSize)
-	assert.Equal(t, 5, DefaultMaxRetries)
+	assert.Equal(t, 10, DefaultMaxRetries) // Increased for better 429 handling
 
 	// Test repository types
 	assert.Equal(t, "model", RepoTypeModel)
@@ -257,7 +257,7 @@ func TestTimeoutConstants(t *testing.T) {
 	assert.Equal(t, "10s", DefaultRequestTimeout.String())
 	assert.Equal(t, "10s", DefaultEtagTimeout.String())
 	assert.Equal(t, "10m0s", DownloadTimeout.String())
-	assert.Equal(t, "10s", DefaultRetryInterval.String())
+	assert.Equal(t, "15s", DefaultRetryInterval.String())
 }
 
 func TestFileSizeThresholds(t *testing.T) {

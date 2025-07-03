@@ -10,3 +10,4 @@ spec:
   storage:
     storageUri: hf://meta-llama/Llama-3.2-90B-Vision-Instruct
     path: /raid/models/meta/Llama-3.2-90B-Vision-Instruct
+    key: "hf-token"
