@@ -285,6 +285,26 @@ func TestGetStorageType(t *testing.T) {
 			want: StorageTypeHuggingFace,
 		},
 		{
+			name: "s3 storage",
+			uri:  "s3://my-bucket/my-prefix",
+			want: StorageTypeS3,
+		},
+		{
+			name: "azure storage",
+			uri:  "az://myaccount/mycontainer/myblob",
+			want: StorageTypeAzure,
+		},
+		{
+			name: "gcs storage",
+			uri:  "gs://my-bucket/my-object",
+			want: StorageTypeGCS,
+		},
+		{
+			name: "github storage",
+			uri:  "github://owner/repo",
+			want: StorageTypeGitHub,
+		},
+		{
 			name:        "unknown storage type",
 			uri:         "unknown://something",
 			wantErr:     true,
@@ -792,6 +812,262 @@ func TestNewObjectURI(t *testing.T) {
 			}
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expect, got)
+		})
+	}
+}
+
+func TestParseS3StorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		want        *S3StorageComponents
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid uri with bucket and prefix",
+			uri:  "s3://my-bucket/path/to/object",
+			want: &S3StorageComponents{
+				Bucket: "my-bucket",
+				Prefix: "path/to/object",
+				Region: "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with bucket only",
+			uri:  "s3://my-bucket",
+			want: &S3StorageComponents{
+				Bucket: "my-bucket",
+				Prefix: "",
+				Region: "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with region",
+			uri:  "s3://my-bucket@us-east-1/path/to/object",
+			want: &S3StorageComponents{
+				Bucket: "my-bucket",
+				Prefix: "path/to/object",
+				Region: "us-east-1",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "missing s3 prefix",
+			uri:         "my-bucket/object",
+			wantErr:     true,
+			errContains: "missing s3:// prefix",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing s3:// prefix",
+		},
+		{
+			name:        "only prefix",
+			uri:         "s3://",
+			wantErr:     true,
+			errContains: "missing bucket name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseS3StorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParseAzureStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		want        *AzureStorageComponents
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid uri with simple format",
+			uri:  "az://myaccount/mycontainer/path/to/blob",
+			want: &AzureStorageComponents{
+				AccountName:   "myaccount",
+				ContainerName: "mycontainer",
+				BlobPath:      "path/to/blob",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with blob endpoint format",
+			uri:  "az://myaccount.blob.core.windows.net/mycontainer/path/to/blob",
+			want: &AzureStorageComponents{
+				AccountName:   "myaccount",
+				ContainerName: "mycontainer",
+				BlobPath:      "path/to/blob",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri without blob path",
+			uri:  "az://myaccount/mycontainer",
+			want: &AzureStorageComponents{
+				AccountName:   "myaccount",
+				ContainerName: "mycontainer",
+				BlobPath:      "",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "missing container",
+			uri:         "az://myaccount",
+			wantErr:     true,
+			errContains: "missing container name",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing az:// prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseAzureStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParseGCSStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		want        *GCSStorageComponents
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid uri with bucket and object",
+			uri:  "gs://my-bucket/path/to/object",
+			want: &GCSStorageComponents{
+				Bucket: "my-bucket",
+				Object: "path/to/object",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with bucket only",
+			uri:  "gs://my-bucket",
+			want: &GCSStorageComponents{
+				Bucket: "my-bucket",
+				Object: "",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "missing gs prefix",
+			uri:         "my-bucket/object",
+			wantErr:     true,
+			errContains: "missing gs:// prefix",
+		},
+		{
+			name:        "empty bucket",
+			uri:         "gs://",
+			wantErr:     true,
+			errContains: "missing bucket name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseGCSStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParseGitHubStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		want        *GitHubStorageComponents
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid uri without tag",
+			uri:  "github://owner/repo",
+			want: &GitHubStorageComponents{
+				Owner:      "owner",
+				Repository: "repo",
+				Tag:        "latest",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with tag",
+			uri:  "github://owner/repo@v1.0.0",
+			want: &GitHubStorageComponents{
+				Owner:      "owner",
+				Repository: "repo",
+				Tag:        "v1.0.0",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "missing repository",
+			uri:         "github://owner",
+			wantErr:     true,
+			errContains: "expected owner/repository",
+		},
+		{
+			name:        "empty uri",
+			uri:         "github://",
+			wantErr:     true,
+			errContains: "missing owner/repository",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseGitHubStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

@@ -213,9 +213,95 @@ func TestBuildStorageArgs(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "unsupported storage scheme",
+			name: "s3 storage scheme",
 			storageSpec: &v1beta1.StorageSpec{
 				StorageUri: strPtr("s3://my-bucket/path"),
+			},
+			want: []string{
+				"--upload-results",
+				"--storage-provider", "aws",
+				"--storage-bucket", "my-bucket",
+				"--storage-prefix", "path",
+			},
+			wantErr: false,
+		},
+		{
+			name: "s3 storage with credentials",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("s3://my-bucket@us-west-2/path/to/data"),
+				Parameters: &map[string]string{
+					"aws_access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+					"aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG",
+					"aws_profile":           "production",
+				},
+			},
+			want: []string{
+				"--upload-results",
+				"--storage-provider", "aws",
+				"--storage-bucket", "my-bucket",
+				"--storage-prefix", "path/to/data",
+				"--storage-aws-access-key-id", "AKIAIOSFODNN7EXAMPLE",
+				"--storage-aws-secret-access-key", "wJalrXUtnFEMI/K7MDENG",
+				"--storage-aws-profile", "production",
+				"--storage-aws-region", "us-west-2",
+			},
+			wantErr: false,
+		},
+		{
+			name: "azure storage scheme",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("az://myaccount/mycontainer/path/to/blob"),
+			},
+			want: []string{
+				"--upload-results",
+				"--storage-provider", "azure",
+				"--storage-bucket", "mycontainer",
+				"--storage-prefix", "path/to/blob",
+				"--storage-azure-account-name", "myaccount",
+			},
+			wantErr: false,
+		},
+		{
+			name: "gcs storage scheme",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("gs://my-bucket/path/to/object"),
+				Parameters: &map[string]string{
+					"gcp_project_id":       "my-project",
+					"gcp_credentials_path": "/path/to/creds.json",
+				},
+			},
+			want: []string{
+				"--upload-results",
+				"--storage-provider", "gcp",
+				"--storage-bucket", "my-bucket",
+				"--storage-prefix", "path/to/object",
+				"--storage-gcp-project-id", "my-project",
+				"--storage-gcp-credentials-path", "/path/to/creds.json",
+			},
+			wantErr: false,
+		},
+		{
+			name: "github storage scheme",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("github://myorg/myrepo@v1.0.0"),
+				Parameters: &map[string]string{
+					"github_token": "ghp_xxxxxxxxxxxx",
+				},
+			},
+			want: []string{
+				"--upload-results",
+				"--storage-provider", "github",
+				"--github-owner", "myorg",
+				"--github-repo", "myrepo",
+				"--github-tag", "v1.0.0",
+				"--github-token", "ghp_xxxxxxxxxxxx",
+			},
+			wantErr: false,
+		},
+		{
+			name: "unsupported storage scheme",
+			storageSpec: &v1beta1.StorageSpec{
+				StorageUri: strPtr("ftp://my-server/path"),
 			},
 			want:    nil,
 			wantErr: true,
