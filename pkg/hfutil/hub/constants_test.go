@@ -256,7 +256,7 @@ func TestTimeoutConstants(t *testing.T) {
 	// Test specific values
 	assert.Equal(t, "10s", DefaultRequestTimeout.String())
 	assert.Equal(t, "10s", DefaultEtagTimeout.String())
-	assert.Equal(t, "10m0s", DownloadTimeout.String())
+	assert.Equal(t, "2h0m0s", DownloadTimeout.String())
 	assert.Equal(t, "15s", DefaultRetryInterval.String())
 }
 
