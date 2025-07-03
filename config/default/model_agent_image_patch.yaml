@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: model-agent
-          image: ghcr.io/moirai-internal/model-agent:v0.1.1
+          image: ghcr.io/moirai-internal/model-agent:v0.1.2
