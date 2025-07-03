@@ -54,6 +54,8 @@ convertDacShape() {
 			echo "medium-a100v2-h100"
 		elif [[ "$unitshape" == "Medium_Flex_V2" ]]; then
 			echo "small-h100"
+		elif [[ "$unitshape" == "Medium_Flex_V1" ]]; then
+		  echo "small-a100"
 		fi
 	elif [[ "$type" == "Fine-tuning" || "$type" == "Fine-tuning - beta" ]]; then
 		if [[ "$unitshape" == "Small_Flex" ]]; then

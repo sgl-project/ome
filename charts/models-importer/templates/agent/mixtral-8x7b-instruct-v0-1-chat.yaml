@@ -6,7 +6,7 @@ metadata:
   labels:
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "vllm-two-cards-chat"
+    models.ome.io/runtime: "vllm-mixtral-8x7b-instruct"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "mixtral-8x7b-instruct-v0-1-chat" "isInternal" }}"
