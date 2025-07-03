@@ -24,7 +24,7 @@ spec:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command-a-032025-drcc" "osBucket" }}/o/{{ index .Values "command-a-032025-drcc" "vendor" }}/{{ index .Values "command-a-032025-drcc" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "command-a-032025-drcc" "vendor" }}/{{ index .Values "command-a-032025-drcc" "osPrefixOverride" }}"
   vendor: {{ index .Values "command-a-032025-drcc" "vendor" }}
-  version: "1.1"
+  version: "1.0"
   # keep trt structure for now
   modelFormat:
     name: tensorrtllm
