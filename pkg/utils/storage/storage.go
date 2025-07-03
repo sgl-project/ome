@@ -16,6 +16,14 @@ const (
 	VendorStoragePrefix = "vendor://"
 	// HuggingFaceStoragePrefix is the prefix for Hugging Face model storage URIs
 	HuggingFaceStoragePrefix = "hf://"
+	// S3StoragePrefix is the prefix for AWS S3 storage URIs
+	S3StoragePrefix = "s3://"
+	// AzureStoragePrefix is the prefix for Azure Blob storage URIs
+	AzureStoragePrefix = "az://"
+	// GCSStoragePrefix is the prefix for Google Cloud Storage URIs
+	GCSStoragePrefix = "gs://"
+	// GitHubStoragePrefix is the prefix for GitHub Releases storage URIs
+	GitHubStoragePrefix = "github://"
 )
 
 // StorageType is a string enum for storage type
@@ -30,6 +38,14 @@ const (
 	StorageTypeVendor StorageType = "VENDOR"
 	// StorageTypeHuggingFace is the value for Hugging Face model storage
 	StorageTypeHuggingFace StorageType = "HUGGINGFACE"
+	// StorageTypeS3 is the value for AWS S3 storage
+	StorageTypeS3 StorageType = "S3"
+	// StorageTypeAzure is the value for Azure Blob storage
+	StorageTypeAzure StorageType = "AZURE"
+	// StorageTypeGCS is the value for Google Cloud Storage
+	StorageTypeGCS StorageType = "GCS"
+	// StorageTypeGitHub is the value for GitHub Releases storage
+	StorageTypeGitHub StorageType = "GITHUB"
 )
 
 // OCIStorageComponents represents the components of an OCI storage URI
@@ -57,6 +73,33 @@ type VendorStorageComponents struct {
 type HuggingFaceStorageComponents struct {
 	ModelID string
 	Branch  string
+}
+
+// S3StorageComponents represents the components of an S3 storage URI
+type S3StorageComponents struct {
+	Bucket string
+	Prefix string
+	Region string // Optional region
+}
+
+// AzureStorageComponents represents the components of an Azure Blob storage URI
+type AzureStorageComponents struct {
+	AccountName   string
+	ContainerName string
+	BlobPath      string
+}
+
+// GCSStorageComponents represents the components of a Google Cloud Storage URI
+type GCSStorageComponents struct {
+	Bucket string
+	Object string
+}
+
+// GitHubStorageComponents represents the components of a GitHub Releases storage URI
+type GitHubStorageComponents struct {
+	Owner      string
+	Repository string
+	Tag        string // Optional tag/release name
 }
 
 // ParseOCIStorageURI parses an OCI storage URI and returns its components
@@ -192,6 +235,213 @@ func ValidateHuggingFaceStorageURI(uri string) error {
 	return err
 }
 
+// ParseS3StorageURI parses an S3 storage URI and returns its components
+// Format: s3://{bucket}/{prefix} or s3://{bucket}@{region}/{prefix}
+func ParseS3StorageURI(uri string) (*S3StorageComponents, error) {
+	if !strings.HasPrefix(uri, S3StoragePrefix) {
+		return nil, fmt.Errorf("invalid S3 storage URI format: missing %s prefix", S3StoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, S3StoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid S3 storage URI format: missing bucket name")
+	}
+
+	var bucket, prefix, region string
+
+	// Check if region is specified with @ symbol
+	if strings.Contains(path, "@") {
+		parts := strings.SplitN(path, "@", 2)
+		bucket = parts[0]
+
+		// Split region and prefix
+		remainingParts := strings.SplitN(parts[1], "/", 2)
+		region = remainingParts[0]
+
+		if len(remainingParts) > 1 {
+			prefix = remainingParts[1]
+		}
+	} else {
+		// Simple format without region
+		parts := strings.SplitN(path, "/", 2)
+		bucket = parts[0]
+
+		if len(parts) > 1 {
+			prefix = parts[1]
+		}
+	}
+
+	if bucket == "" {
+		return nil, fmt.Errorf("invalid S3 storage URI format: bucket name cannot be empty")
+	}
+
+	return &S3StorageComponents{
+		Bucket: bucket,
+		Prefix: prefix,
+		Region: region,
+	}, nil
+}
+
+// ValidateS3StorageURI validates if the given URI matches S3 storage format
+func ValidateS3StorageURI(uri string) error {
+	_, err := ParseS3StorageURI(uri)
+	return err
+}
+
+// ParseAzureStorageURI parses an Azure Blob storage URI and returns its components
+// Format: az://{account}.blob.core.windows.net/{container}/{blob_path} or az://{account}/{container}/{blob_path}
+func ParseAzureStorageURI(uri string) (*AzureStorageComponents, error) {
+	if !strings.HasPrefix(uri, AzureStoragePrefix) {
+		return nil, fmt.Errorf("invalid Azure storage URI format: missing %s prefix", AzureStoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, AzureStoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid Azure storage URI format: missing account name")
+	}
+
+	var accountName, containerName, blobPath string
+
+	// Check if it's the full blob endpoint format
+	if strings.Contains(path, ".blob.core.windows.net/") {
+		parts := strings.SplitN(path, ".blob.core.windows.net/", 2)
+		accountName = parts[0]
+
+		if len(parts) > 1 {
+			containerAndPath := strings.SplitN(parts[1], "/", 2)
+			containerName = containerAndPath[0]
+
+			if len(containerAndPath) > 1 {
+				blobPath = containerAndPath[1]
+			}
+		}
+	} else {
+		// Simple format: account/container/path
+		parts := strings.SplitN(path, "/", 3)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("invalid Azure storage URI format: missing container name")
+		}
+
+		accountName = parts[0]
+		containerName = parts[1]
+
+		if len(parts) > 2 {
+			blobPath = parts[2]
+		}
+	}
+
+	if accountName == "" || containerName == "" {
+		return nil, fmt.Errorf("invalid Azure storage URI format: account name and container name are required")
+	}
+
+	return &AzureStorageComponents{
+		AccountName:   accountName,
+		ContainerName: containerName,
+		BlobPath:      blobPath,
+	}, nil
+}
+
+// ValidateAzureStorageURI validates if the given URI matches Azure storage format
+func ValidateAzureStorageURI(uri string) error {
+	_, err := ParseAzureStorageURI(uri)
+	return err
+}
+
+// ParseGCSStorageURI parses a Google Cloud Storage URI and returns its components
+// Format: gs://{bucket}/{object_path}
+func ParseGCSStorageURI(uri string) (*GCSStorageComponents, error) {
+	if !strings.HasPrefix(uri, GCSStoragePrefix) {
+		return nil, fmt.Errorf("invalid GCS storage URI format: missing %s prefix", GCSStoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, GCSStoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid GCS storage URI format: missing bucket name")
+	}
+
+	// Split into bucket and object path
+	parts := strings.SplitN(path, "/", 2)
+	bucket := parts[0]
+
+	var object string
+	if len(parts) > 1 {
+		object = parts[1]
+	}
+
+	if bucket == "" {
+		return nil, fmt.Errorf("invalid GCS storage URI format: bucket name cannot be empty")
+	}
+
+	return &GCSStorageComponents{
+		Bucket: bucket,
+		Object: object,
+	}, nil
+}
+
+// ValidateGCSStorageURI validates if the given URI matches GCS storage format
+func ValidateGCSStorageURI(uri string) error {
+	_, err := ParseGCSStorageURI(uri)
+	return err
+}
+
+// ParseGitHubStorageURI parses a GitHub Releases storage URI and returns its components
+// Format: github://{owner}/{repository}[@{tag}]
+func ParseGitHubStorageURI(uri string) (*GitHubStorageComponents, error) {
+	if !strings.HasPrefix(uri, GitHubStoragePrefix) {
+		return nil, fmt.Errorf("invalid GitHub storage URI format: missing %s prefix", GitHubStoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, GitHubStoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid GitHub storage URI format: missing owner/repository")
+	}
+
+	var owner, repository, tag string
+
+	// Check if tag is specified
+	if strings.Contains(path, "@") {
+		parts := strings.SplitN(path, "@", 2)
+		ownerRepo := parts[0]
+		tag = parts[1]
+
+		repoParts := strings.SplitN(ownerRepo, "/", 2)
+		if len(repoParts) != 2 {
+			return nil, fmt.Errorf("invalid GitHub storage URI format: expected owner/repository")
+		}
+		owner = repoParts[0]
+		repository = repoParts[1]
+	} else {
+		// No tag specified
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid GitHub storage URI format: expected owner/repository")
+		}
+		owner = parts[0]
+		repository = parts[1]
+		tag = "latest" // Default to latest release
+	}
+
+	if owner == "" || repository == "" {
+		return nil, fmt.Errorf("invalid GitHub storage URI format: owner and repository are required")
+	}
+
+	return &GitHubStorageComponents{
+		Owner:      owner,
+		Repository: repository,
+		Tag:        tag,
+	}, nil
+}
+
+// ValidateGitHubStorageURI validates if the given URI matches GitHub storage format
+func ValidateGitHubStorageURI(uri string) error {
+	_, err := ParseGitHubStorageURI(uri)
+	return err
+}
+
 // GetStorageType determines the type of storage URI
 func GetStorageType(uri string) (StorageType, error) {
 	switch {
@@ -203,6 +453,14 @@ func GetStorageType(uri string) (StorageType, error) {
 		return StorageTypeVendor, nil
 	case strings.HasPrefix(uri, HuggingFaceStoragePrefix):
 		return StorageTypeHuggingFace, nil
+	case strings.HasPrefix(uri, S3StoragePrefix):
+		return StorageTypeS3, nil
+	case strings.HasPrefix(uri, AzureStoragePrefix):
+		return StorageTypeAzure, nil
+	case strings.HasPrefix(uri, GCSStoragePrefix):
+		return StorageTypeGCS, nil
+	case strings.HasPrefix(uri, GitHubStoragePrefix):
+		return StorageTypeGitHub, nil
 	default:
 		return "", fmt.Errorf("unknown storage type for URI: %s", uri)
 	}
@@ -224,6 +482,14 @@ func ValidateStorageURI(uri string) error {
 		return ValidateVendorStorageURI(uri)
 	case StorageTypeHuggingFace:
 		return ValidateHuggingFaceStorageURI(uri)
+	case StorageTypeS3:
+		return ValidateS3StorageURI(uri)
+	case StorageTypeAzure:
+		return ValidateAzureStorageURI(uri)
+	case StorageTypeGCS:
+		return ValidateGCSStorageURI(uri)
+	case StorageTypeGitHub:
+		return ValidateGitHubStorageURI(uri)
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)
 	}

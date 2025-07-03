@@ -501,20 +501,20 @@ func (r *BenchmarkJobReconciler) updateStatus(ctx context.Context, benchmarkJob 
 
 		// Map job conditions to benchmark job states
 		switch {
-		case isComplete:
-			// Completed
-			if benchmarkStatus.State != "Completed" {
-				benchmarkStatus.State = "Completed"
+		case isFailed:
+			// Failed - check this first as a job can be both complete and failed
+			if benchmarkStatus.State != "Failed" {
+				benchmarkStatus.State = "Failed"
 				if benchmarkStatus.StartTime == nil && job.Status.StartTime != nil {
 					benchmarkStatus.StartTime = job.Status.StartTime
 				}
 				benchmarkStatus.CompletionTime = completionTime
 				benchmarkStatus.LastReconcileTime = &now
 			}
-		case isFailed:
-			// Failed
-			if benchmarkStatus.State != "Failed" {
-				benchmarkStatus.State = "Failed"
+		case isComplete:
+			// Completed - only if not failed
+			if benchmarkStatus.State != "Completed" {
+				benchmarkStatus.State = "Completed"
 				if benchmarkStatus.StartTime == nil && job.Status.StartTime != nil {
 					benchmarkStatus.StartTime = job.Status.StartTime
 				}

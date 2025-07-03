@@ -8,6 +8,8 @@ description: >
 
 A _BenchmarkJob_ is a resource in OME that automates the performance benchmarking of inference service or OCI Generative AI Service endpoints. It allows you to evaluate model serving performance under various traffic patterns and load conditions.
 
+BenchmarkJob uses [genai-bench](https://docs.sglang.ai/genai-bench/), a comprehensive benchmarking tool for evaluating generative AI model serving systems. For detailed information about genai-bench features and capabilities, refer to the [official genai-bench documentation](https://docs.sglang.ai/genai-bench/).
+
 ## Core Components
 
 A BenchmarkJob consists of several key components:
@@ -19,7 +21,7 @@ A BenchmarkJob consists of several key components:
 
 ## Example Configuration
 
-Here's an example of a BenchmarkJob configuration:
+Here's an example of a BenchmarkJob configuration using OCI Object Storage:
 
 ```yaml
 apiVersion: ome.io/v1beta1
@@ -65,11 +67,31 @@ spec:
    outputLocation:
       storageUri: "oci://n/idqj093njucb/b/ome-benchmark-results/o/llama-3-1-70b-benchmark"
       parameters:
-         auth: "instance_principal"  # Authentication type
-         config_file: "/path/to/config"  # Optional: Config file for user_principal auth
-         profile: "DEFAULT"  # Optional: Profile name for user_principal auth
-         security_token: "token"  # Optional: Token for security_token auth
-         region: "us-phoenix-1"  # Optional: Region for security_token auth
+         auth: "instance_principal"
+```
+
+### Example with AWS S3 Storage
+
+```yaml
+apiVersion: ome.io/v1beta1
+kind: BenchmarkJob
+metadata:
+   name: model-benchmark-s3
+   namespace: default
+spec:
+   endpoint:
+      endpoint:
+         url: "http://my-model-service:8080/v1/completions"
+         apiFormat: "openai"
+         modelName: "llama-3"
+   task: text-to-text
+   numConcurrency: [1, 4, 8, 16]
+   maxTimePerIteration: 10
+   maxRequestsPerIteration: 100
+   outputLocation:
+      storageUri: "s3://my-benchmarks@us-east-1/experiments/2024"
+      parameters:
+         aws_profile: "production"  # Or use aws_access_key_id and aws_secret_access_key
 ```
 
 ## Spec Attributes
@@ -111,8 +133,11 @@ endpoint:
 
 ## Storage Configuration
 
-BenchmarkJob supports storing benchmark results in OCI Object Storage. The storage configuration is specified in the `outputLocation` field:
+BenchmarkJob supports storing benchmark results in multiple cloud storage providers. The storage configuration is specified in the `outputLocation` field.
 
+### Supported Storage Providers
+
+#### 1. OCI Object Storage
 ```yaml
 outputLocation:
   storageUri: "oci://n/my-namespace/b/my-bucket/o/benchmark-results"
@@ -124,28 +149,90 @@ outputLocation:
     region: "us-phoenix-1"  # Optional: Region for security_token auth
 ```
 
-### Storage URI Format
-
-The storage URI must follow this format:
+#### 2. AWS S3
+```yaml
+outputLocation:
+  storageUri: "s3://my-bucket/path/to/results"
+  # Or with region: "s3://my-bucket@us-west-2/path/to/results"
+  parameters:
+    aws_access_key_id: "AKIAIOSFODNN7EXAMPLE"  # Optional: AWS access key
+    aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG"  # Optional: AWS secret key
+    aws_profile: "production"  # Optional: AWS profile name
+    aws_region: "us-east-1"  # Optional: AWS region
 ```
-oci://n/{namespace}/b/{bucket}/o/{object_path}
+
+#### 3. Azure Blob Storage
+```yaml
+outputLocation:
+  storageUri: "az://myaccount/mycontainer/path/to/results"
+  # Or: "az://myaccount.blob.core.windows.net/mycontainer/path/to/results"
+  parameters:
+    azure_account_name: "myaccount"  # Optional: Storage account name
+    azure_account_key: "YOUR_KEY"  # Optional: Account key
+    azure_connection_string: "DefaultEndpointsProtocol=..."  # Optional: Connection string
+    azure_sas_token: "?sv=..."  # Optional: SAS token
 ```
 
-Where:
-- `{namespace}`: Your OCI object storage namespace
-- `{bucket}`: The bucket name
-- `{object_path}`: Path prefix for benchmark results
+#### 4. Google Cloud Storage
+```yaml
+outputLocation:
+  storageUri: "gs://my-bucket/path/to/results"
+  parameters:
+    gcp_project_id: "my-project-123"  # Optional: GCP project ID
+    gcp_credentials_path: "/path/to/service-account.json"  # Optional: Service account path
+```
+
+#### 5. GitHub Releases
+```yaml
+outputLocation:
+  storageUri: "github://owner/repo@v1.0.0"  # @tag is optional, defaults to "latest"
+  parameters:
+    github_token: "ghp_xxxxxxxxxxxx"  # Required: GitHub personal access token
+```
+
+#### 6. Persistent Volume Claim (PVC)
+```yaml
+outputLocation:
+  storageUri: "pvc://my-pvc/results"
+  # No additional parameters needed
+```
+
+### Storage URI Formats
+
+| Provider | URI Format | Example |
+|----------|------------|---------|
+| OCI | `oci://n/{namespace}/b/{bucket}/o/{path}` | `oci://n/myns/b/mybucket/o/results` |
+| S3 | `s3://{bucket}[@{region}]/{path}` | `s3://mybucket@us-west-2/results` |
+| Azure | `az://{account}/{container}/{path}` | `az://myaccount/mycontainer/results` |
+| GCS | `gs://{bucket}/{path}` | `gs://mybucket/results` |
+| GitHub | `github://{owner}/{repo}[@{tag}]` | `github://myorg/myrepo@v1.0.0` |
+| PVC | `pvc://{pvc-name}/{path}` | `pvc://my-pvc/results` |
 
 ### Authentication Options
 
-The following authentication methods are supported:
-
-- `user_principal`: Uses OCI config file credentials
-  - Requires `config_file` and optionally `profile`
+#### OCI Authentication
+- `user_principal`: Uses OCI config file credentials (requires `config_file` and optionally `profile`)
 - `instance_principal`: Uses instance credentials
-- `security_token`: Uses security token authentication
-  - Requires `security_token` and `region`
+- `security_token`: Uses security token authentication (requires `security_token` and `region`)
 - `instance_obo_user`: Uses instance principal on behalf of user
+
+#### AWS Authentication
+- IAM credentials via `aws_access_key_id` and `aws_secret_access_key`
+- AWS profile via `aws_profile`
+- Environment variables or IAM roles (when no parameters specified)
+
+#### Azure Authentication
+- Storage account key via `azure_account_key`
+- Connection string via `azure_connection_string`
+- SAS token via `azure_sas_token`
+- Azure AD authentication (when no parameters specified)
+
+#### GCP Authentication
+- Service account via `gcp_credentials_path`
+- Application default credentials (when no parameters specified)
+
+#### GitHub Authentication
+- Personal access token via `github_token` (required)
 
 ## Reconciliation Process
 
@@ -200,6 +287,20 @@ status:
 4. **Storage Management**:
    - Use appropriate storage classes for results
    - Clean up old benchmark data regularly
+   - Choose storage provider based on your needs:
+     - **OCI**: Best for Oracle Cloud deployments
+     - **S3**: Ideal for AWS-based infrastructure
+     - **Azure Blob**: Optimal for Azure environments
+     - **GCS**: Recommended for Google Cloud Platform
+     - **GitHub**: Good for public benchmarks and CI/CD integration
+     - **PVC**: Best for on-premise or air-gapped environments
+
+5. **Multi-Cloud Considerations**:
+   - Store credentials securely using Kubernetes secrets
+   - Use service accounts or managed identities when possible
+   - Consider data egress costs when choosing storage location
+   - Enable encryption at rest for sensitive benchmark data
+   - Use consistent naming conventions across cloud providers
 
 
 ## Usage Guide

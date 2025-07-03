@@ -196,6 +196,128 @@ func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 			return nil, fmt.Errorf("invalid PVC storage URI: %v", err)
 		}
 		args = append(args, "--experiment-base-dir", "/"+components.SubPath)
+
+	case storage.StorageTypeS3:
+		// Parse and add S3 storage URI components
+		components, err := storage.ParseS3StorageURI(*storageSpec.StorageUri)
+		if err != nil {
+			return nil, fmt.Errorf("invalid S3 storage URI: %v", err)
+		}
+		args = append(args, "--upload-results")
+		args = append(args, "--storage-provider", "aws")
+		args = append(args, "--storage-bucket", components.Bucket)
+		if components.Prefix != "" {
+			args = append(args, "--storage-prefix", components.Prefix)
+		}
+
+		// Handle storage parameters
+		if storageSpec.Parameters != nil {
+			params := *storageSpec.Parameters
+			// AWS credentials
+			if accessKey, ok := params["aws_access_key_id"]; ok {
+				args = append(args, "--storage-aws-access-key-id", accessKey)
+			}
+			if secretKey, ok := params["aws_secret_access_key"]; ok {
+				args = append(args, "--storage-aws-secret-access-key", secretKey)
+			}
+			if profile, ok := params["aws_profile"]; ok {
+				args = append(args, "--storage-aws-profile", profile)
+			}
+			if region, ok := params["aws_region"]; ok {
+				args = append(args, "--storage-aws-region", region)
+			} else if components.Region != "" {
+				args = append(args, "--storage-aws-region", components.Region)
+			}
+		}
+
+	case storage.StorageTypeAzure:
+		// Parse and add Azure storage URI components
+		components, err := storage.ParseAzureStorageURI(*storageSpec.StorageUri)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Azure storage URI: %v", err)
+		}
+		args = append(args, "--upload-results")
+		args = append(args, "--storage-provider", "azure")
+		args = append(args, "--storage-bucket", components.ContainerName)
+		if components.BlobPath != "" {
+			args = append(args, "--storage-prefix", components.BlobPath)
+		}
+
+		// Always add the account name
+		if storageSpec.Parameters != nil {
+			params := *storageSpec.Parameters
+			// Check if account name is provided in parameters
+			if accountName, ok := params["azure_account_name"]; ok {
+				args = append(args, "--storage-azure-account-name", accountName)
+			} else {
+				args = append(args, "--storage-azure-account-name", components.AccountName)
+			}
+			// Azure credentials
+			if accountKey, ok := params["azure_account_key"]; ok {
+				args = append(args, "--storage-azure-account-key", accountKey)
+			}
+			if connString, ok := params["azure_connection_string"]; ok {
+				args = append(args, "--storage-azure-connection-string", connString)
+			}
+			if sasToken, ok := params["azure_sas_token"]; ok {
+				args = append(args, "--storage-azure-sas-token", sasToken)
+			}
+		} else {
+			// Even without parameters, we need to add the account name
+			args = append(args, "--storage-azure-account-name", components.AccountName)
+		}
+
+	case storage.StorageTypeGCS:
+		// Parse and add GCS storage URI components
+		components, err := storage.ParseGCSStorageURI(*storageSpec.StorageUri)
+		if err != nil {
+			return nil, fmt.Errorf("invalid GCS storage URI: %v", err)
+		}
+		args = append(args, "--upload-results")
+		args = append(args, "--storage-provider", "gcp")
+		args = append(args, "--storage-bucket", components.Bucket)
+		if components.Object != "" {
+			args = append(args, "--storage-prefix", components.Object)
+		}
+
+		// Handle storage parameters
+		if storageSpec.Parameters != nil {
+			params := *storageSpec.Parameters
+			// GCP credentials
+			if projectID, ok := params["gcp_project_id"]; ok {
+				args = append(args, "--storage-gcp-project-id", projectID)
+			}
+			if credsPath, ok := params["gcp_credentials_path"]; ok {
+				args = append(args, "--storage-gcp-credentials-path", credsPath)
+			}
+		}
+
+	case storage.StorageTypeGitHub:
+		// Parse and add GitHub storage URI components
+		components, err := storage.ParseGitHubStorageURI(*storageSpec.StorageUri)
+		if err != nil {
+			return nil, fmt.Errorf("invalid GitHub storage URI: %v", err)
+		}
+		args = append(args, "--upload-results")
+		args = append(args, "--storage-provider", "github")
+		// GitHub doesn't use bucket/prefix model, but owner/repo
+		args = append(args, "--github-owner", components.Owner)
+		args = append(args, "--github-repo", components.Repository)
+		if components.Tag != "latest" {
+			args = append(args, "--github-tag", components.Tag)
+		}
+
+		// Handle storage parameters
+		if storageSpec.Parameters != nil {
+			params := *storageSpec.Parameters
+			// GitHub token
+			if token, ok := params["github_token"]; ok {
+				args = append(args, "--github-token", token)
+			}
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s", storageType)
 	}
 
 	return args, nil
