@@ -1,3 +1,11 @@
+# Global settings that apply to all resources
+global:
+  # Image pull secrets for all containers in the chart
+  # Example:
+  # imagePullSecrets:
+  #   - name: my-registry-secret
+  imagePullSecrets: []
+
 ome:
   version: &defaultVersion v0.1.2
   metricsaggregator:
