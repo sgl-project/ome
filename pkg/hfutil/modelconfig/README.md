@@ -21,12 +21,38 @@ This package provides Go utilities for loading, parsing, and analyzing Hugging F
 
 ## Supported Model Families
 
-- LLaMA (including Llama-3, Llama-3.1, Llama-4, Maverick, Scout)
-- Mistral & Mixtral (MoE)
-- DeepSeek V3
-- Phi-3, Phi-3 Vision
-- Qwen2
-- (See `future work` for upcoming model support)
+### Language Models
+- **LLaMA Family**: Llama-3, Llama-3.1, Llama-4, Maverick, Scout, SmolLM
+- **Mistral Family**: Mistral, Mixtral (MoE)
+- **DeepSeek**: DeepSeek V3
+- **Phi Family**: Phi-3, Phi-3 Vision
+- **Qwen Family**: Qwen2, Qwen2.5
+- **Gemma Family**: Gemma, Gemma2
+- **ChatGLM Family**: ChatGLM3, GLM-4
+- **Other Models**: 
+  - StableLM (StabilityAI)
+  - MiniCPM, MiniCPM3
+  - InternLM, InternLM2
+  - Baichuan, Baichuan2
+  - XVERSE
+  - ExaONE 3
+  - Command-R (Cohere)
+  - DBRX (Databricks)
+
+### Multimodal Models
+- **Qwen2-VL**: Vision-language models
+- **Phi-3 Vision**: Multimodal Phi models
+- **MLlama**: Multimodal Llama models (Llama 3.2 Vision)
+- **DeepSeek-VL**: DeepSeek VL2 and Janus multimodal models
+- **LLaVA**: Large Language and Vision Assistant models
+
+### Embedding Models
+- **BERT-based**: BGE, E5, and other BERT architectures
+- **Mistral-based**: E5-Mistral embedding models
+- **Qwen-based**: GTE-Qwen2 embedding models
+
+### Reward Models
+- Models using Llama, Gemma, Qwen, and InternLM architectures for reward modeling
 
 ## Usage
 
@@ -51,7 +77,20 @@ See the `examples/` directory for more detailed usage patterns.
 - `mistral.go`, `mixtral.go` – Mistral and Mixtral implementations
 - `deepseek_v3.go` – DeepSeek V3 implementation
 - `phi.go`, `phi3_v.go` – Phi family implementations
-- `qwen2.go` – Qwen2 implementation
+- `qwen2.go`, `qwen2_vl.go` – Qwen family implementations
+- `gemma.go` – Gemma family implementation
+- `chatglm.go` – ChatGLM/GLM-4 implementation
+- `stablelm.go` – StableLM implementation
+- `minicpm.go` – MiniCPM implementation
+- `internlm.go` – InternLM implementation
+- `baichuan.go` – Baichuan implementation
+- `xverse.go` – XVERSE implementation
+- `exaone.go` – ExaONE implementation
+- `bert.go` – BERT-based models (embeddings)
+- `deepseek_vl.go` – DeepSeek VL multimodal models
+- `llava.go` – LLaVA multimodal models
+- `command_r.go` – Command-R implementation
+- `dbrx.go` – DBRX implementation
 - `safetensors.go` – Utilities for parameter counting from safetensors files
 - `*_test.go` – Unit tests
 - `examples/` – Example code
@@ -59,31 +98,18 @@ See the `examples/` directory for more detailed usage patterns.
 
 ## Future Work
 
-- **Add support for all GEMMA models**
-  - `google/gemma-2b`
-  - `google/gemma-2b-it`
-  - `google/gemma-7b`
-  - `google/gemma-7b-it`
-  - `google/gemma-1.1-2b`
-  - `google/gemma-1.1-2b-it`
-  - `google/gemma-1.1-7b`
-  - `google/gemma-1.1-7b-it`
-  - *(Check for updates at [Hugging Face GEMMA models](https://huggingface.co/models?search=gemma))*
+- **Additional model families to support:**
+  - OLMoE (Allen AI)
+  - LLaVA-NeXT, LLaVA-OneVision (extended LLaVA variants)
+  - CLIP (standalone vision encoders)
+  - Additional embedding models (Voyage, Cohere embeddings)
+  - More reward models
 
-- **Add support for all Qwen3 models**
-  - `Qwen/Qwen3-1.8B`
-  - `Qwen/Qwen3-1.8B-Instruct`
-  - `Qwen/Qwen3-4B`
-  - `Qwen/Qwen3-4B-Instruct`
-  - `Qwen/Qwen3-7B`
-  - `Qwen/Qwen3-7B-Instruct`
-  - `Qwen/Qwen3-14B`
-  - `Qwen/Qwen3-14B-Instruct`
-  - `Qwen/Qwen3-32B`
-  - `Qwen/Qwen3-32B-Instruct`
-  - `Qwen/Qwen3-72B`
-  - `Qwen/Qwen3-72B-Instruct`
-  - *(Check for updates at [Hugging Face Qwen models](https://huggingface.co/models?search=qwen))*
+- **Enhanced features:**
+  - Automatic model file downloading
+  - Model quantization detection and analysis
+  - Memory usage estimation
+  - Performance benchmarking utilities
 
 - Continue expanding support for new and emerging Hugging Face model architectures.
 - Add more robust error handling and config validation for edge cases.
