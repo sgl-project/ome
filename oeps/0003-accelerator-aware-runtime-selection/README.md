@@ -197,7 +197,7 @@ spec:
 
 ---
 # OME automatically discovers and creates AcceleratorClass
-apiVersion: ome.ai/v1beta1
+apiVersion: ome.io/v1beta1
 kind: AcceleratorClass
 metadata:
   name: gpu-nvidia-a100
