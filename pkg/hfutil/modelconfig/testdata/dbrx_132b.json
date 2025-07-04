@@ -1,0 +1,25 @@
+{
+  "architectures": ["DbrxForCausalLM"],
+  "d_model": 6144,
+  "ffn_config": {
+    "ffn_act_fn": "silu",
+    "ffn_hidden_size": 10752,
+    "moe_jitter_eps": 0.0,
+    "moe_loss_weight": 0.01,
+    "moe_num_experts": 16,
+    "moe_top_k": 4
+  },
+  "attn_config": {
+    "attn_pdrop": 0.0,
+    "clip_qkv": null,
+    "kv_n_heads": 12,
+    "rope_theta": 10000.0
+  },
+  "emb_pdrop": 0.0,
+  "max_seq_len": 32768,
+  "model_type": "dbrx",
+  "n_heads": 48,
+  "n_layers": 48,
+  "vocab_size": 100280,
+  "torch_dtype": "bfloat16"
+}
