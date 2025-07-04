@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica"
@@ -45,7 +48,7 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		ociobjectstore.OCIOSDataStoreModule,
+		OCIOSDataStoreListProvider(),
 		hub.Module,
 		replica.Module,
 		fx.Populate(&r.agent),
@@ -60,4 +63,45 @@ func (r *ReplicaAgent) Start() error {
 // NewReplicaAgent creates a new replica agent
 func NewReplicaAgent() *ReplicaAgent {
 	return &ReplicaAgent{}
+}
+
+type OCIOSDataStoreConfigWrapper struct {
+	fx.Out
+
+	OCIOSDataStoreConfig *ociobjectstore.Config `group:"OCIOSDataStoreConfigs"`
+}
+
+func OCIOSDataStoreListProvider() fx.Option {
+	return fx.Provide(
+		provideSourceOCIOSDataSourceConfig,
+		provideTargetOCIOSDataStoreConfig,
+		ociobjectstore.ProvideListOfOCIOSDataStoreWithAppParams,
+	)
+}
+
+func provideSourceOCIOSDataSourceConfig(logger logging.Interface, v *viper.Viper, authType principals.AuthenticationType) OCIOSDataStoreConfigWrapper {
+	sourceOCIOSDataStoreConfig := &ociobjectstore.Config{}
+	if err := v.UnmarshalKey("source.oci", sourceOCIOSDataStoreConfig); err != nil {
+		panic(fmt.Errorf("error occurred when unmarshalling key source: %+v", err))
+	}
+	sourceOCIOSDataStoreConfig.AnotherLogger = logger
+	sourceOCIOSDataStoreConfig.Name = replica.SourceStorageConfigKeyName
+
+	return OCIOSDataStoreConfigWrapper{
+		OCIOSDataStoreConfig: sourceOCIOSDataStoreConfig,
+	}
+}
+
+func provideTargetOCIOSDataStoreConfig(logger logging.Interface, v *viper.Viper, authType principals.AuthenticationType) OCIOSDataStoreConfigWrapper {
+	targetOCIOSDataStoreConfig := &ociobjectstore.Config{}
+	if err := v.UnmarshalKey("target.oci", targetOCIOSDataStoreConfig); err != nil {
+		panic(fmt.Errorf("error occurred when unmarshalling key source: %+v", err))
+	}
+
+	targetOCIOSDataStoreConfig.AnotherLogger = logger
+	targetOCIOSDataStoreConfig.Name = replica.TargetStorageConfigKeyName
+
+	return OCIOSDataStoreConfigWrapper{
+		OCIOSDataStoreConfig: targetOCIOSDataStoreConfig,
+	}
 }

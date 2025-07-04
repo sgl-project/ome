@@ -2,32 +2,27 @@ package replica
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/go-playground/validator/v10"
 	"github.com/sgl-project/ome/pkg/configutils"
 	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"github.com/sgl-project/ome/pkg/utils/storage"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath            string                   `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB  int                      `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck bool                     `mapstructure:"enable_size_limit_check"`
-	NumConnections       int                      `mapstructure:"num_connections"`
-	SourceObjectStoreURI ociobjectstore.ObjectURI `mapstructure:"source" validate:"required"`
-	TargetObjectStoreURI ociobjectstore.ObjectURI `mapstructure:"target" validate:"required"`
+	LocalPath            string `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB  int    `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck bool   `mapstructure:"enable_size_limit_check"`
+	NumConnections       int    `mapstructure:"num_connections"`
+	SourceStorageURIStr  string `mapstructure:"source.storage_uri" validate:"required"`
+	TargetStorageURIStr  string `mapstructure:"target.storage_uri" validate:"required"`
 
-	SourceStorageType storage.StorageType
-	TargetStorageType storage.StorageType
-
-	ObjectStorageDataStore *ociobjectstore.OCIOSDataStore
-	HubClient              *hf.HubClient
+	SourceOCIOSDataStore *ociobjectstore.OCIOSDataStore
+	TargetOCIOSDataStore *ociobjectstore.OCIOSDataStore
+	HubClient            *hf.HubClient
 }
 
 type Option func(*Config) error
@@ -68,7 +63,15 @@ func NewReplicaConfig(opts ...Option) (*Config, error) {
 // WithAppParams attempts to resolve the required client objects using injected named parameters
 func WithAppParams(params replicaParams) Option {
 	return func(c *Config) error {
-		c.ObjectStorageDataStore = params.ObjectStorageDataStores
+		for _, dataStore := range params.OCIOSDataStoreList {
+			if dataStore.Config.Name == SourceStorageConfigKeyName {
+				c.SourceOCIOSDataStore = dataStore
+			}
+			if dataStore.Config.Name == TargetStorageConfigKeyName {
+				c.TargetOCIOSDataStore = dataStore
+			}
+		}
+
 		c.HubClient = params.HubClient
 		return nil
 	}
@@ -97,12 +100,12 @@ func WithViper(v *viper.Viper) Option {
 		}
 
 		// Ensure that the prefix of the object store URIs end with a slash
-		if len(c.SourceObjectStoreURI.Prefix) > 0 && !strings.HasSuffix(c.SourceObjectStoreURI.Prefix, "/") {
-			c.SourceObjectStoreURI.Prefix = c.SourceObjectStoreURI.Prefix + "/"
-		}
-		if len(c.TargetObjectStoreURI.Prefix) > 0 && !strings.HasSuffix(c.TargetObjectStoreURI.Prefix, "/") {
-			c.TargetObjectStoreURI.Prefix = c.TargetObjectStoreURI.Prefix + "/"
-		}
+		//if len(c.SourceObjectStoreURI.Prefix) > 0 && !strings.HasSuffix(c.SourceObjectStoreURI.Prefix, "/") {
+		//	c.SourceObjectStoreURI.Prefix = c.SourceObjectStoreURI.Prefix + "/"
+		//}
+		//if len(c.TargetObjectStoreURI.Prefix) > 0 && !strings.HasSuffix(c.TargetObjectStoreURI.Prefix, "/") {
+		//	c.TargetObjectStoreURI.Prefix = c.TargetObjectStoreURI.Prefix + "/"
+		//}
 
 		return nil
 	}

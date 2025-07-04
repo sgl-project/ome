@@ -246,7 +246,7 @@ func TestConfig_Validate(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "missing ObjectStorageDataStore",
+			name: "missing SourceOCIOSDataStore",
 			setupConfig: func() *Config {
 				return &Config{
 					FineTunedWeightInfoFilePath:      "/test/path/weights.json",

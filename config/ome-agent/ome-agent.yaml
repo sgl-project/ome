@@ -30,16 +30,40 @@ download_size_limit_gb: 650
 enable_size_limit_check: true
 
 source:
-  bucket_name: "source-bucket"
-  prefix: "models/example-model/"
-  region: "us-ashburn-1"
-  namespace: "example-namespace"
+  storage_uri: "oci://n/idqj093njucb/b/model-store/o/meta/llama-3-2-90b-vision-instruct-fp8-dynamic"
+  oci:
+    enable_obo_token: true
+    obo_token: ""
+    auth_type: "InstancePrincipal"
+    region: "us-ashburn-1"
 
 target:
-  bucket_name: "target-bucket"
-  prefix: "models/example-model/"
-  region: "us-ashburn-1"
-  namespace: "example-namespace"
+  storage_uri: "oci://n/idqj093njucb/b/simolin-test-bucket/o/meta/llama-3-2-90b-vision-instruct-fp8-dynamic"
+  oci:
+    enable_obo_token: false
+    obo_token: ""
+    auth_type: "InstancePrincipal"
+    region: "us-ashburn-1"
+
+#source:
+#  bucket_name: "source-bucket"
+#  prefix: "models/example-model/"
+#  region: "us-ashburn-1"
+#  namespace: "example-namespace"
+#  oci:
+#    enable_obo_token: true
+#    obo_token: ""
+#    auth_type: "InstancePrincipal"
+#
+#target:
+#  bucket_name: "target-bucket"
+#  prefix: "models/example-model/"
+#  region: "us-ashburn-1"
+#  namespace: "example-namespace"
+#  oci:
+#    enable_obo_token: false
+#    obo_token: ""
+#    auth_type: "InstancePrincipal"
 
 model_framework: tensorrtllm
 tensorrtllm_version: "v0.11.0"

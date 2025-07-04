@@ -16,11 +16,22 @@ const (
 	DefaultUploadChunkSizeInMB   = 50
 	DefaultUploadThreads         = 10
 	GB                           = 1073741824
+
+	SourceStorageConfigKeyName = "source"
+	TargetStorageConfigKeyName = "target"
 )
 
 type ReplicaAgent struct {
-	logger logging.Interface
-	Config Config
+	logger           logging.Interface
+	Config           Config
+	ReplicationInput ReplicationInput
+}
+
+type ReplicationInput struct {
+	sourceStorageType storage.StorageType
+	targetStorageType storage.StorageType
+	source            ociobjectstore.ObjectURI
+	target            ociobjectstore.ObjectURI
 }
 
 type ReplicationResult struct {
@@ -31,15 +42,47 @@ type ReplicationResult struct {
 
 // NewReplicaAgent constructs a new replica agent from the given configuration.
 func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
+	if err := storage.ValidateStorageURI(config.SourceStorageURIStr); err != nil {
+		return nil, fmt.Errorf("invalid source storage URI: %w", err)
+	}
+	if err := storage.ValidateStorageURI(config.TargetStorageURIStr); err != nil {
+		return nil, fmt.Errorf("invalid target storage URI: %w", err)
+	}
+
+	sourceStorageType, err := storage.GetStorageType(config.SourceStorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get source storage type: %w", err)
+	}
+	targetStorageType, err := storage.GetStorageType(config.TargetStorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get target storage type: %w", err)
+	}
+
+	sourceObjectURI, err := storage.NewObjectURI(config.SourceStorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse source storage URI: %w", err)
+	}
+
+	targetObjectURI, err := storage.NewObjectURI(config.TargetStorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse target storage URI: %w", err)
+	}
+
 	return &ReplicaAgent{
 		logger: config.AnotherLogger,
 		Config: *config,
+		ReplicationInput: ReplicationInput{
+			sourceStorageType: sourceStorageType,
+			targetStorageType: targetStorageType,
+			source:            *sourceObjectURI,
+			target:            *targetObjectURI,
+		},
 	}, nil
 }
 
 // Start initiates the replication process.
 func (r *ReplicaAgent) Start() error {
-	r.logger.Infof("Start replication from %s to %s", r.Config.SourceObjectStoreURI, r.Config.TargetObjectStoreURI)
+	r.logger.Infof("Start replication from %+v to %+v", r.ReplicationInput.source, r.ReplicationInput.target)
 
 	sourceObjs, err := r.listSourceObjects()
 	if err != nil {
@@ -56,24 +99,25 @@ func (r *ReplicaAgent) Start() error {
 }
 
 func (r *ReplicaAgent) listSourceObjects() ([]ReplicationObject, error) {
-	switch r.Config.SourceStorageType {
+	switch r.ReplicationInput.sourceStorageType {
 	case storage.StorageTypeOCI:
-		r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-		listOfObjectSummary, err := r.Config.ObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
+		r.Config.SourceOCIOSDataStore.SetRegion(r.ReplicationInput.source.Region)
+		// TODO: set source region in another place
+		listOfObjectSummary, err := r.Config.SourceOCIOSDataStore.ListObjects(r.ReplicationInput.source)
 		if err != nil {
 			return nil, err
 		}
-		r.logger.Infof("Listed %d model weight objects under prefix %s", len(listOfObjectSummary), r.Config.SourceObjectStoreURI.Prefix)
+		r.logger.Infof("Listed %d model weight objects under prefix %s", len(listOfObjectSummary), r.ReplicationInput.source.Prefix)
 		return convertToReplicationObjectsFromObjectSummary(listOfObjectSummary), nil
 	case storage.StorageTypeHuggingFace:
-		repoFiles, err := r.Config.HubClient.ListFiles(context.Background(), r.Config.SourceObjectStoreURI.BucketName, hub.WithRepoType(hub.RepoTypeModel))
+		repoFiles, err := r.Config.HubClient.ListFiles(context.Background(), r.ReplicationInput.source.BucketName, hub.WithRepoType(hub.RepoTypeModel))
 		if err != nil {
 			return nil, err
 		}
-		r.logger.Infof("Listed %d model weight files under model %s with %s branch", len(repoFiles), r.Config.SourceObjectStoreURI.BucketName, r.Config.SourceObjectStoreURI.Prefix)
+		r.logger.Infof("Listed %d model weight files under model %s with %s branch", len(repoFiles), r.ReplicationInput.source.BucketName, r.ReplicationInput.source.Prefix)
 		return convertToReplicationObjectsFromRepoFile(repoFiles), nil
 	default:
-		return nil, fmt.Errorf("unsupported source storage type: %s", r.Config.SourceStorageType)
+		return nil, fmt.Errorf("unsupported source storage type: %s", string(r.ReplicationInput.sourceStorageType))
 	}
 }
 

@@ -11,8 +11,9 @@ import (
 )
 
 type OCIToOCIReplicator struct {
-	logger logging.Interface
-	Config Config
+	logger           logging.Interface
+	Config           Config
+	ReplicationInput ReplicationInput
 }
 
 func (r *OCIToOCIReplicator) Replicate(objects []ReplicationObject) error {
@@ -66,13 +67,13 @@ func (r *OCIToOCIReplicator) prepareObjectChannel(objects []ReplicationObject) c
 
 func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan ReplicationObject, results chan<- *ReplicationResult, totalObjects int) {
 	for obj := range objects {
-		if obj.GetName() == r.Config.SourceObjectStoreURI.Prefix {
+		if obj.GetName() == r.ReplicationInput.source.Prefix {
 			continue
 		}
 
 		srcObj := ociobjectstore.ObjectURI{
-			Namespace:  r.Config.SourceObjectStoreURI.Namespace,
-			BucketName: r.Config.SourceObjectStoreURI.BucketName,
+			Namespace:  r.ReplicationInput.source.Namespace,
+			BucketName: r.ReplicationInput.source.BucketName,
 			ObjectName: obj.GetName(),
 		}
 		result := ReplicationResult{source: srcObj}
@@ -103,8 +104,8 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan Replication
 }
 
 func (r *OCIToOCIReplicator) downloadObject(srcObj ociobjectstore.ObjectURI) error {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	err := r.Config.ObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
+	r.Config.SourceOCIOSDataStore.SetRegion(r.ReplicationInput.source.Region) // TODO: double check if can be set another way
+	err := r.Config.SourceOCIOSDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
 		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
 		ociobjectstore.WithThreads(DefaultDownloadThreads))
 	if err != nil {
@@ -115,10 +116,10 @@ func (r *OCIToOCIReplicator) downloadObject(srcObj ociobjectstore.ObjectURI) err
 }
 
 func (r *OCIToOCIReplicator) uploadObject(targetObj ociobjectstore.ObjectURI, objName string) error {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
+	r.Config.SourceOCIOSDataStore.SetRegion(r.ReplicationInput.target.Region)
 	curFilePath := filepath.Join(r.Config.LocalPath, objName)
 
-	err := r.Config.ObjectStorageDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
+	err := r.Config.SourceOCIOSDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
 	if err != nil {
 		r.logger.Errorf("Failed to upload object %s: %+v", targetObj.ObjectName, err)
 		return err
@@ -127,10 +128,10 @@ func (r *OCIToOCIReplicator) uploadObject(targetObj ociobjectstore.ObjectURI, ob
 }
 
 func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
-	targetObjName := strings.Replace(objName, r.Config.SourceObjectStoreURI.Prefix, r.Config.TargetObjectStoreURI.Prefix, 1)
+	targetObjName := strings.Replace(objName, r.ReplicationInput.source.Prefix, r.ReplicationInput.target.Prefix, 1)
 	return ociobjectstore.ObjectURI{
-		Namespace:  r.Config.TargetObjectStoreURI.Namespace,
-		BucketName: r.Config.TargetObjectStoreURI.BucketName,
+		Namespace:  r.ReplicationInput.target.Namespace,
+		BucketName: r.ReplicationInput.target.BucketName,
 		ObjectName: targetObjName,
 	}
 }

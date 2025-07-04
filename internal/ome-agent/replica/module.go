@@ -13,9 +13,9 @@ import (
 type replicaParams struct {
 	fx.In
 
-	AnotherLogger           logging.Interface `name:"another_log"`
-	ObjectStorageDataStores *ociobjectstore.OCIOSDataStore
-	HubClient               *hub.HubClient
+	AnotherLogger      logging.Interface `name:"another_log"`
+	OCIOSDataStoreList []*ociobjectstore.OCIOSDataStore
+	HubClient          *hub.HubClient
 }
 
 var Module = fx.Provide(
