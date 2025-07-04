@@ -17,7 +17,7 @@ description: >
   - [5. Install Prometheus (Optional - Custom metrics scaling)](#5-install-prometheus-optional---custom-metrics-scaling)
   - [6. Install LeaderWorkerSet (Optional - MultiNode mode only)](#6-install-leaderworkerset-optional---multinode-mode-only)
   - [7. Install Kueue (Optional - Job scheduling)](#7-install-kueue-optional---job-scheduling)
-  - [9. Clone OME repository](#8-clone-ome-repository)
+  - [8. Clone OME repository](#8-clone-ome-repository)
 - [Install the latest development version](#install-the-latest-development-version)
   - [Uninstall](#uninstall)
 <!-- /toc -->
