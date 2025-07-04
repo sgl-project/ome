@@ -1,0 +1,24 @@
+title: Accelerator-Aware Runtime Selection for Heterogeneous GPU Environments
+oep-number: 0003
+authors:
+  - "@slin1237"
+status: provisional
+creation-date: 2025-07-04
+reviewers:
+  - TBD
+approvers:
+  - TBD
+
+see-also:
+  - "/oeps/0002-multi-cloud-support"
+
+# The target maturity stage in the current dev cycle for this OEP.
+stage: alpha
+
+# The following PRR answers are required at beta release
+metrics:
+  - ome_accelerator_selection_total
+  - ome_accelerator_selection_duration_seconds
+  - ome_accelerator_availability
+  - ome_accelerator_utilization
+  - ome_runtime_accelerator_mismatch_total
