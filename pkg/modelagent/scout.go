@@ -63,7 +63,7 @@ func NewScout(ctx context.Context, nodeName string,
 	if !ok {
 		instanceType = nodeInfo.Labels[constants.DeprecatedNodeInstanceShapeLabel]
 	}
-	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(instanceType)
+	nodeShapeAlias, err := utils.GetInstanceTypeShortName(instanceType)
 	if err != nil {
 		return nil, err
 	}
