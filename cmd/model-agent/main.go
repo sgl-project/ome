@@ -192,7 +192,7 @@ func initializeComponents(
 	metrics *modelagent.Metrics,
 	gopherTaskChan chan *modelagent.GopherTask,
 	logger *Logger,
-) (*modelagent.Scount, *modelagent.Gopher, error) {
+) (*modelagent.Scout, *modelagent.Gopher, error) {
 	// Create node label reconciler for labeling the node based on model status
 	nodeLabelReconciler := modelagent.NewNodeLabelReconciler(cfg.nodeName, kubeClient, cfg.nodeLabelRetry, logger)
 
