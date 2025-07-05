@@ -24,11 +24,11 @@ func TestShouldDownloadModel(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node",
 			Labels: map[string]string{
-				constants.NodeInstanceShapeLabel:   "GPU.A10.2",
-				"node.kubernetes.io/instance-type": "GPU.A10.2",
-				"accelerator":                      "nvidia",
-				"gpu-model":                        "a10",
-				"region":                           "us-west-2",
+				constants.NodeInstanceShapeLabel:           "GPU.A10.2",
+				constants.DeprecatedNodeInstanceShapeLabel: "GPU.A10.2",
+				"accelerator": "nvidia",
+				"gpu-model":   "a10",
+				"region":      "us-west-2",
 			},
 			Annotations: map[string]string{
 				constants.TargetInstanceShapes: "GPU.A10.2,GPU.A100.8",
