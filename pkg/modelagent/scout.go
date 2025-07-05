@@ -58,7 +58,12 @@ func NewScout(ctx context.Context, nodeName string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node info for node %s: %w", nodeName, err)
 	}
-	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(nodeInfo.Labels["beta.kubernetes.io/instance-type"])
+	// Try the newer label first, then fallback to the deprecated beta label
+	instanceType, ok := nodeInfo.Labels[constants.NodeInstanceShapeLabel]
+	if !ok {
+		instanceType = nodeInfo.Labels[constants.DeprecatedNodeInstanceShapeLabel]
+	}
+	nodeShapeAlias, err := utils.GetOCINodeShortVersionShape(instanceType)
 	if err != nil {
 		return nil, err
 	}

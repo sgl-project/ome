@@ -488,10 +488,11 @@ const (
 
 // Model Agent & Model Controller
 var (
-	NodeInstanceShapeLabel    = "node.kubernetes.io/instance-type"
-	ModelsLabelPrefix         = "models.ome/"
-	TargetInstanceShapes      = "models.ome.io/target-instance-shapes"
-	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
+	NodeInstanceShapeLabel           = "node.kubernetes.io/instance-type"
+	DeprecatedNodeInstanceShapeLabel = "beta.kubernetes.io/instance-type"
+	ModelsLabelPrefix                = "models.ome/"
+	TargetInstanceShapes             = "models.ome.io/target-instance-shapes"
+	ModelStatusConfigMapLabel        = "models.ome/basemodel-status"
 
 	ModelLabelDomain          = "models.ome.io"
 	ClusterBaseModelLabelType = "clusterbasemodel"
