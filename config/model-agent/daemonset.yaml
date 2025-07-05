@@ -64,14 +64,14 @@ spec:
           httpGet:
             path: /livez
             port: 8080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 20
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 20
         resources:
