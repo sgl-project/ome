@@ -61,13 +61,13 @@ spec:
           httpGet:
             path: /livez
             port: {{ .Values.modelAgent.health.port }}
-          initialDelaySeconds: 5
+          initialDelaySeconds: 60
           periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /healthz
             port: {{ .Values.modelAgent.health.port }}
-          initialDelaySeconds: 5
+          initialDelaySeconds: 60
         {{- if .Values.modelAgent.resources }}
         resources:
           {{- toYaml .Values.modelAgent.resources | nindent 10 }}
