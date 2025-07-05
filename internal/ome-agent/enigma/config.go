@@ -128,14 +128,14 @@ func WithViper(v *viper.Viper, logger logging.Interface) Option {
 func configureTensorRTLLM(c *Config, v *viper.Viper, logger logging.Interface) error {
 	var nodeShapeAlias string
 	if v.GetString("node_shape_alias") == "" {
-		nodeShape, err := utils.GetOCINodeShape(logger)
+		nodeShape, err := utils.GetNodeInstanceType(logger)
 		if err != nil {
-			return fmt.Errorf("failed to get OCI node shape: %w", err)
+			return fmt.Errorf("failed to get node instance type: %w", err)
 		}
 
-		nodeShapeAlias, err = utils.GetOCINodeShortVersionShape(nodeShape)
+		nodeShapeAlias, err = utils.GetInstanceTypeShortName(nodeShape)
 		if err != nil {
-			return fmt.Errorf("failed to get short version shape for node: %w", err)
+			return fmt.Errorf("failed to get short name for instance type: %w", err)
 		}
 	} else {
 		nodeShapeAlias = v.GetString("node_shape_alias")
