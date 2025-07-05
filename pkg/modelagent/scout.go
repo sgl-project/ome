@@ -24,7 +24,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type Scount struct {
+type Scout struct {
 	ctx                    context.Context
 	baseModelLister        omev1beta1lister.BaseModelLister
 	baseModelSynced        cache.InformerSynced
@@ -51,7 +51,7 @@ func NewScout(ctx context.Context, nodeName string,
 	informerFactory omev1beta1informers.SharedInformerFactory,
 	gopherChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
-	logger *zap.SugaredLogger) (*Scount, error) {
+	logger *zap.SugaredLogger) (*Scout, error) {
 
 	// Fetch the complete node info
 	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
@@ -63,7 +63,7 @@ func NewScout(ctx context.Context, nodeName string,
 		return nil, err
 	}
 
-	scout := &Scount{
+	scout := &Scout{
 		ctx:                    ctx,
 		nodeShapeAlias:         nodeShapeAlias,
 		nodeInfo:               nodeInfo,
@@ -120,7 +120,7 @@ func NewScout(ctx context.Context, nodeName string,
 	return scout, nil
 }
 
-func (w *Scount) Run(stopCh <-chan struct{}) error {
+func (w *Scout) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 
 	w.logger.Info("Starting scout")
@@ -148,7 +148,7 @@ func (w *Scount) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (w *Scount) downloadBaseModel(obj interface{}) {
+func (w *Scout) downloadBaseModel(obj interface{}) {
 	baseModel, ok := obj.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to BaseModel", obj)
@@ -193,7 +193,7 @@ func (w *Scount) downloadBaseModel(obj interface{}) {
 	}
 }
 
-func (w *Scount) downloadClusterBaseModel(obj interface{}) {
+func (w *Scout) downloadClusterBaseModel(obj interface{}) {
 	clusterBaseModel, ok := obj.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to clusterBaseModel", obj)
@@ -238,7 +238,7 @@ func (w *Scount) downloadClusterBaseModel(obj interface{}) {
 	}
 }
 
-func (w *Scount) updateBaseModel(old, new interface{}) {
+func (w *Scout) updateBaseModel(old, new interface{}) {
 	oldBaseModel, ok := old.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", old)
@@ -301,7 +301,7 @@ func (w *Scount) updateBaseModel(old, new interface{}) {
 	}
 }
 
-func (w *Scount) updateClusterBaseModel(old, new interface{}) {
+func (w *Scout) updateClusterBaseModel(old, new interface{}) {
 	oldClusterBaseModel, ok := old.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", old)
@@ -370,7 +370,7 @@ func (w *Scount) updateClusterBaseModel(old, new interface{}) {
 	}
 }
 
-func (w *Scount) deleteBaseModel(obj interface{}) {
+func (w *Scout) deleteBaseModel(obj interface{}) {
 	baseModel, ok := obj.(*v1beta1.BaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to BaseModel", obj)
@@ -387,7 +387,7 @@ func (w *Scount) deleteBaseModel(obj interface{}) {
 	w.gopherChan <- gopherTask
 }
 
-func (w *Scount) deleteClusterBaseModel(obj interface{}) {
+func (w *Scout) deleteClusterBaseModel(obj interface{}) {
 	clusterBaseModel, ok := obj.(*v1beta1.ClusterBaseModel)
 	if !ok {
 		w.logger.Errorf("Failed to convert %v to ClusterBaseModel", obj)
@@ -406,7 +406,7 @@ func (w *Scount) deleteClusterBaseModel(obj interface{}) {
 // reconcilePendingDeletions checks for any resources with deletion timestamps
 // and processes them to ensure no deletions are missed if the model agent was down
 // when the deletion request was made
-func (w *Scount) reconcilePendingDeletions() {
+func (w *Scout) reconcilePendingDeletions() {
 	w.logger.Info("Checking for pending deletions on startup...")
 
 	// Check BaseModels with deletionTimestamp
@@ -441,7 +441,7 @@ func (w *Scount) reconcilePendingDeletions() {
 }
 
 // shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity
-func (w *Scount) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
+func (w *Scout) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
 	if storage == nil {
 		// If storage is nil, default to true (backward compatibility)
 		return true
@@ -478,7 +478,7 @@ func (w *Scount) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
 	return true
 }
 
-func (w *Scount) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
+func (w *Scout) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
 	// Check match expressions
 	for _, expr := range term.MatchExpressions {
 		if !w.nodeMatchesExpression(expr) {
@@ -496,7 +496,7 @@ func (w *Scount) nodeMatchesSelectorTerm(term v1.NodeSelectorTerm) bool {
 	return true
 }
 
-func (w *Scount) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
+func (w *Scout) nodeMatchesExpression(expr v1.NodeSelectorRequirement) bool {
 	// Get the field value based on whether it's a label or field selector
 	var values []string
 	var exists bool
