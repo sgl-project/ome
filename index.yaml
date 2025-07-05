@@ -1,0 +1,25 @@
+apiVersion: v1
+entries:
+  ome-crd:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2025-07-05T04:11:29.591368114Z"
+    description: OME Custom Resource Definitions
+    digest: 549d2125b7a87602b182a1c676b6b78c9fd1e0bc65573a2141335c75510e3bbb
+    name: ome-crd
+    type: application
+    urls:
+    - https://sgl-project.github.io/ome/charts/ome-crd-0.1.0.tgz
+    version: 0.1.0
+  ome-resources:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2025-07-05T04:11:29.591997968Z"
+    description: OME Resources and Controller
+    digest: aab81ab08a7f80a566bf39598f26f1dd46e7cffe7f04115d9ce9025969a62b0b
+    name: ome-resources
+    type: application
+    urls:
+    - https://sgl-project.github.io/ome/charts/ome-resources-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-07-05T04:11:29.582996528Z"

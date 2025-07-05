@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OME Helm Charts</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #333; }
+        .instructions { background: #f4f4f4; padding: 20px; border-radius: 5px; }
+        code { background: #e8e8e8; padding: 2px 5px; border-radius: 3px; }
+        pre { background: #333; color: #fff; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>OME Helm Charts Repository</h1>
+    <p>This is the official Helm charts repository for OME (Oracle Machine Learning Engine).</p>
+
+    <div class="instructions">
+        <h2>Installation Instructions</h2>
+
+        <h3>Option 1: OCI Registry (Recommended)</h3>
+        <pre>
+# Install directly from OCI registry
+helm install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --namespace ome --create-namespace
+helm install ome oci://ghcr.io/moirai-internal/charts/ome-resources --namespace ome</pre>
+
+        <h3>Option 2: Helm Repository</h3>
+        <pre>
+# Add the OME Helm repository
+helm repo add ome https://sgl-project.github.io/ome
+helm repo update
+
+# Install OME CRDs
+helm install ome-crd ome/ome-crd --namespace ome --create-namespace
+
+# Install OME resources
+helm install ome ome/ome-resources --namespace ome</pre>
+    </div>
+
+    <h2>Available Charts</h2>
+    <ul>
+        <li><a href="charts/">Browse all charts</a></li>
+        <li><a href="charts/index.yaml">Helm repository index</a></li>
+    </ul>
+
+    <h2>Documentation</h2>
+    <p>For more information, visit the <a href="https://sgl-project.github.io/ome/docs/">OME documentation</a>.</p>
+</body>
+</html>
