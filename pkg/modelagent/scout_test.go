@@ -37,7 +37,7 @@ func TestShouldDownloadModel(t *testing.T) {
 	}
 
 	// Create a test scount with minimal fields needed for the test
-	scount := &Scount{
+	scount := &Scout{
 		nodeName:       "test-node",
 		nodeInfo:       testNode,
 		nodeShapeAlias: "a10",
@@ -348,7 +348,7 @@ func TestNodeMatchesExpression(t *testing.T) {
 	}
 
 	// Create a test scount with minimal fields needed
-	scount := &Scount{
+	scount := &Scout{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -562,7 +562,7 @@ func TestNodeMatchesSelectorTerm(t *testing.T) {
 	}
 
 	// Create a test scount with minimal fields needed
-	scount := &Scount{
+	scount := &Scout{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -673,7 +673,7 @@ func TestNodeMatchesSelectorTermWithMatchFields(t *testing.T) {
 	}
 
 	// Create a test scount with minimal fields needed
-	scount := &Scount{
+	scount := &Scout{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
@@ -882,7 +882,7 @@ func TestShouldDownloadModelFallback(t *testing.T) {
 			}
 
 			// Create a test scount with the node
-			scount := &Scount{
+			scount := &Scout{
 				nodeName: "test-node",
 				nodeInfo: testNode,
 				logger:   sugaredLogger,
@@ -919,7 +919,7 @@ func TestNodeMatchesExpressionEdgeCases(t *testing.T) {
 	}
 
 	// Create a test scount with minimal fields needed
-	scount := &Scount{
+	scount := &Scout{
 		nodeName: "test-node",
 		nodeInfo: testNode,
 		logger:   sugaredLogger,
