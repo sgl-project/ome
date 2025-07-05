@@ -25,6 +25,11 @@ spec:
         {{- toYaml .Values.modelAgent.affinity | nindent 8 }}
       nodeSelector:
         {{- toYaml .Values.modelAgent.nodeSelector | nindent 8 }}
+      {{- $imagePullSecrets := .Values.modelAgent.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      {{- if $imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml $imagePullSecrets | nindent 8 }}
+      {{- end }}
       volumes:
         - name: host-models
           hostPath:

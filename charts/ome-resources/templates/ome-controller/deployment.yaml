@@ -44,6 +44,11 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- $imagePullSecrets := .Values.ome.controller.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      {{- if $imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml $imagePullSecrets | nindent 8 }}
+      {{- end }}
       containers:
       - command:
         - /manager
