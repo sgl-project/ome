@@ -80,7 +80,7 @@ spec:
             --deepep-mode normal
             --disaggregation-mode prefill
             --mem-fraction-static 0.849
-            --context-length 32768 
+            --context-length 32768
             --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
@@ -349,8 +349,8 @@ spec:
           --service-discovery
           --service-discovery-namespace "${NAMESPACE}"
           --service-discovery-port 8080
-          --prefill-selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --decode-selector component=decoder ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
       env:
         - name: NAMESPACE
           valueFrom:
