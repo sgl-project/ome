@@ -1,7 +1,6 @@
 package components
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -14,16 +13,11 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
-	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	leaderworkerset "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -406,111 +400,4 @@ func UpdateComponentStatus(b *BaseComponentFields, isvc *v1beta1.InferenceServic
 	b.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, pods, rawDeployment)
 
 	return nil
-}
-
-// DeleteComponent implements the common deletion logic for components
-func (b *BaseComponentFields) DeleteComponent(
-	isvc *v1beta1.InferenceService,
-	componentType v1beta1.ComponentType,
-	reconcileObjectMeta func(*v1beta1.InferenceService) (metav1.ObjectMeta, error),
-) (ctrl.Result, error) {
-	log := b.Log.WithValues("inferenceservice", isvc.Name, "namespace", isvc.Namespace, "component", componentType)
-	log.Info("Deleting component")
-
-	objectMeta, err := reconcileObjectMeta(isvc)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile object metadata for %s deletion", componentType)
-	}
-
-	// Direct deletion of Kubernetes resources
-	return b.deleteResourcesDirectly(isvc, objectMeta, componentType)
-}
-
-// deleteResourcesDirectly deletes component resources directly without using deployment reconcilers
-func (b *BaseComponentFields) deleteResourcesDirectly(
-	isvc *v1beta1.InferenceService,
-	objectMeta metav1.ObjectMeta,
-	componentType v1beta1.ComponentType,
-) (ctrl.Result, error) {
-	log := b.Log.WithValues("inferenceservice", isvc.Name, "namespace", isvc.Namespace, "component", componentType)
-
-	ctx := context.TODO()
-	var errors []error
-
-	resources := []struct {
-		obj  client.Object
-		kind string
-	}{
-		{
-			obj: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "deployment",
-		},
-		{
-			obj: &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "service",
-		},
-		{
-			obj: &autoscalingv2.HorizontalPodAutoscaler{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "HPA",
-		},
-		{
-			obj: &leaderworkerset.LeaderWorkerSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      objectMeta.Name,
-					Namespace: objectMeta.Namespace,
-				},
-			},
-			kind: "LeaderWorkerSet",
-		},
-	}
-
-	for _, resource := range resources {
-		if err := b.Client.Delete(ctx, resource.obj); err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, "Failed to delete "+resource.kind, "name", resource.obj.GetName())
-			errors = append(errors, err)
-		} else if err == nil {
-			log.Info("Successfully deleted "+resource.kind, "name", resource.obj.GetName())
-		}
-	}
-
-	// If any deletion failed, return error
-	if len(errors) > 0 {
-		return ctrl.Result{}, fmt.Errorf("failed to delete some resources for component %s: %v", componentType, errors)
-	}
-
-	log.Info("Successfully deleted all resources for component", "component", componentType)
-	return ctrl.Result{}, nil
-}
-
-// ShouldComponentExist provides a helper implementation for component existence checks
-// This method returns true if the component should exist based on the current InferenceService spec
-func (b *BaseComponentFields) ShouldComponentExist(isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType) bool {
-	switch componentType {
-	case v1beta1.EngineComponent:
-		return isvc.Spec.Engine != nil
-	case v1beta1.DecoderComponent:
-		return isvc.Spec.Decoder != nil
-	case v1beta1.RouterComponent:
-		return isvc.Spec.Router != nil
-	case v1beta1.PredictorComponent:
-		return isvc.Spec.Predictor.Model != nil
-	default:
-		b.Log.Info("Unknown component type for ShouldExist check", "component", componentType)
-		return false
-	}
 }
