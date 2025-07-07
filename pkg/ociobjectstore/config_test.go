@@ -408,6 +408,46 @@ func TestWithAnotherLog(t *testing.T) {
 	}
 }
 
+// TestWithName tests the WithName option
+func TestWithName(t *testing.T) {
+	tests := []struct {
+		testName      string
+		name          string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			testName:      "empty name",
+			name:          "",
+			expectError:   true,
+			errorContains: "name cannot be empty",
+		},
+		{
+			testName:    "valid name",
+			name:        "Valid name",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			c := &Config{}
+			option := WithName(tt.name)
+			err := option(c)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.name, c.Name)
+			}
+		})
+	}
+}
+
 // TestConfig_Validate tests the Validate method
 func TestConfig_Validate(t *testing.T) {
 	tests := []struct {

@@ -19,6 +19,8 @@ const (
 	RegionViperKeyName         = "region_override"
 	EnableOboTokenViperKeyName = "enable_obo_token"
 	OboTokenViperKeyName       = "obo_token"
+	SourceOsConfigName         = "source"
+	TargetOsConfigName         = "target"
 )
 
 // Config holds the configuration parameters required to initialize a OCIOSDataStore.
@@ -85,6 +87,23 @@ func WithAnotherLog(logger logging.Interface) Option {
 			return errors.New("nil another logger")
 		}
 		c.AnotherLogger = logger
+		return nil
+	}
+}
+
+func WithName(name string) Option {
+	return func(cfg *Config) error {
+		if name == "" {
+			return errors.New("name cannot be empty")
+		}
+		cfg.Name = name
+		return nil
+	}
+}
+
+func WithOboTokenEnabled(enabled bool) Option {
+	return func(cfg *Config) error {
+		cfg.EnableOboToken = enabled
 		return nil
 	}
 }

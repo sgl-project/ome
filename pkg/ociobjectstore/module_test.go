@@ -121,6 +121,48 @@ func TestOCIOSDataStoreModule(t *testing.T) {
 	})
 }
 
+func TestOCIOSDataStoreListProvider(t *testing.T) {
+	t.Run("ListProvider structure validation", func(t *testing.T) {
+		// Test that OCIOSDataStoreModule is a valid fx.Option
+		assert.NotNil(t, OCIOSDataStoreListProvider)
+
+		// Test that we can create the module without panicking
+		assert.NotPanics(t, func() {
+			_ = OCIOSDataStoreListProvider
+		})
+	})
+
+	t.Run("ListProvider function with invalid config", func(t *testing.T) {
+		v := viper.New()
+		// Don't set auth_type to test error handling
+
+		logger := testingPkg.SetupMockLogger()
+
+		_, err := ProvideSourceOCIOSDataStoreConfig(v, logger)
+		assert.Error(t, err)
+		// The actual error message is about config validation, not "error reading agent config"
+		assert.Contains(t, err.Error(), "ociobjectstore config is invalid")
+
+		_, err = ProvideTargetOCIOSDataStoreConfig(v, logger)
+		assert.Error(t, err)
+		// The actual error message is about config validation, not "error reading agent config"
+		assert.Contains(t, err.Error(), "ociobjectstore config is invalid")
+	})
+
+	t.Run("ListProvider function with nil logger", func(t *testing.T) {
+		v := viper.New()
+		v.Set(AuthTypeViperKeyName, "InstancePrincipal")
+
+		_, err := ProvideSourceOCIOSDataStoreConfig(v, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nil another logger")
+
+		_, err = ProvideTargetOCIOSDataStoreConfig(v, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nil another logger")
+	})
+}
+
 func TestAppParams(t *testing.T) {
 	t.Run("AppParams structure", func(t *testing.T) {
 		// Test that appParams can be created
