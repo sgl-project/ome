@@ -1,7 +1,7 @@
 package replica
 
 import (
-	"context"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -69,8 +69,8 @@ func (r *ReplicaAgent) Start() error {
 }
 
 func (r *ReplicaAgent) listSourceObjects() ([]objectstorage.ObjectSummary, error) {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	sourceObjs, err := r.Config.ObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
+	r.Config.SourceObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
+	sourceObjs, err := r.Config.SourceObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
 	if err != nil {
 		return nil, err
 	}
@@ -113,20 +113,55 @@ func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.Obj
 		}
 		result := ReplicationResult{source: srcObj}
 
+		downloadStart := time.Now()
+		err := r.downloadObject(srcObj)
+		downloadDuration := time.Since(downloadStart)
+		if err != nil {
+			result.error = err
+			results <- &result
+			continue
+		}
+		r.logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
+
 		targetObj := r.getTargetObjectURI(*obj.Name)
 		result.target = targetObj
 
-		copyStart := time.Now()
-		err := r.Config.ObjectStorageDataStore.CopyObjectAndWait(context.Background(), srcObj, targetObj, nil, nil)
-		copyDuration := time.Since(copyStart)
+		uploadStart := time.Now()
+		err = r.uploadObject(targetObj, *obj.Name)
+		uploadDuration := time.Since(uploadStart)
 		if err != nil {
 			result.error = err
 		} else {
-			r.logger.Infof("Copied object from %s to %s in %v",
-				srcObj.ObjectName, targetObj.ObjectName, copyDuration)
+			r.logger.Infof("Uploaded object to %s in %v", targetObj.ObjectName, uploadDuration)
 		}
 		results <- &result
 	}
+}
+
+func (r *ReplicaAgent) downloadObject(srcObj ociobjectstore.ObjectURI) error {
+	// TODO: length and md5 validation
+	r.Config.SourceObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
+	err := r.Config.SourceObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
+		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
+		ociobjectstore.WithThreads(DefaultDownloadThreads))
+	if err != nil {
+		r.logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
+		return err
+	}
+	return nil
+}
+
+func (r *ReplicaAgent) uploadObject(targetObj ociobjectstore.ObjectURI, objName string) error {
+	// TODO: upload with md5 if original file contains
+	r.Config.TargetObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
+	curFilePath := filepath.Join(r.Config.LocalPath, objName)
+
+	err := r.Config.TargetObjectStorageDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
+	if err != nil {
+		r.logger.Errorf("Failed to upload object %s: %+v", targetObj.ObjectName, err)
+		return err
+	}
+	return nil
 }
 
 func (r *ReplicaAgent) prepareObjectChannel(objects []objectstorage.ObjectSummary) chan objectstorage.ObjectSummary {

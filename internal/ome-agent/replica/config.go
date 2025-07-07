@@ -14,13 +14,14 @@ import (
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath              string                         `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB    int                            `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck   bool                           `mapstructure:"enable_size_limit_check"`
-	NumConnections         int                            `mapstructure:"num_connections"`
-	SourceObjectStoreURI   ociobjectstore.ObjectURI       `mapstructure:"source" validate:"required"`
-	TargetObjectStoreURI   ociobjectstore.ObjectURI       `mapstructure:"target" validate:"required"`
-	ObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
+	LocalPath                    string                         `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB          int                            `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck         bool                           `mapstructure:"enable_size_limit_check"`
+	NumConnections               int                            `mapstructure:"num_connections"`
+	SourceObjectStoreURI         ociobjectstore.ObjectURI       `mapstructure:"source" validate:"required"`
+	TargetObjectStoreURI         ociobjectstore.ObjectURI       `mapstructure:"target" validate:"required"`
+	SourceObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
+	TargetObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
 }
 
 type Option func(*Config) error
@@ -61,7 +62,14 @@ func NewReplicaConfig(opts ...Option) (*Config, error) {
 // WithAppParams attempts to resolve the required client objects using injected named parameters
 func WithAppParams(params replicaParams) Option {
 	return func(c *Config) error {
-		c.ObjectStorageDataStore = params.ObjectStorageDataStores
+		for _, casperDataStore := range params.ObjectStorageDataStores {
+			if casperDataStore.Config.Name == ociobjectstore.SourceOsConfigName {
+				c.SourceObjectStorageDataStore = casperDataStore
+			}
+			if casperDataStore.Config.Name == ociobjectstore.TargetOsConfigName {
+				c.TargetObjectStorageDataStore = casperDataStore
+			}
+		}
 		return nil
 	}
 }

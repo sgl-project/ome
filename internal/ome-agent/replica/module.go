@@ -13,7 +13,7 @@ type replicaParams struct {
 	fx.In
 
 	AnotherLogger           logging.Interface `name:"another_log"`
-	ObjectStorageDataStores *ociobjectstore.OCIOSDataStore
+	ObjectStorageDataStores []*ociobjectstore.OCIOSDataStore
 }
 
 var Module = fx.Provide(

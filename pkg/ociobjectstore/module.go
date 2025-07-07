@@ -28,6 +28,69 @@ var OCIOSDataStoreModule = fx.Provide(
 	ProvideOCIOSDataStore,
 )
 
+type OSDataStoreConfigWrapper struct {
+	fx.Out
+
+	// TODO: Rename group name to objectStorageConfigs; applies to consumers under training agent.
+	OSDataStoreConfig *Config `group:"casperConfigs"`
+}
+
+// ProvideSourceOCIOSDataStore constructs a Config instance for the source OCI Object Storage
+// location using Viper configuration, environment context, and a logger.
+// This function is intended to be used as an fx provider. The resulting Config is wrapped in
+// OSDataStoreConfigWrapper and added to the "oSDataStoreConfig" value group for collective injection.
+//
+// Returns:
+//   - OSDataStoreConfigWrapper containing the initialized Config if successful
+//   - An error if configuration loading or initialization fails
+func ProvideSourceOCIOSDataStoreConfig(v *viper.Viper, logger logging.Interface) (OSDataStoreConfigWrapper, error) {
+	config, err := NewConfig(WithViper(v), WithAnotherLog(logger), WithName(SourceOsConfigName))
+	if err != nil {
+		return OSDataStoreConfigWrapper{}, fmt.Errorf("error reading download agent config: %w", err)
+	}
+	if err = config.Validate(); err != nil {
+		return OSDataStoreConfigWrapper{}, fmt.Errorf("ociobjectstore config is invalid: %w", err)
+	}
+	return OSDataStoreConfigWrapper{
+		OSDataStoreConfig: config,
+	}, nil
+}
+
+// ProvideTargetOCIOSDataStoreConfig constructs a Config instance for the destination (target) OCI Object Storage
+// location using Viper configuration, environment context, and a logger. This function is intended to be
+// used as an fx provider. The resulting Config is wrapped in OSDataStoreConfigWrapper and added to the
+// "oSDataStoreConfig" value group for collective injection.
+//
+// Note: Destination object storage locations are currently expected to reside under service tenancies
+// where customer OBO tokens are not permitted.
+//
+// TODO: Refactor to separate source and target configuration in OME agent config, and read specifically
+// from the target config.
+//
+// Returns:
+//   - OSDataStoreConfigWrapper containing the initialized Config if successful
+//   - An error if configuration loading or initialization fails
+func ProvideTargetOCIOSDataStoreConfig(v *viper.Viper, logger logging.Interface) (OSDataStoreConfigWrapper, error) {
+	config, err := NewConfig(WithViper(v), WithAnotherLog(logger), WithName(TargetOsConfigName), WithOboTokenEnabled(false))
+	if err != nil {
+		return OSDataStoreConfigWrapper{}, fmt.Errorf("error reading download agent config: %w", err)
+	}
+	if err = config.Validate(); err != nil {
+		return OSDataStoreConfigWrapper{}, fmt.Errorf("ociobjectstore config is invalid: %w", err)
+	}
+	return OSDataStoreConfigWrapper{
+		OSDataStoreConfig: config,
+	}, nil
+}
+
+// OCIOSDataStoreListProvider is an fx module that provides a singleton OCIOSDataStore.
+// It wires ProvideSourceOCIOSDataStore and ProvideTargetOCIOSDataStore into the fx dependency graph.
+var OCIOSDataStoreListProvider = fx.Provide(
+	ProvideSourceOCIOSDataStoreConfig,
+	ProvideTargetOCIOSDataStoreConfig,
+	ProvideListOfOCIOSDataStoreWithAppParams,
+)
+
 // appParams defines the fx input struct for dependency injection.
 // It demonstrates two advanced fx features:
 //   - Named logger injection using `name:"another_log"`
@@ -39,6 +102,7 @@ type appParams struct {
 	AnotherLogger logging.Interface `name:"another_log"`
 
 	// Configs is a list of Object Storage configuration instances injected via value group.
+	// TODO: rename group to objectStorageConfigs, including code under replica agent and training agent
 	Configs []*Config `group:"casperConfigs"`
 }
 
