@@ -18,17 +18,17 @@ func TestModule(t *testing.T) {
 func TestReplicaParams(t *testing.T) {
 	// Test the replicaParams struct
 	mockLogger := testingPkg.SetupMockLogger()
-	mockDataStore := &ociobjectstore.OCIOSDataStore{}
+	var mockDataStores []*ociobjectstore.OCIOSDataStore
 
 	params := replicaParams{
 		AnotherLogger:           mockLogger,
-		ObjectStorageDataStores: mockDataStore,
+		ObjectStorageDataStores: mockDataStores,
 	}
 
 	assert.NotNil(t, params.AnotherLogger)
-	assert.NotNil(t, params.ObjectStorageDataStores)
+	assert.Empty(t, params.ObjectStorageDataStores)
 	assert.Equal(t, mockLogger, params.AnotherLogger)
-	assert.Equal(t, mockDataStore, params.ObjectStorageDataStores)
+	assert.Empty(t, mockDataStores)
 }
 
 func TestModuleProvider(t *testing.T) {
@@ -73,11 +73,11 @@ func TestModuleProvider(t *testing.T) {
 
 			// Setup mock dependencies
 			mockLogger := testingPkg.SetupMockLogger()
-			mockDataStore := &ociobjectstore.OCIOSDataStore{}
+			var mockDataStores []*ociobjectstore.OCIOSDataStore
 
 			params := replicaParams{
 				AnotherLogger:           mockLogger,
-				ObjectStorageDataStores: mockDataStore,
+				ObjectStorageDataStores: mockDataStores,
 			}
 
 			// The provider function from Module (simplified to avoid fx dependencies)
@@ -129,14 +129,21 @@ func TestModuleIntegration(t *testing.T) {
 
 	// Setup mock dependencies
 	mockLogger := testingPkg.SetupMockLogger()
-	mockDataStore := &ociobjectstore.OCIOSDataStore{}
+
+	mockDataStores := []*ociobjectstore.OCIOSDataStore{
+		{
+			Config: &ociobjectstore.Config{Name: ociobjectstore.SourceOsConfigName},
+		},
+		{
+			Config: &ociobjectstore.Config{Name: ociobjectstore.TargetOsConfigName},
+		},
+	}
 
 	params := replicaParams{
 		AnotherLogger:           mockLogger,
-		ObjectStorageDataStores: mockDataStore,
+		ObjectStorageDataStores: mockDataStores,
 	}
 
-	// Test configuration creation
 	config, err := NewReplicaConfig(
 		WithViper(v),
 		WithAnotherLog(mockLogger),
@@ -147,7 +154,8 @@ func TestModuleIntegration(t *testing.T) {
 	assert.NotNil(t, config)
 	assert.Equal(t, "/test/path", config.LocalPath)
 	assert.Equal(t, "test-src-namespace", config.SourceObjectStoreURI.Namespace)
-	assert.Equal(t, mockDataStore, config.ObjectStorageDataStore)
+	assert.Equal(t, mockDataStores[0], config.SourceObjectStorageDataStore)
+	assert.Equal(t, mockDataStores[1], config.TargetObjectStorageDataStore)
 
 	// Test agent creation
 	agent, err := NewReplicaAgent(config)

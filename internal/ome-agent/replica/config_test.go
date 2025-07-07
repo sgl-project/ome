@@ -208,17 +208,24 @@ func TestWithViper(t *testing.T) {
 }
 
 func TestWithAppParams(t *testing.T) {
-	mockDataStore := &ociobjectstore.OCIOSDataStore{}
+	sourceDataStore := &ociobjectstore.OCIOSDataStore{
+		Config: &ociobjectstore.Config{Name: ociobjectstore.SourceOsConfigName},
+	}
+	targetDataStore := &ociobjectstore.OCIOSDataStore{
+		Config: &ociobjectstore.Config{Name: ociobjectstore.TargetOsConfigName},
+	}
+	mockDataStores := []*ociobjectstore.OCIOSDataStore{sourceDataStore, targetDataStore}
 	params := replicaParams{
 		AnotherLogger:           testingPkg.SetupMockLogger(),
-		ObjectStorageDataStores: mockDataStore,
+		ObjectStorageDataStores: mockDataStores,
 	}
 
 	config := &Config{}
 	err := WithAppParams(params)(config)
 
 	assert.NoError(t, err)
-	assert.Equal(t, mockDataStore, config.ObjectStorageDataStore)
+	assert.Equal(t, sourceDataStore, config.SourceObjectStorageDataStore)
+	assert.Equal(t, targetDataStore, config.TargetObjectStorageDataStore)
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -237,13 +244,14 @@ func TestConfig_Validate(t *testing.T) {
 			name: "valid config",
 			setupConfig: func() *Config {
 				return &Config{
-					LocalPath:              "/test/path",
-					DownloadSizeLimitGB:    100,
-					EnableSizeLimitCheck:   true,
-					NumConnections:         5,
-					SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					LocalPath:                    "/test/path",
+					DownloadSizeLimitGB:          100,
+					EnableSizeLimitCheck:         true,
+					NumConnections:               5,
+					SourceObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					TargetObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					SourceObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					TargetObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: false,
@@ -252,12 +260,12 @@ func TestConfig_Validate(t *testing.T) {
 			name: "missing LocalPath",
 			setupConfig: func() *Config {
 				return &Config{
-					DownloadSizeLimitGB:    100,
-					EnableSizeLimitCheck:   true,
-					NumConnections:         5,
-					SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					DownloadSizeLimitGB:          100,
+					EnableSizeLimitCheck:         true,
+					NumConnections:               5,
+					TargetObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					SourceObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					TargetObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -266,12 +274,13 @@ func TestConfig_Validate(t *testing.T) {
 			name: "missing SourceObjectStoreURI",
 			setupConfig: func() *Config {
 				return &Config{
-					LocalPath:              "/test/path",
-					DownloadSizeLimitGB:    100,
-					EnableSizeLimitCheck:   true,
-					NumConnections:         5,
-					TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					LocalPath:                    "/test/path",
+					DownloadSizeLimitGB:          100,
+					EnableSizeLimitCheck:         true,
+					NumConnections:               5,
+					TargetObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					SourceObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					TargetObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
@@ -280,26 +289,43 @@ func TestConfig_Validate(t *testing.T) {
 			name: "missing TargetObjectStoreURI",
 			setupConfig: func() *Config {
 				return &Config{
-					LocalPath:              "/test/path",
-					DownloadSizeLimitGB:    100,
-					EnableSizeLimitCheck:   true,
-					NumConnections:         5,
-					SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					ObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					LocalPath:                    "/test/path",
+					DownloadSizeLimitGB:          100,
+					EnableSizeLimitCheck:         true,
+					NumConnections:               5,
+					SourceObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					SourceObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+					TargetObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,
 		},
 		{
-			name: "missing ObjectStorageDataStore",
+			name: "missing SourceObjectStorageDataStore",
 			setupConfig: func() *Config {
 				return &Config{
-					LocalPath:            "/test/path",
-					DownloadSizeLimitGB:  100,
-					EnableSizeLimitCheck: true,
-					NumConnections:       5,
-					SourceObjectStoreURI: ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-					TargetObjectStoreURI: ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					LocalPath:                    "/test/path",
+					DownloadSizeLimitGB:          100,
+					EnableSizeLimitCheck:         true,
+					NumConnections:               5,
+					SourceObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					TargetObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					TargetObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
+				}
+			},
+			expectError: true,
+		},
+		{
+			name: "missing TargetObjectStorageDataStore",
+			setupConfig: func() *Config {
+				return &Config{
+					LocalPath:                    "/test/path",
+					DownloadSizeLimitGB:          100,
+					EnableSizeLimitCheck:         true,
+					NumConnections:               5,
+					SourceObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+					TargetObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+					SourceObjectStorageDataStore: &ociobjectstore.OCIOSDataStore{Client: &ociClient},
 				}
 			},
 			expectError: true,

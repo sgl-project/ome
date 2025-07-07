@@ -44,7 +44,7 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		ociobjectstore.OCIOSDataStoreModule,
+		ociobjectstore.OCIOSDataStoreListProvider,
 		replica.Module,
 		fx.Populate(&r.agent),
 	}
