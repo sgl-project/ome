@@ -43,14 +43,15 @@ func TestNewReplicaAgent(t *testing.T) {
 	mockDataStore := &ociobjectstore.OCIOSDataStore{}
 
 	config := &Config{
-		AnotherLogger:          mockLogger,
-		LocalPath:              "/test/path",
-		SourceObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
-		TargetObjectStoreURI:   ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
-		ObjectStorageDataStore: mockDataStore,
-		NumConnections:         5,
-		DownloadSizeLimitGB:    100,
-		EnableSizeLimitCheck:   true,
+		AnotherLogger:                mockLogger,
+		LocalPath:                    "/test/path",
+		SourceObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "src-ns", BucketName: "src-bucket"},
+		TargetObjectStoreURI:         ociobjectstore.ObjectURI{Namespace: "tgt-ns", BucketName: "tgt-bucket"},
+		SourceObjectStorageDataStore: mockDataStore,
+		TargetObjectStorageDataStore: mockDataStore,
+		NumConnections:               5,
+		DownloadSizeLimitGB:          100,
+		EnableSizeLimitCheck:         true,
 	}
 
 	agent, err := NewReplicaAgent(config)
@@ -305,14 +306,14 @@ func TestReplicaAgent_Start(t *testing.T) {
 	agent := &ReplicaAgent{
 		logger: mockLogger,
 		Config: Config{
-			AnotherLogger:          mockLogger,
-			LocalPath:              "/test/path",
-			SourceObjectStoreURI:   sourceURI,
-			TargetObjectStoreURI:   targetURI,
-			ObjectStorageDataStore: mockDataStore.OCIOSDataStore,
-			NumConnections:         1,
-			DownloadSizeLimitGB:    100,
-			EnableSizeLimitCheck:   true,
+			AnotherLogger:                mockLogger,
+			LocalPath:                    "/test/path",
+			SourceObjectStoreURI:         sourceURI,
+			TargetObjectStoreURI:         targetURI,
+			SourceObjectStorageDataStore: mockDataStore.OCIOSDataStore,
+			NumConnections:               1,
+			DownloadSizeLimitGB:          100,
+			EnableSizeLimitCheck:         true,
 		},
 	}
 

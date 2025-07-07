@@ -69,8 +69,8 @@ func (r *ReplicaAgent) Start() error {
 }
 
 func (r *ReplicaAgent) listSourceObjects() ([]objectstorage.ObjectSummary, error) {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	sourceObjs, err := r.Config.ObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
+	r.Config.SourceObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
+	sourceObjs, err := r.Config.SourceObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +140,8 @@ func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.Obj
 }
 
 func (r *ReplicaAgent) downloadObject(srcObj ociobjectstore.ObjectURI, obj *objectstorage.ObjectSummary) error {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	err := r.Config.ObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
+	r.Config.SourceObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
+	err := r.Config.SourceObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
 		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
 		ociobjectstore.WithThreads(DefaultDownloadThreads))
 	if err != nil {
@@ -152,10 +152,10 @@ func (r *ReplicaAgent) downloadObject(srcObj ociobjectstore.ObjectURI, obj *obje
 }
 
 func (r *ReplicaAgent) uploadObject(targetObj ociobjectstore.ObjectURI, objName string) error {
-	r.Config.ObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
+	r.Config.TargetObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
 	curFilePath := filepath.Join(r.Config.LocalPath, objName)
 
-	err := r.Config.ObjectStorageDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
+	err := r.Config.TargetObjectStorageDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
 	if err != nil {
 		r.logger.Errorf("Failed to upload object %s: %+v", targetObj.ObjectName, err)
 		return err
