@@ -67,18 +67,18 @@ func TestGetInstanceTypeShortName(t *testing.T) {
 			expected:     "L40",
 			expectError:  false,
 		},
-		// Error cases
+		// Fallback cases
 		{
 			name:         "Unknown instance type",
 			instanceType: "unknown-instance-type",
-			expected:     "",
-			expectError:  true,
+			expected:     "unknown-instance-type",
+			expectError:  false,
 		},
 		{
 			name:         "Empty instance type",
 			instanceType: "",
 			expected:     "",
-			expectError:  true,
+			expectError:  false,
 		},
 	}
 

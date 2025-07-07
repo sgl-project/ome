@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"fmt"
-
 	"github.com/sgl-project/ome/pkg/imds"
 	"github.com/sgl-project/ome/pkg/logging"
 )
@@ -45,5 +43,6 @@ func GetInstanceTypeShortName(currentInstanceType string) (string, error) {
 	if shortName, ok := instanceTypeMap[currentInstanceType]; ok {
 		return shortName, nil
 	}
-	return "", fmt.Errorf("couldn't find instance type %s in the mapping", currentInstanceType)
+	// Return the original instance type as a fallback for unknown shapes
+	return currentInstanceType, nil
 }
