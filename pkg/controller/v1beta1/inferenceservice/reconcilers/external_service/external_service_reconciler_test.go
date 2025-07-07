@@ -210,7 +210,7 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 			},
 			expectedSelector: map[string]string{
 				constants.InferenceServicePodLabelKey: "test-service",
-				constants.KServiceComponentLabel:      string(v1beta1.RouterComponent),
+				constants.OMEComponentLabel:           string(v1beta1.RouterComponent),
 			},
 			description: "router component should be selected when multiple components exist",
 		},
@@ -232,7 +232,7 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 			},
 			expectedSelector: map[string]string{
 				constants.InferenceServicePodLabelKey: "test-service",
-				constants.KServiceComponentLabel:      string(v1beta1.EngineComponent),
+				constants.OMEComponentLabel:           string(v1beta1.EngineComponent),
 			},
 			description: "engine component should be selected when router doesn't exist",
 		},
@@ -253,7 +253,7 @@ func TestExternalServiceReconciler_determineTargetSelector(t *testing.T) {
 			},
 			expectedSelector: map[string]string{
 				constants.InferenceServicePodLabelKey: "test-service",
-				constants.KServiceComponentLabel:      string(constants.Predictor),
+				constants.OMEComponentLabel:           string(constants.Predictor),
 			},
 			description: "predictor component should be selected as fallback",
 		},
@@ -411,7 +411,7 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						constants.InferenceServicePodLabelKey: "test-service",
-						constants.KServiceComponentLabel:      string(v1beta1.EngineComponent),
+						constants.OMEComponentLabel:           string(v1beta1.EngineComponent),
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -450,7 +450,7 @@ func TestExternalServiceReconciler_Reconcile(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						constants.InferenceServicePodLabelKey: "test-service",
-						constants.KServiceComponentLabel:      string(v1beta1.EngineComponent),
+						constants.OMEComponentLabel:           string(v1beta1.EngineComponent),
 					},
 					Ports: []corev1.ServicePort{
 						{

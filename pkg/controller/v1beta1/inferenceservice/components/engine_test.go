@@ -85,7 +85,8 @@ func TestEngineReconcile(t *testing.T) {
 				},
 			},
 			baseModelMeta: &metav1.ObjectMeta{
-				Name: "base-model-1",
+				Name:      "base-model-1",
+				Namespace: "default",
 				Annotations: map[string]string{
 					constants.ModelCategoryAnnotation: "LARGE",
 				},
@@ -167,6 +168,12 @@ func TestEngineReconcile(t *testing.T) {
 				// since environment variables are only applied to the runner container
 				g.Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(gomega.BeEmpty())
 
+				// Check node selector was added for the base model
+				expectedNodeSelector := map[string]string{
+					"models.ome.io/default.basemodel.base-model-1": "Ready",
+				}
+				g.Expect(deployment.Spec.Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+
 				// Check service was created
 				service := &v1.Service{}
 				err = c.Get(context.TODO(), types.NamespacedName{
@@ -188,7 +195,8 @@ func TestEngineReconcile(t *testing.T) {
 				},
 			},
 			baseModelMeta: &metav1.ObjectMeta{
-				Name: "base-model-2",
+				Name:      "base-model-2",
+				Namespace: "default",
 			},
 			engineSpec: &v1beta1.EngineSpec{
 				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
@@ -270,6 +278,13 @@ func TestEngineReconcile(t *testing.T) {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				g.Expect(lwsList.Items).To(gomega.HaveLen(1))
 				g.Expect(lwsList.Items[0].Spec.Replicas).To(gomega.Equal(int32Ptr(2)))
+
+				// Check node selector was added for both leader and worker pods
+				expectedNodeSelector := map[string]string{
+					"models.ome.io/default.basemodel.base-model-2": "Ready",
+				}
+				g.Expect(lwsList.Items[0].Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				g.Expect(lwsList.Items[0].Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
 			},
 		},
 		{
@@ -432,6 +447,81 @@ func TestEngineReconcile(t *testing.T) {
 			},
 		},
 		{
+			name:           "ClusterBaseModel with node selector",
+			deploymentMode: constants.RawDeployment,
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+				Storage: &v1beta1.StorageSpec{
+					Path: stringPtr("/mnt/models/cluster-model"),
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name: "cluster-base-model",
+				// No namespace for ClusterBaseModel
+			},
+			engineSpec: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					MinReplicas: intPtr(1),
+					MaxReplicas: 3,
+				},
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "engine",
+							Image: "engine:latest",
+						},
+					},
+				},
+			},
+			runtime:     &v1beta1.ServingRuntimeSpec{},
+			runtimeName: "test-runtime",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cluster-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{},
+				},
+			},
+			setupMocks: func(c client.Client, cs kubernetes.Interface) {
+				// Create inferenceservice config
+				cm := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "inferenceservice-config",
+						Namespace: "ome",
+					},
+					Data: map[string]string{
+						"config": "{}",
+					},
+				}
+				err := c.Create(context.TODO(), cm)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				_, err = cs.CoreV1().ConfigMaps("ome").Create(context.TODO(), cm, metav1.CreateOptions{})
+				if err != nil && !strings.Contains(err.Error(), "already exists") {
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+			},
+			validate: func(t *testing.T, c client.Client, isvc *v1beta1.InferenceService) {
+				// Check deployment was created
+				deployment := &appsv1.Deployment{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-cluster-isvc-engine",
+					Namespace: "default",
+				}, deployment)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Check node selector for ClusterBaseModel (no namespace in label)
+				expectedNodeSelector := map[string]string{
+					"models.ome.io/clusterbasemodel.cluster-base-model": "Ready",
+				}
+				g.Expect(deployment.Spec.Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+			},
+		},
+		{
 			name:           "Engine with nil spec should error",
 			deploymentMode: constants.RawDeployment,
 			engineSpec:     nil,
@@ -588,7 +678,7 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 				"custom-label":                                  "value",
 				"engine-label":                                  "engine-value",
 				constants.InferenceServicePodLabelKey:           "test-isvc",
-				constants.KServiceComponentLabel:                "engine",
+				constants.OMEComponentLabel:                     "engine",
 				constants.ServingRuntimeLabelKey:                "test-runtime",
 				constants.InferenceServiceBaseModelNameLabelKey: "base-model",
 				constants.InferenceServiceBaseModelSizeLabelKey: "LARGE",
@@ -640,7 +730,7 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			},
 			expectedLabels: map[string]string{
 				constants.InferenceServicePodLabelKey:           "ft-isvc",
-				constants.KServiceComponentLabel:                "engine",
+				constants.OMEComponentLabel:                     "engine",
 				constants.FTServingLabelKey:                     "true",
 				constants.FineTunedWeightFTStrategyLabelKey:     "lora",
 				constants.FTServingWithMergedWeightsLabelKey:    "false",
