@@ -116,17 +116,17 @@ func (r *ExternalServiceReconciler) determineTargetSelector(isvc *v1beta1.Infere
 
 	// Priority: Router > Engine > Predictor
 	if isvc.Spec.Router != nil {
-		baseSelector[constants.KServiceComponentLabel] = string(v1beta1.RouterComponent)
+		baseSelector[constants.OMEComponentLabel] = string(v1beta1.RouterComponent)
 		return baseSelector
 	}
 
 	if isvc.Spec.Engine != nil {
-		baseSelector[constants.KServiceComponentLabel] = string(v1beta1.EngineComponent)
+		baseSelector[constants.OMEComponentLabel] = string(v1beta1.EngineComponent)
 		return baseSelector
 	}
 
 	// Fallback to predictor
-	baseSelector[constants.KServiceComponentLabel] = string(constants.Predictor)
+	baseSelector[constants.OMEComponentLabel] = string(constants.Predictor)
 	return baseSelector
 }
 
@@ -140,7 +140,7 @@ func (r *ExternalServiceReconciler) buildExternalService(isvc *v1beta1.Inference
 			Namespace: isvc.Namespace,
 			Labels: map[string]string{
 				constants.InferenceServicePodLabelKey: isvc.Name,
-				constants.KServiceComponentLabel:      "external-service",
+				constants.OMEComponentLabel:           "external-service",
 			},
 			Annotations: r.getServiceAnnotations(isvc),
 		},

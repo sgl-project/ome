@@ -281,6 +281,7 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 	}
 
 	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, podSpec, objectMeta)
+	UpdatePodSpecNodeSelector(&d.BaseComponentFields, isvc, podSpec)
 
 	d.Log.Info("Decoder PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
@@ -310,6 +311,7 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 		return nil, err
 	}
 	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, workerPodSpec, objectMeta)
+	UpdatePodSpecNodeSelector(&d.BaseComponentFields, isvc, workerPodSpec)
 
 	d.Log.Info("Decoder Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
