@@ -408,8 +408,11 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, errors.Wrapf(err, "fails to create IngressConfig")
 	}
 
+	// Resolve ingress config with annotation overrides
+	resolvedIngressConfig := isvcutils.ResolveIngressConfig(ingressConfig, isvc.Annotations)
+
 	// New architecture: ingress uses the determined ingress deployment mode
-	ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig, isvcConfig)
+	ingressReconciler := ingress.NewIngressReconciler(r.Client, r.Clientset, r.Scheme, resolvedIngressConfig, isvcConfig)
 	r.Log.Info("Reconciling ingress for inference service", "isvc", isvc.Name)
 	if err := ingressReconciler.(*ingress.IngressReconciler).ReconcileWithDeploymentMode(ctx, isvc, ingressDeploymentMode); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile ingress")
@@ -417,15 +420,15 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Reconcile external service - creates a service with the inference service name
 	// when ingress is disabled to provide a stable endpoint
-	externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, ingressConfig)
+	externalServiceReconciler := external_service.NewExternalServiceReconciler(r.Client, r.Clientset, r.Scheme, resolvedIngressConfig)
 	r.Log.Info("Reconciling external service for inference service", "isvc", isvc.Name)
 	if err := externalServiceReconciler.Reconcile(ctx, isvc); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "fails to reconcile external service")
 	}
 
 	// Set Status.Address for external service when ingress is disabled
-	if ingressConfig.DisableIngressCreation {
-		if err := r.setExternalServiceURL(ctx, isvc, ingressConfig); err != nil {
+	if resolvedIngressConfig.DisableIngressCreation {
+		if err := r.setExternalServiceURL(ctx, isvc, resolvedIngressConfig); err != nil {
 			r.Recorder.Event(isvc, v1.EventTypeWarning, "InternalError", err.Error())
 			return reconcile.Result{}, errors.Wrapf(err, "fails to set external service URL")
 		}
