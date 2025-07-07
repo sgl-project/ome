@@ -240,7 +240,7 @@ func (b *IngressBuilder) generateMetadata(isvc *v1beta1.InferenceService,
 		Namespace: isvc.Namespace,
 		Labels: utils.Union(isvc.Labels, map[string]string{
 			constants.InferenceServicePodLabelKey: isvc.Name,
-			constants.KServiceComponentLabel:      string(componentType),
+			constants.OMEComponentLabel:           string(componentType),
 		}),
 		Annotations: annotations,
 	}

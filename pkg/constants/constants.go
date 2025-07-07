@@ -325,8 +325,8 @@ const (
 
 // Labels to put on kservice
 const (
-	KServiceComponentLabel = "component"
-	KServiceEndpointLabel  = "endpoint"
+	OMEComponentLabel = "component"
+	OMEEndpointLabel  = "endpoint"
 )
 
 // Labels for TrainedModel
@@ -388,14 +388,6 @@ const (
 
 // DefaultModelLocalMountPath is where models will be mounted by the storage-initializer
 const DefaultModelLocalMountPath = "/mnt/models"
-
-// Multi-model InferenceService
-const (
-	ModelConfigVolumeName = "model-config"
-	ModelDirVolumeName    = "model-dir"
-	ModelConfigDir        = "/mnt/configs"
-	ModelDir              = DefaultModelLocalMountPath
-)
 
 var (
 	ServiceAnnotationDisallowedList = []string{

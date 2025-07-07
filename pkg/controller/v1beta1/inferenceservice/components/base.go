@@ -195,6 +195,48 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 	}
 }
 
+// UpdatePodSpecNodeSelector updates pod spec with node selector for model scheduling
+func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
+	// Only add node selector if we have a base model
+	if b.BaseModel == nil || b.BaseModelMeta == nil {
+		return
+	}
+
+	// Skip node selector for fine-tuned serving with merged weights
+	// as they don't need the base model on the node
+	if b.FineTunedServingWithMergedWeights {
+		b.Log.Info("Skipping node selector for fine-tuned serving with merged weights",
+			"inferenceService", isvc.Name, "namespace", isvc.Namespace)
+		return
+	}
+
+	// Determine if this is a ClusterBaseModel or BaseModel
+	var labelKey string
+	isClusterScoped := b.BaseModelMeta.Namespace == ""
+
+	if isClusterScoped {
+		// ClusterBaseModel
+		labelKey = constants.GetClusterBaseModelLabel(b.BaseModelMeta.Name)
+	} else {
+		// BaseModel (namespace-scoped)
+		labelKey = constants.GetBaseModelLabel(b.BaseModelMeta.Namespace, b.BaseModelMeta.Name)
+	}
+
+	// Initialize node selector if nil
+	if podSpec.NodeSelector == nil {
+		podSpec.NodeSelector = make(map[string]string)
+	}
+
+	// Add node selector for model with "Ready" status
+	podSpec.NodeSelector[labelKey] = "Ready"
+
+	b.Log.Info("Added node selector for model scheduling",
+		"labelKey", labelKey,
+		"modelName", b.BaseModelMeta.Name,
+		"namespace", b.BaseModelMeta.Namespace,
+		"inferenceService", isvc.Name)
+}
+
 // UpdatePodSpecVolumes updates pod spec with common volumes
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
@@ -301,7 +343,7 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 
 	baseLabels := map[string]string{
 		constants.InferenceServicePodLabelKey: isvc.Name,
-		constants.KServiceComponentLabel:      string(componentType),
+		constants.OMEComponentLabel:           string(componentType),
 		constants.ServingRuntimeLabelKey:      b.RuntimeName,
 		constants.FTServingLabelKey:           strconv.FormatBool(b.FineTunedServing),
 	}
