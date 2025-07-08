@@ -30,7 +30,9 @@
 				{{- if ne .ResourceType "page" -}}
 				{{- /* Assume it is a file that needs code highlighting. */ -}}
 				{{- $codelang := $e.codelang | default ( path.Ext .Name | strings.TrimPrefix ".") -}}
-				{{- highlight .Content $codelang "" -}}
+				<div class="code-toolbar">
+					<pre class="language-{{ $codelang }}" tabindex="0"><code class="language-{{ $codelang }}">{{ .Content }}</code></pre>
+				</div>
 				{{- else -}}
 					{{- .Content -}}
 				{{- end -}}

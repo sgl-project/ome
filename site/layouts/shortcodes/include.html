@@ -30,8 +30,9 @@ Throw a compile error or print an error on the page if the file is not found */}
   <div class="highlight">
     <a href="{{ $link }}" download="{{ $filename }}" class="d-flex flex-row-reverse p-2"> <button class="btn btn-outline-primary btn-sm position-absolute"> <i class="fa-solid fa-file-arrow-down"></i> {{ $filename }}   </button> </a>
   {{ if eq ($.Scratch.Get "iscode") "true" }}
-    {{- highlight ($.Scratch.Get "filepath" | readFile | htmlUnescape |
-    safeHTML ) ($.Scratch.Get "lang") "" -}}
+    <div class="code-toolbar">
+      <pre class="language-{{ $.Scratch.Get "lang" }}" tabindex="0"><code class="language-{{ $.Scratch.Get "lang" }}">{{- $.Scratch.Get "filepath" | readFile | htmlUnescape | safeHTML -}}</code></pre>
+    </div>
   {{ else }}
     {{- $.Scratch.Get "filepath" | os.ReadFile | .Page.RenderString | safeHTML -}}
   {{ end }}
