@@ -3,10 +3,11 @@ kind: ClusterServingRuntime
 metadata:
   name: cohere-command-a-vllm
 spec:
-  {{- with .Values.cohere.commonAnnotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    prometheus.io/port: '8002'
+    prometheus.io/scrape: 'true'
+    ome.io/disable-blocklist: 'true'
+    ome.io/inject-model-init: 'true'
   {{- with .Values.cohere.commonLabels }}
   labels:
     {{- toYaml . | nindent 4 }}
