@@ -3,8 +3,8 @@ kind: Kustomization
 
 resources:
   - meta/Llama-3.3-70B-instruct.yaml
-  - meta/llama-4-maverick-17b-128e-instruct-fp8.yaml
-  - meta/llama-4-scout-17b-16e-instruct.yaml
+  - meta/Llama-4-Maverick-17B-128E-Instruct-FP8.yaml
+  - meta/Llama-4-Scout-17B-16E-Instruct.yaml
   - intfloat/e5-mistral-7b-instruct.yaml
   - microsoft/Phi-3-vision-128k-instruct.yaml
   - deepseek-ai/DeepSeek-V3.yaml
