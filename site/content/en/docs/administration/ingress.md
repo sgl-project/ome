@@ -6,8 +6,6 @@ description: >
   Cluster administrator guide for configuring OME ingress and networking in production environments.
 ---
 
-## Overview
-
 OME (Open Model Engine) provides flexible ingress configuration to support various Kubernetes ingress controllers and deployment scenarios. This guide covers the configuration options available to cluster administrators.
 
 ## Supported Ingress Controllers
@@ -53,24 +51,24 @@ data:
 
 ### Configuration Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `ingressClassName` | string | `"istio"` | Ingress controller class name |
-| `ingressDomain` | string | `"example.com"` | Base domain for generated hostnames |
-| `domainTemplate` | string | `"{{.Name}}.{{.Namespace}}.{{.IngressDomain}}"` | Template for generating hostnames |
-| `urlScheme` | string | `"http"` | URL scheme (http/https) |
-| `disableIngressCreation` | bool | `false` | Disable ingress creation entirely |
-| `enableGatewayAPI` | bool | `false` | Use Gateway API instead of Kubernetes Ingress |
+| Parameter                | Type   | Default                                         | Description                                   |
+|--------------------------|--------|-------------------------------------------------|-----------------------------------------------|
+| `ingressClassName`       | string | `"istio"`                                       | Ingress controller class name                 |
+| `ingressDomain`          | string | `"example.com"`                                 | Base domain for generated hostnames           |
+| `domainTemplate`         | string | `"{{.Name}}.{{.Namespace}}.{{.IngressDomain}}"` | Template for generating hostnames             |
+| `urlScheme`              | string | `"http"`                                        | URL scheme (http/https)                       |
+| `disableIngressCreation` | bool   | `false`                                         | Disable ingress creation entirely             |
+| `enableGatewayAPI`       | bool   | `false`                                         | Use Gateway API instead of Kubernetes Ingress |
 
 ### Advanced Parameters
 
 For Istio service mesh configurations:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `ingressGateway` | string | Istio Gateway resource name |
-| `ingressService` | string | Istio ingress gateway service name |
-| `disableIstioVirtualHost` | bool | Disable Istio VirtualService creation |
+| Parameter                 | Type   | Description                           |
+|---------------------------|--------|---------------------------------------|
+| `ingressGateway`          | string | Istio Gateway resource name           |
+| `ingressService`          | string | Istio ingress gateway service name    |
+| `disableIstioVirtualHost` | bool   | Disable Istio VirtualService creation |
 
 ## Advanced Configuration
 
@@ -127,15 +125,15 @@ While the ConfigMap provides cluster-wide defaults, individual InferenceServices
 
 The following ingress settings can be overridden per service:
 
-| Annotation Key | ConfigMap Equivalent | Description | Type |
-|----------------|---------------------|-------------|------|
-| `ome.io/ingress-domain-template` | `domainTemplate` | Custom domain pattern | String template |
-| `ome.io/ingress-domain` | `ingressDomain` | Fixed base domain | String |
-| `ome.io/ingress-additional-domains` | `additionalIngressDomains` | Extra domains (comma-separated) | String list |
-| `ome.io/ingress-url-scheme` | `urlScheme` | HTTP/HTTPS scheme | String |
-| `ome.io/ingress-path-template` | `pathTemplate` | URL path pattern | String template |
-| `ome.io/ingress-disable-istio-virtualhost` | `disableIstioVirtualHost` | Skip VirtualService creation | Boolean ("true"/"false") |
-| `ome.io/ingress-disable-creation` | `disableIngressCreation` | Skip all ingress creation | Boolean ("true"/"false") |
+| Annotation Key                             | ConfigMap Equivalent       | Description                     | Type                     |
+|--------------------------------------------|----------------------------|---------------------------------|--------------------------|
+| `ome.io/ingress-domain-template`           | `domainTemplate`           | Custom domain pattern           | String template          |
+| `ome.io/ingress-domain`                    | `ingressDomain`            | Fixed base domain               | String                   |
+| `ome.io/ingress-additional-domains`        | `additionalIngressDomains` | Extra domains (comma-separated) | String list              |
+| `ome.io/ingress-url-scheme`                | `urlScheme`                | HTTP/HTTPS scheme               | String                   |
+| `ome.io/ingress-path-template`             | `pathTemplate`             | URL path pattern                | String template          |
+| `ome.io/ingress-disable-istio-virtualhost` | `disableIstioVirtualHost`  | Skip VirtualService creation    | Boolean ("true"/"false") |
+| `ome.io/ingress-disable-creation`          | `disableIngressCreation`   | Skip all ingress creation       | Boolean ("true"/"false") |
 
 ### Configuration Priority
 
@@ -149,11 +147,11 @@ The resolution order follows this priority (highest to lowest):
 
 OME creates different ingress resources based on deployment mode:
 
-| Deployment Mode | Ingress Type | Configuration |
-|-----------------|--------------|---------------|
-| **Serverless** | Istio VirtualService | Uses `ingressGateway` and `ingressService` parameters |
-| **RawDeployment** | Kubernetes Ingress or Gateway API | Uses `ingressClassName` parameter |
-| **MultiNode** | Kubernetes Ingress or Gateway API | Uses `ingressClassName` parameter |
+| Deployment Mode   | Ingress Type                      | Configuration                                         |
+|-------------------|-----------------------------------|-------------------------------------------------------|
+| **Serverless**    | Istio VirtualService              | Uses `ingressGateway` and `ingressService` parameters |
+| **RawDeployment** | Kubernetes Ingress or Gateway API | Uses `ingressClassName` parameter                     |
+| **MultiNode**     | Kubernetes Ingress or Gateway API | Uses `ingressClassName` parameter                     |
 
 ## Configuration Validation
 

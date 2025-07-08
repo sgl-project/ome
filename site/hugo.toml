@@ -41,6 +41,8 @@ ignoreFiles = []
     # See a complete list of available styles at https://xyproto.github.io/splash/docs/all.html
     style = "tango"
     guessSyntax = "true"
+    # Generate classes instead of inline styles for Prism compatibility
+    noClasses = false
 
 ###############################################################################
 # Docsy - Image processing configuration

@@ -153,6 +153,56 @@ figcaption {
   border-bottom: none !important;
 }
 
+// --------------------------------------------------
+// Prism.js code block styling
+// --------------------------------------------------
+// Override default code block background
+pre[class*="language-"] {
+  background: #f8f8f8 !important; // Lighter background color
+}
+
+// Ensure code blocks have proper positioning for toolbar
+div.code-toolbar {
+  position: relative;
+  
+  // Override any conflicting styles from Hugo's highlighter
+  > pre[class*="language-"] {
+    margin: 0;
+    padding: 1em;
+    overflow: auto;
+    background: #f8f8f8; // Lighter background color
+  }
+}
+
+// Ensure Prism toolbar appears in top-right corner
+div.code-toolbar > .toolbar {
+  position: absolute;
+  top: .3em;
+  right: .2em;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+// Make sure toolbar is visible on hover
+div.code-toolbar:hover > .toolbar {
+  opacity: 1;
+}
+
+// Style the copy button
+div.code-toolbar > .toolbar > .toolbar-item > button {
+  background: rgba(224, 224, 224, 0.2);
+  color: #bbb;
+  padding: 0 0.5em;
+  border-radius: 0.5em;
+  box-shadow: 0 2px 0 0 rgba(0,0,0,0.2);
+  font-size: 0.8em;
+  
+  &:hover {
+    background: rgba(224, 224, 224, 0.4);
+    color: #333;
+  }
+}
+
 .td-content > ul li,
 .td-content > ol li.nav-item {
   margin-bottom: 0px;
