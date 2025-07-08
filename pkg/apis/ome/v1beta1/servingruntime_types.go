@@ -49,7 +49,19 @@ type SupportedModelFormat struct {
 	// Priority can be overridden by specifying the runtime in the InferenceService.
 	// +optional
 	Priority *int32 `json:"priority,omitempty"`
+
+	// Operator for the selector with supported values: "Equal", "GreaterThan"
+	// This is used to select the serving runtime based on the modelFormat version, modelFramework version
+	// +optional
+	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
 }
+
+type RuntimeSelectorOperator string
+
+const (
+	RuntimeSelectorOpEqual       RuntimeSelectorOperator = "Equal"
+	RuntimeSelectorOpGreaterThan RuntimeSelectorOperator = "GreaterThan"
+)
 
 // +k8s:openapi-gen=true
 type ServingRuntimePodSpec struct {

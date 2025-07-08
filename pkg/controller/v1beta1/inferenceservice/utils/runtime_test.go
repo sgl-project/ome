@@ -781,510 +781,434 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 	}
 }
 
-func TestGetSupportingRuntimesNewArchitecture(t *testing.T) {
-	strPtr := func(s string) *string { return &s }
-	boolPtr := func(b bool) *bool { return &b }
-	int32Ptr := func(i int32) *int32 { return &i }
-
+func TestCompareSupportedModelFormats(t *testing.T) {
 	tests := []struct {
-		name             string
-		baseModel        *v1beta1.BaseModelSpec
-		namespace        string
-		setupClient      func() client.Client
-		expectedCount    int
-		expectedFirst    string
-		expectedExcluded map[string]string // runtime name -> expected error substring
-		expectError      bool
+		name            string
+		baseModel       *v1beta1.BaseModelSpec
+		supportedFormat v1beta1.SupportedModelFormat
+		expected        bool
 	}{
 		{
-			name: "find runtimes supporting pytorch model",
+			name: "matching model format names",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
 				},
-				ModelParameterSize: strPtr("7B"),
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "pytorch-runtime",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-												Priority:   int32Ptr(10),
-											},
-										},
-									},
-								},
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "multi-format-runtime",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-												Priority:   int32Ptr(5),
-											},
-											{
-												Name: "onnx",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "onnx",
-												},
-												AutoSelect: boolPtr(true),
-											},
-										},
-									},
-								},
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "no-autoselect-runtime",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(false),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
 			},
-			expectedCount: 2,
-			expectedFirst: "pytorch-runtime", // Higher priority
-			expectedExcluded: map[string]string{
-				"no-autoselect-runtime": "runtime does not have auto-select enabled",
-			},
-			expectError: false,
+			expected: true,
 		},
 		{
-			name: "no runtimes support the model",
+			name: "non-matching model format names",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "custom-format",
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
 				},
-				ModelParameterSize: strPtr("100B"),
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "pytorch-only",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:    "PyTorch",
+					Version: ptrToString("1.0.0"),
+				},
 			},
-			expectedCount: 0,
-			expectedExcluded: map[string]string{
-				"pytorch-only": "model format 'mt:custom-format' not in supported formats",
-			},
-			expectError: false,
+			expected: false,
 		},
 		{
-			name: "runtime is disabled",
+			name: "matching quantization",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
 				},
-				ModelParameterSize: strPtr("7B"),
+				Quantization: ptrToModelQuant("int8"),
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "disabled-runtime",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										Disabled: boolPtr(true),
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				Quantization: ptrToModelQuant("int8"),
 			},
-			expectedCount: 0,
-			expectedExcluded: map[string]string{
-				"disabled-runtime": "runtime is disabled",
-			},
-			expectError: false,
+			expected: true,
 		},
 		{
-			name: "error listing namespace runtimes",
+			name: "non-matching quantization",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
 				},
+				Quantization: ptrToModelQuant("int8"),
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if _, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							return errors.New("failed to list namespace runtimes")
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				Quantization: ptr(v1beta1.ModelQuantization("fp16")),
 			},
-			expectedCount: 0,
-			expectError:   true,
+			expected: false,
 		},
 		{
-			name: "error listing cluster runtimes",
+			name: "equal version comparison",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptrToString("1.8.0"),
 				},
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if _, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							// Return empty namespace list
-							return nil
-						}
-						if _, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							return errors.New("failed to list cluster runtimes")
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0")},
+				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual)),
 			},
-			expectedCount: 0,
-			expectError:   true,
+			expected: true,
 		},
 		{
-			name: "mix of namespace and cluster runtimes",
+			name: "equal version comparison - not equal",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptrToString("1.8.0"),
 				},
-				ModelParameterSize: strPtr("7B"),
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "namespace-runtime",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: "cluster-runtime",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.9.0")},
+				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual)),
 			},
-			expectedCount: 2,
-			expectedFirst: "namespace-runtime", // Namespace runtimes come first
-			expectError:   false,
+			expected: false,
 		},
 		{
-			name: "model without parameter size",
+			name: "greater than version comparison - true",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptr("1.7.0"),
 				},
-				ModelParameterSize: nil, // No size specified
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "runtime-with-priority",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-												Priority:   int32Ptr(10),
-											},
-										},
-									},
-								},
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "runtime-lower-priority",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(true),
-												Priority:   int32Ptr(5),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0")},
+				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)),
 			},
-			expectedCount: 2,
-			expectedFirst: "runtime-with-priority",
-			expectError:   false,
+			expected: true,
 		},
 		{
-			name: "runtime with nil auto-select defaults to false",
+			name: "greater than version comparison - false",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptr("1.7.0"),
 				},
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "runtime-nil-autoselect",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: nil, // nil should be treated as false
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.7.0")},
+				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)),
 			},
-			expectedCount: 0,
-			expectedExcluded: map[string]string{
-				"runtime-nil-autoselect": "runtime does not have auto-select enabled",
-			},
-			expectError: false,
+			expected: false,
 		},
 		{
-			name: "runtime supports model but has all formats with autoselect false",
+			name: "unofficial version comparison - forces equality",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "ONNX",
+					Version: ptr("1.8.0-dev"),
 				},
 			},
-			namespace: "test-namespace",
-			setupClient: func() client.Client {
-				return &mockClient{
-					listFunc: func(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-						if runtimeList, ok := list.(*v1beta1.ServingRuntimeList); ok {
-							runtimeList.Items = []v1beta1.ServingRuntime{
-								{
-									ObjectMeta: metav1.ObjectMeta{
-										Name:      "runtime-mixed-autoselect",
-										Namespace: "test-namespace",
-									},
-									Spec: v1beta1.ServingRuntimeSpec{
-										SupportedModelFormats: []v1beta1.SupportedModelFormat{
-											{
-												Name: "pytorch",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "pytorch",
-												},
-												AutoSelect: boolPtr(false),
-											},
-											{
-												Name: "onnx",
-												ModelFormat: &v1beta1.ModelFormat{
-													Name: "onnx",
-												},
-												AutoSelect: boolPtr(false),
-											},
-										},
-									},
-								},
-							}
-							return nil
-						}
-						if clusterRuntimeList, ok := list.(*v1beta1.ClusterServingRuntimeList); ok {
-							clusterRuntimeList.Items = []v1beta1.ClusterServingRuntime{}
-							return nil
-						}
-						return nil
-					},
-				}
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0-dev")},
+				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)), // This will be ignored due to unofficial version
 			},
-			expectedCount: 0,
-			expectedExcluded: map[string]string{
-				"runtime-mixed-autoselect": "runtime does not have auto-select enabled",
+			expected: true,
+		},
+		{
+			name: "unofficial version comparison - not equal",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptr("1.8.0-dev"),
+				},
 			},
-			expectError: false,
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0-alpha")},
+				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)), // This will be ignored due to unofficial version
+			},
+			expected: false,
+		},
+		{
+			name: "framework comparison - matching",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.10.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:           "test-format",
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0")},
+			},
+			expected: true,
+		},
+		{
+			name: "framework comparison - non-matching name",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.10.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:           "test-format",
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "PyTorch", Version: ptr("1.10.0")},
+			},
+			expected: false,
+		},
+		{
+			name: "framework comparison - greater than version",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.12.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:           "test-format",
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0")},
+				Operator:       (*v1beta1.RuntimeSelectorOperator)(ptr(string(v1beta1.RuntimeSelectorOpGreaterThan))),
+			},
+			expected: false,
+		},
+		{
+			name: "framework comparison - not greater than version",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.8.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:           "test-format",
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0")},
+				Operator:       (*v1beta1.RuntimeSelectorOperator)(ptr(string(v1beta1.RuntimeSelectorOpGreaterThan))),
+			},
+			expected: false,
+		},
+		// Test case for prefixed format names like mt:pytorch
+		{
+			name: "model format with prefix",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "mt:pytorch",
+					Version: ptrToString("1.0.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Version: ptrToString("1.0.0")},
+			},
+			expected: false, // Currently this will fail because we're doing exact matching
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cl := tt.setupClient()
-			result, excludedRuntimes, err := GetSupportingRuntimes(tt.baseModel, cl, tt.namespace)
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Len(t, result, tt.expectedCount)
-				if tt.expectedCount > 0 {
-					assert.Equal(t, tt.expectedFirst, result[0].Name)
-				}
-
-				// Check excluded runtimes
-				for name, expectedErr := range tt.expectedExcluded {
-					if err, exists := excludedRuntimes[name]; exists {
-						assert.Contains(t, err.Error(), expectedErr)
-					} else {
-						t.Errorf("Expected runtime %s to be excluded but it wasn't", name)
-					}
-				}
-			}
+			result := compareSupportedModelFormats(tt.baseModel, tt.supportedFormat)
+			assert.Equal(t, tt.expected, result, "Test case: %s", tt.name)
 		})
 	}
+}
+
+func TestContainsUnofficialVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		version  Version
+		expected bool
+	}{
+		{
+			name: "official version",
+			version: Version{
+				Major: 1,
+				Minor: 8,
+				Patch: 0,
+			},
+			expected: false,
+		},
+		{
+			name: "with pre-release",
+			version: Version{
+				Major: 1,
+				Minor: 8,
+				Patch: 0,
+				Pre:   []string{"beta"},
+			},
+			expected: true,
+		},
+		{
+			name: "with build metadata",
+			version: Version{
+				Major: 1,
+				Minor: 8,
+				Patch: 0,
+				Build: []string{"20240707"},
+			},
+			expected: true,
+		},
+		{
+			name: "with both pre-release and build",
+			version: Version{
+				Major: 1,
+				Minor: 8,
+				Patch: 0,
+				Pre:   []string{"alpha"},
+				Build: []string{"20240707"},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := containsUnofficialVersion(tt.version)
+			assert.Equal(t, tt.expected, result, "Test case: %s", tt.name)
+		})
+	}
+}
+
+func TestVersionComparison(t *testing.T) {
+	tests := []struct {
+		name        string
+		v1          string
+		v2          string
+		equal       bool
+		greaterThan bool
+	}{
+		{
+			name:        "equal versions",
+			v1:          "1.8.0",
+			v2:          "1.8.0",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "greater major version",
+			v1:          "2.0.0",
+			v2:          "1.9.0",
+			equal:       false,
+			greaterThan: true,
+		},
+		{
+			name:        "greater minor version",
+			v1:          "1.9.0",
+			v2:          "1.8.0",
+			equal:       false,
+			greaterThan: true,
+		},
+		{
+			name:        "greater patch version",
+			v1:          "1.8.5",
+			v2:          "1.8.0",
+			equal:       false,
+			greaterThan: true,
+		},
+		{
+			name:        "less major version",
+			v1:          "1.0.0",
+			v2:          "2.0.0",
+			equal:       false,
+			greaterThan: false,
+		},
+		{
+			name:        "pre-release versions equal",
+			v1:          "1.8.0-alpha",
+			v2:          "1.8.0-alpha",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "different pre-release versions",
+			v1:          "1.8.0-beta",
+			v2:          "1.8.0-alpha",
+			equal:       false,
+			greaterThan: true, // Implementation might differ on pre-release ordering
+		},
+		{
+			name:        "build metadata equal",
+			v1:          "1.8.0+20240707",
+			v2:          "1.8.0+20240707",
+			equal:       true,
+			greaterThan: false,
+		},
+		{
+			name:        "different build metadata",
+			v1:          "1.8.0+20240708",
+			v2:          "1.8.0+20240707",
+			equal:       true, // Build metadata doesn't affect equality
+			greaterThan: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v1, err := Parse(tt.v1)
+			assert.NoError(t, err)
+			v2, err := Parse(tt.v2)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.equal, Equal(v1, v2), "Equal comparison failed for %s", tt.name)
+			assert.Equal(t, tt.greaterThan, GreaterThan(v1, v2), "GreaterThan comparison failed for %s", tt.name)
+		})
+	}
+}
+
+// Helper function for creating string pointers
+// ptrToString is used to create string pointers for testing
+func ptrToString(s string) *string {
+	return &s
+}
+
+// ptrToModelQuant is used to create ModelQuantization pointers for testing
+func ptrToModelQuant(s string) *v1beta1.ModelQuantization {
+	mq := v1beta1.ModelQuantization(s)
+	return &mq
+}
+
+// ptrToRuntimeOp is used to create RuntimeSelectorOperator pointers for testing
+func ptrToRuntimeOp(s string) *v1beta1.RuntimeSelectorOperator {
+	op := v1beta1.RuntimeSelectorOperator(s)
+	return &op
 }

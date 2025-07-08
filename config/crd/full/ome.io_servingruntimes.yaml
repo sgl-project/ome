@@ -31362,6 +31362,8 @@ spec:
                         type: string
                       name:
                         type: string
+                      operator:
+                        type: string
                       priority:
                         format: int32
                         minimum: 1
