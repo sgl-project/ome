@@ -9,6 +9,7 @@ import (
 
 	goerrors "github.com/pkg/errors"
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	modelVer "github.com/sgl-project/ome/pkg/modelver"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -256,12 +257,12 @@ func RuntimeSupportsModel(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.Serv
 }
 
 func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat) bool {
-	// 1. Compare model format name
-	if &baseModel.ModelFormat != nil && supportedFormat.ModelFormat != nil {
-		if baseModel.ModelFormat.Name != supportedFormat.ModelFormat.Name {
+	// 1. Compare model artitecture name
+	if baseModel.ModelArchitecture != nil && supportedFormat.ModelArchitecture != nil {
+		if *baseModel.ModelArchitecture != *supportedFormat.ModelArchitecture {
 			return false
 		}
-	} else if &baseModel.ModelFormat != nil || supportedFormat.ModelFormat != nil {
+	} else if (baseModel.ModelArchitecture == nil) != (supportedFormat.ModelArchitecture == nil) {
 		// If only one of them is nil, they don't match
 		return false
 	}
@@ -272,7 +273,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		if *baseModel.Quantization != *supportedFormat.Quantization {
 			return false
 		}
-	} else if baseModel.Quantization != nil || supportedFormat.Quantization != nil {
+	} else if (baseModel.Quantization == nil) != (supportedFormat.Quantization == nil) {
 		// If only one of them is nil, they don't match
 		return false
 	}
@@ -285,7 +286,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		operator = string(*supportedFormat.Operator)
 	}
 
-	// 2. Compare ModelFormat versions
+	// 3. Compare ModelFormat versions
 	hasUnofficialFormatVersion := false
 	modelFormatMatches := true
 
@@ -297,28 +298,32 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 
 		if supportedFormat.ModelFormat.Version != nil && &baseModel.ModelFormat.Version != nil {
 			// Parse versions
-			baseModelFormatVersion, err := Parse(*baseModel.ModelFormat.Version)
+			baseModelFormatVersion, err := modelVer.Parse(*baseModel.ModelFormat.Version)
 			if err != nil {
+				fmt.Println("Error parsing basModel modelFormat version:", err)
 				return false
 			}
 
-			supportedFormatVersion, err := Parse(*supportedFormat.ModelFormat.Version)
+			supportedFormatVersion, err := modelVer.Parse(*supportedFormat.ModelFormat.Version)
 			if err != nil {
+				fmt.Println("Error parsing supportedFormat modelFormat version:", err)
 				return false
 			}
 
 			// Check if versions have unofficial parts (requirement #1)
-			hasUnofficialFormatVersion = containsUnofficialVersion(baseModelFormatVersion) ||
-				containsUnofficialVersion(supportedFormatVersion)
+			hasUnofficialFormatVersion = modelVer.ContainsUnofficialVersion(baseModelFormatVersion) ||
+				modelVer.ContainsUnofficialVersion(supportedFormatVersion)
 
 			// Compare versions based on operator and whether unofficial versions exist (requirements #1, #2, #3)
 			if hasUnofficialFormatVersion || operator == "Equal" {
-				modelFormatMatches = Equal(supportedFormatVersion, baseModelFormatVersion)
+				modelFormatMatches = modelVer.Equal(supportedFormatVersion, baseModelFormatVersion)
 			} else if operator == "GreaterThan" {
-				modelFormatMatches = GreaterThan(supportedFormatVersion, baseModelFormatVersion)
+				modelFormatMatches = modelVer.GreaterThan(supportedFormatVersion, baseModelFormatVersion)
+			} else if operator == "GreaterThanOrEqual" {
+				modelFormatMatches = modelVer.GreaterThanOrEqual(supportedFormatVersion, baseModelFormatVersion)
 			} else {
 				// Default to Equal for unknown operators
-				modelFormatMatches = Equal(supportedFormatVersion, baseModelFormatVersion)
+				modelFormatMatches = modelVer.Equal(supportedFormatVersion, baseModelFormatVersion)
 			}
 
 			// If ModelFormat versions don't match, the formats are incompatible
@@ -328,11 +333,12 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		} else {
 			return false
 		}
-	} else if supportedFormat.ModelFormat != nil || &baseModel.ModelFormat != nil {
+	} else if (supportedFormat.ModelFormat != nil) != (&baseModel.ModelFormat != nil) {
+		// If only one of them is nil, they don't match
 		return false
 	}
 
-	// 3. Compare ModelFramework (if exists)
+	// 4. Compare ModelFramework (if exists)
 	hasUnofficialFrameworkVersion := false
 	modelFrameworkMatches := true
 	if supportedFormat.ModelFramework != nil && baseModel.ModelFramework != nil {
@@ -344,28 +350,32 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		// Compare framework versions if both are specified
 		if supportedFormat.ModelFramework.Version != nil && baseModel.ModelFramework.Version != nil {
 			// Parse framework versions
-			baseFrameworkVersion, err := Parse(*baseModel.ModelFramework.Version)
+			baseFrameworkVersion, err := modelVer.Parse(*baseModel.ModelFramework.Version)
 			if err != nil {
+				fmt.Println("Error parsing baseModel modelFramework version:", err)
 				return false
 			}
 
-			supportedFrameworkVersion, err := Parse(*supportedFormat.ModelFramework.Version)
+			supportedFrameworkVersion, err := modelVer.Parse(*supportedFormat.ModelFramework.Version)
 			if err != nil {
+				fmt.Println("Error parsing supportedFormat modelFramework version:", err)
 				return false
 			}
 
 			// Check if versions have unofficial parts (requirement #1)
-			hasUnofficialFrameworkVersion = containsUnofficialVersion(baseFrameworkVersion) ||
-				containsUnofficialVersion(supportedFrameworkVersion)
+			hasUnofficialFrameworkVersion = modelVer.ContainsUnofficialVersion(baseFrameworkVersion) ||
+				modelVer.ContainsUnofficialVersion(supportedFrameworkVersion)
 
 			// If there are unofficial versions or operator is Equal, use Equal comparison (requirements #1, #2)
 			if hasUnofficialFrameworkVersion || operator == "Equal" {
-				modelFrameworkMatches = Equal(supportedFrameworkVersion, baseFrameworkVersion)
+				modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
 			} else if operator == "GreaterThan" {
-				modelFrameworkMatches = GreaterThan(supportedFrameworkVersion, baseFrameworkVersion)
+				modelFrameworkMatches = modelVer.GreaterThan(supportedFrameworkVersion, baseFrameworkVersion)
+			} else if operator == "GreaterThanOrEqual" {
+				modelFrameworkMatches = modelVer.GreaterThanOrEqual(supportedFrameworkVersion, baseFrameworkVersion)
 			} else {
 				// Default to Equal for unknown operators
-				modelFrameworkMatches = Equal(supportedFrameworkVersion, baseFrameworkVersion)
+				modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
 			}
 
 			if !modelFrameworkMatches {
@@ -374,31 +384,13 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		} else {
 			return false
 		}
-	} else if supportedFormat.ModelFramework != nil || baseModel.ModelFramework != nil {
+	} else if (supportedFormat.ModelFramework != nil) != (baseModel.ModelFramework != nil) {
 		// If only one of them is nil, they don't match
 		return false
 	}
 
 	// 4. If we got this far, the formats are compatible
 	return true
-}
-
-// formatToString converts a SupportedModelFormat to a human-readable string
-func formatToString(format v1beta1.SupportedModelFormat) string {
-	result := format.Name
-	if format.ModelFormat != nil {
-		result = format.ModelFormat.Name
-		if format.ModelFormat.Version != nil {
-			result += ":" + *format.ModelFormat.Version
-		}
-	}
-	if format.ModelArchitecture != nil {
-		result += "/" + *format.ModelArchitecture
-	}
-	if format.Quantization != nil {
-		result += "/" + string(*format.Quantization)
-	}
-	return result
 }
 
 // GetSupportingRuntimes returns a list of ServingRuntimeSpecs that can support the given model.

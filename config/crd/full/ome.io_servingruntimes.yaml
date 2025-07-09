@@ -31363,6 +31363,7 @@ spec:
                       name:
                         type: string
                       operator:
+                        default: Equal
                         type: string
                       priority:
                         format: int32

@@ -53,14 +53,16 @@ type SupportedModelFormat struct {
 	// Operator for the selector with supported values: "Equal", "GreaterThan"
 	// This is used to select the serving runtime based on the modelFormat version, modelFramework version
 	// +optional
+	// +kubebuilder:default=Equal
 	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
 }
 
 type RuntimeSelectorOperator string
 
 const (
-	RuntimeSelectorOpEqual       RuntimeSelectorOperator = "Equal"
-	RuntimeSelectorOpGreaterThan RuntimeSelectorOperator = "GreaterThan"
+	RuntimeSelectorOpEqual              RuntimeSelectorOperator = "Equal"
+	RuntimeSelectorOpGreaterThan        RuntimeSelectorOperator = "GreaterThan"
+	RuntimeSelectorOpGreaterThanOrEqual RuntimeSelectorOperator = "GreaterThanOrEqual"
 )
 
 // +k8s:openapi-gen=true

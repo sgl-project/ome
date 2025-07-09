@@ -115,7 +115,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 					},
 					Spec: v1beta1.BaseModelSpec{
 						ModelFormat: v1beta1.ModelFormat{
-							Name: "safetensors",
+							Name:    "safetensors",
+							Version: stringPtr("1.0.0"),
 						},
 						Storage: &v1beta1.StorageSpec{
 							Path: stringPtr("/mnt/models/base"),
@@ -235,7 +236,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 					},
 					Spec: v1beta1.BaseModelSpec{
 						ModelFormat: v1beta1.ModelFormat{
-							Name: "safetensors",
+							Name:    "safetensors",
+							Version: stringPtr("1.0.0"),
 						},
 					},
 				}
@@ -322,7 +324,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 					Spec: v1beta1.BaseModelSpec{
 						ModelFormat: v1beta1.ModelFormat{
 							Name:    "sklearn",
-							Version: stringPtr("1.0"),
+							Version: stringPtr("1.0.0"),
 						},
 						Storage: &v1beta1.StorageSpec{
 							Path: stringPtr("/mnt/models/sklearn"),
@@ -507,7 +509,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 					},
 					Spec: v1beta1.BaseModelSpec{
 						ModelFormat: v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "pytorch",
+							Version: stringPtr("1.0.0"),
 						},
 					},
 				}
@@ -626,7 +629,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 					},
 					Spec: v1beta1.BaseModelSpec{
 						ModelFormat: v1beta1.ModelFormat{
-							Name: "safetensors",
+							Name:    "safetensors",
+							Version: stringPtr("1.0.0"),
 						},
 					},
 				}

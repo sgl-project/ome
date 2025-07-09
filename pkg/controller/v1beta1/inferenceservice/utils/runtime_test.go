@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	modelVer "github.com/sgl-project/ome/pkg/modelver"
+
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -440,87 +442,6 @@ func TestRuntimeCompatibilityError(t *testing.T) {
 	}
 }
 
-func TestFormatToString(t *testing.T) {
-	strPtr := func(s string) *string { return &s }
-
-	tests := []struct {
-		name     string
-		format   v1beta1.SupportedModelFormat
-		expected string
-	}{
-		{
-			name: "format with only name",
-			format: v1beta1.SupportedModelFormat{
-				Name: "simple-format",
-			},
-			expected: "simple-format",
-		},
-		{
-			name: "format with model format no version",
-			format: v1beta1.SupportedModelFormat{
-				Name: "ignored",
-				ModelFormat: &v1beta1.ModelFormat{
-					Name: "pytorch",
-				},
-			},
-			expected: "pytorch",
-		},
-		{
-			name: "format with model format and version",
-			format: v1beta1.SupportedModelFormat{
-				Name: "ignored",
-				ModelFormat: &v1beta1.ModelFormat{
-					Name:    "pytorch",
-					Version: strPtr("2.0"),
-				},
-			},
-			expected: "pytorch:2.0",
-		},
-		{
-			name: "format with architecture",
-			format: v1beta1.SupportedModelFormat{
-				Name: "ignored",
-				ModelFormat: &v1beta1.ModelFormat{
-					Name: "safetensors",
-				},
-				ModelArchitecture: strPtr("LlamaForCausalLM"),
-			},
-			expected: "safetensors/LlamaForCausalLM",
-		},
-		{
-			name: "format with quantization",
-			format: v1beta1.SupportedModelFormat{
-				Name: "ignored",
-				ModelFormat: &v1beta1.ModelFormat{
-					Name: "onnx",
-				},
-				Quantization: (*v1beta1.ModelQuantization)(strPtr("fp8")),
-			},
-			expected: "onnx/fp8",
-		},
-		{
-			name: "format with all fields",
-			format: v1beta1.SupportedModelFormat{
-				Name: "ignored",
-				ModelFormat: &v1beta1.ModelFormat{
-					Name:    "pytorch",
-					Version: strPtr("2.0"),
-				},
-				ModelArchitecture: strPtr("LlamaForCausalLM"),
-				Quantization:      (*v1beta1.ModelQuantization)(strPtr("fp8")),
-			},
-			expected: "pytorch:2.0/LlamaForCausalLM/fp8",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatToString(tt.format)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 	strPtr := func(s string) *string { return &s }
 	boolPtr := func(b bool) *bool { return &b }
@@ -537,7 +458,8 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "supported model format",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "pytorch",
+					Version: strPtr("1.0.0"),
 				},
 				ModelParameterSize: strPtr("7B"),
 			},
@@ -546,7 +468,8 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 					{
 						Name: "pytorch",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "pytorch",
+							Version: strPtr("1.0.0"),
 						},
 					},
 				},
@@ -558,7 +481,8 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "supported model format with all attributes matching",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "pytorch",
+					Version: strPtr("1.0.0"),
 				},
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
@@ -566,7 +490,8 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 					{
 						Name: "pytorch",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "pytorch",
+							Version: strPtr("1.0.0"),
 						},
 						AutoSelect: boolPtr(true),
 					},
@@ -579,7 +504,8 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "unsupported model format",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "tensorflow",
+					Name:    "tensorflow",
+					Version: strPtr("2.0.0"),
 				},
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
@@ -587,20 +513,22 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 					{
 						Name: "pytorch",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "pytorch",
+							Version: strPtr("1.0.0"),
 						},
 					},
 				},
 			},
 			runtimeName:   "test-runtime",
 			expectError:   true,
-			errorContains: "model format 'mt:tensorflow' not in supported formats",
+			errorContains: "model format 'mt:tensorflow:2.0.0' not in supported formats",
 		},
 		{
 			name: "model size out of range",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "pytorch",
+					Version: strPtr("1.0.0"),
 				},
 				ModelParameterSize: strPtr("70B"),
 			},
@@ -609,7 +537,8 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 					{
 						Name: "pytorch",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "pytorch",
+							Version: strPtr("1.0.0"),
 						},
 					},
 				},
@@ -627,10 +556,10 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
 					Name:    "safetensors",
-					Version: strPtr("1.0"),
+					Version: strPtr("1.0.0"),
 				},
 				ModelArchitecture: strPtr("LlamaForCausalLM"),
-				Quantization:      (*v1beta1.ModelQuantization)(strPtr("fp8")),
+				Quantization:      ptrToModelQuant("fp8"),
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
@@ -638,10 +567,10 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 						Name: "safetensors",
 						ModelFormat: &v1beta1.ModelFormat{
 							Name:    "safetensors",
-							Version: strPtr("1.0"),
+							Version: strPtr("1.0.0"),
 						},
 						ModelArchitecture: strPtr("LlamaForCausalLM"),
-						Quantization:      (*v1beta1.ModelQuantization)(strPtr("fp8")),
+						Quantization:      ptrToModelQuant("fp8"),
 					},
 				},
 			},
@@ -652,17 +581,23 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "model with nil parameter size",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "safetensors",
+					Version: strPtr("1.0.0"),
 				},
+				ModelArchitecture:  strPtr("LlamaForCausalLM"),
+				Quantization:       ptrToModelQuant("fp8"),
 				ModelParameterSize: nil,
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
-						Name: "pytorch",
+						Name: "safetensors",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "safetensors",
+							Version: strPtr("1.0.0"),
 						},
+						ModelArchitecture: strPtr("LlamaForCausalLM"),
+						Quantization:      ptrToModelQuant("fp8"),
 					},
 				},
 				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
@@ -677,17 +612,22 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "runtime with nil size range",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "safetensors",
+					Version: strPtr("1.0.0"),
 				},
-				ModelParameterSize: strPtr("7B"),
+				ModelArchitecture: strPtr("LlamaForCausalLM"),
+				Quantization:      ptrToModelQuant("fp8"),
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
-						Name: "pytorch",
+						Name: "safetensors",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "safetensors",
+							Version: strPtr("1.0.0"),
 						},
+						ModelArchitecture: strPtr("LlamaForCausalLM"),
+						Quantization:      ptrToModelQuant("fp8"),
 					},
 				},
 				ModelSizeRange: nil,
@@ -699,17 +639,23 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "model size at minimum boundary",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "safetensors",
+					Version: strPtr("1.0.0"),
 				},
+				ModelArchitecture:  strPtr("LlamaForCausalLM"),
+				Quantization:       ptrToModelQuant("fp8"),
 				ModelParameterSize: strPtr("1B"),
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
-						Name: "pytorch",
+						Name: "safetensors",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "safetensors",
+							Version: strPtr("1.0.0"),
 						},
+						ModelArchitecture: strPtr("LlamaForCausalLM"),
+						Quantization:      ptrToModelQuant("fp8"),
 					},
 				},
 				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
@@ -724,17 +670,23 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			name: "model size at maximum boundary",
 			baseModel: &v1beta1.BaseModelSpec{
 				ModelFormat: v1beta1.ModelFormat{
-					Name: "pytorch",
+					Name:    "safetensors",
+					Version: strPtr("1.0.0"),
 				},
+				ModelArchitecture:  strPtr("LlamaForCausalLM"),
+				Quantization:       ptrToModelQuant("fp8"),
 				ModelParameterSize: strPtr("13B"),
 			},
 			srSpec: &v1beta1.ServingRuntimeSpec{
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
-						Name: "pytorch",
+						Name: "safetensors",
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:    "safetensors",
+							Version: strPtr("1.0.0"),
 						},
+						ModelArchitecture: strPtr("LlamaForCausalLM"),
+						Quantization:      ptrToModelQuant("fp8"),
 					},
 				},
 				ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
@@ -1056,12 +1008,12 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 func TestContainsUnofficialVersion(t *testing.T) {
 	tests := []struct {
 		name     string
-		version  Version
+		version  modelVer.Version
 		expected bool
 	}{
 		{
 			name: "official version",
-			version: Version{
+			version: modelVer.Version{
 				Major: 1,
 				Minor: 8,
 				Patch: 0,
@@ -1070,7 +1022,7 @@ func TestContainsUnofficialVersion(t *testing.T) {
 		},
 		{
 			name: "with pre-release",
-			version: Version{
+			version: modelVer.Version{
 				Major: 1,
 				Minor: 8,
 				Patch: 0,
@@ -1080,7 +1032,7 @@ func TestContainsUnofficialVersion(t *testing.T) {
 		},
 		{
 			name: "with build metadata",
-			version: Version{
+			version: modelVer.Version{
 				Major: 1,
 				Minor: 8,
 				Patch: 0,
@@ -1090,7 +1042,7 @@ func TestContainsUnofficialVersion(t *testing.T) {
 		},
 		{
 			name: "with both pre-release and build",
-			version: Version{
+			version: modelVer.Version{
 				Major: 1,
 				Minor: 8,
 				Patch: 0,
@@ -1103,94 +1055,8 @@ func TestContainsUnofficialVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := containsUnofficialVersion(tt.version)
+			result := modelVer.ContainsUnofficialVersion(tt.version)
 			assert.Equal(t, tt.expected, result, "Test case: %s", tt.name)
-		})
-	}
-}
-
-func TestVersionComparison(t *testing.T) {
-	tests := []struct {
-		name        string
-		v1          string
-		v2          string
-		equal       bool
-		greaterThan bool
-	}{
-		{
-			name:        "equal versions",
-			v1:          "1.8.0",
-			v2:          "1.8.0",
-			equal:       true,
-			greaterThan: false,
-		},
-		{
-			name:        "greater major version",
-			v1:          "2.0.0",
-			v2:          "1.9.0",
-			equal:       false,
-			greaterThan: true,
-		},
-		{
-			name:        "greater minor version",
-			v1:          "1.9.0",
-			v2:          "1.8.0",
-			equal:       false,
-			greaterThan: true,
-		},
-		{
-			name:        "greater patch version",
-			v1:          "1.8.5",
-			v2:          "1.8.0",
-			equal:       false,
-			greaterThan: true,
-		},
-		{
-			name:        "less major version",
-			v1:          "1.0.0",
-			v2:          "2.0.0",
-			equal:       false,
-			greaterThan: false,
-		},
-		{
-			name:        "pre-release versions equal",
-			v1:          "1.8.0-alpha",
-			v2:          "1.8.0-alpha",
-			equal:       true,
-			greaterThan: false,
-		},
-		{
-			name:        "different pre-release versions",
-			v1:          "1.8.0-beta",
-			v2:          "1.8.0-alpha",
-			equal:       false,
-			greaterThan: true, // Implementation might differ on pre-release ordering
-		},
-		{
-			name:        "build metadata equal",
-			v1:          "1.8.0+20240707",
-			v2:          "1.8.0+20240707",
-			equal:       true,
-			greaterThan: false,
-		},
-		{
-			name:        "different build metadata",
-			v1:          "1.8.0+20240708",
-			v2:          "1.8.0+20240707",
-			equal:       true, // Build metadata doesn't affect equality
-			greaterThan: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			v1, err := Parse(tt.v1)
-			assert.NoError(t, err)
-			v2, err := Parse(tt.v2)
-			assert.NoError(t, err)
-
-			assert.Equal(t, tt.equal, Equal(v1, v2), "Equal comparison failed for %s", tt.name)
-			assert.Equal(t, tt.greaterThan, GreaterThan(v1, v2), "GreaterThan comparison failed for %s", tt.name)
 		})
 	}
 }
