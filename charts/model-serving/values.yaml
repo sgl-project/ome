@@ -3,18 +3,18 @@ vllm:
   serveModelName: vllm-model # served model name for non-fine-tuned vllm serving
   commonImage:
     repository: fra.ocir.io/idqj093njucb/official-vllm-openai
-    tag: 0.5.3.post1.7f8d612d-log
+    tag: v0.7.3.78f0810ef
   latestImage:
-    tag: v0.6.4.post1.c78ab524
+    tag: v0.7.3.78f0810ef
   # If you need to add another image tag, please think twice about the impact, and the business justification
 
 sglang:
   port: 8080
   commonImage:
     repository: fra.ocir.io/idqj093njucb/official-sgl
-    tag: v0.4.5.5e34fb5-cu124
+    tag: v0.4.6.post5.23224b0-cu124
   latestImage:
-    tag: v0.4.5.5e34fb5-cu124
+    tag: v0.4.6.post5.23224b0-cu124
   # If you need to add another image tag, please think twice about the impact, and the business justification
 
 oci:
@@ -597,7 +597,7 @@ llama_4_maverick_17b_128e_instruct_fp8:
   maxReplicas: 1
   image:
     repository:
-    tag: v0.8.4.6b2f6bdb
+    tag:
 
 llama_4_scout_17b_16e_instruct:
   enabled: false
@@ -622,7 +622,7 @@ llama_4_scout_17b_16e_instruct:
   maxReplicas: 1
   image:
     repository:
-    tag: v0.8.4.6b2f6bdb
+    tag:
 
 phi_3_vision_128k_instruct:
   enabled: false
