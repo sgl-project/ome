@@ -31344,6 +31344,9 @@ spec:
                         properties:
                           name:
                             type: string
+                          operator:
+                            default: Equal
+                            type: string
                           version:
                             type: string
                         required:
@@ -31352,6 +31355,9 @@ spec:
                       modelFramework:
                         properties:
                           name:
+                            type: string
+                          operator:
+                            default: Equal
                             type: string
                           version:
                             type: string
