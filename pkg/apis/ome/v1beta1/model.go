@@ -15,6 +15,11 @@ type ModelFormat struct {
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
+	// Operator for the selector with supported values: "Equal", "GreaterThan"
+	// This is used to select the serving runtime based on the modelFormat version, modelFramework version
+	// +optional
+	// +kubebuilder:default=Equal
+	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
 }
 
 type ModelFrameworkSpec struct {
@@ -26,7 +31,20 @@ type ModelFrameworkSpec struct {
 	// It Can be "major", "major.minor" or "major.minor.patch".
 	// +optional
 	Version *string `json:"version,omitempty"`
+	// Operator for the selector with supported values: "Equal", "GreaterThan"
+	// This is used to select the serving runtime based on the modelFormat version, modelFramework version
+	// +optional
+	// +kubebuilder:default=Equal
+	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
 }
+
+type RuntimeSelectorOperator string
+
+const (
+	RuntimeSelectorOpEqual              RuntimeSelectorOperator = "Equal"
+	RuntimeSelectorOpGreaterThan        RuntimeSelectorOperator = "GreaterThan"
+	RuntimeSelectorOpGreaterThanOrEqual RuntimeSelectorOperator = "GreaterThanOrEqual"
+)
 
 type StorageSpec struct {
 	// Path is the absolute path where the model will be downloaded and stored on the node.

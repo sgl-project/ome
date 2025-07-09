@@ -1118,7 +1118,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 		},
 	}
@@ -1133,7 +1133,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 			ModelExtensionSpec: v1beta1.ModelExtensionSpec{
 				Disabled: boolPtr(true),
@@ -1151,7 +1151,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 				{
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
-						Version: stringPtr("1"),
+						Version: stringPtr("1.0.0"),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true), // Critical for matching
@@ -1170,7 +1170,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 				{
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
-						Version: stringPtr("1"),
+						Version: stringPtr("1.0.0"),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(false), // Won't match
@@ -1318,7 +1318,7 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 			// No Disabled field - should be treated as enabled
 		},
@@ -1334,7 +1334,7 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 			ModelExtensionSpec: v1beta1.ModelExtensionSpec{
 				Disabled: boolPtr(false), // Explicitly enabled
@@ -1351,7 +1351,7 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 				{
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
-						Version: stringPtr("1"),
+						Version: stringPtr("1.0.0"),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
@@ -1434,7 +1434,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 		},
 	}
@@ -1448,7 +1448,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 				{
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
-						Version: stringPtr("1"),
+						Version: stringPtr("1.0.0"),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
@@ -1466,7 +1466,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 				{
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
-						Version: stringPtr("1"),
+						Version: stringPtr("1.0.0"),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
@@ -1529,7 +1529,7 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "llama",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 		},
 	}
@@ -1544,7 +1544,7 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 			ModelParameterSize: stringPtr("7B"),
 			ModelFormat: v1beta1.ModelFormat{
 				Name:    "different",
-				Version: stringPtr("1"),
+				Version: stringPtr("1.0.0"),
 			},
 		},
 	}
@@ -1558,7 +1558,7 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 				{
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
-						Version: stringPtr("1"),
+						Version: stringPtr("1.0.0"),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
