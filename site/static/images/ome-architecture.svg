@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1600" height="1200" xmlns="http://www.w3.org/2000/svg" style="background-color: white;">
-    <title>OME (Operator for Machine learning Endpoints) Architecture</title>
+    <title>OME (Open Model Engine) Architecture</title>
     <defs>
         <!-- Define gradients -->
         <linearGradient id="userGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -40,7 +40,7 @@
     </defs>
     
     <!-- Title -->
-    <text x="800" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333" font-family="Arial, sans-serif">OME (Operator for Machine learning Endpoints) Architecture</text>
+    <text x="800" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#333" font-family="Arial, sans-serif">OME (Open Model Engine) Architecture</text>
     
     <!-- User Layer -->
     <g id="userLayer">
