@@ -139,7 +139,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								Version:    stringPtr("*"),
 								AutoSelect: boolPtr(true),
 								ModelFormat: &v1beta1.ModelFormat{
-									Name: "safetensors",
+									Name:    "safetensors",
+									Version: stringPtr("1.0.0"),
 								},
 							},
 						},
@@ -257,7 +258,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								Version:    stringPtr("*"),
 								AutoSelect: boolPtr(true),
 								ModelFormat: &v1beta1.ModelFormat{
-									Name: "safetensors",
+									Name:    "safetensors",
+									Version: stringPtr("1.0.0"),
 								},
 							},
 						},
@@ -387,7 +389,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								AutoSelect: boolPtr(true),
 								ModelFormat: &v1beta1.ModelFormat{
 									Name:    "sklearn",
-									Version: stringPtr("1.0"),
+									Version: stringPtr("1.0.0"),
 								},
 							},
 						},
@@ -529,7 +531,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								Name:    "pytorch",
 								Version: stringPtr("*"),
 								ModelFormat: &v1beta1.ModelFormat{
-									Name: "pytorch",
+									Name:    "pytorch",
+									Version: stringPtr("1.0.0"),
 								},
 							},
 						},
@@ -650,7 +653,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								Version:    stringPtr("*"),
 								AutoSelect: boolPtr(true),
 								ModelFormat: &v1beta1.ModelFormat{
-									Name: "safetensors",
+									Name:    "safetensors",
+									Version: stringPtr("1.0.0"),
 								},
 							},
 						},

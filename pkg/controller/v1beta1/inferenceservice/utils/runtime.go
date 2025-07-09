@@ -257,7 +257,12 @@ func RuntimeSupportsModel(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.Serv
 }
 
 func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat) bool {
-	// 1. Compare model artitecture name
+	// 1. Check AutoSelect flag if present and false
+	if supportedFormat.AutoSelect != nil && !(*supportedFormat.AutoSelect) {
+		return false
+	}
+
+	// 2. Compare model artitecture name
 	if baseModel.ModelArchitecture != nil && supportedFormat.ModelArchitecture != nil {
 		if *baseModel.ModelArchitecture != *supportedFormat.ModelArchitecture {
 			return false
@@ -267,7 +272,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		return false
 	}
 
-	// 2. Compare model quantization
+	// 3. Compare model quantization
 	if baseModel.Quantization != nil && supportedFormat.Quantization != nil {
 		// ModelQuantization is a string type, so we can compare directly
 		if *baseModel.Quantization != *supportedFormat.Quantization {
@@ -290,13 +295,13 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 	hasUnofficialFormatVersion := false
 	modelFormatMatches := true
 
-	// If version is specified in both supportedFormat and baseModel, compare them
+	// If version is specified in supportedFormat, compare with baseModel
 	if supportedFormat.ModelFormat != nil && &baseModel.ModelFormat != nil {
 		if supportedFormat.ModelFormat.Name != baseModel.ModelFormat.Name {
 			return false
 		}
 
-		if supportedFormat.ModelFormat.Version != nil && &baseModel.ModelFormat.Version != nil {
+		if supportedFormat.ModelFormat.Version != nil && baseModel.ModelFormat.Version != nil {
 			// Parse versions
 			baseModelFormatVersion, err := modelVer.Parse(*baseModel.ModelFormat.Version)
 			if err != nil {
@@ -389,7 +394,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		return false
 	}
 
-	// 4. If we got this far, the formats are compatible
+	// 6. If we got this far, the formats are compatible
 	return true
 }
 
