@@ -348,6 +348,7 @@ llama_3_3_70b_instruct:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           preference:
@@ -365,6 +366,7 @@ llama_3_3_70b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
   volumes: [ ]
@@ -587,6 +589,7 @@ llama_4_maverick_17b_128e_instruct_fp8:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
   volumes: [ ]
@@ -611,6 +614,7 @@ llama_4_scout_17b_16e_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
   volumes: [ ]
@@ -655,6 +659,7 @@ e5_mistral_7b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
   tolerations: [ ]
   labels: { }
   volumes: [ ]
@@ -703,6 +708,7 @@ mistral_7b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H100-NC.8
   labels: { }
   tolerations: [ ]
   topologySpreadConstraints: [ ]
