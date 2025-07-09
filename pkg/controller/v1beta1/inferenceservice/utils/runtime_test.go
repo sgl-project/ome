@@ -822,8 +822,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0")},
-				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual)),
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
 			},
 			expected: true,
 		},
@@ -837,8 +836,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.9.0")},
-				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual)),
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.9.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
 			},
 			expected: false,
 		},
@@ -852,8 +850,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0")},
-				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)),
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan))},
 			},
 			expected: true,
 		},
@@ -867,8 +864,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.7.0")},
-				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)),
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.7.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan))},
 			},
 			expected: false,
 		},
@@ -882,8 +878,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0-dev")},
-				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)), // This will be ignored due to unofficial version
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0-dev"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan))},
 			},
 			expected: true,
 		},
@@ -897,8 +892,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0-alpha")},
-				Operator:    ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan)), // This will be ignored due to unofficial version
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.8.0-alpha"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThan))},
 			},
 			expected: false,
 		},
@@ -916,8 +910,8 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:           "test-format",
-				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
-				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0")},
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
 			},
 			expected: true,
 		},
@@ -954,9 +948,8 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:           "test-format",
-				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
-				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0")},
-				Operator:       (*v1beta1.RuntimeSelectorOperator)(ptr(string(v1beta1.RuntimeSelectorOpGreaterThan))),
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
 			},
 			expected: false,
 		},
@@ -974,9 +967,8 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:           "test-format",
-				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
-				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0")},
-				Operator:       (*v1beta1.RuntimeSelectorOperator)(ptr(string(v1beta1.RuntimeSelectorOpGreaterThan))),
+				ModelFormat:    &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{Name: "ONNXRuntime", Version: ptr("1.10.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
 			},
 			expected: false,
 		},
@@ -991,9 +983,242 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			supportedFormat: v1beta1.SupportedModelFormat{
 				Name:        "test-format",
-				ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Version: ptrToString("1.0.0")},
+				ModelFormat: &v1beta1.ModelFormat{Name: "pytorch", Version: ptrToString("1.0.0"), Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpEqual))},
 			},
 			expected: false, // Currently this will fail because we're doing exact matching
+		},
+		{
+			name: "autoselect flag explicitly false",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				AutoSelect:  ptr(false),
+			},
+			expected: false,
+		},
+		{
+			name: "model architecture mismatch",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelArchitecture: ptrToString("transformer"),
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:              "test-format",
+				ModelFormat:       &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelArchitecture: ptrToString("cnn"),
+			},
+			expected: false,
+		},
+		{
+			name: "model has architecture but runtime doesn't specify",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelArchitecture: ptrToString("transformer"),
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+			},
+			expected: false,
+		},
+		{
+			name: "runtime has architecture requirement but model doesn't specify",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:              "test-format",
+				ModelFormat:       &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelArchitecture: ptrToString("transformer"),
+			},
+			expected: false,
+		},
+		{
+			name: "nil model format in supportedFormat",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+			},
+			expected: false,
+		},
+		{
+			name: "missing version in model format",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "ONNX",
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+			},
+			expected: false,
+		},
+		{
+			name: "missing version in supported format",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX"},
+			},
+			expected: false,
+		},
+		{
+			name: "greater than or equal - equal case",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.8.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:     "ONNX",
+					Version:  ptrToString("1.8.0"),
+					Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThanOrEqual)),
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "greater than or equal - greater than case",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.8.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:     "ONNX",
+					Version:  ptrToString("1.9.0"),
+					Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThanOrEqual)),
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "greater than or equal - equal to case",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.8.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:     "ONNX",
+					Version:  ptrToString("1.8.0"),
+					Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThanOrEqual)),
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "greater than or equal - less than case",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.8.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name: "test-format",
+				ModelFormat: &v1beta1.ModelFormat{
+					Name:     "ONNX",
+					Version:  ptrToString("1.7.0"),
+					Operator: ptrToRuntimeOp(string(v1beta1.RuntimeSelectorOpGreaterThanOrEqual)),
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "runtime has framework requirement but model doesn't specify",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.10.0"),
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "missing framework version in model",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name: "ONNXRuntime",
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.10.0"),
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "missing framework version in supportedFormat",
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "ONNX",
+					Version: ptrToString("1.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "ONNXRuntime",
+					Version: ptrToString("1.10.0"),
+				},
+			},
+			supportedFormat: v1beta1.SupportedModelFormat{
+				Name:        "test-format",
+				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name: "ONNXRuntime",
+				},
+			},
+			expected: false,
 		},
 	}
 

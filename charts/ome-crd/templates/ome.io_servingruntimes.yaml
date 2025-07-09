@@ -31344,6 +31344,9 @@ spec:
                         properties:
                           name:
                             type: string
+                          operator:
+                            default: Equal
+                            type: string
                           version:
                             type: string
                         required:
@@ -31353,6 +31356,9 @@ spec:
                         properties:
                           name:
                             type: string
+                          operator:
+                            default: Equal
+                            type: string
                           version:
                             type: string
                         required:
@@ -31361,9 +31367,6 @@ spec:
                       modelType:
                         type: string
                       name:
-                        type: string
-                      operator:
-                        default: Equal
                         type: string
                       priority:
                         format: int32

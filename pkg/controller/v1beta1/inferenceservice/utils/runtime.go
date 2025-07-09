@@ -283,14 +283,6 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		return false
 	}
 
-	// Get version comparison operator or use default Equal if nil
-	var operator string
-	if supportedFormat.Operator == nil {
-		operator = "Equal" // Default is Equal per requirement #4
-	} else {
-		operator = string(*supportedFormat.Operator)
-	}
-
 	// 3. Compare ModelFormat versions
 	hasUnofficialFormatVersion := false
 	modelFormatMatches := true
@@ -318,6 +310,9 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 			// Check if versions have unofficial parts (requirement #1)
 			hasUnofficialFormatVersion = modelVer.ContainsUnofficialVersion(baseModelFormatVersion) ||
 				modelVer.ContainsUnofficialVersion(supportedFormatVersion)
+
+			// Get operator from modelFormat in supportedFormat
+			operator := getRuntimeSelectorOperator(supportedFormat.ModelFormat.Operator)
 
 			// Compare versions based on operator and whether unofficial versions exist (requirements #1, #2, #3)
 			if hasUnofficialFormatVersion || operator == "Equal" {
@@ -371,6 +366,9 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 			hasUnofficialFrameworkVersion = modelVer.ContainsUnofficialVersion(baseFrameworkVersion) ||
 				modelVer.ContainsUnofficialVersion(supportedFrameworkVersion)
 
+			// Get operator from modelFramework in supportedFormat
+			operator := getRuntimeSelectorOperator(supportedFormat.ModelFramework.Operator)
+
 			// If there are unofficial versions or operator is Equal, use Equal comparison (requirements #1, #2)
 			if hasUnofficialFrameworkVersion || operator == "Equal" {
 				modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
@@ -396,6 +394,15 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 
 	// 6. If we got this far, the formats are compatible
 	return true
+}
+
+// getRuntimeSelectorOperator return a string representation of the RuntimeSelectorOperator.
+// If the operator is nil, it defaults to "Equal".
+func getRuntimeSelectorOperator(operator *v1beta1.RuntimeSelectorOperator) string {
+	if operator == nil {
+		return string(v1beta1.RuntimeSelectorOpEqual)
+	}
+	return string(*operator)
 }
 
 // GetSupportingRuntimes returns a list of ServingRuntimeSpecs that can support the given model.
