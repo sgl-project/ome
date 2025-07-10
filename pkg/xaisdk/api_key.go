@@ -64,6 +64,7 @@ type CreateApiKeyBody struct {
 	ACLStrings []string `json:"acls"`
 	QPS        int32    `json:"qps,omitempty"`
 	QPM        int32    `json:"qpm,omitempty"`
+	TPM        string   `json:"tpm,omitempty"`
 }
 
 type APIKey struct {
@@ -80,6 +81,7 @@ type APIKey struct {
 	Disabled      bool       `json:"disabled"`
 	QPS           int32      `json:"qps,omitempty"`
 	QPM           int32      `json:"qpm,omitempty"`
+	TPM           string     `json:"tpm,omitempty"`
 	ACLStrings    []string   `json:"aclStrings,omitempty"`
 	JSON          apiKeyJSON `json:"-"`
 }

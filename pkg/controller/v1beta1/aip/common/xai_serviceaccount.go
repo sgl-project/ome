@@ -21,6 +21,19 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 )
 
+const (
+	// defaultQPM is the default QPM (queries per minute) limit assigned to each xAI API key.
+	// Adjust this value if default rate limiting requirements change.
+	defaultQPM int32 = 5_000
+	// defaultQPS is the default QPS (queries per second) limit assigned to each xAI API key.
+	// Adjust this value if default rate limiting requirements change.
+	defaultQPS int32 = 84
+
+	// defaultTPM is the default TPM (tokens per minute) limit assigned to each xAI API key.
+	// Adjust this value if default rate limiting requirements change.
+	defaultTPM string = "100000"
+)
+
 // XAIServiceAccount implements ProjectScoped and ResourceOperation
 type XAIServiceAccount struct {
 	ResourceBase
@@ -99,7 +112,14 @@ func (sa *XAIServiceAccount) Create(ctx context.Context) error {
 	}
 	xaiTeamId := "ee0936c7-f897-47e8-836b-08bb2d3547e5"
 	// Create API Key in xAI
-	resp, err := xaiClient.APIKeys.Create(ctx, xaiTeamId, xaisdk.CreateApiKeyBody{Name: *sa.Resource.Spec.Name, ACLStrings: []string{"api-key:endpoint:*", "api-key:model:*"}})
+	resp, err := xaiClient.APIKeys.Create(ctx, xaiTeamId,
+		xaisdk.CreateApiKeyBody{
+			Name:       *sa.Resource.Spec.Name,
+			ACLStrings: []string{"api-key:endpoint:*", "api-key:model:*"},
+			QPM:        defaultQPM,
+			QPS:        defaultQPS,
+			TPM:        defaultTPM,
+		})
 	if err != nil {
 		// Log the error without stack trace for API errors as they might be transient
 		sa.Log.Info("Failed to create API Key in API, will retry",
