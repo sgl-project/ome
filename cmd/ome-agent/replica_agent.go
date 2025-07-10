@@ -80,37 +80,35 @@ func OCIOSDataStoreListProvider() fx.Option {
 	)
 }
 
-func provideSourceOCIOSDataSourceConfig(logger logging.Interface, v *viper.Viper) OCIOSDataStoreConfigWrapper {
+func provideSourceOCIOSDataSourceConfig(
+	logger logging.Interface,
+	v *viper.Viper) (OCIOSDataStoreConfigWrapper, error) {
 	sourceOCIEnabled := v.GetBool("source.oci.enabled")
 	if !sourceOCIEnabled {
-		return OCIOSDataStoreConfigWrapper{
-			OCIOSDataStoreConfig: nil,
-		}
+		return OCIOSDataStoreConfigWrapper{}, nil
 	}
 
 	sourceOCIOSDataStoreConfig := &ociobjectstore.Config{}
 	if err := v.UnmarshalKey("source.oci", sourceOCIOSDataStoreConfig); err != nil {
-		panic(fmt.Errorf("error occurred when unmarshalling key source: %+v", err))
+		return OCIOSDataStoreConfigWrapper{}, fmt.Errorf("error occurred when unmarshalling key source: %+v", err)
 	}
 	sourceOCIOSDataStoreConfig.AnotherLogger = logger
 	sourceOCIOSDataStoreConfig.Name = replica.SourceStorageConfigKeyName
 
 	return OCIOSDataStoreConfigWrapper{
 		OCIOSDataStoreConfig: sourceOCIOSDataStoreConfig,
-	}
+	}, nil
 }
 
-func provideTargetOCIOSDataStoreConfig(logger logging.Interface, v *viper.Viper) OCIOSDataStoreConfigWrapper {
+func provideTargetOCIOSDataStoreConfig(logger logging.Interface, v *viper.Viper) (OCIOSDataStoreConfigWrapper, error) {
 	targetOCIEnabled := v.GetBool("target.oci.enabled")
 	if !targetOCIEnabled {
-		return OCIOSDataStoreConfigWrapper{
-			OCIOSDataStoreConfig: nil,
-		}
+		return OCIOSDataStoreConfigWrapper{}, nil
 	}
 
 	targetOCIOSDataStoreConfig := &ociobjectstore.Config{}
 	if err := v.UnmarshalKey("target.oci", targetOCIOSDataStoreConfig); err != nil {
-		panic(fmt.Errorf("error occurred when unmarshalling key source: %+v", err))
+		return OCIOSDataStoreConfigWrapper{}, fmt.Errorf("error occurred when unmarshalling key target: %+v", err)
 	}
 
 	targetOCIOSDataStoreConfig.AnotherLogger = logger
@@ -118,5 +116,5 @@ func provideTargetOCIOSDataStoreConfig(logger logging.Interface, v *viper.Viper)
 
 	return OCIOSDataStoreConfigWrapper{
 		OCIOSDataStoreConfig: targetOCIOSDataStoreConfig,
-	}
+	}, nil
 }
