@@ -16,7 +16,7 @@ const (
 	NameViperKeyName           = "name"
 	AuthTypeViperKeyName       = "auth_type"
 	CompartmentIdViperKeyName  = "compartment_id"
-	RegionViperKeyName         = "region_override"
+	RegionViperKeyName         = "region"
 	EnableOboTokenViperKeyName = "enable_obo_token"
 	OboTokenViperKeyName       = "obo_token"
 	SourceOsConfigName         = "source"
@@ -30,9 +30,13 @@ type Config struct {
 	Name           string                         `mapstructure:"name"`                                                 // Name for the configuration (useful in multi-store setup)
 	AuthType       *principals.AuthenticationType `mapstructure:"auth_type" validate:"required"`                        // Authentication method (e.g., instance principal, API key)
 	CompartmentId  *string                        `mapstructure:"compartment_id"`                                       // OCI Compartment OCID
-	Region         string                         `mapstructure:"region_override"`                                      // Optional region override
+	Region         string                         `mapstructure:"region"`                                               // Optional region override
 	EnableOboToken bool                           `mapstructure:"enable_obo_token"`                                     // Whether OBO token should be used
 	OboToken       string                         `mapstructure:"obo_token" validate:"required_if=EnableOboToken true"` // Token used when OBO is enabled
+}
+
+func (c *Config) String() string {
+	return common.PointerString(*c)
 }
 
 // Option defines a functional configuration override for building a Config.

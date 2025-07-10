@@ -3,6 +3,7 @@ package replica
 import (
 	"fmt"
 
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/spf13/viper"
@@ -12,8 +13,9 @@ import (
 type replicaParams struct {
 	fx.In
 
-	AnotherLogger           logging.Interface `name:"another_log"`
-	ObjectStorageDataStores []*ociobjectstore.OCIOSDataStore
+	AnotherLogger      logging.Interface                `name:"another_log"`
+	OCIOSDataStoreList []*ociobjectstore.OCIOSDataStore `optional:"true"`
+	HubClient          *hub.HubClient                   `optional:"true"`
 }
 
 var Module = fx.Provide(
@@ -25,6 +27,10 @@ var Module = fx.Provide(
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error creating replica config: %+v", err)
+		}
+
+		if err = config.Validate(); err != nil {
+			return nil, fmt.Errorf("error validating replica config: %+v", err)
 		}
 		return NewReplicaAgent(config)
 	})
