@@ -1,14 +1,13 @@
 package replica
 
 import (
-	"path/filepath"
-	"strings"
-	"sync"
-	"time"
+	"fmt"
 
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/utils/storage"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -17,185 +16,123 @@ const (
 	DefaultUploadChunkSizeInMB   = 50
 	DefaultUploadThreads         = 10
 	GB                           = 1073741824
+
+	SourceStorageConfigKeyName = "source"
+	TargetStorageConfigKeyName = "target"
 )
 
 type ReplicaAgent struct {
-	logger logging.Interface
-	Config Config
+	logger           logging.Interface
+	Config           Config
+	ReplicationInput ReplicationInput
 }
 
-type ReplicationResult struct {
-	source ociobjectstore.ObjectURI
-	target ociobjectstore.ObjectURI
-	error  error
+type ReplicationInput struct {
+	sourceStorageType storage.StorageType
+	targetStorageType storage.StorageType
+	source            ociobjectstore.ObjectURI
+	target            ociobjectstore.ObjectURI
 }
 
 // NewReplicaAgent constructs a new replica agent from the given configuration.
 func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
+	sourceStorageType, err := storage.GetStorageType(config.Source.StorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get source storage type from source storage URI %s - %w",
+			config.Source.StorageURIStr, err)
+	}
+	targetStorageType, err := storage.GetStorageType(config.Target.StorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get target storage type from target storage URI %s - %w",
+			config.Target.StorageURIStr, err)
+	}
+
+	if err = config.ValidateRequiredDependencies(sourceStorageType, targetStorageType); err != nil {
+		return nil, fmt.Errorf("failed to validate required dependencies - %w", err)
+	}
+
+	sourceObjectURI, err := storage.NewObjectURI(config.Source.StorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse source storage URI %s - %w", config.Source.StorageURIStr, err)
+	}
+	targetObjectURI, err := storage.NewObjectURI(config.Target.StorageURIStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse target storage URI %s - %w", config.Target.StorageURIStr, err)
+	}
+
+	if sourceStorageType == storage.StorageTypeOCI {
+		sourceObjectURI.Region = config.Source.OCIOSDataStore.Config.Region
+	}
+	if targetStorageType == storage.StorageTypeOCI {
+		targetObjectURI.Region = config.Target.OCIOSDataStore.Config.Region
+	}
+
 	return &ReplicaAgent{
 		logger: config.AnotherLogger,
 		Config: *config,
+		ReplicationInput: ReplicationInput{
+			sourceStorageType: sourceStorageType,
+			targetStorageType: targetStorageType,
+			source:            *sourceObjectURI,
+			target:            *targetObjectURI,
+		},
 	}, nil
 }
 
 // Start initiates the replication process.
 func (r *ReplicaAgent) Start() error {
-	r.logger.Infof("Start replication from %s to %s", r.Config.SourceObjectStoreURI, r.Config.TargetObjectStoreURI)
+	r.logger.Infof("Start replication from %+v to %+v", r.ReplicationInput.source, r.ReplicationInput.target)
+
 	sourceObjs, err := r.listSourceObjects()
 	if err != nil {
 		return err
 	}
-
 	r.validateModelSize(sourceObjs)
 
-	startTime := time.Now()
-	totalObjects := len(sourceObjs)
-	results := r.replicateObjects(sourceObjs, totalObjects)
-
-	successCount, errorCount := 0, 0
-	for result := range results {
-		if result.error != nil {
-			errorCount++
-			r.logger.Errorf("Replication failed for %s to %s: %v", result.source, result.target, result.error)
-		} else {
-			successCount++
-			r.logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
-		}
-		r.logProgress(successCount, errorCount, totalObjects, startTime)
-	}
-
-	r.logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
-	return nil
-}
-
-func (r *ReplicaAgent) listSourceObjects() ([]objectstorage.ObjectSummary, error) {
-	r.Config.SourceObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	sourceObjs, err := r.Config.SourceObjectStorageDataStore.ListObjects(r.Config.SourceObjectStoreURI)
+	replicator, err := NewReplicator(r)
 	if err != nil {
-		return nil, err
-	}
-	r.logger.Infof("Listed %d model weight objects under prefix %s", len(sourceObjs), r.Config.SourceObjectStoreURI.Prefix)
-	return sourceObjs, nil
-}
-
-func (r *ReplicaAgent) replicateObjects(objects []objectstorage.ObjectSummary, totalObjects int) chan *ReplicationResult {
-	r.logger.Info("Starting replication to target")
-
-	objChan := r.prepareObjectChannel(objects)
-	resultChan := make(chan *ReplicationResult, len(objects))
-
-	var wg sync.WaitGroup
-	for i := 0; i < r.Config.NumConnections; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			r.processObjectReplication(objChan, resultChan, totalObjects)
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	return resultChan
-}
-
-func (r *ReplicaAgent) processObjectReplication(objects <-chan objectstorage.ObjectSummary, results chan<- *ReplicationResult, totalObjects int) {
-	for obj := range objects {
-		if *obj.Name == r.Config.SourceObjectStoreURI.Prefix {
-			continue
-		}
-
-		srcObj := ociobjectstore.ObjectURI{
-			Namespace:  r.Config.SourceObjectStoreURI.Namespace,
-			BucketName: r.Config.SourceObjectStoreURI.BucketName,
-			ObjectName: *obj.Name,
-		}
-		result := ReplicationResult{source: srcObj}
-
-		downloadStart := time.Now()
-		err := r.downloadObject(srcObj, &obj)
-		downloadDuration := time.Since(downloadStart)
-		if err != nil {
-			result.error = err
-			results <- &result
-			continue
-		}
-		r.logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
-
-		targetObj := r.getTargetObjectURI(*obj.Name)
-		result.target = targetObj
-
-		uploadStart := time.Now()
-		err = r.uploadObject(targetObj, *obj.Name)
-		uploadDuration := time.Since(uploadStart)
-		if err != nil {
-			result.error = err
-		} else {
-			r.logger.Infof("Uploaded object to %s in %v", targetObj.ObjectName, uploadDuration)
-		}
-		results <- &result
-	}
-}
-
-func (r *ReplicaAgent) downloadObject(srcObj ociobjectstore.ObjectURI, obj *objectstorage.ObjectSummary) error {
-	r.Config.SourceObjectStorageDataStore.SetRegion(r.Config.SourceObjectStoreURI.Region)
-	err := r.Config.SourceObjectStorageDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
-		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
-		ociobjectstore.WithThreads(DefaultDownloadThreads))
-	if err != nil {
-		r.logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
 		return err
 	}
-	return nil
+
+	return replicator.Replicate(sourceObjs)
 }
 
-func (r *ReplicaAgent) uploadObject(targetObj ociobjectstore.ObjectURI, objName string) error {
-	r.Config.TargetObjectStorageDataStore.SetRegion(r.Config.TargetObjectStoreURI.Region)
-	curFilePath := filepath.Join(r.Config.LocalPath, objName)
-
-	err := r.Config.TargetObjectStorageDataStore.MultipartFileUpload(curFilePath, targetObj, DefaultUploadChunkSizeInMB, DefaultUploadThreads)
-	if err != nil {
-		r.logger.Errorf("Failed to upload object %s: %+v", targetObj.ObjectName, err)
-		return err
-	}
-	return nil
-}
-
-func (r *ReplicaAgent) prepareObjectChannel(objects []objectstorage.ObjectSummary) chan objectstorage.ObjectSummary {
-	objChan := make(chan objectstorage.ObjectSummary, len(objects))
-	go func() {
-		defer close(objChan)
-		for _, object := range objects {
-			objChan <- object
+func (r *ReplicaAgent) listSourceObjects() ([]ReplicationObject, error) {
+	switch r.ReplicationInput.sourceStorageType {
+	case storage.StorageTypeOCI:
+		listOfObjectSummary, err := r.Config.Source.OCIOSDataStore.ListObjects(r.ReplicationInput.source)
+		if err != nil {
+			return nil, err
 		}
-	}()
-	return objChan
-}
-
-func (r *ReplicaAgent) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
-	targetObjName := strings.Replace(objName, r.Config.SourceObjectStoreURI.Prefix, r.Config.TargetObjectStoreURI.Prefix, 1)
-	return ociobjectstore.ObjectURI{
-		Namespace:  r.Config.TargetObjectStoreURI.Namespace,
-		BucketName: r.Config.TargetObjectStoreURI.BucketName,
-		ObjectName: targetObjName,
+		r.logger.Infof("Listed %d model weight objects under prefix %s", len(listOfObjectSummary), r.ReplicationInput.source.Prefix)
+		return convertToReplicationObjectsFromObjectSummary(listOfObjectSummary), nil
+	case storage.StorageTypeHuggingFace:
+		repoFiles, err := r.Config.Source.HubClient.ListFiles(context.Background(), r.ReplicationInput.source.BucketName, hub.WithRepoType(hub.RepoTypeModel))
+		if err != nil {
+			return nil, err
+		}
+		r.logger.Infof("Listed %d model weight files under model %s with %s branch", len(repoFiles), r.ReplicationInput.source.BucketName, r.ReplicationInput.source.Prefix)
+		return convertToReplicationObjectsFromRepoFile(repoFiles), nil
+	default:
+		return nil, fmt.Errorf("unsupported source storage type: %s", string(r.ReplicationInput.sourceStorageType))
 	}
 }
 
-func (r *ReplicaAgent) validateModelSize(objects []objectstorage.ObjectSummary) {
+func (r *ReplicaAgent) validateModelSize(objects []ReplicationObject) {
 	r.logger.Info("Calculating model size from source")
 
 	sizeLimit := int64(r.Config.DownloadSizeLimitGB) * GB
 	var totalSize int64
 
 	for _, object := range objects {
-		if object.Name == nil || object.Size == nil {
+		if object.GetName() == "" || object.GetSize() == 0 {
 			r.logger.Errorf("Invalid object with missing name or size: %+v", object)
 			continue
 		}
 
-		totalSize += *object.Size
+		totalSize += object.GetSize()
 		if r.Config.EnableSizeLimitCheck && totalSize > sizeLimit {
 			r.logger.Fatalf("Model weights exceed size limit of %d bytes", sizeLimit)
 		}
@@ -205,10 +142,4 @@ func (r *ReplicaAgent) validateModelSize(objects []objectstorage.ObjectSummary) 
 		r.logger.Fatal("No model weights exist in the model folder")
 	}
 	r.logger.Infof("Total model size: %d bytes", totalSize)
-}
-
-func (r *ReplicaAgent) logProgress(successCount, errorCount, totalObjects int, startTime time.Time) {
-	progress := float64(successCount+errorCount) / float64(totalObjects) * 100
-	elapsedTime := time.Since(startTime)
-	r.logger.Infof("Progress: %.2f%%, Success: %d, Errors: %d, Total: %d, Elapsed Time: %v", progress, successCount, errorCount, totalObjects, elapsedTime)
 }

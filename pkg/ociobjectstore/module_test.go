@@ -244,7 +244,7 @@ func TestViperKeyConstants(t *testing.T) {
 		assert.Equal(t, "name", NameViperKeyName)
 		assert.Equal(t, "auth_type", AuthTypeViperKeyName)
 		assert.Equal(t, "compartment_id", CompartmentIdViperKeyName)
-		assert.Equal(t, "region_override", RegionViperKeyName)
+		assert.Equal(t, "region", RegionViperKeyName)
 		assert.Equal(t, "enable_obo_token", EnableOboTokenViperKeyName)
 		assert.Equal(t, "obo_token", OboTokenViperKeyName)
 	})

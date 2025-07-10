@@ -30,16 +30,23 @@ download_size_limit_gb: 650
 enable_size_limit_check: true
 
 source:
-  bucket_name: "source-bucket"
-  prefix: "models/example-model/"
-  region: "us-ashburn-1"
-  namespace: "example-namespace"
+  storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+  oci:
+    enabled: true
+    enable_obo_token: true
+    obo_token: "dummy-obo-token"
+    auth_type: "InstancePrincipal"
+    region: "eu-frankfurt-1"
+    compartment_id: ""
 
 target:
-  bucket_name: "target-bucket"
-  prefix: "models/example-model/"
-  region: "us-ashburn-1"
-  namespace: "example-namespace"
+  storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+  oci:
+    enabled: true
+    enable_obo_token: false
+    obo_token: ""
+    auth_type: "InstancePrincipal"
+    region: "us-chicago-1"
 
 model_framework: tensorrtllm
 tensorrtllm_version: "v0.11.0"

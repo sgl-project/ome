@@ -2,26 +2,34 @@ package replica
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/sgl-project/ome/pkg/configutils"
+	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
 	AnotherLogger logging.Interface
 
-	LocalPath                    string                         `mapstructure:"local_path" validate:"required"`
-	DownloadSizeLimitGB          int                            `mapstructure:"download_size_limit_gb"`
-	EnableSizeLimitCheck         bool                           `mapstructure:"enable_size_limit_check"`
-	NumConnections               int                            `mapstructure:"num_connections"`
-	SourceObjectStoreURI         ociobjectstore.ObjectURI       `mapstructure:"source" validate:"required"`
-	TargetObjectStoreURI         ociobjectstore.ObjectURI       `mapstructure:"target" validate:"required"`
-	SourceObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
-	TargetObjectStorageDataStore *ociobjectstore.OCIOSDataStore `validate:"required"`
+	LocalPath            string `mapstructure:"local_path" validate:"required"`
+	DownloadSizeLimitGB  int    `mapstructure:"download_size_limit_gb"`
+	EnableSizeLimitCheck bool   `mapstructure:"enable_size_limit_check"`
+	NumConnections       int    `mapstructure:"num_connections"`
+
+	Source struct {
+		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
+		OCIOSDataStore *ociobjectstore.OCIOSDataStore
+		HubClient      *hf.HubClient
+	} `mapstructure:"source"`
+
+	Target struct {
+		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
+		OCIOSDataStore *ociobjectstore.OCIOSDataStore
+	} `mapstructure:"target"`
 }
 
 type Option func(*Config) error
@@ -62,23 +70,16 @@ func NewReplicaConfig(opts ...Option) (*Config, error) {
 // WithAppParams attempts to resolve the required client objects using injected named parameters
 func WithAppParams(params replicaParams) Option {
 	return func(c *Config) error {
-		for _, casperDataStore := range params.ObjectStorageDataStores {
-			if casperDataStore == nil || casperDataStore.Config == nil {
-				continue
+		for _, dataStore := range params.OCIOSDataStoreList {
+			if dataStore.Config.Name == SourceStorageConfigKeyName {
+				c.Source.OCIOSDataStore = dataStore
 			}
-			switch casperDataStore.Config.Name {
-			case ociobjectstore.SourceOsConfigName:
-				if c.SourceObjectStorageDataStore != nil {
-					return fmt.Errorf("duplicate source object storage data store provided")
-				}
-				c.SourceObjectStorageDataStore = casperDataStore
-			case ociobjectstore.TargetOsConfigName:
-				if c.TargetObjectStorageDataStore != nil {
-					return fmt.Errorf("duplicate target object storage data store provided")
-				}
-				c.TargetObjectStorageDataStore = casperDataStore
+			if dataStore.Config.Name == TargetStorageConfigKeyName {
+				c.Target.OCIOSDataStore = dataStore
 			}
 		}
+
+		c.Source.HubClient = params.HubClient
 		return nil
 	}
 }
@@ -105,14 +106,6 @@ func WithViper(v *viper.Viper) Option {
 			return fmt.Errorf("error occurred when unmarshalling config: %+v", err)
 		}
 
-		// Ensure that the prefix of the object store URIs end with a slash
-		if len(c.SourceObjectStoreURI.Prefix) > 0 && !strings.HasSuffix(c.SourceObjectStoreURI.Prefix, "/") {
-			c.SourceObjectStoreURI.Prefix = c.SourceObjectStoreURI.Prefix + "/"
-		}
-		if len(c.TargetObjectStoreURI.Prefix) > 0 && !strings.HasSuffix(c.TargetObjectStoreURI.Prefix, "/") {
-			c.TargetObjectStoreURI.Prefix = c.TargetObjectStoreURI.Prefix + "/"
-		}
-
 		return nil
 	}
 }
@@ -121,6 +114,36 @@ func (c *Config) Validate() error {
 	validate := validator.New()
 	if err := validate.Struct(c); err != nil {
 		return err
+	}
+
+	if err := storage.ValidateStorageURI(c.Source.StorageURIStr); err != nil {
+		return fmt.Errorf("invalid source storage URI %s - %w ", c.Source.StorageURIStr, err)
+	}
+	if err := storage.ValidateStorageURI(c.Target.StorageURIStr); err != nil {
+		return fmt.Errorf("invalid target storage URI %s - %w", c.Target.StorageURIStr, err)
+	}
+	return nil
+}
+
+func (c *Config) ValidateRequiredDependencies(sourceStorageType storage.StorageType, targetStorageType storage.StorageType) error {
+	// Validate source dependencies
+	switch sourceStorageType {
+	case storage.StorageTypeOCI:
+		if err := requireNonNil("Source.OCIOSDataStore", c.Source.OCIOSDataStore); err != nil {
+			return err
+		}
+	case storage.StorageTypeHuggingFace:
+		if err := requireNonNil("Source.HubClient", c.Source.HubClient); err != nil {
+			return err
+		}
+	}
+
+	// Validate target dependencies
+	switch targetStorageType {
+	case storage.StorageTypeOCI:
+		if err := requireNonNil("Target.OCIOSDataStore", c.Target.OCIOSDataStore); err != nil {
+			return err
+		}
 	}
 	return nil
 }
