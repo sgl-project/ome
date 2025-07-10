@@ -1,6 +1,7 @@
 package replica
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -56,6 +57,9 @@ func (r *OCIToOCIReplicator) Replicate(objects []ReplicationObject) error {
 	}
 
 	r.logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
+	if errorCount > 0 {
+		return fmt.Errorf("%d/%d replications failed", errorCount, len(objects))
+	}
 	return nil
 }
 
