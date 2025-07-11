@@ -247,10 +247,14 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 			return nil, err
 		}
 		var baseModelName string
-		if inferenceService.Spec.Predictor.Model != nil {
+		if inferenceService.Spec.Predictor.Model != nil &&
+			inferenceService.Spec.Predictor.Model.BaseModel != nil {
 			baseModelName = *inferenceService.Spec.Predictor.Model.BaseModel
 		} else if inferenceService.Spec.Model != nil {
 			baseModelName = inferenceService.Spec.Model.Name
+		}
+		if baseModelName == "" {
+			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", inferenceService.Name, inferenceService.Namespace)
 		}
 		baseModel, _, err := isvcutils.GetBaseModel(r.Client, baseModelName, inferenceService.Namespace)
 		if err != nil {
