@@ -40,7 +40,7 @@ spec:
         version: "1.0.0"
       modelArchitecture: Llama4ForConditionalGeneration
       autoSelect: true
-      priority: 1
+      priority: 2
       version: "1.0.0"
       quantization: fp8
   volumes:
