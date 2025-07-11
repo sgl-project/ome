@@ -246,14 +246,24 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		if err != nil {
 			return nil, err
 		}
-		baseModel, _, err := isvcutils.GetBaseModel(r.Client, *inferenceService.Spec.Predictor.Model.BaseModel, inferenceService.Namespace)
+		var baseModelName string
+		if inferenceService.Spec.Predictor.Model != nil &&
+			inferenceService.Spec.Predictor.Model.BaseModel != nil {
+			baseModelName = *inferenceService.Spec.Predictor.Model.BaseModel
+		} else if inferenceService.Spec.Model != nil {
+			baseModelName = inferenceService.Spec.Model.Name
+		}
+		if baseModelName == "" {
+			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", inferenceService.Name, inferenceService.Namespace)
+		}
+		baseModel, _, err := isvcutils.GetBaseModel(r.Client, baseModelName, inferenceService.Namespace)
 		if err != nil {
 			return nil, err
 		}
 		benchmarkutils.UpdateVolumeMounts(inferenceService, &defaultContainer, baseModel)
 
 		volumes = append(volumes, v1.Volume{
-			Name: *inferenceService.Spec.Predictor.Model.BaseModel,
+			Name: baseModelName,
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{
 					Path: *baseModel.Storage.Path,
