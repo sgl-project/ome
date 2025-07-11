@@ -1,0 +1,41 @@
+title: PVC Storage Support for BaseModel and ClusterBaseModel
+oep-number: 0004
+authors:
+  - "@slin1238"
+status: provisional
+creation-date: 2025-07-11
+reviewers:
+  - TBD
+approvers:
+  - TBD
+
+see-also:
+  - "/oeps/0001-multi-cloud-storage"
+replaces: []
+
+# The target maturity stage in the current dev cycle for this OEP.
+stage: beta
+
+# The most recent milestone for which work toward delivery of this OEP has been
+# done. This can be the current (upcoming) milestone, if it is being actively
+# worked on.
+latest-milestone: "v0.3"
+
+# The milestone at which this feature was, or is targeted to be, at each stage.
+milestone:
+  alpha: "v0.3"
+  beta: "v0.4"
+  stable: "v0.5"
+
+# The following PRR answers are required at alpha release
+# List the feature gate name and the components for which it must be enabled
+feature-gates:
+  - name: PVCStorageSupport
+disable-supported: true
+
+# The following PRR answers are required at beta release
+metrics:
+  - model_agent_pvc_verification_total
+  - model_agent_pvc_verification_errors_total
+  - basemodel_metadata_extraction_jobs_total
+  - basemodel_metadata_extraction_duration_seconds
