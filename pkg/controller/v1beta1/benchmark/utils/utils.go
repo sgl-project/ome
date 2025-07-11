@@ -50,42 +50,24 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 		// TODO: Use actual service account key later
 		args["--api-key"] = "sample-key"
 
-		var baseModelName *string
-		var protocolVersion string
-		if inferenceService.Spec.Predictor.Model != nil {
-			baseModelName = inferenceService.Spec.Predictor.Model.BaseModel
-			protocolVersion = string(*inferenceService.Spec.Predictor.Model.ProtocolVersion)
-		} else if inferenceService.Spec.Model != nil &&
-			inferenceService.Spec.Engine != nil &&
-			inferenceService.Spec.Engine.Runner != nil {
-			baseModelName = &inferenceService.Spec.Model.Name
-			for _, env := range inferenceService.Spec.Engine.Runner.Env {
-				if env.Name == "PROTOCOL_VERSION" {
-					protocolVersion = env.Value
-					break
-				}
-			}
+		var baseModelName string
+		if inferenceService.Spec.Predictor.Model != nil &&
+			inferenceService.Spec.Predictor.Model.BaseModel != nil {
+			baseModelName = *inferenceService.Spec.Predictor.Model.BaseModel
+		} else if inferenceService.Spec.Model != nil {
+			baseModelName = inferenceService.Spec.Model.Name
 		} else {
-			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined in Predictor spec", ref.Namespace, ref.Name)
-		}
-
-		// Use protocol version if available
-		if protocolVersion != "" {
-			args["--api-backend"] = string(protocolVersion)
-		} else {
-			// Default or error if protocol is mandatory?
-			// For now, let's assume a default or leave it empty if not critical
-			args["--api-backend"] = "vllm" // Assuming default if nil
+			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", ref.Namespace, ref.Name)
 		}
 
 		// Use a generic model name and set the model-tokenizer if BaseModel is defined
-		if baseModelName != nil {
-			baseModel, _, err := isvcutils.GetBaseModel(c, *baseModelName, inferenceService.Namespace)
+		if baseModelName != "" {
+			baseModel, _, err := isvcutils.GetBaseModel(c, baseModelName, inferenceService.Namespace)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get BaseModel %s: %w", *baseModelName, err)
+				return nil, fmt.Errorf("failed to get BaseModel %s: %w", baseModelName, err)
 			}
 			if baseModel.Storage == nil || baseModel.Storage.Path == nil {
-				return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", *baseModelName)
+				return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", baseModelName)
 			}
 			args["--api-model-name"] = "vllm-model" // Or derive from somewhere?
 			args["--model-tokenizer"] = *baseModel.Storage.Path
@@ -93,6 +75,28 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 			// Handle case where BaseModel is not specified but needed?
 			// Or maybe model name comes from somewhere else?
 			args["--api-model-name"] = "some-default-model" // Placeholder
+		}
+
+		// Use protocol version if available
+		var protocolVersion string
+		if inferenceService.Spec.Predictor.Model != nil &&
+			inferenceService.Spec.Predictor.Model.ProtocolVersion != nil &&
+			*inferenceService.Spec.Predictor.Model.ProtocolVersion != "" {
+			protocolVersion = string(*inferenceService.Spec.Predictor.Model.ProtocolVersion)
+		} else if inferenceService.Spec.Engine != nil && inferenceService.Spec.Engine.Runner != nil {
+			for _, env := range inferenceService.Spec.Engine.Runner.Env {
+				if env.Name == "PROTOCOL_VERSION" {
+					protocolVersion = env.Value
+					break
+				}
+			}
+		}
+		if protocolVersion != "" {
+			args["--api-backend"] = string(protocolVersion)
+		} else {
+			// Default or error if protocol is mandatory?
+			// For now, let's assume a default or leave it empty if not critical
+			args["--api-backend"] = "vllm" // Assuming default if nil
 		}
 
 		// Extract the URL from the InferenceService's status if available
