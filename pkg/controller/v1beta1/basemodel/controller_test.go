@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,8 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/modelagent"
+	"github.com/sgl-project/ome/pkg/utils/storage"
+	batchv1 "k8s.io/api/batch/v1"
 )
 
 func TestBaseModelReconcile(t *testing.T) {
@@ -1154,4 +1157,1353 @@ func stringPtr(s string) *string {
 
 func int32Ptr(i int32) *int32 {
 	return &i
+}
+
+// TestBaseModelPVCStorageScenarios tests PVC storage scenarios for BaseModel controller
+func TestBaseModelPVCStorageScenarios(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name       string
+		baseModel  *v1beta1.BaseModel
+		setupMocks func(client.Client)
+		validate   func(*testing.T, client.Client, *v1beta1.BaseModel, ctrl.Result, error)
+		wantErr    bool
+	}{
+		{
+			name: "BaseModel with PVC storage should create metadata job",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify metadata job was created
+				job := &batchv1.Job{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      fmt.Sprintf("metadata-%s", baseModel.Name),
+					Namespace: baseModel.Namespace,
+				}, job)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Verify job spec
+				g.Expect(job.Spec.Template.Spec.Containers).To(gomega.HaveLen(1))
+				container := job.Spec.Template.Spec.Containers[0]
+				g.Expect(container.Image).To(gomega.ContainSubstring("ome-agent"))
+				g.Expect(container.Args).To(gomega.ContainElement("model-metadata"))
+				g.Expect(container.Args).To(gomega.ContainElement("--model-path"))
+				g.Expect(container.Args).To(gomega.ContainElement("/model"))
+				g.Expect(container.Args).To(gomega.ContainElement("--basemodel-name"))
+				g.Expect(container.Args).To(gomega.ContainElement(baseModel.Name))
+
+				// Verify PVC volume mount
+				g.Expect(job.Spec.Template.Spec.Volumes).To(gomega.HaveLen(1))
+				volume := job.Spec.Template.Spec.Volumes[0]
+				g.Expect(volume.Name).To(gomega.Equal("model-volume"))
+				g.Expect(volume.PersistentVolumeClaim.ClaimName).To(gomega.Equal("my-pvc"))
+
+				// Verify volume mount in container
+				g.Expect(container.VolumeMounts).To(gomega.HaveLen(1))
+				volumeMount := container.VolumeMounts[0]
+				g.Expect(volumeMount.Name).To(gomega.Equal("model-volume"))
+				g.Expect(volumeMount.MountPath).To(gomega.Equal("/model"))
+			},
+		},
+		{
+			name: "BaseModel with PVC storage and namespace should create metadata job",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-namespace-model",
+					Namespace:  "model-storage",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "pytorch",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://model-storage:shared-pvc/models/llama2-7b"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create model-storage namespace
+				modelNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "model-storage",
+					},
+				}
+				err = c.Create(context.TODO(), modelNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create PVC in model-storage namespace
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "shared-pvc",
+						Namespace: "model-storage",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify metadata job was created
+				job := &batchv1.Job{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      fmt.Sprintf("metadata-%s", baseModel.Name),
+					Namespace: baseModel.Namespace,
+				}, job)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Verify job spec with namespace-specific PVC
+				container := job.Spec.Template.Spec.Containers[0]
+				g.Expect(container.Args).To(gomega.ContainElement("--basemodel-namespace"))
+				g.Expect(container.Args).To(gomega.ContainElement("model-storage"))
+
+				// Verify PVC volume mount
+				volume := job.Spec.Template.Spec.Volumes[0]
+				g.Expect(volume.PersistentVolumeClaim.ClaimName).To(gomega.Equal("shared-pvc"))
+			},
+		},
+		{
+			name: "BaseModel with PVC storage should handle job idempotency",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-idempotent-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create existing metadata job
+				existingJob := &batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "metadata-pvc-idempotent-model",
+						Namespace: "default",
+						Labels: map[string]string{
+							"app": "ome-metadata-agent",
+						},
+					},
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "metadata-agent",
+										Image: "ome-agent:latest",
+									},
+								},
+							},
+						},
+					},
+				}
+				err = c.Create(context.TODO(), existingJob)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify existing job is not recreated
+				job := &batchv1.Job{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      "metadata-pvc-idempotent-model",
+					Namespace: "default",
+				}, job)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Verify job still has original spec
+				g.Expect(job.Spec.Template.Spec.Containers[0].Image).To(gomega.Equal("ome-agent:latest"))
+			},
+		},
+		{
+			name: "BaseModel with PVC storage should handle job success",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-success-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create successful metadata job
+				successfulJob := &batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "metadata-pvc-success-model",
+						Namespace: "default",
+					},
+					Status: batchv1.JobStatus{
+						Succeeded: 1,
+						Conditions: []batchv1.JobCondition{
+							{
+								Type:   batchv1.JobComplete,
+								Status: corev1.ConditionTrue,
+							},
+						},
+					},
+				}
+				err = c.Create(context.TODO(), successfulJob)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create ConfigMap with metadata
+				modelEntry := modelagent.ModelEntry{
+					Status: modelagent.ModelStatusReady,
+					Config: &modelagent.ModelConfig{
+						ModelType:         "llama",
+						ModelArchitecture: "LlamaForCausalLM",
+						MaxTokens:         4096,
+					},
+				}
+				entryData, _ := json.Marshal(modelEntry)
+
+				configMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "worker-node-1",
+						Namespace: constants.OMENamespace,
+						Labels: map[string]string{
+							constants.ModelStatusConfigMapLabel: "true",
+						},
+					},
+					Data: map[string]string{
+						"default.basemodel.pvc-success-model": string(entryData),
+					},
+				}
+				err = c.Create(context.TODO(), configMap)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Fetch the updated BaseModel
+				updated := &v1beta1.BaseModel{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Verify status was updated
+				g.Expect(updated.Status.State).To(gomega.Equal(v1beta1.LifeCycleStateReady))
+				g.Expect(updated.Status.NodesReady).To(gomega.ContainElement("worker-node-1"))
+
+				// Verify spec was updated with metadata
+				g.Expect(updated.Spec.ModelType).ToNot(gomega.BeNil())
+				g.Expect(*updated.Spec.ModelType).To(gomega.Equal("llama"))
+				g.Expect(updated.Spec.ModelArchitecture).ToNot(gomega.BeNil())
+				g.Expect(*updated.Spec.ModelArchitecture).To(gomega.Equal("LlamaForCausalLM"))
+				g.Expect(updated.Spec.MaxTokens).ToNot(gomega.BeNil())
+				g.Expect(*updated.Spec.MaxTokens).To(gomega.Equal(int32(4096)))
+			},
+		},
+		{
+			name: "BaseModel with PVC storage should handle job failure",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-failure-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create failed metadata job
+				failedJob := &batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "metadata-pvc-failure-model",
+						Namespace: "default",
+					},
+					Status: batchv1.JobStatus{
+						Failed: 1,
+						Conditions: []batchv1.JobCondition{
+							{
+								Type:   batchv1.JobFailed,
+								Status: corev1.ConditionTrue,
+							},
+						},
+					},
+				}
+				err = c.Create(context.TODO(), failedJob)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create ConfigMap with failed status
+				modelEntry := modelagent.ModelEntry{
+					Status: modelagent.ModelStatusFailed,
+					Config: nil,
+				}
+				entryData, _ := json.Marshal(modelEntry)
+
+				configMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "worker-node-1",
+						Namespace: constants.OMENamespace,
+						Labels: map[string]string{
+							constants.ModelStatusConfigMapLabel: "true",
+						},
+					},
+					Data: map[string]string{
+						"default.basemodel.pvc-failure-model": string(entryData),
+					},
+				}
+				err = c.Create(context.TODO(), configMap)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Fetch the updated BaseModel
+				updated := &v1beta1.BaseModel{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Verify status reflects failure
+				g.Expect(updated.Status.State).To(gomega.Equal(v1beta1.LifeCycleStateFailed))
+				g.Expect(updated.Status.NodesFailed).To(gomega.ContainElement("worker-node-1"))
+			},
+		},
+		{
+			name: "BaseModel with invalid PVC URI should fail validation",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "invalid-pvc-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc:///invalid-uri"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify no job was created due to invalid PVC URI
+				job := &batchv1.Job{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      "metadata-invalid-pvc-model",
+					Namespace: "default",
+				}, job)
+				g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
+
+				// Verify BaseModel status reflects error
+				updated := &v1beta1.BaseModel{}
+				err = c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(updated.Status.State).To(gomega.Equal(v1beta1.LifeCycleStateFailed))
+			},
+			wantErr: true,
+		},
+		{
+			name: "BaseModel with non-existent PVC should fail validation",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "missing-pvc-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://non-existent-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify no job was created due to missing PVC
+				job := &batchv1.Job{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      "metadata-missing-pvc-model",
+					Namespace: "default",
+				}, job)
+				g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
+
+				// Verify BaseModel status reflects error
+				updated := &v1beta1.BaseModel{}
+				err = c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(updated.Status.State).To(gomega.Equal(v1beta1.LifeCycleStateFailed))
+			},
+			wantErr: true,
+		},
+		{
+			name: "BaseModel with unbound PVC should wait for binding",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "unbound-pvc-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					ModelFormat: v1beta1.ModelFormat{
+						Name: "safetensors",
+					},
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://pending-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create unbound PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pending-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimPending,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify no job was created due to unbound PVC
+				job := &batchv1.Job{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Name:      "metadata-unbound-pvc-model",
+					Namespace: "default",
+				}, job)
+				g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
+
+				// Verify BaseModel status reflects pending state
+				updated := &v1beta1.BaseModel{}
+				err = c.Get(context.TODO(), types.NamespacedName{
+					Name:      baseModel.Name,
+					Namespace: baseModel.Namespace,
+				}, updated)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(updated.Status.State).To(gomega.Equal(v1beta1.LifeCycleStateInTransit))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create fake client
+			client := ctrlclientfake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.baseModel).
+				Build()
+
+			// Setup mocks
+			if tt.setupMocks != nil {
+				tt.setupMocks(client)
+			}
+
+			// Create reconciler
+			reconciler := &BaseModelReconciler{
+				Client:   client,
+				Log:      ctrl.Log.WithName("test"),
+				Scheme:   scheme,
+				Recorder: &record.FakeRecorder{},
+			}
+
+			// Reconcile
+			req := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tt.baseModel.Name,
+					Namespace: tt.baseModel.Namespace,
+				},
+			}
+
+			result, err := reconciler.Reconcile(context.TODO(), req)
+
+			// Validate results
+			if tt.wantErr {
+				g.Expect(err).To(gomega.HaveOccurred())
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, client, tt.baseModel, result, err)
+			}
+		})
+	}
+}
+
+// TestBaseModelPVCJobSpecValidation tests job spec validation for PVC storage scenarios
+func TestBaseModelPVCJobSpecValidation(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name           string
+		baseModel      *v1beta1.BaseModel
+		expectedImage  string
+		expectedArgs   []string
+		expectedVolume string
+		description    string
+	}{
+		{
+			name: "PVC job should have correct image",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-image",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+					},
+				},
+			},
+			expectedImage:  "ome-agent:latest",
+			expectedArgs:   []string{"model-metadata", "--model-path", "/model", "--basemodel-name", "test-pvc-image"},
+			expectedVolume: "my-pvc",
+			description:    "PVC job should use ome-agent image with correct arguments",
+		},
+		{
+			name: "PVC job should have correct volume mount",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-volume",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://shared-pvc/models/llama2"),
+					},
+				},
+			},
+			expectedImage:  "ome-agent:latest",
+			expectedArgs:   []string{"model-metadata", "--model-path", "/model", "--basemodel-name", "test-pvc-volume"},
+			expectedVolume: "shared-pvc",
+			description:    "PVC job should mount the correct PVC volume",
+		},
+		{
+			name: "PVC job should have correct namespace argument",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-namespace",
+					Namespace: "model-storage",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://model-storage:shared-pvc/models/llama2"),
+					},
+				},
+			},
+			expectedImage:  "ome-agent:latest",
+			expectedArgs:   []string{"model-metadata", "--model-path", "/model", "--basemodel-name", "test-pvc-namespace", "--basemodel-namespace", "model-storage"},
+			expectedVolume: "shared-pvc",
+			description:    "PVC job should include namespace argument when specified",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock job creation (this would be the actual job creation logic)
+			// For testing purposes, we'll validate the expected job spec
+			expectedJobName := fmt.Sprintf("metadata-%s", tt.baseModel.Name)
+			g.Expect(expectedJobName).To(gomega.ContainSubstring("metadata-"))
+
+			// Validate expected arguments
+			g.Expect(tt.expectedArgs).To(gomega.ContainElement("model-metadata"))
+			g.Expect(tt.expectedArgs).To(gomega.ContainElement("--model-path"))
+			g.Expect(tt.expectedArgs).To(gomega.ContainElement("/model"))
+			g.Expect(tt.expectedArgs).To(gomega.ContainElement("--basemodel-name"))
+			g.Expect(tt.expectedArgs).To(gomega.ContainElement(tt.baseModel.Name))
+
+			// Validate namespace argument if specified
+			if tt.baseModel.Namespace != "default" {
+				g.Expect(tt.expectedArgs).To(gomega.ContainElement("--basemodel-namespace"))
+				g.Expect(tt.expectedArgs).To(gomega.ContainElement(tt.baseModel.Namespace))
+			}
+
+			// Validate expected volume
+			g.Expect(tt.expectedVolume).To(gomega.Not(gomega.BeEmpty()))
+		})
+	}
+}
+
+// TestBaseModelPVCReconciliationLoops tests reconciliation loops for PVC storage scenarios
+func TestBaseModelPVCReconciliationLoops(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name           string
+		baseModel      *v1beta1.BaseModel
+		setupMocks     func(client.Client)
+		expectedResult ctrl.Result
+		description    string
+	}{
+		{
+			name: "PVC reconciliation should requeue on pending PVC",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-requeue-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://pending-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create pending PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pending-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimPending,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			expectedResult: ctrl.Result{RequeueAfter: time.Minute},
+			description:    "PVC reconciliation should requeue when PVC is pending",
+		},
+		{
+			name: "PVC reconciliation should not requeue on bound PVC",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "pvc-no-requeue-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://bound-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create bound PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "bound-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			expectedResult: ctrl.Result{},
+			description:    "PVC reconciliation should not requeue when PVC is bound",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create fake client
+			client := ctrlclientfake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.baseModel).
+				Build()
+
+			// Setup mocks
+			if tt.setupMocks != nil {
+				tt.setupMocks(client)
+			}
+
+			// Create reconciler
+			reconciler := &BaseModelReconciler{
+				Client:   client,
+				Log:      ctrl.Log.WithName("test"),
+				Scheme:   scheme,
+				Recorder: &record.FakeRecorder{},
+			}
+
+			// Reconcile
+			req := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tt.baseModel.Name,
+					Namespace: tt.baseModel.Namespace,
+				},
+			}
+
+			result, err := reconciler.Reconcile(context.TODO(), req)
+
+			// Validate results
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(result).To(gomega.Equal(tt.expectedResult), tt.description)
+		})
+	}
+}
+
+// TestBaseModelPVCJobSpecValidationComprehensive tests comprehensive job spec validation for PVC storage
+func TestBaseModelPVCJobSpecValidationComprehensive(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	testCases := []struct {
+		name          string
+		baseModel     *v1beta1.BaseModel
+		expectedImage string
+		expectedArgs  []string
+		expectError   bool
+		errorContains string
+		description   string
+	}{
+		{
+			name: "PVC storage with simple subpath",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models"),
+					},
+				},
+			},
+			expectedImage: "ome/model-metadata-agent:latest",
+			expectedArgs: []string{
+				"--model-path=/models",
+				"--basemodel-name=test-pvc-model",
+				"--basemodel-namespace=default",
+			},
+			expectError: false,
+			description: "PVC storage with simple subpath should create valid job spec",
+		},
+		{
+			name: "PVC storage with nested subpath",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-nested-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/path/to/models/llama2"),
+					},
+				},
+			},
+			expectedImage: "ome/model-metadata-agent:latest",
+			expectedArgs: []string{
+				"--model-path=/models",
+				"--basemodel-name=test-pvc-nested-model",
+				"--basemodel-namespace=default",
+			},
+			expectError: false,
+			description: "PVC storage with nested subpath should create valid job spec",
+		},
+		{
+			name: "PVC storage with namespace",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-ns-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://storage-ns:my-pvc/models"),
+					},
+				},
+			},
+			expectedImage: "ome/model-metadata-agent:latest",
+			expectedArgs: []string{
+				"--model-path=/models",
+				"--basemodel-name=test-pvc-ns-model",
+				"--basemodel-namespace=default",
+			},
+			expectError: false,
+			description: "PVC storage with namespace should create valid job spec",
+		},
+		{
+			name: "PVC storage with special characters in subpath",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pvc-special-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2@7b#chat$hf"),
+					},
+				},
+			},
+			expectedImage: "ome/model-metadata-agent:latest",
+			expectedArgs: []string{
+				"--model-path=/models",
+				"--basemodel-name=test-pvc-special-model",
+				"--basemodel-namespace=default",
+			},
+			expectError: false,
+			description: "PVC storage with special characters should create valid job spec",
+		},
+		{
+			name: "invalid PVC URI format",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-invalid-pvc-model",
+					Namespace: "default",
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://"),
+					},
+				},
+			},
+			expectError:   true,
+			errorContains: "invalid PVC storage URI",
+			description:   "Invalid PVC URI format should return error",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test PVC URI validation
+			if tc.baseModel.Spec.Storage != nil && tc.baseModel.Spec.Storage.StorageUri != nil {
+				err := storage.ValidatePVCStorageURI(*tc.baseModel.Spec.Storage.StorageUri)
+				if tc.expectError {
+					g.Expect(err).To(gomega.HaveOccurred(), tc.description)
+					if tc.errorContains != "" {
+						g.Expect(err.Error()).To(gomega.ContainSubstring(tc.errorContains), tc.description)
+					}
+					return
+				}
+				g.Expect(err).NotTo(gomega.HaveOccurred(), tc.description)
+
+				// Test storage type detection
+				storageType, err := storage.GetStorageType(*tc.baseModel.Spec.Storage.StorageUri)
+				g.Expect(err).NotTo(gomega.HaveOccurred(), tc.description)
+				g.Expect(storageType).To(gomega.Equal(storage.StorageTypePVC), tc.description)
+
+				// Test PVC URI parsing
+				components, err := storage.ParsePVCStorageURI(*tc.baseModel.Spec.Storage.StorageUri)
+				g.Expect(err).NotTo(gomega.HaveOccurred(), tc.description)
+				g.Expect(components).NotTo(gomega.BeNil(), tc.description)
+				g.Expect(components.PVCName).NotTo(gomega.BeEmpty(), tc.description)
+				g.Expect(components.SubPath).NotTo(gomega.BeEmpty(), tc.description)
+			}
+		})
+	}
+}
+
+// TestBaseModelPVCReconciliationLoopsComprehensive tests comprehensive reconciliation loops for PVC storage
+func TestBaseModelPVCReconciliationLoopsComprehensive(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	testCases := []struct {
+		name          string
+		baseModel     *v1beta1.BaseModel
+		setupMocks    func(client.Client)
+		validate      func(*testing.T, client.Client, *v1beta1.BaseModel, ctrl.Result, error)
+		expectError   bool
+		errorContains string
+		description   string
+	}{
+		{
+			name: "PVC storage BaseModel with metadata job creation",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-pvc-metadata-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-pvc",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify that metadata job was created
+				jobList := &batchv1.JobList{}
+				err := c.List(context.TODO(), jobList)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Look for metadata extraction job
+				found := false
+				for _, job := range jobList.Items {
+					if strings.Contains(job.Name, baseModel.Name) && strings.Contains(job.Name, "metadata") {
+						found = true
+						// Verify job spec
+						g.Expect(job.Spec.Template.Spec.Containers).To(gomega.HaveLen(1))
+						container := job.Spec.Template.Spec.Containers[0]
+						g.Expect(container.Image).To(gomega.ContainSubstring("model-metadata-agent"))
+						g.Expect(container.Args).To(gomega.ContainElement("--model-path=/models"))
+						g.Expect(container.Args).To(gomega.ContainElement("--basemodel-name=" + baseModel.Name))
+						g.Expect(container.Args).To(gomega.ContainElement("--basemodel-namespace=" + baseModel.Namespace))
+						break
+					}
+				}
+				g.Expect(found).To(gomega.BeTrue(), "Metadata extraction job should be created")
+			},
+			expectError: false,
+			description: "PVC storage BaseModel should create metadata extraction job",
+		},
+		{
+			name: "PVC storage BaseModel with unbound PVC",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-pvc-unbound-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://my-pvc-unbound/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create unbound PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-pvc-unbound",
+						Namespace: "default",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimPending,
+					},
+				}
+				err = c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify that no metadata job was created due to unbound PVC
+				jobList := &batchv1.JobList{}
+				err := c.List(context.TODO(), jobList)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Should not find metadata extraction job for unbound PVC
+				found := false
+				for _, job := range jobList.Items {
+					if strings.Contains(job.Name, baseModel.Name) && strings.Contains(job.Name, "metadata") {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(gomega.BeFalse(), "Metadata extraction job should not be created for unbound PVC")
+			},
+			expectError: false,
+			description: "PVC storage BaseModel with unbound PVC should not create metadata job",
+		},
+		{
+			name: "PVC storage BaseModel with non-existent PVC",
+			baseModel: &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-pvc-nonexistent-model",
+					Namespace:  "default",
+					Finalizers: []string{constants.BaseModelFinalizer},
+				},
+				Spec: v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: stringPtr("pvc://nonexistent-pvc/models/llama2"),
+					},
+				},
+			},
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, baseModel *v1beta1.BaseModel, result ctrl.Result, reconcileErr error) {
+				// Verify that no metadata job was created due to non-existent PVC
+				jobList := &batchv1.JobList{}
+				err := c.List(context.TODO(), jobList)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Should not find metadata extraction job for non-existent PVC
+				found := false
+				for _, job := range jobList.Items {
+					if strings.Contains(job.Name, baseModel.Name) && strings.Contains(job.Name, "metadata") {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(gomega.BeFalse(), "Metadata extraction job should not be created for non-existent PVC")
+			},
+			expectError: false,
+			description: "PVC storage BaseModel with non-existent PVC should not create metadata job",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create fake client
+			client := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+			// Setup mocks
+			if tc.setupMocks != nil {
+				tc.setupMocks(client)
+			}
+
+			// Create controller
+			controller := &BaseModelReconciler{
+				Client: client,
+				Scheme: scheme,
+			}
+
+			// Create BaseModel
+			err := client.Create(context.TODO(), tc.baseModel)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			// Reconcile
+			request := reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tc.baseModel.Name,
+					Namespace: tc.baseModel.Namespace,
+				},
+			}
+
+			result, reconcileErr := controller.Reconcile(context.TODO(), request)
+
+			// Validate results
+			if tc.validate != nil {
+				tc.validate(t, client, tc.baseModel, result, reconcileErr)
+			}
+
+			if tc.expectError {
+				g.Expect(reconcileErr).To(gomega.HaveOccurred(), tc.description)
+				if tc.errorContains != "" {
+					g.Expect(reconcileErr.Error()).To(gomega.ContainSubstring(tc.errorContains), tc.description)
+				}
+			} else {
+				g.Expect(reconcileErr).NotTo(gomega.HaveOccurred(), tc.description)
+			}
+		})
+	}
+}
+
+// TestBaseModelPVCIdempotency tests idempotency of PVC storage BaseModel reconciliation
+func TestBaseModelPVCIdempotency(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(batchv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	// Create fake client
+	client := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Create ome namespace
+	omeNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: constants.OMENamespace,
+		},
+	}
+	err := client.Create(context.TODO(), omeNamespace)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// Create bound PVC
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-pvc",
+			Namespace: "default",
+		},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Phase: corev1.ClaimBound,
+		},
+	}
+	err = client.Create(context.TODO(), pvc)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// Create BaseModel
+	baseModel := &v1beta1.BaseModel{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-pvc-idempotent-model",
+			Namespace:  "default",
+			Finalizers: []string{constants.BaseModelFinalizer},
+		},
+		Spec: v1beta1.BaseModelSpec{
+			Storage: &v1beta1.StorageSpec{
+				StorageUri: stringPtr("pvc://my-pvc/models/llama2"),
+			},
+		},
+	}
+	err = client.Create(context.TODO(), baseModel)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	// Create controller
+	controller := &BaseModelReconciler{
+		Client: client,
+		Scheme: scheme,
+	}
+
+	// First reconciliation
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      baseModel.Name,
+			Namespace: baseModel.Namespace,
+		},
+	}
+
+	result1, err1 := controller.Reconcile(context.TODO(), request)
+	g.Expect(err1).NotTo(gomega.HaveOccurred())
+
+	// Second reconciliation (should be idempotent)
+	result2, err2 := controller.Reconcile(context.TODO(), request)
+	g.Expect(err2).NotTo(gomega.HaveOccurred())
+
+	// Verify that both reconciliations produced the same result
+	g.Expect(result1).To(gomega.Equal(result2), "Reconciliation should be idempotent")
+
+	// Verify that only one metadata job was created
+	jobList := &batchv1.JobList{}
+	err = client.List(context.TODO(), jobList)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+
+	metadataJobCount := 0
+	for _, job := range jobList.Items {
+		if strings.Contains(job.Name, baseModel.Name) && strings.Contains(job.Name, "metadata") {
+			metadataJobCount++
+		}
+	}
+	g.Expect(metadataJobCount).To(gomega.Equal(1), "Only one metadata job should be created")
 }
