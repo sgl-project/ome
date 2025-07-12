@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     -o model-agent ./cmd/model-agent
 
 # Use Oracle Linux 9 as base image for OCI SDK compatibility
-FROM oraclelinux:9-slim
+FROM oraclelinux:10-slim
 RUN microdnf update -y && microdnf clean all
 
 COPY --from=builder /workspace/model-agent /
