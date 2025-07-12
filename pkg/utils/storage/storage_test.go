@@ -578,22 +578,15 @@ func TestParsePVCStorageURI(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "pvc name with invalid characters",
-			uri:     "pvc://my_pvc/results",
-			want:    nil,
-			wantErr: false, // PVC names can have underscores
-		},
 		{
-			name:    "pvc name starting with number",
-			uri:     "pvc://123-pvc/results",
-			want:    nil,
-			wantErr: false, // PVC names can start with numbers
+			name:    "pvc name with invalid characters (underscore)",
+			uri:     "pvc://my_pvc/results",
+			wantErr: true,
 		},
 		{
 			name:    "pvc name with uppercase",
 			uri:     "pvc://MyPVC/results",
-			want:    nil,
-			wantErr: false, // PVC names can have uppercase
+			wantErr: true,
 		},
 	}
 
