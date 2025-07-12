@@ -1,0 +1,9 @@
+# Minimal configuration for model-metadata agent
+# This agent is designed to be run as a Kubernetes Job with command-line arguments
+# The actual values will be provided via command-line flags by the BaseModel controller
+
+# Placeholder values - will be overridden by command-line flags
+model_path: ""
+basemodel_name: ""
+basemodel_namespace: ""
+cluster_scoped: false
