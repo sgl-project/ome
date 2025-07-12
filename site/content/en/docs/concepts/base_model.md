@@ -140,7 +140,7 @@ storage:
 
 Reference models already stored in Kubernetes persistent volumes:
 ```
-pvc://{pvc-name}/{sub-path}
+pvc://[{namespace}:]{pvc-name}/{sub-path}
 ```
 
 Example:
@@ -149,6 +149,8 @@ storage:
   storageUri: "pvc://model-storage/llama-models/llama-3-70b"
   path: "/local/models/llama-3-70b"
 ```
+
+> **Note**: For BaseModel resources, if no namespace is specified, the PVC is assumed to be in the same namespace as the BaseModel. For ClusterBaseModel resources, you must specify the namespace explicitly using the colon separator format: `pvc://namespace:pvc-name/path`.
 
 ### Vendor Storage
 

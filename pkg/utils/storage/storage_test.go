@@ -161,31 +161,126 @@ func TestParsePVCStorageURI(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid uri with simple path",
+			name: "valid uri without namespace - simple path",
 			uri:  "pvc://my-pvc/results",
 			want: &PVCStorageComponents{
-				PVCName: "my-pvc",
-				SubPath: "results",
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "results",
 			},
 			wantErr: false,
 		},
 		{
-			name: "valid uri with nested path",
+			name: "valid uri without namespace - nested path",
 			uri:  "pvc://my-pvc/path/to/results",
 			want: &PVCStorageComponents{
-				PVCName: "my-pvc",
-				SubPath: "path/to/results",
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path/to/results",
 			},
 			wantErr: false,
 		},
 		{
-			name: "valid uri with special characters",
-			uri:  "pvc://my-pvc-123/path_with-special.chars",
+			name: "valid uri with namespace using colon separator",
+			uri:  "pvc://default:my-pvc/results",
 			want: &PVCStorageComponents{
-				PVCName: "my-pvc-123",
-				SubPath: "path_with-special.chars",
+				Namespace: "default",
+				PVCName:   "my-pvc",
+				SubPath:   "results",
 			},
 			wantErr: false,
+		},
+		{
+			name: "valid uri with namespace and nested path",
+			uri:  "pvc://my-namespace:my-pvc/path/to/results",
+			want: &PVCStorageComponents{
+				Namespace: "my-namespace",
+				PVCName:   "my-pvc",
+				SubPath:   "path/to/results",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with special characters in pvc name",
+			uri:  "pvc://my-pvc-123/path_with-special.chars",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc-123",
+				SubPath:   "path_with-special.chars",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with namespace and special chars",
+			uri:  "pvc://default:my-pvc-123/path_with-special.chars",
+			want: &PVCStorageComponents{
+				Namespace: "default",
+				PVCName:   "my-pvc-123",
+				SubPath:   "path_with-special.chars",
+			},
+			wantErr: false,
+		},
+		{
+			name: "namespace with numbers and hyphens",
+			uri:  "pvc://ns-123:pvc-456/model",
+			want: &PVCStorageComponents{
+				Namespace: "ns-123",
+				PVCName:   "pvc-456",
+				SubPath:   "model",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid uri with ClusterBaseModel use case",
+			uri:  "pvc://model-storage:shared-pvc/path/to/models/llama2-7b",
+			want: &PVCStorageComponents{
+				Namespace: "model-storage",
+				PVCName:   "shared-pvc",
+				SubPath:   "path/to/models/llama2-7b",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "invalid namespace with uppercase",
+			uri:     "pvc://MyNamespace:my-pvc/models",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "invalid namespace with underscore",
+			uri:     "pvc://my_namespace:my-pvc/models",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "namespace starting with hyphen",
+			uri:     "pvc://-namespace:my-pvc/models",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "namespace ending with hyphen",
+			uri:     "pvc://namespace-:my-pvc/models",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "very long namespace (64 chars)",
+			uri:     "pvc://a123456789012345678901234567890123456789012345678901234567890123:my-pvc/models",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "empty namespace before colon",
+			uri:     "pvc://:my-pvc/models",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "empty pvc name after colon",
+			uri:     "pvc://default:/models",
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name:    "missing pvc prefix",
@@ -206,32 +301,44 @@ func TestParsePVCStorageURI(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "empty pvc name with subpath",
+			name:    "empty pvc name",
 			uri:     "pvc:///results",
 			want:    nil,
 			wantErr: true,
 		},
 		{
-			name:    "invalid uri - missing subpath",
-			uri:     "pvc://my-pvc",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "invalid uri - empty subpath",
+			name:    "empty subpath",
 			uri:     "pvc://my-pvc/",
 			want:    nil,
 			wantErr: true,
 		},
 		{
-			name:    "invalid uri - empty pvc name",
-			uri:     "pvc:///results",
+			name:    "empty subpath with namespace",
+			uri:     "pvc://default:my-pvc/",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "only pvc name provided",
+			uri:     "pvc://my-pvc",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "only namespace and pvc provided",
+			uri:     "pvc://default:my-pvc",
 			want:    nil,
 			wantErr: true,
 		},
 		{
 			name:    "invalid uri - wrong scheme",
 			uri:     "oci://my-pvc/results",
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "multiple colons in namespace:pvc part",
+			uri:     "pvc://ns:pvc:extra/path",
 			want:    nil,
 			wantErr: true,
 		},
@@ -251,6 +358,92 @@ func TestParsePVCStorageURI(t *testing.T) {
 	}
 }
 
+func TestIsValidNamespace(t *testing.T) {
+	tests := []struct {
+		name      string
+		namespace string
+		want      bool
+	}{
+		{
+			name:      "valid simple namespace",
+			namespace: "default",
+			want:      true,
+		},
+		{
+			name:      "valid namespace with hyphens",
+			namespace: "my-namespace",
+			want:      true,
+		},
+		{
+			name:      "valid namespace with numbers",
+			namespace: "ns123",
+			want:      true,
+		},
+		{
+			name:      "valid namespace with hyphens and numbers",
+			namespace: "test-123-namespace",
+			want:      true,
+		},
+		{
+			name:      "valid single character",
+			namespace: "a",
+			want:      true,
+		},
+		{
+			name:      "valid 63 characters",
+			namespace: "a123456789012345678901234567890123456789012345678901234567890a",
+			want:      true,
+		},
+		{
+			name:      "invalid empty",
+			namespace: "",
+			want:      false,
+		},
+		{
+			name:      "invalid uppercase",
+			namespace: "MyNamespace",
+			want:      false,
+		},
+		{
+			name:      "invalid underscore",
+			namespace: "my_namespace",
+			want:      false,
+		},
+		{
+			name:      "invalid dot",
+			namespace: "my.namespace",
+			want:      false,
+		},
+		{
+			name:      "invalid starting with hyphen",
+			namespace: "-namespace",
+			want:      false,
+		},
+		{
+			name:      "invalid ending with hyphen",
+			namespace: "namespace-",
+			want:      false,
+		},
+		{
+			name:      "invalid too long (64 chars)",
+			namespace: "a1234567890123456789012345678901234567890123456789012345678901234",
+			want:      false,
+		},
+		{
+			name:      "invalid special characters",
+			namespace: "name@space",
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidNamespace(tt.namespace)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestGetStorageType(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -266,7 +459,7 @@ func TestGetStorageType(t *testing.T) {
 		},
 		{
 			name: "pvc storage",
-			uri:  "pvc://mypvc/mypath",
+			uri:  "pvc://my-pvc/mypath",
 			want: StorageTypePVC,
 		},
 		{
@@ -346,8 +539,13 @@ func TestValidateStorageURI(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "valid pvc uri",
+			name:    "valid pvc uri without namespace",
 			uri:     "pvc://my-pvc/data",
+			wantErr: false,
+		},
+		{
+			name:    "valid pvc uri with namespace",
+			uri:     "pvc://default:my-pvc/data",
 			wantErr: false,
 		},
 		{
@@ -371,8 +569,13 @@ func TestValidateStorageURI(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "invalid pvc uri - missing subpath",
+			name:    "invalid pvc uri - missing subpath without namespace",
 			uri:     "pvc://my-pvc",
+			wantErr: true,
+		},
+		{
+			name:    "invalid pvc uri - missing subpath with namespace",
+			uri:     "pvc://default:my-pvc",
 			wantErr: true,
 		},
 		{
