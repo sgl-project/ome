@@ -24,6 +24,7 @@ var instanceTypeMap = map[string]string{
 
 	// CoreWeave instance types
 	"gd-8xh100ib-i128": "H100",
+	"gd-8xh200ib-i128": "H200",
 	"gd-8xl40-i128":    "L40",
 }
 
