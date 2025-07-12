@@ -14,6 +14,7 @@ import (
 	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -446,15 +447,24 @@ func (w *Scout) reconcilePendingDeletions() {
 }
 
 // shouldDownloadModel checks if a model should be downloaded to this node based on node selector and node affinity
-func (w *Scout) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
-	if storage == nil {
+func (w *Scout) shouldDownloadModel(storageSpec *v1beta1.StorageSpec) bool {
+	if storageSpec == nil {
 		// If storage is nil, default to true (backward compatibility)
 		return true
 	}
 
+	// Check if it's PVC storage type - if so, skip it entirely
+	if storageSpec.StorageUri != nil {
+		storageType, err := storage.GetStorageType(*storageSpec.StorageUri)
+		if err == nil && storageType == storage.StorageTypePVC {
+			w.logger.Debugf("Skipping PVC storage type in shouldDownloadModel (handled by BaseModel controller)")
+			return false
+		}
+	}
+
 	// Check NodeSelector if specified
-	if len(storage.NodeSelector) > 0 {
-		for key, value := range storage.NodeSelector {
+	if len(storageSpec.NodeSelector) > 0 {
+		for key, value := range storageSpec.NodeSelector {
 			nodeValue, exists := w.nodeInfo.Labels[key]
 			if !exists || nodeValue != value {
 				return false
@@ -463,8 +473,8 @@ func (w *Scout) shouldDownloadModel(storage *v1beta1.StorageSpec) bool {
 	}
 
 	// Check NodeAffinity if specified
-	if storage.NodeAffinity != nil && storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-		nodeSelectorTerms := storage.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+	if storageSpec.NodeAffinity != nil && storageSpec.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+		nodeSelectorTerms := storageSpec.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
 		if len(nodeSelectorTerms) > 0 {
 			matches := false
 			for _, term := range nodeSelectorTerms {

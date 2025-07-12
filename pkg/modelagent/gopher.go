@@ -364,6 +364,11 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				// Error is already logged and metrics recorded in the method
 				return err
 			}
+		case storage.StorageTypePVC:
+			s.logger.Infof("Skipping PVC storage type for model %s (handled by BaseModel controller)", modelInfo)
+			// PVC storage is handled entirely by the BaseModel controller
+			// Model agent doesn't need to do anything for PVC storage
+			return nil
 		default:
 			return fmt.Errorf("unknown storage type %s", storageType)
 		}
