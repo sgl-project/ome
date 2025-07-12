@@ -462,131 +462,6 @@ func TestParsePVCStorageURI(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		// Error cases
-		{
-			name:    "invalid namespace with uppercase",
-			uri:     "pvc://MyNamespace:my-pvc/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "invalid namespace with underscore",
-			uri:     "pvc://my_namespace:my-pvc/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "namespace starting with hyphen",
-			uri:     "pvc://-namespace:my-pvc/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "namespace ending with hyphen",
-			uri:     "pvc://namespace-:my-pvc/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "very long namespace (64 chars)",
-			uri:     "pvc://a123456789012345678901234567890123456789012345678901234567890123:my-pvc/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "empty namespace before colon",
-			uri:     "pvc://:my-pvc/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "empty pvc name after colon",
-			uri:     "pvc://default:/models",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "missing pvc prefix",
-			uri:     "my-pvc/results",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "empty uri",
-			uri:     "",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "only prefix",
-			uri:     "pvc://",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "empty pvc name",
-			uri:     "pvc:///results",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "empty subpath",
-			uri:     "pvc://my-pvc/",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "empty subpath with namespace",
-			uri:     "pvc://default:my-pvc/",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "only pvc name provided",
-			uri:     "pvc://my-pvc",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "only namespace and pvc provided",
-			uri:     "pvc://default:my-pvc",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "invalid uri - wrong scheme",
-			uri:     "oci://my-pvc/results",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "multiple colons in namespace:pvc part",
-			uri:     "pvc://ns:pvc:extra/path",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "trailing slash in pvc name",
-			uri:     "pvc://my-pvc-/results",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "leading slash in subpath",
-			uri:     "pvc://my-pvc//results",
-			want:    nil,
-			wantErr: true,
-		},
-		{
-			name:    "pvc name with invalid characters (underscore)",
-			uri:     "pvc://my_pvc/results",
-			wantErr: true,
-		},
-		{
-			name:    "pvc name with uppercase",
-			uri:     "pvc://MyPVC/results",
-			wantErr: true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -1683,120 +1558,6 @@ func TestValidatePVCStorageURI(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "invalid namespace with uppercase",
-			uri:         "pvc://MyNamespace:my-pvc/models",
-			wantErr:     true,
-			errContains: "invalid namespace",
-		},
-		{
-			name:        "invalid namespace with underscore",
-			uri:         "pvc://my_namespace:my-pvc/models",
-			wantErr:     true,
-			errContains: "invalid namespace",
-		},
-		{
-			name:        "namespace starting with hyphen",
-			uri:         "pvc://-namespace:my-pvc/models",
-			wantErr:     true,
-			errContains: "invalid namespace",
-		},
-		{
-			name:        "namespace ending with hyphen",
-			uri:         "pvc://namespace-:my-pvc/models",
-			wantErr:     true,
-			errContains: "invalid namespace",
-		},
-		{
-			name:        "very long namespace (64 chars)",
-			uri:         "pvc://a123456789012345678901234567890123456789012345678901234567890123:my-pvc/models",
-			wantErr:     true,
-			errContains: "invalid namespace",
-		},
-		{
-			name:        "empty namespace before colon",
-			uri:         "pvc://:my-pvc/models",
-			wantErr:     true,
-			errContains: "empty namespace before colon",
-		},
-		{
-			name:        "empty pvc name after colon",
-			uri:         "pvc://default:/models",
-			wantErr:     true,
-			errContains: "empty PVC name after colon",
-		},
-		{
-			name:        "missing pvc prefix",
-			uri:         "my-pvc/results",
-			wantErr:     true,
-			errContains: "missing pvc:// prefix",
-		},
-		{
-			name:        "empty uri",
-			uri:         "",
-			wantErr:     true,
-			errContains: "missing pvc:// prefix",
-		},
-		{
-			name:        "only prefix",
-			uri:         "pvc://",
-			wantErr:     true,
-			errContains: "missing content after prefix",
-		},
-		{
-			name:        "empty pvc name",
-			uri:         "pvc:///results",
-			wantErr:     true,
-			errContains: "missing PVC name",
-		},
-		{
-			name:        "empty subpath",
-			uri:         "pvc://my-pvc/",
-			wantErr:     true,
-			errContains: "missing subpath",
-		},
-		{
-			name:        "empty subpath with namespace",
-			uri:         "pvc://default:my-pvc/",
-			wantErr:     true,
-			errContains: "missing subpath",
-		},
-		{
-			name:        "only pvc name provided",
-			uri:         "pvc://my-pvc",
-			wantErr:     true,
-			errContains: "missing subpath",
-		},
-		{
-			name:        "only namespace and pvc provided",
-			uri:         "pvc://default:my-pvc",
-			wantErr:     true,
-			errContains: "missing subpath",
-		},
-		{
-			name:        "invalid uri - wrong scheme",
-			uri:         "oci://my-pvc/results",
-			wantErr:     true,
-			errContains: "missing pvc:// prefix",
-		},
-		{
-			name:        "multiple colons in namespace:pvc part",
-			uri:         "pvc://ns:pvc:extra/path",
-			wantErr:     true,
-			errContains: "multiple colons not allowed",
-		},
-		{
-			name:        "trailing slash in pvc name",
-			uri:         "pvc://my-pvc-/results",
-			wantErr:     true,
-			errContains: "missing subpath",
-		},
-		{
-			name:        "leading slash in subpath",
-			uri:         "pvc://my-pvc//results",
-			wantErr:     true,
-			errContains: "missing subpath",
-		},
-		{
 			name:    "multiple consecutive slashes in subpath",
 			uri:     "pvc://my-pvc/path//to//results",
 			wantErr: false, // This should be valid as it's normalized
@@ -2754,6 +2515,196 @@ func TestPVCStorageValidationComprehensive(t *testing.T) {
 			assert.NotNil(t, components, tc.description)
 			assert.NotEmpty(t, components.PVCName, tc.description)
 			assert.NotEmpty(t, components.SubPath, tc.description)
+		})
+	}
+}
+
+// TestPVCStorageErrorHandlingComprehensive consolidates all PVC storage error cases
+// that were previously duplicated across multiple test functions
+func TestPVCStorageErrorHandlingComprehensive(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+		description string
+	}{
+		// Namespace validation errors
+		{
+			name:        "invalid namespace with uppercase",
+			uri:         "pvc://MyNamespace:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace with uppercase should fail validation",
+		},
+		{
+			name:        "invalid namespace with underscore",
+			uri:         "pvc://my_namespace:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace with underscore should fail validation",
+		},
+		{
+			name:        "namespace starting with hyphen",
+			uri:         "pvc://-namespace:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace starting with hyphen should fail validation",
+		},
+		{
+			name:        "namespace ending with hyphen",
+			uri:         "pvc://namespace-:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace ending with hyphen should fail validation",
+		},
+		{
+			name:        "very long namespace (64 chars)",
+			uri:         "pvc://a123456789012345678901234567890123456789012345678901234567890123:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace with 64 characters should fail validation",
+		},
+		{
+			name:        "empty namespace before colon",
+			uri:         "pvc://:my-pvc/models",
+			wantErr:     true,
+			errContains: "empty namespace before colon",
+			description: "Empty namespace before colon should fail validation",
+		},
+		{
+			name:        "empty pvc name after colon",
+			uri:         "pvc://default:/models",
+			wantErr:     true,
+			errContains: "empty PVC name after colon",
+			description: "Empty PVC name after colon should fail validation",
+		},
+		// URI format errors
+		{
+			name:        "missing pvc prefix",
+			uri:         "my-pvc/results",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI without pvc:// prefix should fail validation",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "Empty URI should fail validation",
+		},
+		{
+			name:        "only prefix",
+			uri:         "pvc://",
+			wantErr:     true,
+			errContains: "missing content after prefix",
+			description: "URI with only prefix should fail validation",
+		},
+		{
+			name:        "empty pvc name",
+			uri:         "pvc:///results",
+			wantErr:     true,
+			errContains: "missing PVC name",
+			description: "URI with empty PVC name should fail validation",
+		},
+		{
+			name:        "empty subpath",
+			uri:         "pvc://my-pvc/",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with empty subpath should fail validation",
+		},
+		{
+			name:        "empty subpath with namespace",
+			uri:         "pvc://default:my-pvc/",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with namespace and empty subpath should fail validation",
+		},
+		{
+			name:        "only pvc name provided",
+			uri:         "pvc://my-pvc",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with only PVC name should fail validation",
+		},
+		{
+			name:        "only namespace and pvc provided",
+			uri:         "pvc://default:my-pvc",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with only namespace and PVC should fail validation",
+		},
+		{
+			name:        "invalid uri - wrong scheme",
+			uri:         "oci://my-pvc/results",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI with wrong scheme should fail validation",
+		},
+		{
+			name:        "multiple colons in namespace:pvc part",
+			uri:         "pvc://ns:pvc:extra/path",
+			wantErr:     true,
+			errContains: "multiple colons not allowed",
+			description: "URI with multiple colons should fail validation",
+		},
+		{
+			name:        "trailing slash in pvc name",
+			uri:         "pvc://my-pvc-/results",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with trailing slash in PVC name should fail validation",
+		},
+		{
+			name:        "leading slash in subpath",
+			uri:         "pvc://my-pvc//results",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with leading slash in subpath should fail validation",
+		},
+		{
+			name:        "pvc name with invalid characters (underscore)",
+			uri:         "pvc://my_pvc/results",
+			wantErr:     true,
+			errContains: "invalid PVC name",
+			description: "PVC name with underscore should fail validation",
+		},
+		{
+			name:        "pvc name with uppercase",
+			uri:         "pvc://MyPVC/results",
+			wantErr:     true,
+			errContains: "invalid PVC name",
+			description: "PVC name with uppercase should fail validation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test ParsePVCStorageURI
+			components, err := ParsePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, tt.description)
+				}
+				assert.Nil(t, components, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+				assert.NotNil(t, components, tt.description)
+			}
+
+			// Test ValidatePVCStorageURI
+			validateErr := ValidatePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, validateErr, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, validateErr.Error(), tt.errContains, tt.description)
+				}
+			} else {
+				assert.NoError(t, validateErr, tt.description)
+			}
 		})
 	}
 }
