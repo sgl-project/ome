@@ -206,7 +206,7 @@ outputLocation:
 | Azure | `az://{account}/{container}/{path}` | `az://myaccount/mycontainer/results` |
 | GCS | `gs://{bucket}/{path}` | `gs://mybucket/results` |
 | GitHub | `github://{owner}/{repo}[@{tag}]` | `github://myorg/myrepo@v1.0.0` |
-| PVC | `pvc://{pvc-name}/{path}` | `pvc://my-pvc/results` |
+| PVC | `pvc://[{namespace}:]{pvc-name}/{path}` | `pvc://my-pvc/results` or `pvc://default:my-pvc/results` |
 
 ### Authentication Options
 

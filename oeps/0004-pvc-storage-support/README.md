@@ -40,8 +40,8 @@ Currently, OME supports multiple storage backends (OCI Object Storage, HuggingFa
 ### Goals
 
 1. Enable BaseModel/ClusterBaseModel to reference models stored in PVCs using URI format:
-   - BaseModel: `pvc://{pvc-name}/{sub-path}` (PVC in same namespace)
-   - ClusterBaseModel: `pvc://{namespace}/{pvc-name}/{sub-path}` (PVC in specified namespace)
+   - BaseModel: `pvc://{pvc-name}/{sub-path}` (assumes same namespace as the BaseModel)
+   - ClusterBaseModel: `pvc://{namespace}:{pvc-name}/{sub-path}` (explicitly specifies namespace with colon separator)
 2. Support both ReadWriteMany (RWX) and ReadWriteOnce (RWO) access modes appropriately
 3. Automatically extract and populate model metadata (architecture, parameters, capabilities) from PVC-stored models
 4. Maintain compatibility with existing InferenceService scheduling and deployment mechanisms
@@ -101,8 +101,8 @@ As a data scientist, I have models stored on high-performance block storage expo
    - Metadata extraction happens once per model
 
 5. **Namespace Handling**:
-   - **BaseModel**: PVC must be in the same namespace, URI format: `pvc://{pvc-name}/{sub-path}`
-   - **ClusterBaseModel**: PVC namespace must be specified in URI: `pvc://{namespace}/{pvc-name}/{sub-path}`
+   - **BaseModel**: PVC is assumed to be in the same namespace, URI format: `pvc://{pvc-name}/{sub-path}`
+   - **ClusterBaseModel**: PVC namespace must be specified explicitly, URI format: `pvc://{namespace}:{pvc-name}/{sub-path}`
    - For ClusterBaseModel, metadata extraction jobs are created in the PVC's namespace
    - InferenceService pods will be scheduled in the PVC's namespace for ClusterBaseModel
 
@@ -365,8 +365,8 @@ metadata:
   name: llama2-7b-shared
 spec:
   storage:
-    storageUri: "pvc://model-storage/model-storage-pvc/models/llama2-7b"
-    # Format: pvc://{namespace}/{pvc-name}/{sub-path}
+    storageUri: "pvc://model-storage:model-storage-pvc/models/llama2-7b"
+    # Format: pvc://{namespace}:{pvc-name}/{sub-path}
   modelFormat:
     name: llama
 ```

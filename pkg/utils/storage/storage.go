@@ -58,8 +58,9 @@ type OCIStorageComponents struct {
 
 // PVCStorageComponents represents the components of a PVC storage URI
 type PVCStorageComponents struct {
-	PVCName string
-	SubPath string
+	Namespace string // Only used for ClusterBaseModel
+	PVCName   string
+	SubPath   string
 }
 
 // VendorStorageComponents represents the components of a vendor storage URI
@@ -128,7 +129,8 @@ func ValidateOCIStorageURI(uri string) error {
 }
 
 // ParsePVCStorageURI parses a PVC storage URI and returns its components
-// Format: pvc://{pvc-name}/{sub-path}
+// Format: pvc://{pvc-name}/{sub-path} OR pvc://{namespace}:{pvc-name}/{sub-path}
+// When namespace is not specified, it should be inferred from the BaseModel's namespace
 func ParsePVCStorageURI(uri string) (*PVCStorageComponents, error) {
 	if !strings.HasPrefix(uri, PVCStoragePrefix) {
 		return nil, fmt.Errorf("invalid PVC storage URI format: missing %s prefix", PVCStoragePrefix)
@@ -137,24 +139,76 @@ func ParsePVCStorageURI(uri string) (*PVCStorageComponents, error) {
 	// Remove prefix
 	path := strings.TrimPrefix(uri, PVCStoragePrefix)
 	if path == "" {
-		return nil, fmt.Errorf("invalid PVC storage URI format: missing PVC name")
+		return nil, fmt.Errorf("invalid PVC storage URI format: missing content after prefix")
 	}
 
-	// Split into PVC name and subpath
-	parts := strings.SplitN(path, "/", 2)
-	if len(parts) == 0 || parts[0] == "" {
-		return nil, fmt.Errorf("invalid PVC storage URI format: missing PVC name")
+	// Check if namespace is specified with colon separator
+	var namespace, pvcName, subPath string
+
+	// First, check if we have namespace:pvc-name format
+	firstSlashIdx := strings.Index(path, "/")
+	if firstSlashIdx == -1 {
+		return nil, fmt.Errorf("invalid PVC storage URI format: missing subpath")
 	}
 
-	// Require both PVC name and subpath
-	if len(parts) < 2 || parts[1] == "" {
+	firstPart := path[:firstSlashIdx]
+	remainingPath := path[firstSlashIdx+1:]
+
+	if colonIdx := strings.Index(firstPart, ":"); colonIdx != -1 {
+		// Format: namespace:pvc-name/sub-path
+		namespace = firstPart[:colonIdx]
+		pvcName = firstPart[colonIdx+1:]
+
+		if namespace == "" {
+			return nil, fmt.Errorf("invalid PVC storage URI format: empty namespace before colon")
+		}
+		if pvcName == "" {
+			return nil, fmt.Errorf("invalid PVC storage URI format: empty PVC name after colon")
+		}
+
+		// Check for multiple colons - not allowed
+		if strings.Contains(pvcName, ":") {
+			return nil, fmt.Errorf("invalid PVC storage URI format: multiple colons not allowed in namespace:pvc-name")
+		}
+
+		// Validate namespace format
+		if !isValidNamespace(namespace) {
+			return nil, fmt.Errorf("invalid PVC storage URI format: invalid namespace %q (must be lowercase alphanumeric with hyphens, max 63 chars)", namespace)
+		}
+	} else {
+		// Format: pvc-name/sub-path
+		pvcName = firstPart
+		if pvcName == "" {
+			return nil, fmt.Errorf("invalid PVC storage URI format: missing PVC name")
+		}
+	}
+
+	subPath = remainingPath
+	if subPath == "" {
 		return nil, fmt.Errorf("invalid PVC storage URI format: missing subpath")
 	}
 
 	return &PVCStorageComponents{
-		PVCName: parts[0],
-		SubPath: parts[1],
+		Namespace: namespace, // Empty string if not specified
+		PVCName:   pvcName,
+		SubPath:   subPath,
 	}, nil
+}
+
+// isValidNamespace checks if a string could be a valid Kubernetes namespace
+func isValidNamespace(s string) bool {
+	// Basic validation - K8s namespaces must be lowercase alphanumeric or hyphens
+	// This is a simplified check; actual K8s validation is more complex
+	if len(s) == 0 || len(s) > 63 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+			return false
+		}
+	}
+	// Can't start or end with hyphen
+	return s[0] != '-' && s[len(s)-1] != '-'
 }
 
 // ValidatePVCStorageURI validates if the given URI matches PVC storage format
