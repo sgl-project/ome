@@ -943,7 +943,7 @@ func inferCapabilities(model modelconfig.HuggingFaceModel) []string {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsSubstring(s, substr))))
+	return strings.Contains(s, substr)
 }
 
 func containsSubstring(s, substr string) bool {
