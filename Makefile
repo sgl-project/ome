@@ -555,7 +555,7 @@ test: fmt vet manifests envtest ## 🧪 Run all tests with coverage (optimized -
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
 	@echo "🔍 Filtering PKG coverage report..."
-	@cat coverage-pkg.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-pkg.out
+	@cat coverage-pkg.out.tmp | grep -v -E "(pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/|pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-pkg.out
 	@rm coverage-pkg.out.tmp
 	@echo "✅ Package tests passed"
 	
@@ -589,7 +589,7 @@ coverage: ## Show coverage for all packages
 	echo "Internal: $$int_cov%"; \
 	avg_cov=$$(awk "BEGIN {printf \"%.2f\", ($$cmd_cov + $$pkg_cov + $$int_cov) / 3}"); \
 	echo "\nAverage Coverage: $$avg_cov%"; \
-	if awk "BEGIN {exit !($$avg_cov < 45)}"; then \
+	if awk "BEGIN {exit !($$avg_cov < 49)}"; then \
 		echo "Average coverage $$avg_cov% is below minimum threshold of 45%"; \
 		exit 1; \
 	fi
