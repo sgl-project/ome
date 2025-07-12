@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -106,6 +107,7 @@ func TestSuccessfulConfigJsonExtraction(t *testing.T) {
 		"intermediate_size":       11008,
 		"num_hidden_layers":       32,
 		"num_attention_heads":     32,
+		"num_key_value_heads":     32,
 		"max_position_embeddings": 4096,
 		"vocab_size":              32000,
 		"torch_dtype":             "float16",
@@ -170,6 +172,7 @@ func TestVariousConfigJsonFormats(t *testing.T) {
 				"intermediate_size":       11008,
 				"num_hidden_layers":       32,
 				"num_attention_heads":     32,
+				"num_key_value_heads":     32,
 				"max_position_embeddings": 4096,
 				"vocab_size":              32000,
 				"torch_dtype":             "float16",
@@ -497,12 +500,10 @@ func TestFileSystemOperations(t *testing.T) {
 func TestMultipleConfigFileNames(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
-	// Create afero filesystem
-	fs := afero.NewMemMapFs()
-
-	// Create model directory
-	modelDir := "/model"
-	err := fs.MkdirAll(modelDir, 0755)
+	// Create a temporary directory structure
+	tempDir := t.TempDir()
+	modelDir := filepath.Join(tempDir, "model")
+	err := os.MkdirAll(modelDir, 0755)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
 	// Test different config file names
@@ -519,6 +520,7 @@ func TestMultipleConfigFileNames(t *testing.T) {
 			"intermediate_size":       11008,
 			"num_hidden_layers":       32,
 			"num_attention_heads":     32,
+			"num_key_value_heads":     32,
 			"max_position_embeddings": 4096,
 			"vocab_size":              32000,
 		}
@@ -527,13 +529,12 @@ func TestMultipleConfigFileNames(t *testing.T) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		configPath := filepath.Join(modelDir, configFile)
-		err = afero.WriteFile(fs, configPath, configJSON, 0644)
+		err = os.WriteFile(configPath, configJSON, 0644)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 
 		// Test that the file can be found and loaded
-		exists, err := afero.Exists(fs, configPath)
+		_, err = os.Stat(configPath)
 		g.Expect(err).NotTo(gomega.HaveOccurred())
-		g.Expect(exists).To(gomega.BeTrue(), "Config file %s should exist", configFile)
 
 		// Test loading the config
 		model, err := modelconfig.LoadModelConfig(configPath)
@@ -543,7 +544,7 @@ func TestMultipleConfigFileNames(t *testing.T) {
 
 		// Clean up for next iteration
 		if i < len(configFiles)-1 {
-			err = fs.Remove(configPath)
+			err = os.Remove(configPath)
 			g.Expect(err).NotTo(gomega.HaveOccurred())
 		}
 	}
