@@ -578,7 +578,6 @@ func TestParsePVCStorageURI(t *testing.T) {
 			wantErr: true,
 		},
 		{
-		{
 			name:    "pvc name with invalid characters (underscore)",
 			uri:     "pvc://my_pvc/results",
 			wantErr: true,
@@ -2684,6 +2683,77 @@ func TestPVCStorageURIParsingWithVariousSubpaths(t *testing.T) {
 				assert.NoError(t, err, tt.description)
 				assert.Equal(t, tt.expected, components, tt.description)
 			}
+		})
+	}
+}
+
+// TestPVCStorageValidationComprehensive tests comprehensive PVC storage validation scenarios
+// extracted from controller tests to improve test organization
+func TestPVCStorageValidationComprehensive(t *testing.T) {
+	testCases := []struct {
+		name          string
+		storageUri    string
+		expectError   bool
+		errorContains string
+		description   string
+	}{
+		{
+			name:        "PVC storage with simple subpath",
+			storageUri:  "pvc://my-pvc/models",
+			expectError: false,
+			description: "PVC storage with simple subpath should be valid",
+		},
+		{
+			name:        "PVC storage with nested subpath",
+			storageUri:  "pvc://my-pvc/path/to/models/llama2",
+			expectError: false,
+			description: "PVC storage with nested subpath should be valid",
+		},
+		{
+			name:        "PVC storage with namespace",
+			storageUri:  "pvc://storage-ns:my-pvc/models",
+			expectError: false,
+			description: "PVC storage with namespace should be valid",
+		},
+		{
+			name:        "PVC storage with special characters in subpath",
+			storageUri:  "pvc://my-pvc/models/llama2@7b#chat$hf",
+			expectError: false,
+			description: "PVC storage with special characters should be valid",
+		},
+		{
+			name:          "invalid PVC URI format",
+			storageUri:    "pvc://",
+			expectError:   true,
+			errorContains: "invalid PVC storage URI",
+			description:   "Invalid PVC URI format should return error",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test PVC URI validation
+			err := ValidatePVCStorageURI(tc.storageUri)
+			if tc.expectError {
+				assert.Error(t, err, tc.description)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains, tc.description)
+				}
+				return
+			}
+			assert.NoError(t, err, tc.description)
+
+			// Test storage type detection
+			storageType, err := GetStorageType(tc.storageUri)
+			assert.NoError(t, err, tc.description)
+			assert.Equal(t, StorageTypePVC, storageType, tc.description)
+
+			// Test PVC URI parsing
+			components, err := ParsePVCStorageURI(tc.storageUri)
+			assert.NoError(t, err, tc.description)
+			assert.NotNil(t, components, tc.description)
+			assert.NotEmpty(t, components.PVCName, tc.description)
+			assert.NotEmpty(t, components.SubPath, tc.description)
 		})
 	}
 }
