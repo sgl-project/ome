@@ -27,4 +27,5 @@ func init() {
 	rootCmd.AddCommand(CreateAgentCommand(NewReplicaAgent()))
 	rootCmd.AddCommand(CreateAgentCommand(NewServingAgent()))
 	rootCmd.AddCommand(CreateAgentCommand(NewFineTunedAdapterAgent()))
+	rootCmd.AddCommand(CreateAgentCommand(NewModelMetadataAgent()))
 }
