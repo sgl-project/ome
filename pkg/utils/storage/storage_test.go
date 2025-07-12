@@ -9,6 +9,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Test constants for commonly used model paths
+const (
+	// Base model paths
+	TestModelPathLlama2        = "models/llama2"
+	TestModelPathLlama27B      = "models/llama2-7b"
+	TestModelPathLlama27BBin   = "models/llama2-7b.bin"
+	TestModelPathLlama27BChat  = "models/llama2-7b-chat-hf"
+	TestModelPathLlama2Special = "models/llama2@7b#chat$hf"
+
+	// Extended paths
+	TestModelPathLlama27BExtended = "path/to/models/llama2-7b"
+	TestModelPathLlama2Extended   = "path/to/models/llama2"
+	TestModelPathLlama27BEnv      = "env/prod/models/llama2-7b"
+	TestModelPathLlama2Unicode    = "测试/模型/llama2-7b"
+)
+
 func TestParseOCIStorageURI(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -233,22 +249,22 @@ func TestParsePVCStorageURI(t *testing.T) {
 		},
 		{
 			name: "valid uri with ClusterBaseModel use case",
-			uri:  "pvc://model-storage:shared-pvc/path/to/models/llama2-7b",
+			uri:  "pvc://model-storage:shared-pvc/" + TestModelPathLlama27BExtended,
 			want: &PVCStorageComponents{
 				Namespace: "model-storage",
 				PVCName:   "shared-pvc",
-				SubPath:   "path/to/models/llama2-7b",
+				SubPath:   TestModelPathLlama27BExtended,
 			},
 			wantErr: false,
 		},
 		// Enhanced test cases for various subpath formats
 		{
 			name: "subpath with file extensions",
-			uri:  "pvc://my-pvc/models/llama2-7b.bin",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BBin,
 			want: &PVCStorageComponents{
 				Namespace: "",
 				PVCName:   "my-pvc",
-				SubPath:   "models/llama2-7b.bin",
+				SubPath:   TestModelPathLlama27BBin,
 			},
 			wantErr: false,
 		},
@@ -264,11 +280,11 @@ func TestParsePVCStorageURI(t *testing.T) {
 		},
 		{
 			name: "subpath with unicode characters",
-			uri:  "pvc://my-pvc/测试/模型/llama2-7b",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Unicode,
 			want: &PVCStorageComponents{
 				Namespace: "",
 				PVCName:   "my-pvc",
-				SubPath:   "测试/模型/llama2-7b",
+				SubPath:   TestModelPathLlama2Unicode,
 			},
 			wantErr: false,
 		},
@@ -424,11 +440,11 @@ func TestParsePVCStorageURI(t *testing.T) {
 		},
 		{
 			name: "subpath with environment-like paths",
-			uri:  "pvc://my-pvc/env/prod/models/llama2-7b",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BEnv,
 			want: &PVCStorageComponents{
 				Namespace: "",
 				PVCName:   "my-pvc",
-				SubPath:   "env/prod/models/llama2-7b",
+				SubPath:   TestModelPathLlama27BEnv,
 			},
 			wantErr: false,
 		},
@@ -589,7 +605,7 @@ func TestGetStorageType(t *testing.T) {
 		},
 		{
 			name: "pvc storage with complex subpath",
-			uri:  "pvc://my-pvc/path/to/models/llama2-7b.bin",
+			uri:  "pvc://my-pvc/path/to/" + TestModelPathLlama27BBin,
 			want: StorageTypePVC,
 		},
 		{
@@ -599,7 +615,7 @@ func TestGetStorageType(t *testing.T) {
 		},
 		{
 			name: "pvc storage with unicode characters",
-			uri:  "pvc://my-pvc/测试/模型/llama2-7b",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Unicode,
 			want: StorageTypePVC,
 		},
 		{
@@ -609,7 +625,7 @@ func TestGetStorageType(t *testing.T) {
 		},
 		{
 			name: "pvc storage with file extensions",
-			uri:  "pvc://my-pvc/models/llama2-7b.bin",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BBin,
 			want: StorageTypePVC,
 		},
 		{
@@ -664,7 +680,7 @@ func TestGetStorageType(t *testing.T) {
 		},
 		{
 			name: "pvc storage with environment-like paths",
-			uri:  "pvc://my-pvc/env/prod/models/llama2-7b",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BEnv,
 			want: StorageTypePVC,
 		},
 		{
@@ -1554,7 +1570,7 @@ func TestValidatePVCStorageURI(t *testing.T) {
 		},
 		{
 			name:    "valid uri with ClusterBaseModel use case",
-			uri:     "pvc://model-storage:shared-pvc/path/to/models/llama2-7b",
+			uri:     "pvc://model-storage:shared-pvc/" + TestModelPathLlama27BExtended,
 			wantErr: false,
 		},
 		{
@@ -1589,7 +1605,7 @@ func TestValidatePVCStorageURI(t *testing.T) {
 		},
 		{
 			name:    "subpath with file extensions",
-			uri:     "pvc://my-pvc/models/llama2-7b.bin",
+			uri:     "pvc://my-pvc/" + TestModelPathLlama27BBin,
 			wantErr: false, // This should be valid
 		},
 		{
@@ -2226,28 +2242,28 @@ func TestPVCStorageTypeDetectionComprehensive(t *testing.T) {
 	}{
 		{
 			name:         "valid PVC URI without namespace",
-			uri:          "pvc://my-pvc/models/llama2",
+			uri:          "pvc://my-pvc/" + TestModelPathLlama2,
 			expectedType: StorageTypePVC,
 			wantErr:      false,
 			description:  "PVC URI without namespace should be detected as PVC type",
 		},
 		{
 			name:         "valid PVC URI with namespace",
-			uri:          "pvc://default:my-pvc/models/llama2",
+			uri:          "pvc://default:my-pvc/" + TestModelPathLlama2,
 			expectedType: StorageTypePVC,
 			wantErr:      false,
 			description:  "PVC URI with namespace should be detected as PVC type",
 		},
 		{
 			name:         "PVC URI with complex subpath",
-			uri:          "pvc://my-pvc/path/to/models/llama2-7b-chat-hf",
+			uri:          "pvc://my-pvc/path/to/" + TestModelPathLlama27BChat,
 			expectedType: StorageTypePVC,
 			wantErr:      false,
 			description:  "PVC URI with complex subpath should be detected as PVC type",
 		},
 		{
 			name:         "PVC URI with special characters in subpath",
-			uri:          "pvc://my-pvc/models/llama2@7b#chat$hf",
+			uri:          "pvc://my-pvc/" + TestModelPathLlama2Special,
 			expectedType: StorageTypePVC,
 			wantErr:      false,
 			description:  "PVC URI with special characters should be detected as PVC type",
@@ -2321,11 +2337,11 @@ func TestPVCStorageURIParsingWithVariousSubpaths(t *testing.T) {
 		},
 		{
 			name: "nested subpath",
-			uri:  "pvc://my-pvc/path/to/models/llama2",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Extended,
 			expected: &PVCStorageComponents{
 				Namespace: "",
 				PVCName:   "my-pvc",
-				SubPath:   "path/to/models/llama2",
+				SubPath:   TestModelPathLlama2Extended,
 			},
 			wantErr:     false,
 			description: "Nested subpath should be parsed correctly",
@@ -2343,11 +2359,11 @@ func TestPVCStorageURIParsingWithVariousSubpaths(t *testing.T) {
 		},
 		{
 			name: "subpath with special characters",
-			uri:  "pvc://my-pvc/models/llama2@7b#chat$hf",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Special,
 			expected: &PVCStorageComponents{
 				Namespace: "",
 				PVCName:   "my-pvc",
-				SubPath:   "models/llama2@7b#chat$hf",
+				SubPath:   TestModelPathLlama2Special,
 			},
 			wantErr:     false,
 			description: "Subpath with special characters should be parsed correctly",
@@ -2409,22 +2425,22 @@ func TestPVCStorageURIParsingWithVariousSubpaths(t *testing.T) {
 		},
 		{
 			name: "subpath with namespace",
-			uri:  "pvc://default:my-pvc/models/llama2",
+			uri:  "pvc://default:my-pvc/" + TestModelPathLlama2,
 			expected: &PVCStorageComponents{
 				Namespace: "default",
 				PVCName:   "my-pvc",
-				SubPath:   "models/llama2",
+				SubPath:   TestModelPathLlama2,
 			},
 			wantErr:     false,
 			description: "Subpath with namespace should be parsed correctly",
 		},
 		{
 			name: "subpath with complex namespace",
-			uri:  "pvc://my-namespace-123:my-pvc/path/to/models/llama2-7b",
+			uri:  "pvc://my-namespace-123:my-pvc/" + TestModelPathLlama27BExtended,
 			expected: &PVCStorageComponents{
 				Namespace: "my-namespace-123",
 				PVCName:   "my-pvc",
-				SubPath:   "path/to/models/llama2-7b",
+				SubPath:   TestModelPathLlama27BExtended,
 			},
 			wantErr:     false,
 			description: "Subpath with complex namespace should be parsed correctly",
@@ -2466,7 +2482,7 @@ func TestPVCStorageValidationComprehensive(t *testing.T) {
 		},
 		{
 			name:        "PVC storage with nested subpath",
-			storageUri:  "pvc://my-pvc/path/to/models/llama2",
+			storageUri:  "pvc://my-pvc/" + TestModelPathLlama2Extended,
 			expectError: false,
 			description: "PVC storage with nested subpath should be valid",
 		},
@@ -2478,7 +2494,7 @@ func TestPVCStorageValidationComprehensive(t *testing.T) {
 		},
 		{
 			name:        "PVC storage with special characters in subpath",
-			storageUri:  "pvc://my-pvc/models/llama2@7b#chat$hf",
+			storageUri:  "pvc://my-pvc/" + TestModelPathLlama2Special,
 			expectError: false,
 			description: "PVC storage with special characters should be valid",
 		},
