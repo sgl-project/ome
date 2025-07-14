@@ -1,0 +1,27 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kimi-k2-instruct
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: kimi-k2-instruct
+  namespace: kimi-k2-instruct
+spec:
+  model:
+    name: kimi-k2-instruct
+  runtime:
+    name: srt-kimi-k2-pd
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  decoder:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
+    

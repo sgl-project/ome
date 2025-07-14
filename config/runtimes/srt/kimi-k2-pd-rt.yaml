@@ -1,0 +1,348 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-kimi-k2-pd
+spec:
+  disabled: false
+  modelSizeRange:
+    min: 1T
+    max: 1.5T
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.48.3"
+      modelArchitecture: DeepseekV3ForCausalLM
+      quantization: "fp8"
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - openAI
+  engineConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/profile: "oci-roce"
+      rdma.ome.io/container-name: "ome-container"
+    leader:
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      runner:
+        name: ome-container
+        image: docker.io/lmsysorg/sglang:dev
+        env:
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: "true"
+          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
+            value: "100000"
+          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
+            value: "100000"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+        command:
+          - sh
+          - -c
+          - >
+            MC_TE_METRIC=true;
+            SGLANG_TBO_DEBUG=1;
+            python3 -m sglang.launch_server
+            --port 8080
+            --host 0.0.0.0
+            --model-path ${MODEL_PATH}
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --chunked-prefill-size 524288
+            --max-prefill-tokens 32768
+            --page-size 64
+            --ep-dispatch-algorithm dynamic
+            --eplb-algorithm deepseek
+            --enable-dp-lm-head
+            --watchdog-timeout 1000000
+            --disable-cuda-graph
+            --enable-two-batch-overlap
+            --enable-dp-attention
+            --disable-shared-experts-fusion
+            --dp-size ${PARALLELISM_SIZE}
+            --disable-radix-cache
+            --enable-deepep-moe
+            --deepep-mode normal
+            --disaggregation-mode prefill
+            --mem-fraction-static 0.849
+            --context-length 2176
+            --tp-size ${PARALLELISM_SIZE}
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --decode-log-interval 1
+            --max-running-requests 1024
+            --max-total-tokens 131072
+        resources:
+          requests:
+            nvidia.com/gpu: 8
+          limits:
+            nvidia.com/gpu: 8
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          failureThreshold: 5
+          successThreshold: 1
+          periodSeconds: 60
+          timeoutSeconds: 60
+    worker:
+      size: 3
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      runner:
+        name: ome-container
+        image: docker.io/lmsysorg/sglang:dev
+        command:
+          - sh
+          - -c
+          - >
+            python3 -m sglang.launch_server
+            --model-path ${MODEL_PATH}
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --chunked-prefill-size 524288
+            --max-prefill-tokens 32768
+            --page-size 64
+            --ep-dispatch-algorithm dynamic
+            --eplb-algorithm deepseek
+            --enable-dp-lm-head
+            --enable-dp-attention
+            --dp-size ${PARALLELISM_SIZE}
+            --disable-radix-cache
+            --enable-deepep-moe
+            --disable-cuda-graph
+            --enable-two-batch-overlap
+            --disable-shared-experts-fusion
+            --deepep-mode normal
+            --disaggregation-mode prefill
+            --max-total-tokens 131072
+            --watchdog-timeout 1000000
+            --mem-fraction-static 0.849
+            --context-length 2176
+            --tp-size ${PARALLELISM_SIZE}
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --port 8080
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --decode-log-interval 1
+            --host 0.0.0.0
+            --max-running-requests 1024
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+          requests:
+            nvidia.com/gpu: "8"
+        env:
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: "true"
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: "8"
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: "0"
+          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
+            value: "100000"
+          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
+            value: "100000"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
+            value: "8"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          - name: SGL_CHUNKED_PREFIX_CACHE_THRESHOLD
+            value: "0"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+  decoderConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/profile: "oci-roce"
+      rdma.ome.io/container-name: "ome-container"
+    leader:
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      runner:
+        name: ome-container
+        image: docker.io/lmsysorg/sglang:dev
+        env:
+          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
+            value: "16"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
+            value: "100000"
+          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
+            value: "100000"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+        command:
+          - sh
+          - -c
+          - >
+            python3 -m sglang.launch_server
+            --port 8080
+            --host 0.0.0.0
+            --page-size 64
+            --model-path ${MODEL_PATH}
+            --enable-dp-attention
+            --enable-dp-lm-head
+            --dp-size ${PARALLELISM_SIZE}
+            --disable-radix-cache
+            --disable-shared-experts-fusion
+            --enable-deepep-moe
+            --deepep-mode low_latency
+            --disaggregation-mode decode
+            --enable-two-batch-overlap
+            --watchdog-timeout 1000000
+            --mem-fraction-static 0.849
+            --context-length 2176
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --cuda-graph-max-bs 64
+            --max-running-requests 15360
+            --tp-size ${PARALLELISM_SIZE}
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --decode-log-interval 1
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --ep-num-redundant-experts ${PARALLELISM_SIZE}
+        resources:
+          requests:
+            nvidia.com/gpu: 8
+          limits:
+            nvidia.com/gpu: 8
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          failureThreshold: 5
+          successThreshold: 1
+          periodSeconds: 60
+          timeoutSeconds: 60
+    worker:
+      size: 3
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      runner:
+        name: ome-container
+        image: docker.io/lmsysorg/sglang:dev
+        command:
+          - sh
+          - -c
+          - >
+            python3 -m sglang.launch_server
+            --model-path ${MODEL_PATH}
+            --page-size 64
+            --enable-dp-attention
+            --enable-dp-lm-head
+            --dp-size ${PARALLELISM_SIZE}
+            --disable-radix-cache
+            --disable-shared-experts-fusion
+            --enable-deepep-moe
+            --deepep-mode low_latency
+            --watchdog-timeout 1000000
+            --enable-two-batch-overlap
+            --disaggregation-mode decode
+            --mem-fraction-static 0.849
+            --context-length 2176
+            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --cuda-graph-max-bs 64
+            --max-running-requests 15360
+            --tp-size ${PARALLELISM_SIZE}
+            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
+            --nnodes ${LWS_GROUP_SIZE}
+            --node-rank ${LWS_WORKER_INDEX}
+            --port 8080
+            --decode-log-interval 1
+            --host 0.0.0.0
+            --trust-remote-code
+            --moe-dense-tp-size 1
+            --ep-num-redundant-experts ${PARALLELISM_SIZE}
+        resources:
+          limits:
+            nvidia.com/gpu: "8"
+          requests:
+            nvidia.com/gpu: "8"
+        env:
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: "24"
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: "0"
+          - name: NVSHMEM_IB_TRAFFIC_CLASS
+            value: "16"
+          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
+            value: "100000"
+          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
+            value: "100000"
+          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
+            value: "16"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+  routerConfig:
+    runner:
+      name: router
+      image: fra.ocir.io/idqj093njucb/sgl-router:dev7
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      ports:
+        - containerPort: 8080
+          name: http
+      command:
+        - sh
+        - -c
+        - >
+          python3 -m sglang_router.launch_router
+          --host 0.0.0.0
+          --port 8080
+          --pd-disaggregation
+          --policy cache_aware
+          --service-discovery
+          --service-discovery-namespace "${NAMESPACE}"
+          --service-discovery-port 8080
+          --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
