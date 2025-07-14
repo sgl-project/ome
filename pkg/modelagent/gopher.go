@@ -353,7 +353,9 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				s.logger.Warnf("No model object found in task, skipping config parsing")
 			}
 
-			_ = s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel)
+			if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel); err != nil {
+				s.logger.Errorf("Failed to parse and update model config: %v", err)
+			}
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping download for model %s", modelInfo)
 		case storage.StorageTypeHuggingFace:
@@ -915,6 +917,8 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
 	}
 
-	_ = s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel)
+	if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel); err != nil {
+		s.logger.Errorf("Failed to parse and update model config: %v", err)
+	}
 	return nil
 }
