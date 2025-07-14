@@ -181,9 +181,6 @@ OME-Agent uses subcommands to run specific tasks. Use the following commands:=
 ```bash
 ./ome-agent enigma --config <path-to-config.yaml> --debug
 ```
-```bash
-./ome-agent training-agent --config <path-to-config.yaml> --debug
-```
 
 
 ## Development Guide
@@ -203,7 +200,6 @@ make push-ome-agent-image
 make run-ome-agent-enigma
 make run-ome-agent-hf-download
 make run-ome-agent-os-replica
-make run-ome-agent-training-agent
 ```
 
 ### Code Structure
@@ -214,23 +210,28 @@ OME-Agent follows a modular and scalable design, which makes it easy to extend w
 
 The main directory layout might look something like this:
 ```
-ome-agent/
-├── cmd/                       # Contains Cobra subcommands
-│   ├──main.go                 # Main entry point for the CLI
-│   ├── hf_download_agent.go   # Subcommand for HuggingFace model downloads
-│   ├── enigma_agent.go        # Subcommand for model encryption/decryption
-│   ├── replica_agent.go       # Subcommand for object storage replication
-│   └── training_agent.go      # Subcommand for training sidecar agent
-├── internal/                  # Contains the core business logic for each feature
-│   ├── enigma/                # Logic for encryption/decryption
-│   ├── replica/               # Logic for replication across OCI buckets
-│   └── training-agent/        # Logic for training sidecar agent
-├── pkg/                       # Shared libraries and utility functions
-│   ├── configutils/           # Utility functions for handling configuration files
-│   ├── constants/             # Common constants used across the project
-│   ├── logging/               # Logging module for consistent logging across commands
-│   ├── secrets/               # Secret management (e.g., KMS integration for decryption)
-│   └── hf_download/           # Logic for HuggingFace downloading (independent enough to be its own package)
+ome/
+├── cmd/                            # Contains subbinaries
+│   └── ome-agent/                  # Contains Cobra subcommands
+│       ├── main.go                 # Main entry point for the CLI
+│       ├── hf_download_agent.go    # Subcommand for HuggingFace model downloads
+│       ├── enigma_agent.go         # Subcommand for model encryption/decryption
+│       ├── model_metadata_agent.go # Subcommand for model metadata extraction
+│       ├── replica_agent.go        # Subcommand for object storage replication
+│       └── serving_agent.go        # Subcommand for serving sidecar agent
+│       └── fine-tuned-adapter.go   # Subcommand for fine-tuned adapter
+├── internal/                       # Contains the core business logic for each feature
+│   ├── enigma/                     # Logic for encryption/decryption
+│   ├── fine-tuned-adapter/         # Logic for fine-tuned adapter
+│   ├── model-metadata/             # Logic for model metadata extraction
+│   ├── replica/                    # Logic for replication across OCI buckets
+│   └── serving-agent/              # Logic for serving sidecar agent
+├── pkg/                            # Shared libraries and utility functions
+│   ├── configutils/                # Utility functions for handling configuration files
+│   ├── constants/                  # Common constants used across the project
+│   ├── logging/                    # Logging module for consistent logging across commands
+│   ├── secrets/                    # Secret management (e.g., KMS integration for decryption)
+│   └── hf_download/                # Logic for HuggingFace downloading (independent enough to be its own package)
 ```
 
 ### Key Components Explained
