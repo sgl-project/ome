@@ -158,17 +158,7 @@ destination:
   bucket: dest-bucket
   region: us-east-1
 `
-	case "training-agent":
-		content = `
-debug: true
-# Mock training agent config
-model_path: /path/to/model
-batch_size: 32
-auth_type: instance_principal
-input_object_store:
-  bucket: input-bucket
-  region: us-west-2
-`
+
 	case "serving-agent":
 		content = `
 debug: true
@@ -238,21 +228,6 @@ destination:
   namespace: mock-namespace
   prefix: models/
 temp_dir: %s
-`, mockDataDir)
-
-	case "training-agent":
-		content = fmt.Sprintf(`
-debug: true
-# Detailed mock training agent config
-model_path: %s/model
-batch_size: 32
-epochs: 3
-learning_rate: 0.001
-auth_type: instance_principal
-input_object_store:
-  bucket: input-bucket
-  region: us-west-2
-  namespace: mock-namespace
 `, mockDataDir)
 
 	case "serving-agent":
