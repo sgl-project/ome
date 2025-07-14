@@ -598,7 +598,7 @@ coverage: ## Show coverage for all packages
 .PHONY: integration-test
 integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."
-	go test -v ./integration_tests/... -ginkgo.v -ginkgo.trace
+	go test -v ./tests/... -ginkgo.v -ginkgo.trace
 	@echo "✅ Integration tests passed"
 
 
