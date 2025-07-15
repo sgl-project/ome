@@ -39,10 +39,6 @@ func AppendVolumeMountIfNotExist(container *v1.Container, volumeMount *v1.Volume
 	container.VolumeMounts = append(container.VolumeMounts, *volumeMount)
 }
 
-func AppendContainerArgs(container *v1.Container, args *[]string) {
-	container.Args = append(container.Args, *args...)
-}
-
 func AppendEnvVars(container *v1.Container, envVars *[]v1.EnvVar) {
 	container.Env = append(container.Env, *envVars...)
 }

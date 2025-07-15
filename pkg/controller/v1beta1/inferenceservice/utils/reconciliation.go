@@ -3,8 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 
 	goerrors "github.com/pkg/errors"
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
@@ -13,25 +11,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GetServingRuntime Get a ServingRuntime by name. First, ServingRuntimes in the given namespace will be checked.
-// If a resource of the specified name is not found, then ClusterServingRuntimes will be checked.
-func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta1.ServingRuntimeSpec, error) {
-	runtime := &v1beta1.ServingRuntime{}
-	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, runtime)
+// GetBaseModel retrieves a BaseModel or ClusterBaseModel by name.
+// It first tries to find a namespace-scoped BaseModel, then falls back to a cluster-scoped ClusterBaseModel.
+// Returns the model spec, metadata, and any error encountered.
+func GetBaseModel(cl client.Client, name string, namespace string) (*v1beta1.BaseModelSpec, *metav1.ObjectMeta, error) {
+	baseModel := &v1beta1.BaseModel{}
+	err := cl.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, baseModel)
 	if err == nil {
-		return &runtime.Spec, nil
+		return &baseModel.Spec, &baseModel.ObjectMeta, nil
 	} else if !errors.IsNotFound(err) {
-		return nil, err
+		return nil, nil, err
 	}
-
-	clusterRuntime := &v1beta1.ClusterServingRuntime{}
-	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterRuntime)
+	clusterBaseModel := &v1beta1.ClusterBaseModel{}
+	err = cl.Get(context.TODO(), client.ObjectKey{Name: name}, clusterBaseModel)
 	if err == nil {
-		return &clusterRuntime.Spec, nil
+		return &clusterBaseModel.Spec, &clusterBaseModel.ObjectMeta, nil
 	} else if !errors.IsNotFound(err) {
-		return nil, err
+		return nil, nil, err
 	}
-	return nil, goerrors.New("No ServingRuntimes or ClusterServingRuntimes with the name: " + name)
+	return nil, nil, goerrors.New("No BaseModel or ClusterBaseModel with the name: " + name)
 }
 
 // GetFineTunedWeight Get the fine-tuned weight from the given fine-tuned weight name.
@@ -62,59 +60,6 @@ func ReconcileBaseModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1be
 	}
 
 	return baseModel, baseModelMeta, nil
-}
-
-// GetRuntimeForNewArchitecture retrieves the runtime for the new architecture
-// It either uses the specified runtime or auto-selects based on the model
-func GetRuntimeForNewArchitecture(cl client.Client, isvc *v1beta1.InferenceService, baseModel *v1beta1.BaseModelSpec) (*v1beta1.ServingRuntimeSpec, string, error) {
-	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
-		// Use specified runtime
-		rt, err := GetServingRuntime(cl, isvc.Spec.Runtime.Name, isvc.Namespace)
-		if err != nil {
-			return nil, "", err
-		}
-
-		if rt.IsDisabled() {
-			return nil, "", fmt.Errorf("specified runtime %s is disabled", isvc.Spec.Runtime.Name)
-		}
-
-		// Verify the runtime supports the model
-		if err := RuntimeSupportsModel(baseModel, rt, isvc.Spec.Runtime.Name); err != nil {
-			// Fill in model name in error if available
-			if compatErr, ok := err.(*RuntimeCompatibilityError); ok {
-				compatErr.ModelName = isvc.Spec.Model.Name
-			}
-			return nil, "", err
-		}
-
-		return rt, isvc.Spec.Runtime.Name, nil
-	}
-
-	// Auto-select runtime based on model
-	runtimes, excludedRuntimes, err := GetSupportingRuntimes(baseModel, cl, isvc.Namespace)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if len(runtimes) == 0 {
-		// Generate a detailed error message including why runtimes were excluded
-		var excludedReasons []string
-		for name, reason := range excludedRuntimes {
-			excludedReasons = append(excludedReasons, fmt.Sprintf("%s: %v", name, reason))
-		}
-
-		errMsg := fmt.Sprintf("no runtime found to support model %s with format %s",
-			isvc.Spec.Model.Name, baseModel.ModelFormat.Name)
-		if len(excludedReasons) > 0 {
-			sort.Strings(excludedReasons)
-			errMsg += ". Excluded runtimes: " + strings.Join(excludedReasons, "; ")
-		}
-		return nil, "", goerrors.New(errMsg)
-	}
-
-	// Use the first supporting runtime (highest priority)
-	selectedRuntime := &runtimes[0]
-	return &selectedRuntime.Spec, selectedRuntime.Name, nil
 }
 
 // MergeRuntimeSpecs merges the runtime and isvc specs to get final engine, decoder, and router specs

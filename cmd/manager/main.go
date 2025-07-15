@@ -15,6 +15,7 @@ import (
 	v1beta1benchmarkjobcontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 	v1beta1isvccontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/webhook/admission/benchmark"
 	"github.com/sgl-project/ome/pkg/webhook/admission/isvc"
@@ -320,7 +321,10 @@ func main() {
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&v1beta1.InferenceService{}).
 			WithDefaulter(&isvc.InferenceServiceDefaulter{}).
-			WithValidator(&isvc.InferenceServiceValidator{Client: mgr.GetClient()}).
+			WithValidator(&isvc.InferenceServiceValidator{
+				Client:          mgr.GetClient(),
+				RuntimeSelector: runtimeselector.New(mgr.GetClient()),
+			}).
 			Complete(); err != nil {
 			setupLog.Error(err, "Failed to create InferenceService webhook", "webhook", "v1beta1")
 			os.Exit(1)
