@@ -6,10 +6,11 @@
 *       @slin1237
 
 # Config files
-/config/  @slin1237 @CatherineSue @zhyncs
+/config/  @slin1237 @CatherineSue
 
 # Core Go packages
 /pkg/controller/v1beta1/benchmark   @CatherineSue
+/pkg/runtimeselector @pallasathena92
 /pkg/controller/v1beta1/inferenceservice @slin1237 @CatherineSue @YouNeedCryDear
 /pkg/principals   @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
 /pkg/ociobjectstore @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
