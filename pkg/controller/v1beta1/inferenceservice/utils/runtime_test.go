@@ -151,7 +151,8 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:   "pytorch",
+							Weight: 1,
 						},
 						AutoSelect: ptr(true),
 					},
@@ -171,7 +172,8 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "onnx",
+							Name:   "onnx",
+							Weight: 1,
 						},
 						AutoSelect: ptr(true),
 					},
@@ -191,7 +193,8 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "tensorflow",
+							Name:   "tensorflow",
+							Weight: 1,
 						},
 						AutoSelect: ptr(true),
 					},
@@ -211,13 +214,22 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:   "pytorch",
+							Weight: 1,
 						},
 						AutoSelect: ptr(true),
 					},
 					{
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "onnx",
+							Name:   "onnx",
+							Weight: 1,
+						},
+						AutoSelect: ptr(true),
+					},
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "tensorflow",
+							Weight: 1,
 						},
 						AutoSelect: ptr(true),
 					},
@@ -238,9 +250,27 @@ func TestGetSupportingRuntimes(t *testing.T) {
 				SupportedModelFormats: []v1beta1.SupportedModelFormat{
 					{
 						ModelFormat: &v1beta1.ModelFormat{
-							Name: "pytorch",
+							Name:   "pytorch",
+							Weight: 1,
 						},
 						AutoSelect: ptr(true),
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "no-autoselect-rt",
+				Namespace: "default",
+			},
+			Spec: v1beta1.ServingRuntimeSpec{
+				SupportedModelFormats: []v1beta1.SupportedModelFormat{
+					{
+						ModelFormat: &v1beta1.ModelFormat{
+							Name:   "pytorch",
+							Weight: 1,
+						},
+						AutoSelect: ptr(false),
 					},
 				},
 			},
@@ -253,6 +283,90 @@ func TestGetSupportingRuntimes(t *testing.T) {
 	}
 	for _, rt := range runtimes {
 		_ = fakeClient.Create(context.Background(), rt)
+	}
+
+	tests := []struct {
+		name         string
+		model        *v1beta1.BaseModel
+		namespace    string
+		wantRuntimes []string
+		wantErrors   map[string]string
+	}{
+		{
+			name:      "small pytorch model - should match pytorch-rt and multi-format-rt",
+			model:     baseModels[0], // small-model (7B pytorch)
+			namespace: "default",
+			wantRuntimes: []string{
+				"pytorch-rt",      // exact format match, size in range
+				"multi-format-rt", // supports pytorch, size in range
+			},
+			wantErrors: map[string]string{
+				"disabled-rt":      "runtime is disabled",
+				"no-autoselect-rt": "runtime does not have auto-select enabled",
+				"onnx-rt":          "runtime onnx-rt does not support model : model format 'mt:pytorch' not in supported formats",
+				"tensorflow-rt":    "runtime tensorflow-rt does not support model : model format 'mt:pytorch' not in supported formats",
+			},
+		},
+		{
+			name:      "medium onnx model - should match onnx-rt and multi-format-rt",
+			model:     baseModels[1], // medium-model (13B onnx)
+			namespace: "default",
+			wantRuntimes: []string{
+				"onnx-rt",         // exact format match, size in range
+				"multi-format-rt", // supports onnx, size in range
+			},
+			wantErrors: map[string]string{
+				"disabled-rt":      "runtime is disabled",
+				"no-autoselect-rt": "runtime no-autoselect-rt does not support model : model format 'mt:onnx' not in supported formats",
+				"pytorch-rt":       "runtime pytorch-rt does not support model : model format 'mt:onnx' not in supported formats",
+				"tensorflow-rt":    "runtime tensorflow-rt does not support model : model format 'mt:onnx' not in supported formats",
+			},
+		},
+		{
+			name:      "large tensorflow model - should match tensorflow-rt only",
+			model:     baseModels[2], // large-model (70B tensorflow)
+			namespace: "default",
+			wantRuntimes: []string{
+				"tensorflow-rt", // exact format match, size in range
+			},
+			wantErrors: map[string]string{
+				"disabled-rt":      "runtime is disabled",
+				"no-autoselect-rt": "runtime no-autoselect-rt does not support model : model format 'mt:tensorflow' not in supported formats",
+				"pytorch-rt":       "runtime pytorch-rt does not support model : model format 'mt:tensorflow' not in supported formats",
+				"onnx-rt":          "runtime onnx-rt does not support model : model format 'mt:tensorflow' not in supported formats",
+				"multi-format-rt":  "runtime multi-format-rt does not support model : model size 70B is outside supported range [1B, 20B]",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runtimes, excludedRuntimes, err := GetSupportingRuntimes(&tt.model.Spec, fakeClient, tt.namespace)
+			// Assume no error for fake client
+			assert.NoError(t, err)
+
+			// Check that we got the expected number of supporting runtimes
+			assert.Equal(t, len(tt.wantRuntimes), len(runtimes),
+				"Expected %d supporting runtimes, got %d", len(tt.wantRuntimes), len(runtimes))
+
+			// Check that the returned runtimes match our expectations
+			gotRuntimeNames := make([]string, len(runtimes))
+			for i, rt := range runtimes {
+				gotRuntimeNames[i] = rt.Name
+			}
+			assert.ElementsMatch(t, tt.wantRuntimes, gotRuntimeNames,
+				"Expected runtimes %v, got %v", tt.wantRuntimes, gotRuntimeNames)
+
+			// Check excluded runtimes
+			assert.Len(t, excludedRuntimes, len(tt.wantErrors),
+				"Expected %d excluded runtimes, got %d", len(tt.wantErrors), len(excludedRuntimes))
+			for runtimeName, expectedError := range tt.wantErrors {
+				actualError, ok := excludedRuntimes[runtimeName]
+				if assert.True(t, ok, "expected runtime %s to be excluded", runtimeName) {
+					assert.Equal(t, expectedError, actualError.Error())
+				}
+			}
+		})
 	}
 }
 

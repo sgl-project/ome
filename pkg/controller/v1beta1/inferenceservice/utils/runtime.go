@@ -366,7 +366,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 			if !modelFormatMatches {
 				return modelFormatMatches
 			}
-		} else {
+		} else if (supportedFormat.ModelFormat.Version != nil) != (baseModel.ModelFormat.Version != nil) {
 			return false
 		}
 	} else if (supportedFormat.ModelFormat != nil) != (&baseModel.ModelFormat != nil) {
@@ -388,7 +388,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 			if !modelFrameworkMatches {
 				return modelFrameworkMatches
 			}
-		} else {
+		} else if (supportedFormat.ModelFramework.Version != nil) != (baseModel.ModelFramework.Version != nil) {
 			return false
 		}
 	} else if (supportedFormat.ModelFramework != nil) != (baseModel.ModelFramework != nil) {
