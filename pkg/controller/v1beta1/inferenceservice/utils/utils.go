@@ -11,12 +11,6 @@ import (
 	"github.com/sgl-project/ome/pkg/constants"
 )
 
-/*
-GetDeploymentMode returns the current deployment mode based on annotations and config.
-If a valid deployment mode is specified in annotations, it is used.
-Otherwise, returns the default deployment mode from config.
-*/
-
 func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (bool, error) {
 	mergedFineTunedWeights, err := IsMergedFineTunedWeight(fineTunedWeights[0])
 	if err != nil {
@@ -38,7 +32,6 @@ func IsMergedFineTunedWeight(fineTunedWeight *v1beta1.FineTunedWeight) (bool, er
 	return false, nil
 }
 
-// function to get generate scaledObject name
 func GetScaledObjectName(isvcName string) string {
 	const (
 		prefix     = "scaledobject-"

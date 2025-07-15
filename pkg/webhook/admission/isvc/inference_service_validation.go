@@ -7,6 +7,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -40,7 +41,8 @@ var (
 // +kubebuilder:object:generate=false
 // +k8s:openapi-gen=false
 type InferenceServiceValidator struct {
-	Client client.Client
+	Client          client.Client
+	RuntimeSelector runtimeselector.Selector
 }
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-inferenceservice,mutating=false,failurePolicy=fail,groups=ome.io,resources=inferenceservices,versions=v1beta1,name=inferenceservice.ome-webhook-server.validator
@@ -234,14 +236,25 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 		return warnings, fmt.Errorf("model %s is disabled", isvc.Spec.Model.Name)
 	}
 
-	// Use the same runtime resolution logic as the reconciler
-	_, rtName, err := isvcutils.GetRuntimeForNewArchitecture(v.Client, isvc, baseModel)
-	if err != nil {
-		return warnings, fmt.Errorf("no supporting runtime found for model %s and engine does not have complete runner configuration", isvc.Spec.Model.Name)
+	// Check runtime selection/validation
+	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
+		// Validate specified runtime
+		if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc.Namespace); err != nil {
+			return warnings, fmt.Errorf("runtime %s does not support model %s: %w",
+				isvc.Spec.Runtime.Name, isvc.Spec.Model.Name, err)
+		}
+		warnings = append(warnings, fmt.Sprintf("Runtime %s is valid for model %s",
+			isvc.Spec.Runtime.Name, isvc.Spec.Model.Name))
+	} else {
+		// Check if runtime can be auto-selected
+		selection, err := v.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc.Namespace)
+		if err != nil {
+			return warnings, fmt.Errorf("no supporting runtime found for model %s and engine does not have complete runner configuration", isvc.Spec.Model.Name)
+		}
+		// Success - runtime will be auto-selected
+		warnings = append(warnings, fmt.Sprintf("Runtime %s will be auto-selected for model %s",
+			selection.Name, isvc.Spec.Model.Name))
 	}
-
-	// Success - runtime will be auto-selected
-	warnings = append(warnings, fmt.Sprintf("Runtime %s will be auto-selected for model %s", rtName, isvc.Spec.Model.Name))
 	return warnings, nil
 }
 

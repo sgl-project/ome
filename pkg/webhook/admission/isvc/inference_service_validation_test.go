@@ -12,6 +12,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -972,7 +973,8 @@ func TestInferenceService_RuntimeResolution(t *testing.T) {
 				Build()
 
 			validator := &InferenceServiceValidator{
-				Client: fakeClient,
+				Client:          fakeClient,
+				RuntimeSelector: runtimeselector.New(fakeClient),
 			}
 
 			_, err := validator.validateRuntimeAndModelResolution(context.Background(), tt.isvc)
@@ -1000,7 +1002,8 @@ func TestValidateInferenceService_ComprehensiveErrorPaths(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	validator := &InferenceServiceValidator{
-		Client: fakeClient,
+		Client:          fakeClient,
+		RuntimeSelector: runtimeselector.New(fakeClient),
 	}
 
 	tests := []struct {
@@ -1284,7 +1287,8 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 				Build()
 
 			validator := &InferenceServiceValidator{
-				Client: fakeClient,
+				Client:          fakeClient,
+				RuntimeSelector: runtimeselector.New(fakeClient),
 			}
 
 			warnings, err := validator.resolveModelAndRuntime(context.Background(), tt.isvc, admission.Warnings{})
@@ -1394,7 +1398,8 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 				Build()
 
 			validator := &InferenceServiceValidator{
-				Client: fakeClient,
+				Client:          fakeClient,
+				RuntimeSelector: runtimeselector.New(fakeClient),
 			}
 
 			isvc := &v1beta1.InferenceService{
@@ -1486,7 +1491,8 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 		Build()
 
 	validator := &InferenceServiceValidator{
-		Client: fakeClient,
+		Client:          fakeClient,
+		RuntimeSelector: runtimeselector.New(fakeClient),
 	}
 
 	isvc := &v1beta1.InferenceService{
@@ -1579,7 +1585,8 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 		Build()
 
 	validator := &InferenceServiceValidator{
-		Client: fakeClient,
+		Client:          fakeClient,
+		RuntimeSelector: runtimeselector.New(fakeClient),
 	}
 
 	isvc := &v1beta1.InferenceService{

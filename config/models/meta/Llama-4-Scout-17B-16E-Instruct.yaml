@@ -7,6 +7,14 @@ spec:
   disabled: false
   displayName: meta.llama-4-scout-17b-16e-instruct
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.51.0.dev0"
+  modelType: llama
+  modelArchitecture: Llama4ForConditionalGeneration
   storage:
     storageUri: hf://meta-llama/Llama-4-Scout-17B-16E-Instruct
     path: /raid/models/meta/llama-4-scout-17b-16e-instruct

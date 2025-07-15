@@ -5,7 +5,16 @@ metadata:
 spec:
   vendor: meta
   disabled: false
+  displayName: meta.llama-4-maverick-17b-128e-instruct
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.51.0.dev0"
+  modelType: llama
+  modelArchitecture: Llama4ForConditionalGeneration
   storage:
     storageUri: hf://meta-llama/Llama-4-Maverick-17B-128E-Instruct
     path: /raid/models/meta/llama-4-maverick-17b-128e-instruct
