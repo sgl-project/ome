@@ -1,0 +1,9 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://openvex.dev/docs/public/vex-ome-template",
+  "author": "OME Maintainers",
+  "role": "Project Maintainer",
+  "timestamp": "2025-01-15T00:00:00Z",
+  "version": 1,
+  "statements": []
+}
