@@ -1152,6 +1152,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
 						Version: stringPtr("1.0.0"),
+						Weight:  int64(1), // Optional weight
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true), // Critical for matching
@@ -1171,6 +1172,7 @@ func TestResolveModelAndRuntime_Comprehensive(t *testing.T) {
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
 						Version: stringPtr("1.0.0"),
+						Weight:  int64(1),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(false), // Won't match
@@ -1352,6 +1354,7 @@ func TestResolveModelAndRuntime_EdgeCases(t *testing.T) {
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
 						Version: stringPtr("1.0.0"),
+						Weight:  int64(1), // default value is 1
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
@@ -1449,6 +1452,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
 						Version: stringPtr("1.0.0"),
+						Weight:  int64(1),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
@@ -1467,6 +1471,7 @@ func TestResolveModelAndRuntime_WarningHandling(t *testing.T) {
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
 						Version: stringPtr("1.0.0"),
+						Weight:  int64(1),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),
@@ -1559,6 +1564,7 @@ func TestResolveModelAndRuntime_NamespacePrecedence(t *testing.T) {
 					ModelFormat: &v1beta1.ModelFormat{
 						Name:    "llama",
 						Version: stringPtr("1.0.0"),
+						Weight:  int64(1),
 					},
 					ModelArchitecture: stringPtr("llama"),
 					AutoSelect:        boolPtr(true),

@@ -3426,6 +3426,20 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 							Format:      "",
 						},
 					},
+					"operator": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Operator for the selector with supported values: \"Equal\", \"GreaterThan\" This is used to select the serving runtime based on the modelFormat version",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"weight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weight of the model format in the runtime selector, used to prioritize modelFormat",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
 				},
 			},
 		},
@@ -3451,6 +3465,20 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 							Description: "Version of the library. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+					"operator": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Operator for the selector with supported values: \"Equal\", \"GreaterThan\" This is used to select the serving runtime based on the modelFramework version",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"weight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weight of the framework in the runtime selector, used to prioritize modelFramework",
+							Type:        []string{"integer"},
+							Format:      "int64",
 						},
 					},
 				},

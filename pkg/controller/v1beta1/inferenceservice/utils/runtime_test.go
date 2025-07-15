@@ -307,8 +307,12 @@ func TestParseModelSize(t *testing.T) {
 	}
 }
 
-func TestSortSupportedRuntimeByPriority(t *testing.T) {
-	modelFormat := v1beta1.ModelFormat{Name: "test-format"}
+func TestSortSupportedRuntime(t *testing.T) {
+	baseModel := &v1beta1.BaseModelSpec{
+		ModelFormat:        v1beta1.ModelFormat{Name: "test-format"},
+		ModelFramework:     &v1beta1.ModelFrameworkSpec{Name: "test-framework"},
+		ModelParameterSize: ptr("7B"),
+	}
 	modelSize := 7.0
 
 	tests := []struct {
@@ -317,71 +321,325 @@ func TestSortSupportedRuntimeByPriority(t *testing.T) {
 		want     []string
 	}{
 		{
-			name: "sort by size range match",
+			name: "sort by score - higher score wins",
 			runtimes: []v1beta1.SupportedRuntime{
 				{
-					Name: "runtime1",
+					Name: "low-score-runtime",
 					Spec: v1beta1.ServingRuntimeSpec{
-						ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-							Min: ptr("1B"),
-							Max: ptr("10B"),
+						SupportedModelFormats: []v1beta1.SupportedModelFormat{
+							{
+								ModelFormat: &v1beta1.ModelFormat{
+									Name:   "test-format",
+									Weight: 5,
+								},
+								Priority: ptr(int32(1)),
+							},
 						},
 					},
 				},
 				{
-					Name: "runtime2",
+					Name: "high-score-runtime",
 					Spec: v1beta1.ServingRuntimeSpec{
+						SupportedModelFormats: []v1beta1.SupportedModelFormat{
+							{
+								ModelFormat: &v1beta1.ModelFormat{
+									Name:   "test-format",
+									Weight: 10,
+								},
+								ModelFramework: &v1beta1.ModelFrameworkSpec{
+									Name:   "test-framework",
+									Weight: 8,
+								},
+								Priority: ptr(int32(2)),
+							},
+						},
+					},
+				},
+			},
+			want: []string{"high-score-runtime", "low-score-runtime"}, // Higher score first
+		},
+		{
+			name: "sort by model size range when scores are equal",
+			runtimes: []v1beta1.SupportedRuntime{
+				{
+					Name: "far-size-runtime",
+					Spec: v1beta1.ServingRuntimeSpec{
+						SupportedModelFormats: []v1beta1.SupportedModelFormat{
+							{
+								ModelFormat: &v1beta1.ModelFormat{
+									Name:   "test-format",
+									Weight: 10,
+								},
+								Priority: ptr(int32(1)),
+							},
+						},
 						ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
-							Min: ptr("20B"),
+							Min: ptr("20B"), // Further from 7B
 							Max: ptr("30B"),
 						},
 					},
 				},
+				{
+					Name: "close-size-runtime",
+					Spec: v1beta1.ServingRuntimeSpec{
+						SupportedModelFormats: []v1beta1.SupportedModelFormat{
+							{
+								ModelFormat: &v1beta1.ModelFormat{
+									Name:   "test-format",
+									Weight: 10,
+								},
+								Priority: ptr(int32(1)),
+							},
+						},
+						ModelSizeRange: &v1beta1.ModelSizeRangeSpec{
+							Min: ptr("5B"), // Closer to 7B
+							Max: ptr("10B"),
+						},
+					},
+				},
 			},
-			want: []string{"runtime1", "runtime2"},
+			want: []string{"close-size-runtime", "far-size-runtime"}, // Closer size range first
 		},
 		{
-			name: "sort by auto select",
+			name: "no matching format - should not score",
 			runtimes: []v1beta1.SupportedRuntime{
 				{
-					Name: "runtime1",
+					Name: "no-match-runtime",
 					Spec: v1beta1.ServingRuntimeSpec{
 						SupportedModelFormats: []v1beta1.SupportedModelFormat{
 							{
 								ModelFormat: &v1beta1.ModelFormat{
-									Name: "test-format",
+									Name:   "different-format",
+									Weight: 100,
 								},
-								AutoSelect: ptr(true),
+								Priority: ptr(int32(10)),
 							},
 						},
 					},
 				},
 				{
-					Name: "runtime2",
+					Name: "matching-runtime",
 					Spec: v1beta1.ServingRuntimeSpec{
 						SupportedModelFormats: []v1beta1.SupportedModelFormat{
 							{
 								ModelFormat: &v1beta1.ModelFormat{
-									Name: "test-format",
+									Name:   "test-format",
+									Weight: 5,
 								},
-								AutoSelect: ptr(false),
+								Priority: ptr(int32(1)),
 							},
 						},
 					},
 				},
 			},
-			want: []string{"runtime1", "runtime2"},
+			want: []string{"matching-runtime", "no-match-runtime"}, // Matching format wins
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sortSupportedRuntimeByPriority(tt.runtimes, modelFormat, modelSize)
+			sortSupportedRuntime(tt.runtimes, baseModel, modelSize)
 			got := make([]string, len(tt.runtimes))
 			for i, rt := range tt.runtimes {
 				got[i] = rt.Name
 			}
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestScore(t *testing.T) {
+	tests := []struct {
+		name          string
+		runtime       v1beta1.SupportedRuntime
+		baseModel     *v1beta1.BaseModelSpec
+		expectedScore int64
+	}{
+		{
+			name: "exact match with weights and priority",
+			runtime: v1beta1.SupportedRuntime{
+				Name: "test-runtime",
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:    "PyTorch",
+								Version: ptr("2.0.0"),
+								Weight:  10,
+							},
+							ModelFramework: &v1beta1.ModelFrameworkSpec{
+								Name:    "transformers",
+								Version: ptr("4.0.0"),
+								Weight:  5,
+							},
+							Priority: ptr(int32(3)),
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name:    "PyTorch",
+					Version: ptr("2.0.0"),
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name:    "transformers",
+					Version: ptr("4.0.0"),
+				},
+			},
+			expectedScore: 45, // (10 * 3) + (5 * 3) = 30 + 15 = 45
+		},
+		{
+			name: "format match only",
+			runtime: v1beta1.SupportedRuntime{
+				Name: "test-runtime",
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:   "PyTorch",
+								Weight: 8,
+							},
+							ModelFramework: &v1beta1.ModelFrameworkSpec{
+								Name:   "different-framework",
+								Weight: 4,
+							},
+							Priority: ptr(int32(2)),
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "PyTorch",
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name: "transformers",
+				},
+			},
+			expectedScore: 0, // Framework doesn't match, so no score
+		},
+		{
+			name: "no match",
+			runtime: v1beta1.SupportedRuntime{
+				Name: "test-runtime",
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:   "TensorFlow",
+								Weight: 10,
+							},
+							Priority: ptr(int32(5)),
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "PyTorch",
+				},
+			},
+			expectedScore: 0, // No match
+		},
+		{
+			name: "multiple formats, best match wins",
+			runtime: v1beta1.SupportedRuntime{
+				Name: "test-runtime",
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:   "PyTorch",
+								Weight: 5,
+							},
+							ModelFramework: &v1beta1.ModelFrameworkSpec{
+								Name:   "transformers",
+								Weight: 8,
+							},
+							Priority: ptr(int32(1)),
+						},
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:   "PyTorch",
+								Weight: 10,
+							},
+							ModelFramework: &v1beta1.ModelFrameworkSpec{
+								Name:   "transformers",
+								Weight: 8,
+							},
+							Priority: ptr(int32(2)),
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "PyTorch",
+				},
+				ModelFramework: &v1beta1.ModelFrameworkSpec{
+					Name: "transformers",
+				},
+			},
+			expectedScore: 36, // Best match: (10 * 2) + (8 * 2) = 20 + 16 = 36
+		},
+		{
+			name: "default priority when not specified",
+			runtime: v1beta1.SupportedRuntime{
+				Name: "test-runtime",
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:   "PyTorch",
+								Weight: 12,
+							},
+							// No priority specified, should default to 1
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "PyTorch",
+				},
+			},
+			expectedScore: 12, // 12 * 1 (default priority) = 12
+		},
+		{
+			name: "nil model framework in base model",
+			runtime: v1beta1.SupportedRuntime{
+				Name: "test-runtime",
+				Spec: v1beta1.ServingRuntimeSpec{
+					SupportedModelFormats: []v1beta1.SupportedModelFormat{
+						{
+							ModelFormat: &v1beta1.ModelFormat{
+								Name:   "PyTorch",
+								Weight: 10,
+							},
+							ModelFramework: &v1beta1.ModelFrameworkSpec{
+								Name:   "transformers",
+								Weight: 5,
+							},
+							Priority: ptr(int32(2)),
+						},
+					},
+				},
+			},
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "PyTorch",
+				},
+				// ModelFramework is nil
+			},
+			expectedScore: 0, // model no modelFramework, runtime has, it won't support this runtime.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actualScore := score(tt.runtime, tt.baseModel)
+			assert.Equal(t, tt.expectedScore, actualScore, "Score should match expected value")
 		})
 	}
 }
@@ -709,7 +967,7 @@ func TestRuntimeSupportsModelNewArchitecture(t *testing.T) {
 			},
 			runtimeName:   "test-runtime",
 			expectError:   true,
-			errorContains: "model format 'mt:pytorch' not in supported formats []",
+			errorContains: "model format 'mt:pytorch' not in supported formats",
 		},
 	}
 
@@ -987,6 +1245,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 			},
 			expected: false, // Currently this will fail because we're doing exact matching
 		},
+		// autoselect
 		{
 			name: "autoselect flag explicitly false",
 			baseModel: &v1beta1.BaseModelSpec{
@@ -1000,7 +1259,7 @@ func TestCompareSupportedModelFormats(t *testing.T) {
 				ModelFormat: &v1beta1.ModelFormat{Name: "ONNX", Version: ptrToString("1.0.0")},
 				AutoSelect:  ptr(false),
 			},
-			expected: false,
+			expected: true,
 		},
 		{
 			name: "model architecture mismatch",
