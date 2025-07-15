@@ -1,0 +1,11 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: kimi-k2-instruct
+spec:
+  vendor: moonshotai
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://moonshotai/Kimi-K2-Instruct
+    path: /raid/models/moonshotai/Kimi-K2-Instruct
