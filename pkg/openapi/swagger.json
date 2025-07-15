@@ -1928,9 +1928,18 @@
           "type": "string",
           "default": ""
         },
+        "operator": {
+          "description": "Operator for the selector with supported values: \"Equal\", \"GreaterThan\" This is used to select the serving runtime based on the modelFormat version",
+          "type": "string"
+        },
         "version": {
           "description": "Version of the model format. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
           "type": "string"
+        },
+        "weight": {
+          "description": "Weight of the model format in the runtime selector, used to prioritize modelFormat",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -1942,9 +1951,18 @@
           "type": "string",
           "default": ""
         },
+        "operator": {
+          "description": "Operator for the selector with supported values: \"Equal\", \"GreaterThan\" This is used to select the serving runtime based on the modelFramework version",
+          "type": "string"
+        },
         "version": {
           "description": "Version of the library. Used in validating that a runtime supports a predictor. It Can be \"major\", \"major.minor\" or \"major.minor.patch\".",
           "type": "string"
+        },
+        "weight": {
+          "description": "Weight of the framework in the runtime selector, used to prioritize modelFramework",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },

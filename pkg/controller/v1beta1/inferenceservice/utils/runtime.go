@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -120,30 +121,35 @@ func sortClusterServingRuntimeList(runtimes *v1beta1.ClusterServingRuntimeList) 
 	})
 }
 
-// sortSupportedRuntimeByPriority sorts runtimes by their priority for a specific model.
+// sortSupportedRuntime sorts runtimes by their modelFormat and modelFramework weighted score (priority * weight)
 // The sorting considers:
-// 1. Model size range compatibility
-// 2. Explicit priority values
-// 3. Creation timestamp and name as tiebreakers
-func sortSupportedRuntimeByPriority(runtimes []v1beta1.SupportedRuntime, modelFormat v1beta1.ModelFormat, modelSize float64) {
+// 1. ModelFormat and ModelFramework weighted score (priority * weight)
+// 2. Model size range compatibility
+// Returns true if any runtime has a score > 0 (indicating support), false otherwise
+func sortSupportedRuntime(runtimes []v1beta1.SupportedRuntime, baseModel *v1beta1.BaseModelSpec, modelSize float64) {
 	sort.Slice(runtimes, func(i, j int) bool {
-		p1 := runtimes[i].Spec.GetPriority(modelFormat.Name)
-		p2 := runtimes[j].Spec.GetPriority(modelFormat.Name)
+		// First, prioritize by modelFormat, modelFramework score
+		// The score is calculated by the weight of modelFormat and modelFramework multiply priority
+		r1Score := score(runtimes[i], baseModel)
+		r2Score := score(runtimes[j], baseModel)
+		if r1Score != r2Score {
+			return r1Score > r2Score
+		}
 
-		// First, prioritize by model size range
+		// Second, prioritize by model size range
 		r1HasSizeRange := runtimes[i].Spec.ModelSizeRange != nil
 		r2HasSizeRange := runtimes[j].Spec.ModelSizeRange != nil
 
 		// Check if both have size ranges and if one of them matches the model size better
 		if r1HasSizeRange && r2HasSizeRange {
-			r1FitsModel := modelSize >= parseModelSize(*runtimes[i].Spec.ModelSizeRange.Min) &&
-				modelSize <= parseModelSize(*runtimes[i].Spec.ModelSizeRange.Max)
-			r2FitsModel := modelSize >= parseModelSize(*runtimes[j].Spec.ModelSizeRange.Min) &&
-				modelSize <= parseModelSize(*runtimes[j].Spec.ModelSizeRange.Max)
+			r1MinDiff := math.Abs(parseModelSize(*runtimes[i].Spec.ModelSizeRange.Min) - modelSize)
+			r1MaxDiff := math.Abs(parseModelSize(*runtimes[i].Spec.ModelSizeRange.Max) - modelSize)
+			r2MinDiff := math.Abs(parseModelSize(*runtimes[j].Spec.ModelSizeRange.Min) - modelSize)
+			r2MaxDiff := math.Abs(parseModelSize(*runtimes[j].Spec.ModelSizeRange.Max) - modelSize)
 
-			if r1FitsModel && !r2FitsModel {
+			if r1MinDiff+r1MaxDiff < r2MinDiff+r2MaxDiff {
 				return true
-			} else if !r1FitsModel && r2FitsModel {
+			} else {
 				return false
 			}
 		}
@@ -155,18 +161,86 @@ func sortSupportedRuntimeByPriority(runtimes []v1beta1.SupportedRuntime, modelFo
 		if !r1HasSizeRange && r2HasSizeRange {
 			return false
 		}
-
-		// Finally, fallback to prioritizing by explicit priority values
-		switch {
-		case p1 == nil && p2 == nil: // if both runtimes do not specify the priority, the order is kept
-			return false
-		case p1 == nil && p2 != nil: // runtime with priority specified takes precedence
-			return false
-		case p1 != nil && p2 == nil:
-			return true
-		}
-		return *p1 > *p2
+		return true
 	})
+}
+
+// score returns a score for a runtime based on its modelFormat and modelFramework
+// The score is calculated as follows:
+// 1. For each supported model format in the runtime, check if it matches the baseModel's modelFormat and modelFramework.
+// 2. If it matches, calculate the score by multiplying the weight of the model format and model framework by their priority.
+// 3. Keep track of the maximum score found.
+func score(runtime v1beta1.SupportedRuntime, baseModel *v1beta1.BaseModelSpec) int64 {
+	var maxScore int64 = 0
+
+	// 1. Go through all supported model formats in runtime
+	for _, supportedFormat := range runtime.Spec.SupportedModelFormats {
+		// 2. Get autoSelect flag, if it is false, continue to next supportedModelFormat
+		if supportedFormat.AutoSelect != nil && !(*supportedFormat.AutoSelect) {
+			continue
+		}
+		// 3. Get priority for it
+		priority := int64(1) // Default priority
+		if supportedFormat.Priority != nil {
+			priority = int64(*supportedFormat.Priority)
+		}
+
+		// 3. Compare model format, if it doesn't match, continue to next supportedModelFormat
+		modelFormatMatches := false
+		if supportedFormat.ModelFormat != nil && &baseModel.ModelFormat.Name != nil {
+			if supportedFormat.ModelFormat.Name != baseModel.ModelFormat.Name {
+				continue
+			}
+			// Compare versions if both are specified
+			if supportedFormat.ModelFormat.Version != nil && baseModel.ModelFormat.Version != nil {
+				modelFormatMatches = compareModelFormat(supportedFormat.ModelFormat, &baseModel.ModelFormat, false)
+				if !modelFormatMatches {
+					continue
+				}
+			} else {
+				modelFormatMatches = true
+			}
+		}
+
+		// 4. Compare model framework, if it doesn't match, continue to next supportedModelFormat
+		modelFrameworkMatches := false
+		if supportedFormat.ModelFramework != nil && baseModel.ModelFramework != nil {
+			if supportedFormat.ModelFramework.Name != baseModel.ModelFramework.Name {
+				continue
+			}
+			// Compare versions if both are specified
+			if supportedFormat.ModelFramework.Version != nil && baseModel.ModelFramework.Version != nil {
+				modelFrameworkMatches = compareModelFramework(supportedFormat.ModelFramework, baseModel.ModelFramework, false)
+				if !modelFrameworkMatches {
+					continue
+				}
+			} else {
+				modelFrameworkMatches = true
+			}
+		}
+
+		// 5. If model format and model framework are all match, calculate score by their weight multiply priority and then sum it
+		if (modelFormatMatches || (supportedFormat.ModelFormat == nil && &baseModel.ModelFormat == nil)) &&
+			(modelFrameworkMatches || (supportedFormat.ModelFramework == nil && baseModel.ModelFramework == nil)) {
+
+			// Calculate weighted score
+			var currentScore int64 = 0
+			if modelFormatMatches && supportedFormat.ModelFormat != nil {
+				currentScore += supportedFormat.ModelFormat.Weight * priority
+			}
+			if modelFrameworkMatches && supportedFormat.ModelFramework != nil {
+				currentScore += supportedFormat.ModelFramework.Weight * priority
+			}
+
+			// 6. Keep the max score
+			if currentScore > maxScore {
+				maxScore = currentScore
+			}
+		}
+	}
+
+	// 7. After all supportedModelFormat checked, return maxScore
+	return maxScore
 }
 
 // parseModelSize converts a model size string (e.g., "7B", "13B", "70B") to a float64 value.
@@ -232,7 +306,7 @@ func RuntimeSupportsModel(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.Serv
 			RuntimeName: runtimeName,
 			ModelName:   "", // Will be filled by caller if available
 			ModelFormat: baseModel.ModelFormat.Name,
-			Reason:      fmt.Sprintf("model format '%s' not in supported formats %v", getModelFormatLabel(baseModel), srSpec.SupportedModelFormats),
+			Reason:      fmt.Sprintf("model format '%s' not in supported formats", getModelFormatLabel(baseModel)),
 		}
 	}
 
@@ -257,12 +331,7 @@ func RuntimeSupportsModel(baseModel *v1beta1.BaseModelSpec, srSpec *v1beta1.Serv
 }
 
 func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat) bool {
-	// 1. Check AutoSelect flag if present and false
-	if supportedFormat.AutoSelect != nil && !(*supportedFormat.AutoSelect) {
-		return false
-	}
-
-	// 2. Compare model artitecture name
+	// 1. Compare model artitecture name
 	if baseModel.ModelArchitecture != nil && supportedFormat.ModelArchitecture != nil {
 		if *baseModel.ModelArchitecture != *supportedFormat.ModelArchitecture {
 			return false
@@ -272,7 +341,7 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		return false
 	}
 
-	// 3. Compare model quantization
+	// 2. Compare model quantization
 	if baseModel.Quantization != nil && supportedFormat.Quantization != nil {
 		// ModelQuantization is a string type, so we can compare directly
 		if *baseModel.Quantization != *supportedFormat.Quantization {
@@ -282,53 +351,20 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		// If only one of them is nil, they don't match
 		return false
 	}
-
 	// 3. Compare ModelFormat versions
-	hasUnofficialFormatVersion := false
 	modelFormatMatches := true
-
 	// If version is specified in supportedFormat, compare with baseModel
 	if supportedFormat.ModelFormat != nil && &baseModel.ModelFormat != nil {
+		// Compare format names (must be equal)
 		if supportedFormat.ModelFormat.Name != baseModel.ModelFormat.Name {
 			return false
 		}
 
 		if supportedFormat.ModelFormat.Version != nil && baseModel.ModelFormat.Version != nil {
-			// Parse versions
-			baseModelFormatVersion, err := modelVer.Parse(*baseModel.ModelFormat.Version)
-			if err != nil {
-				fmt.Println("Error parsing basModel modelFormat version:", err)
-				return false
-			}
-
-			supportedFormatVersion, err := modelVer.Parse(*supportedFormat.ModelFormat.Version)
-			if err != nil {
-				fmt.Println("Error parsing supportedFormat modelFormat version:", err)
-				return false
-			}
-
-			// Check if versions have unofficial parts (requirement #1)
-			hasUnofficialFormatVersion = modelVer.ContainsUnofficialVersion(baseModelFormatVersion) ||
-				modelVer.ContainsUnofficialVersion(supportedFormatVersion)
-
-			// Get operator from modelFormat in supportedFormat
-			operator := getRuntimeSelectorOperator(supportedFormat.ModelFormat.Operator)
-
-			// Compare versions based on operator and whether unofficial versions exist (requirements #1, #2, #3)
-			if hasUnofficialFormatVersion || operator == "Equal" {
-				modelFormatMatches = modelVer.Equal(supportedFormatVersion, baseModelFormatVersion)
-			} else if operator == "GreaterThan" {
-				modelFormatMatches = modelVer.GreaterThan(supportedFormatVersion, baseModelFormatVersion)
-			} else if operator == "GreaterThanOrEqual" {
-				modelFormatMatches = modelVer.GreaterThanOrEqual(supportedFormatVersion, baseModelFormatVersion)
-			} else {
-				// Default to Equal for unknown operators
-				modelFormatMatches = modelVer.Equal(supportedFormatVersion, baseModelFormatVersion)
-			}
-
+			modelFormatMatches = compareModelFormat(supportedFormat.ModelFormat, &baseModel.ModelFormat, modelFormatMatches)
 			// If ModelFormat versions don't match, the formats are incompatible
 			if !modelFormatMatches {
-				return false
+				return modelFormatMatches
 			}
 		} else {
 			return false
@@ -339,50 +375,18 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 	}
 
 	// 4. Compare ModelFramework (if exists)
-	hasUnofficialFrameworkVersion := false
 	modelFrameworkMatches := true
 	if supportedFormat.ModelFramework != nil && baseModel.ModelFramework != nil {
 		// Compare framework names (must be equal)
 		if supportedFormat.ModelFramework.Name != baseModel.ModelFramework.Name {
 			return false
 		}
-
 		// Compare framework versions if both are specified
 		if supportedFormat.ModelFramework.Version != nil && baseModel.ModelFramework.Version != nil {
-			// Parse framework versions
-			baseFrameworkVersion, err := modelVer.Parse(*baseModel.ModelFramework.Version)
-			if err != nil {
-				fmt.Println("Error parsing baseModel modelFramework version:", err)
-				return false
-			}
-
-			supportedFrameworkVersion, err := modelVer.Parse(*supportedFormat.ModelFramework.Version)
-			if err != nil {
-				fmt.Println("Error parsing supportedFormat modelFramework version:", err)
-				return false
-			}
-
-			// Check if versions have unofficial parts (requirement #1)
-			hasUnofficialFrameworkVersion = modelVer.ContainsUnofficialVersion(baseFrameworkVersion) ||
-				modelVer.ContainsUnofficialVersion(supportedFrameworkVersion)
-
-			// Get operator from modelFramework in supportedFormat
-			operator := getRuntimeSelectorOperator(supportedFormat.ModelFramework.Operator)
-
-			// If there are unofficial versions or operator is Equal, use Equal comparison (requirements #1, #2)
-			if hasUnofficialFrameworkVersion || operator == "Equal" {
-				modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
-			} else if operator == "GreaterThan" {
-				modelFrameworkMatches = modelVer.GreaterThan(supportedFrameworkVersion, baseFrameworkVersion)
-			} else if operator == "GreaterThanOrEqual" {
-				modelFrameworkMatches = modelVer.GreaterThanOrEqual(supportedFrameworkVersion, baseFrameworkVersion)
-			} else {
-				// Default to Equal for unknown operators
-				modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
-			}
-
+			modelFrameworkMatches = compareModelFramework(supportedFormat.ModelFramework, baseModel.ModelFramework, modelFrameworkMatches)
+			// If ModelFramework versions don't match, the formats are incompatible
 			if !modelFrameworkMatches {
-				return false
+				return modelFrameworkMatches
 			}
 		} else {
 			return false
@@ -392,8 +396,82 @@ func compareSupportedModelFormats(baseModel *v1beta1.BaseModelSpec, supportedFor
 		return false
 	}
 
-	// 6. If we got this far, the formats are compatible
+	// 5. If we got this far, the formats are compatible
 	return true
+}
+
+// compareModelFormat compares two model formats based on their versions and operators.
+func compareModelFormat(supportedModelFormat *v1beta1.ModelFormat, basemodelModeFormat *v1beta1.ModelFormat, modelFormatMatches bool) bool {
+	hasUnofficialFormatVersion := false
+	// Parse versions
+	baseModelFormatVersion, err := modelVer.Parse(*basemodelModeFormat.Version)
+	if err != nil {
+		fmt.Println("Error parsing basModel modelFormat version:", err)
+		return false
+	}
+
+	supportedFormatVersion, err := modelVer.Parse(*supportedModelFormat.Version)
+	if err != nil {
+		fmt.Println("Error parsing supportedFormat modelFormat version:", err)
+		return false
+	}
+
+	// Check if versions have unofficial parts (requirement #1)
+	hasUnofficialFormatVersion = modelVer.ContainsUnofficialVersion(baseModelFormatVersion) ||
+		modelVer.ContainsUnofficialVersion(supportedFormatVersion)
+
+	// Get operator from modelFormat in supportedFormat
+	operator := getRuntimeSelectorOperator(supportedModelFormat.Operator)
+
+	// Compare versions based on operator and whether unofficial versions exist (requirements #1, #2, #3)
+	if hasUnofficialFormatVersion || operator == "Equal" {
+		modelFormatMatches = modelVer.Equal(supportedFormatVersion, baseModelFormatVersion)
+	} else if operator == "GreaterThan" {
+		modelFormatMatches = modelVer.GreaterThan(supportedFormatVersion, baseModelFormatVersion)
+	} else if operator == "GreaterThanOrEqual" {
+		modelFormatMatches = modelVer.GreaterThanOrEqual(supportedFormatVersion, baseModelFormatVersion)
+	} else {
+		// Default to Equal for unknown operators
+		modelFormatMatches = modelVer.Equal(supportedFormatVersion, baseModelFormatVersion)
+	}
+	return modelFormatMatches
+}
+
+// compareModelFramework compares two modelFrameworks based on their versions and operators.
+func compareModelFramework(supportedModelFramework *v1beta1.ModelFrameworkSpec, baseModelFramework *v1beta1.ModelFrameworkSpec, modelFrameworkMatches bool) bool {
+	hasUnofficialFrameworkVersion := false
+	// Parse framework versions
+	baseFrameworkVersion, err := modelVer.Parse(*baseModelFramework.Version)
+	if err != nil {
+		fmt.Println("Error parsing baseModel modelFramework version:", err)
+		return false
+	}
+
+	supportedFrameworkVersion, err := modelVer.Parse(*supportedModelFramework.Version)
+	if err != nil {
+		fmt.Println("Error parsing supportedFormat modelFramework version:", err)
+		return false
+	}
+
+	// Check if versions have unofficial parts (requirement #1)
+	hasUnofficialFrameworkVersion = modelVer.ContainsUnofficialVersion(baseFrameworkVersion) ||
+		modelVer.ContainsUnofficialVersion(supportedFrameworkVersion)
+
+	// Get operator from modelFramework in supportedFormat
+	operator := getRuntimeSelectorOperator(supportedModelFramework.Operator)
+
+	// If there are unofficial versions or operator is Equal, use Equal comparison (requirements #1, #2)
+	if hasUnofficialFrameworkVersion || operator == "Equal" {
+		modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
+	} else if operator == "GreaterThan" {
+		modelFrameworkMatches = modelVer.GreaterThan(supportedFrameworkVersion, baseFrameworkVersion)
+	} else if operator == "GreaterThanOrEqual" {
+		modelFrameworkMatches = modelVer.GreaterThanOrEqual(supportedFrameworkVersion, baseFrameworkVersion)
+	} else {
+		// Default to Equal for unknown operators
+		modelFrameworkMatches = modelVer.Equal(supportedFrameworkVersion, baseFrameworkVersion)
+	}
+	return modelFrameworkMatches
 }
 
 // getRuntimeSelectorOperator return a string representation of the RuntimeSelectorOperator.
@@ -458,14 +536,20 @@ func GetSupportingRuntimes(baseModel *v1beta1.BaseModelSpec, cl client.Client, n
 			continue
 		}
 
+		// Filter out runtimes that don't support the model's format/framework,
+		// Score calculation considers modelFormat and modelFramework compatibility with priority weights
+		// A score <= 0 indicates no format/framework match or this supportedFormat autoselect is false, so runtime cannot serve this model
+		if score(v1beta1.SupportedRuntime{Name: rt.GetName(), Spec: rt.Spec}, baseModel) <= 0 {
+			continue
+		}
+
 		srSpecs = append(srSpecs, v1beta1.SupportedRuntime{Name: rt.GetName(), Spec: rt.Spec})
 	}
-
 	// Sort namespace-scoped runtimes by priority
 	if baseModel.ModelParameterSize != nil {
-		sortSupportedRuntimeByPriority(srSpecs, baseModel.ModelFormat, parseModelSize(*baseModel.ModelParameterSize))
+		sortSupportedRuntime(srSpecs, baseModel, parseModelSize(*baseModel.ModelParameterSize))
 	} else {
-		sortSupportedRuntimeByPriority(srSpecs, baseModel.ModelFormat, 0)
+		sortSupportedRuntime(srSpecs, baseModel, 0)
 	}
 
 	// Process cluster-scoped runtimes
@@ -496,16 +580,23 @@ func GetSupportingRuntimes(baseModel *v1beta1.BaseModelSpec, cl client.Client, n
 			continue
 		}
 
+		// Filter out runtimes that don't support the model's format/framework,
+		// Score calculation considers modelFormat and modelFramework compatibility with priority weights
+		// A score <= 0 indicates no format/framework match or this supportedFormat autoselect is false, so runtime cannot serve this model
+		if score(v1beta1.SupportedRuntime{Name: crt.GetName(), Spec: crt.Spec}, baseModel) <= 0 {
+			continue
+		}
+
 		clusterSrSpecs = append(clusterSrSpecs, v1beta1.SupportedRuntime{Name: crt.GetName(), Spec: crt.Spec})
 	}
-
 	// Sort cluster-scoped runtimes by priority
 	if baseModel.ModelParameterSize != nil {
-		sortSupportedRuntimeByPriority(clusterSrSpecs, baseModel.ModelFormat, parseModelSize(*baseModel.ModelParameterSize))
+		sortSupportedRuntime(clusterSrSpecs, baseModel, parseModelSize(*baseModel.ModelParameterSize))
 	} else {
-		sortSupportedRuntimeByPriority(clusterSrSpecs, baseModel.ModelFormat, 0)
+		sortSupportedRuntime(clusterSrSpecs, baseModel, 0)
 	}
 
 	srSpecs = append(srSpecs, clusterSrSpecs...)
+
 	return srSpecs, excludedRuntimes, nil
 }
