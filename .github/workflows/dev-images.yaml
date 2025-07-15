@@ -1,0 +1,202 @@
+name: Dev Images
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # For signing images with cosign
+
+env:
+  # Image registry configuration
+  REGISTRY: ghcr.io
+  IMAGE_ORG: moirai-internal
+  # Go version
+  GO_VERSION: '1.24.1'
+
+jobs:
+  build-and-push-images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component:
+          - name: manager
+            dockerfile: dockerfiles/manager.Dockerfile
+            image: ome-manager
+          - name: model-agent
+            dockerfile: dockerfiles/model-agent.Dockerfile
+            image: model-agent
+          - name: multinode-prober
+            dockerfile: dockerfiles/multinode-prober.Dockerfile
+            image: multinode-prober
+          - name: ome-agent
+            dockerfile: dockerfiles/ome-agent.Dockerfile
+            image: ome-agent
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Generate version info
+        id: version
+        run: |
+          # Generate version info for dev builds
+          SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
+          TIMESTAMP=$(date -u +'%Y%m%d%H%M%S')
+          DEV_VERSION="dev-${TIMESTAMP}-${SHORT_SHA}"
+          echo "version=${DEV_VERSION}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "📦 Building dev version: ${DEV_VERSION}"
+
+      - name: Build and push ${{ matrix.component.name }}
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:dev
+            ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}:dev-${{ steps.version.outputs.short_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            GIT_TAG=dev
+            GIT_COMMIT=${{ github.sha }}
+
+      - name: Sign image
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          # Sign both the :dev tag and the SHA-specific tag
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: ${{ matrix.component.image }}-sbom.spdx.json
+
+      - name: Attach SBOM to image
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          # Attach SBOM to the image using cosign
+          cosign attach sbom --sbom ${{ matrix.component.image }}-sbom.spdx.json ${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}
+
+  publish-dev-charts:
+    needs: build-and-push-images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.MOIRAI_REGISTRY_TOKEN }}
+
+      - name: Update chart for dev
+        run: |
+          # Get short SHA for version
+          SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
+          TIMESTAMP=$(date -u +'%Y%m%d%H%M%S')
+          DEV_VERSION="0.0.0-dev.${TIMESTAMP}+${SHORT_SHA}"
+          
+          # Update chart versions with dev version
+          for chart in charts/*/; do
+            # Create a copy of the chart for dev
+            cp -r ${chart} ${chart%.}/dev/
+            
+            # Update versions in the dev copy
+            yq eval -i ".version = \"${DEV_VERSION}\"" ${chart}dev/Chart.yaml
+            yq eval -i ".appVersion = \"dev\"" ${chart}dev/Chart.yaml
+            
+            # Update image tags in values.yaml for ome-resources chart
+            if [[ -f ${chart}dev/values.yaml ]] && [[ $(basename ${chart}) == "ome-resources" ]]; then
+              # Update all image tags to use dev
+              yq eval -i ".ome.version = \"dev\"" ${chart}dev/values.yaml
+              yq eval -i ".ome.benchmarkJob.tag = \"dev\"" ${chart}dev/values.yaml
+              yq eval -i ".ome.multinodeProber.tag = \"dev\"" ${chart}dev/values.yaml
+              yq eval -i ".ome.omeAgent.tag = \"dev\"" ${chart}dev/values.yaml
+              yq eval -i ".modelAgent.image.tag = \"dev\"" ${chart}dev/values.yaml
+            fi
+          done
+
+      - name: Package and push dev charts
+        run: |
+          for chart in charts/*/dev/; do
+            # Package the dev chart
+            helm package ${chart}
+            
+            # Get the chart name from the packaged file
+            CHART_FILE=$(ls -1 *.tgz | tail -n1)
+            
+            # Push to OCI registry with dev tag
+            helm push ${CHART_FILE} oci://${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/charts
+            
+            # Clean up
+            rm ${CHART_FILE}
+            rm -rf ${chart}
+          done
+
+  notify:
+    needs: [build-and-push-images, publish-dev-charts]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🚀 Dev Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following dev images have been published:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Image |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| OME Manager | \`ghcr.io/moirai-internal/ome-manager:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Model Agent | \`ghcr.io/moirai-internal/model-agent:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| OME Agent | \`ghcr.io/moirai-internal/ome-agent:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Multinode Prober | \`ghcr.io/moirai-internal/multinode-prober:dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Helm Charts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Dev Helm charts are available:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "helm install ome-crd oci://ghcr.io/moirai-internal/charts/ome-crd --version 0.0.0-dev.*" >> $GITHUB_STEP_SUMMARY
+          echo "helm install ome oci://ghcr.io/moirai-internal/charts/ome-resources --version 0.0.0-dev.*" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
