@@ -141,6 +141,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								ModelFormat: &v1beta1.ModelFormat{
 									Name:    "safetensors",
 									Version: stringPtr("1.0.0"),
+									Weight:  int64(1),
 								},
 							},
 						},
@@ -260,6 +261,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								ModelFormat: &v1beta1.ModelFormat{
 									Name:    "safetensors",
 									Version: stringPtr("1.0.0"),
+									Weight:  int64(1),
 								},
 							},
 						},
@@ -390,6 +392,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								ModelFormat: &v1beta1.ModelFormat{
 									Name:    "sklearn",
 									Version: stringPtr("1.0.0"),
+									Weight:  int64(1),
 								},
 							},
 						},
@@ -533,6 +536,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								ModelFormat: &v1beta1.ModelFormat{
 									Name:    "pytorch",
 									Version: stringPtr("1.0.0"),
+									Weight:  int64(1),
 								},
 							},
 						},
@@ -655,6 +659,7 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								ModelFormat: &v1beta1.ModelFormat{
 									Name:    "safetensors",
 									Version: stringPtr("1.0.0"),
+									Weight:  int64(1),
 								},
 							},
 						},

@@ -95,6 +95,10 @@ spec:
                     type: string
                   version:
                     type: string
+                  weight:
+                    default: 1
+                    format: int64
+                    type: integer
                 required:
                 - name
                 type: object
@@ -107,6 +111,10 @@ spec:
                     type: string
                   version:
                     type: string
+                  weight:
+                    default: 1
+                    format: int64
+                    type: integer
                 required:
                 - name
                 type: object

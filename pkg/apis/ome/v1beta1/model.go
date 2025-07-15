@@ -16,10 +16,14 @@ type ModelFormat struct {
 	// +optional
 	Version *string `json:"version,omitempty"`
 	// Operator for the selector with supported values: "Equal", "GreaterThan"
-	// This is used to select the serving runtime based on the modelFormat version, modelFramework version
+	// This is used to select the serving runtime based on the modelFormat version
 	// +optional
 	// +kubebuilder:default=Equal
 	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
+	// Weight of the model format in the runtime selector, used to prioritize modelFormat
+	// +optional
+	// +kubebuilder:default=1
+	Weight int64 `json:"weight,omitempty"`
 }
 
 type ModelFrameworkSpec struct {
@@ -32,10 +36,14 @@ type ModelFrameworkSpec struct {
 	// +optional
 	Version *string `json:"version,omitempty"`
 	// Operator for the selector with supported values: "Equal", "GreaterThan"
-	// This is used to select the serving runtime based on the modelFormat version, modelFramework version
+	// This is used to select the serving runtime based on the modelFramework version
 	// +optional
 	// +kubebuilder:default=Equal
 	Operator *RuntimeSelectorOperator `json:"operator,omitempty"`
+	// Weight of the framework in the runtime selector, used to prioritize modelFramework
+	// +optional
+	// +kubebuilder:default=1
+	Weight int64 `json:"weight,omitempty"`
 }
 
 type RuntimeSelectorOperator string
