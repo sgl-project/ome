@@ -9,6 +9,7 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 	omeTesting "github.com/sgl-project/ome/pkg/testing"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
@@ -703,13 +704,14 @@ func TestInferenceServiceReconcile(t *testing.T) {
 
 			// Create reconciler
 			reconciler := &InferenceServiceReconciler{
-				Client:        c,
-				ClientConfig:  &rest.Config{},
-				Clientset:     clientset,
-				Log:           ctrl.Log.WithName("test"),
-				Scheme:        scheme,
-				Recorder:      recorder,
-				StatusManager: status.NewStatusReconciler(),
+				Client:          c,
+				ClientConfig:    &rest.Config{},
+				Clientset:       clientset,
+				Log:             ctrl.Log.WithName("test"),
+				Scheme:          scheme,
+				Recorder:        recorder,
+				StatusManager:   status.NewStatusReconciler(),
+				RuntimeSelector: runtimeselector.New(c),
 			}
 
 			// Ensure the InferenceService exists in the client

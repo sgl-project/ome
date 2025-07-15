@@ -33,6 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
@@ -41,6 +42,7 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/external_service"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"github.com/sgl-project/ome/pkg/utils"
 	knapis "knative.dev/pkg/apis"
 )
@@ -100,12 +102,13 @@ const (
 // InferenceServiceReconciler reconciles an InferenceService object
 type InferenceServiceReconciler struct {
 	client.Client
-	ClientConfig  *rest.Config
-	Clientset     kubernetes.Interface
-	Log           logr.Logger
-	Scheme        *runtime.Scheme
-	Recorder      record.EventRecorder
-	StatusManager *status.StatusReconciler
+	ClientConfig    *rest.Config
+	Clientset       kubernetes.Interface
+	Log             logr.Logger
+	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
+	StatusManager   *status.StatusReconciler
+	RuntimeSelector runtimeselector.Selector
 }
 
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -206,10 +209,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, err
 	}
 
-	// Check if we should use the new architecture
 	var ingressDeploymentMode constants.DeploymentModeType
-	// New architecture path
-	r.Log.Info("Using new engine/decoder architecture", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
 
 	// Step 1: Reconcile model first
 	baseModel, baseModelMeta, err := isvcutils.ReconcileBaseModel(r.Client, isvc)
@@ -219,12 +219,40 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return reconcile.Result{}, err
 	}
 
-	// Step 2: Get rt spec (either specified or auto-selected based on model)
-	rt, rtName, err := isvcutils.GetRuntimeForNewArchitecture(r.Client, isvc, baseModel)
-	if err != nil {
-		r.Log.Error(err, "Failed to get rt", "Name", isvc.Name)
-		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeReconcileError", err.Error())
-		return reconcile.Result{}, err
+	// Step 2: Get runtime spec (either specified or auto-selected based on model)
+	var rt *v1beta1.ServingRuntimeSpec
+	var rtName string
+
+	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
+		// Validate specified runtime
+		rtName = isvc.Spec.Runtime.Name
+		if err := r.RuntimeSelector.ValidateRuntime(ctx, rtName, baseModel, isvc.Namespace); err != nil {
+			r.Log.Error(err, "Runtime validation failed", "runtime", rtName, "model", isvc.Spec.Model.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeValidationError",
+				"Runtime %s does not support model %s: %v", rtName, isvc.Spec.Model.Name, err)
+			return reconcile.Result{}, err
+		}
+
+		// Get the runtime spec using selector
+		rtSpec, _, err := r.RuntimeSelector.GetRuntime(ctx, rtName, isvc.Namespace)
+		if err != nil {
+			r.Log.Error(err, "Failed to get runtime spec", "runtime", rtName)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeFetchError", err.Error())
+			return reconcile.Result{}, err
+		}
+		rt = rtSpec
+	} else {
+		// Auto-select runtime
+		selection, err := r.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc.Namespace)
+		if err != nil {
+			r.Log.Error(err, "Failed to auto-select runtime", "model", isvc.Spec.Model.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "RuntimeSelectionError",
+				"Failed to find runtime for model %s: %v", isvc.Spec.Model.Name, err)
+			return reconcile.Result{}, err
+		}
+		rt = selection.Spec
+		rtName = selection.Name
+		r.Log.Info("Auto-selected runtime", "runtime", rtName, "model", isvc.Spec.Model.Name)
 	}
 
 	// Step 3: Merge rt and isvc specs to get final engine, decoder, and router specs
@@ -516,6 +544,9 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	// NEW: Initialize StatusReconciler
 	r.StatusManager = status.NewStatusReconciler()
 
+	// Initialize RuntimeSelector
+	r.RuntimeSelector = runtimeselector.New(mgr.GetClient())
+
 	ksvcFound, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if err != nil {
 		return err
@@ -579,6 +610,17 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 	} else {
 		r.Log.Info("The InferenceService controller won't watch networking.istio.io/v1beta1/VirtualService resources because the CRD is not available.")
 	}
+
+	// Add watches for ServingRuntime and ClusterServingRuntime to populate cache
+	ctrlBuilder = ctrlBuilder.
+		Watches(&v1beta1.ServingRuntime{},
+			handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
+				return nil // Just populate cache
+			})).
+		Watches(&v1beta1.ClusterServingRuntime{},
+			handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
+				return nil // Just populate cache
+			}))
 
 	return ctrlBuilder.Complete(r)
 }
