@@ -322,7 +322,9 @@ func main() {
 
 		if err = ctrl.NewWebhookManagedBy(mgr).
 			For(&v1beta1.InferenceService{}).
-			WithDefaulter(&isvc.InferenceServiceDefaulter{}).
+			WithDefaulter(&isvc.InferenceServiceDefaulter{
+				ClientSet: clientSet,
+			}).
 			WithValidator(&isvc.InferenceServiceValidator{
 				Client:          mgr.GetClient(),
 				RuntimeSelector: runtimeselector.New(mgr.GetClient()),
