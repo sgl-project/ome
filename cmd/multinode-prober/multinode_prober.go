@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sgl-project/ome/pkg/version"
 )
 
 // ChatCompletionRequest represents the request payload for the OpenAI-compatible API
@@ -204,7 +205,8 @@ func checkEndpoint(endpoint string) bool {
 func main() {
 	// Initialize configuration using Viper
 	options := GetOptions()
-	log.Print("Starting multinode-prober")
+
+	log.Printf("Starting multinode-prober, gitVersion=%s, gitCommit=%s", version.GitVersion, version.GitCommit)
 
 	http.HandleFunc("/healthz", livenessHandler(options))
 	http.HandleFunc("/readyz", readinessHandler(options))

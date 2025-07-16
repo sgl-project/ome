@@ -16,6 +16,7 @@ import (
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/modelagent"
+	"github.com/sgl-project/ome/pkg/version"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -286,6 +287,9 @@ func runCommand(cmd *cobra.Command, args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Log version information
+	logger.Infow("Initializing", "gitVersion", version.GitVersion, "gitCommit", version.GitCommit)
 
 	// Log all Viper config at startup for traceability
 	logger.Infow("Model Agent configuration (Viper)", "allSettings", v.AllSettings())
