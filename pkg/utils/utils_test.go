@@ -4,13 +4,13 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
-	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 func TestFilterUtil(t *testing.T) {

@@ -1,13 +1,6 @@
 package common
 
 import (
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
-
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -17,6 +10,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/knative"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinode"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/raw"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 )
 
 // DeploymentReconciler handles common deployment reconciliation logic

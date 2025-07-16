@@ -10,20 +10,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/utils"
-
-	"github.com/sgl-project/ome/pkg/constants"
-
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
+	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
+	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/utils/storage"
-	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 type GopherTaskType string

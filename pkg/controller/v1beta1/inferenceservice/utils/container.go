@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 func AppendVolumeMount(container *v1.Container, volumeMount *v1.VolumeMount) {

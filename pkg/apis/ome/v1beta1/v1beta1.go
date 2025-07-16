@@ -6,9 +6,10 @@
 package v1beta1
 
 import (
-	"github.com/sgl-project/ome/pkg/constants"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 var (

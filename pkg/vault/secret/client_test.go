@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/secrets"
-	"github.com/sgl-project/ome/pkg/principals"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/sgl-project/ome/pkg/principals"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
 )
 
 // MockSecretsClientInterface defines the interface for mocking secrets client

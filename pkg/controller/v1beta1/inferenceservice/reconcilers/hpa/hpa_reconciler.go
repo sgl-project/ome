@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
-	"github.com/sgl-project/ome/pkg/constants"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -18,6 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 var log = logf.Log.WithName("HPAReconciler")

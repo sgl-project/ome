@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	istiov1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
@@ -21,6 +19,9 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	kfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 func TestMultiNodeVLLMReconciler_Reconcile(t *testing.T) {

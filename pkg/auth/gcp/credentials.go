@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
+
+	"github.com/sgl-project/ome/pkg/auth"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 // GCPCredentials implements auth.Credentials for GCP

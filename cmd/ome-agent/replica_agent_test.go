@@ -3,9 +3,10 @@ package main
 import (
 	"testing"
 
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
 )
 
 func TestOCIOSDataStoreListProvider(t *testing.T) {

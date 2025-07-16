@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/utils/storage"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 // --- Mock replication object ---

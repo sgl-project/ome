@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
 func TestObjectSummaryReplicationObject(t *testing.T) {

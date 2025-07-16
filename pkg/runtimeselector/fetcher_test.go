@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 func TestFetchRuntimes(t *testing.T) {

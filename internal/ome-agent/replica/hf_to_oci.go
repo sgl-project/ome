@@ -9,10 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
-
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 // Indirection for testability

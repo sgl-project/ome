@@ -3,21 +3,19 @@ package isvc
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	"github.com/sgl-project/ome/pkg/runtimeselector"
-
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
-	"regexp"
-
-	"github.com/sgl-project/ome/pkg/constants"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	"github.com/sgl-project/ome/pkg/runtimeselector"
 )
 
 // regular expressions for validation of isvc name

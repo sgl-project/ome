@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 
-	"github.com/sgl-project/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 // RayServiceReconciler reconciles Ray head Service objects

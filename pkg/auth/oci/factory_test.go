@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/zap/zaptest"
+
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
-	"go.uber.org/zap/zaptest"
 )
 
 func TestNewFactory(t *testing.T) {

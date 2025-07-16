@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sgl-project/ome/pkg/logging"
 	"go.uber.org/zap"
+
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 // DefaultFactory is the default auth factory implementation

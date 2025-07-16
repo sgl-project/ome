@@ -7,7 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"github.com/sgl-project/ome/pkg/constants"
 )
 

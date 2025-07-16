@@ -5,20 +5,20 @@ import (
 	"fmt"
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
-	apierr "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/sgl-project/ome/pkg/constants"
-	hpa "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/hpa"
-	keda "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/keda"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	hpa "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/hpa"
+	keda "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/keda"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 // Autoscaler Interface implemented by all autoscalers
