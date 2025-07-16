@@ -91,6 +91,14 @@ func (r *InferenceServiceReconciler) cleanupResourcesOfType(
 			continue
 		}
 
+		// Special handling for external service
+		if component == "external-service" && gvk.Kind == "Service" {
+			// External service should exist if ingress is disabled and there are active components
+			if r.shouldKeepExternalService(isvc, activeComponents) {
+				continue
+			}
+		}
+
 		log.Info("Deleting orphaned resource", "gvk", gvk, "name", obj.GetName(), "component", component)
 		if err := r.Delete(ctx, &obj); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete %s/%s: %w", gvk.Kind, obj.GetName(), err)
@@ -108,6 +116,18 @@ func (r *InferenceServiceReconciler) isOwnedBy(obj *unstructured.Unstructured, i
 			ref.UID == isvc.UID {
 			return true
 		}
+	}
+	return false
+}
+
+// shouldKeepExternalService determines if the external service should be kept based on active components
+func (r *InferenceServiceReconciler) shouldKeepExternalService(isvc *v1beta1.InferenceService, activeComponents map[v1beta1.ComponentType]bool) bool {
+	// Check if ingress creation is disabled via annotation
+	if val, ok := isvc.Annotations["ome.io/ingress-disable-creation"]; ok && val == "true" {
+		// Keep external service if any component that can serve traffic is active
+		return activeComponents[v1beta1.RouterComponent] ||
+			activeComponents[v1beta1.EngineComponent] ||
+			activeComponents[v1beta1.PredictorComponent]
 	}
 	return false
 }

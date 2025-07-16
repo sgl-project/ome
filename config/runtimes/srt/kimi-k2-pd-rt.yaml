@@ -21,10 +21,6 @@ spec:
   protocolVersions:
     - openAI
   engineConfig:
-    annotations:
-      rdma.ome.io/auto-inject: "true"
-      rdma.ome.io/profile: "oci-roce"
-      rdma.ome.io/container-name: "ome-container"
     leader:
       tolerations:
         - key: "nvidia.com/gpu"
@@ -32,33 +28,40 @@ spec:
           effect: "NoSchedule"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
+        - name: sglang-recorder-dir
+          emptyDir: {}
+        - name: sglang-profiler-dir
+          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
         env:
-          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
-            value: "1"
-          - name: SGLANG_SET_CPU_AFFINITY
+          - name: MC_TE_METRIC
             value: "true"
-          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
-            value: "100000"
-          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
-            value: "100000"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
+          - name: PYTHONUNBUFFERED
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
+          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
+            value: "/tmp/sglang-recorder"
+          - name: SGLANG_TORCH_PROFILER_DIR
+            value: "/tmp/sglang-profiler"
         command:
           - sh
           - -c
           - >
-            MC_TE_METRIC=true;
-            SGLANG_TBO_DEBUG=1;
             python3 -m sglang.launch_server
             --port 8080
             --host 0.0.0.0
             --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --disaggregation-ib-device mlx5_1
             --chunked-prefill-size 524288
             --max-prefill-tokens 32768
             --page-size 64
@@ -86,19 +89,28 @@ spec:
             --decode-log-interval 1
             --max-running-requests 1024
             --max-total-tokens 131072
+            --ep-num-redundant-experts ${PARALLELISM_SIZE}
+            --enable-eplb
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          failureThreshold: 5
-          successThreshold: 1
-          periodSeconds: 60
-          timeoutSeconds: 60
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+          - mountPath: /tmp/sglang-recorder
+            name: sglang-recorder-dir
+          - mountPath: /tmp/sglang-profiler
+            name: sglang-profiler-dir
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
     worker:
       size: 3
       tolerations:
@@ -107,16 +119,38 @@ spec:
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
+        - name: sglang-recorder-dir
+          emptyDir: {}
+        - name: sglang-profiler-dir
+          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
+        env:
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
+            value: "/tmp/sglang-recorder"
+          - name: SGLANG_TORCH_PROFILER_DIR
+            value: "/tmp/sglang-profiler"
         command:
           - sh
           - -c
           - >
             python3 -m sglang.launch_server
             --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
+            --disaggregation-ib-device mlx5_1
             --chunked-prefill-size 524288
             --max-prefill-tokens 32768
             --page-size 64
@@ -146,38 +180,41 @@ spec:
             --decode-log-interval 1
             --host 0.0.0.0
             --max-running-requests 1024
+            --ep-num-redundant-experts ${PARALLELISM_SIZE}
+            --enable-eplb
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
-        env:
-          - name: SGLANG_SET_CPU_AFFINITY
-            value: "true"
-          - name: SGLANG_HACK_DEEPEP_NUM_SMS
-            value: "8"
-          - name: SGLANG_HACK_DEEPEP_NEW_MODE
-            value: "0"
-          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
-            value: "100000"
-          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
-            value: "100000"
-          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
-            value: "1"
-          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
-            value: "8"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
-            value: "1"
-          - name: SGL_CHUNKED_PREFIX_CACHE_THRESHOLD
-            value: "0"
-          - name: GLOO_SOCKET_IFNAME
-            value: eth0
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+          - mountPath: /tmp/sglang-recorder
+            name: sglang-recorder-dir
+          - mountPath: /tmp/sglang-profiler
+            name: sglang-profiler-dir
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
   decoderConfig:
-    annotations:
-      rdma.ome.io/auto-inject: "true"
-      rdma.ome.io/profile: "oci-roce"
-      rdma.ome.io/container-name: "ome-container"
     leader:
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
+        - name: sglang-recorder-dir
+          emptyDir: {}
+        - name: sglang-profiler-dir
+          emptyDir: {}
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"
@@ -188,18 +225,20 @@ spec:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
         env:
-          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
-            value: "16"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
             value: "1"
+          - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
+            value: "176"
+          - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
+            value: "256"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
-            value: "100000"
-          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
-            value: "100000"
-          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
-            value: "1"
+          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
+            value: "/tmp/sglang-recorder"
+          - name: SGLANG_TORCH_PROFILER_DIR
+            value: "/tmp/sglang-profiler"
         command:
           - sh
           - -c
@@ -221,9 +260,9 @@ spec:
             --watchdog-timeout 1000000
             --mem-fraction-static 0.849
             --context-length 2176
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
-            --cuda-graph-max-bs 64
-            --max-running-requests 15360
+            --disaggregation-ib-device mlx5_1
+            --cuda-graph-bs 256
+            --max-running-requests 24576
             --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
@@ -232,30 +271,64 @@ spec:
             --trust-remote-code
             --moe-dense-tp-size 1
             --ep-num-redundant-experts ${PARALLELISM_SIZE}
+            --enable-eplb
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+          - mountPath: /tmp/sglang-recorder
+            name: sglang-recorder-dir
+          - mountPath: /tmp/sglang-profiler
+            name: sglang-profiler-dir
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          failureThreshold: 5
-          successThreshold: 1
-          periodSeconds: 60
-          timeoutSeconds: 60
     worker:
-      size: 3
+      size: 11
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
+        - name: sglang-recorder-dir
+          emptyDir: {}
+        - name: sglang-profiler-dir
+          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
+        env:
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
+            value: "176"
+          - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
+            value: "256"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
+            value: "/tmp/sglang-recorder"
+          - name: SGLANG_TORCH_PROFILER_DIR
+            value: "/tmp/sglang-profiler"
         command:
           - sh
           - -c
@@ -275,9 +348,9 @@ spec:
             --disaggregation-mode decode
             --mem-fraction-static 0.849
             --context-length 2176
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
-            --cuda-graph-max-bs 64
-            --max-running-requests 15360
+            --disaggregation-ib-device mlx5_1
+            --cuda-graph-bs 256
+            --max-running-requests 24576
             --tp-size ${PARALLELISM_SIZE}
             --dist-init-addr $(LWS_LEADER_ADDRESS):5000
             --nnodes ${LWS_GROUP_SIZE}
@@ -288,38 +361,35 @@ spec:
             --trust-remote-code
             --moe-dense-tp-size 1
             --ep-num-redundant-experts ${PARALLELISM_SIZE}
+            --enable-eplb
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+          - mountPath: /tmp/sglang-recorder
+            name: sglang-recorder-dir
+          - mountPath: /tmp/sglang-profiler
+            name: sglang-profiler-dir
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
-        env:
-          - name: SGLANG_HACK_DEEPEP_NUM_SMS
-            value: "24"
-          - name: SGLANG_HACK_DEEPEP_NEW_MODE
-            value: "0"
-          - name: NVSHMEM_IB_TRAFFIC_CLASS
-            value: "16"
-          - name: SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT
-            value: "100000"
-          - name: SGLANG_DISAGGREGATION_WAITING_TIMEOUT
-            value: "100000"
-          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
-            value: "16"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
-            value: "1"
-          - name: GLOO_SOCKET_IFNAME
-            value: eth0
-          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
-            value: "1"
   routerConfig:
     runner:
       name: router
-      image: fra.ocir.io/idqj093njucb/sgl-router:dev7
+      image: ghcr.io/moirai-internal/sgl-router:dev
       resources:
         limits:
-          cpu: "1"
-          memory: "2Gi"
+          cpu: "10"
+          memory: "20Gi"
       ports:
         - containerPort: 8080
           name: http
@@ -331,12 +401,14 @@ spec:
           --host 0.0.0.0
           --port 8080
           --pd-disaggregation
-          --policy cache_aware
+          --policy random
           --service-discovery
           --service-discovery-namespace "${NAMESPACE}"
           --service-discovery-port 8080
           --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
           --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --max-payload-size 2147483648
+          --worker-startup-timeout-secs 1200
       env:
         - name: NAMESPACE
           valueFrom:
