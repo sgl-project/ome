@@ -8,7 +8,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 
@@ -39,6 +38,7 @@ var (
 // +kubebuilder:object:generate=false
 // +k8s:openapi-gen=false
 type InferenceServiceDefaulter struct {
+	ClientSet kubernetes.Interface
 }
 
 // +kubebuilder:webhook:path=/mutate-ome-io-v1beta1-inferenceservice,mutating=true,failurePolicy=fail,groups=ome.io,resources=inferenceservices,verbs=create;update,versions=v1beta1,name=inferenceservice.ome-webhook-server.defaulter
@@ -47,23 +47,14 @@ var _ webhook.CustomDefaulter = &InferenceServiceDefaulter{}
 func (d *InferenceServiceDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	isvc, err := convertToInferenceService(obj)
 	if err != nil {
-		inferenceServiceValidatorLogger.Error(err, "Unable to convert object to InferenceService")
+		mutatorLogger.Error(err, "Unable to convert object to InferenceService")
 		return err
 	}
 	mutatorLogger.Info("Defaulting InferenceService", "namespace", isvc.Namespace, "name", isvc.Name)
-	cfg, err := config.GetConfig()
+	deployConfig, err := controllerconfig.NewDeployConfig(d.ClientSet)
 	if err != nil {
-		mutatorLogger.Error(err, "unable to set up client config")
-		panic(err)
-	}
-	clientSet, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		mutatorLogger.Error(err, "unable to create clientSet")
-		panic(err)
-	}
-	deployConfig, err := controllerconfig.NewDeployConfig(clientSet)
-	if err != nil {
-		panic(err)
+		mutatorLogger.Error(err, "Failed to get deploy config")
+		return err
 	}
 	DefaultInferenceService(isvc, deployConfig)
 	return nil
