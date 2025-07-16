@@ -71,7 +71,7 @@ spec:
     max: 110B
   containers:
     - name: ome-container
-      image: {{ .Values.llama_4_scout_17b_16e_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_4_scout_17b_16e_instruct.image.tag | default .Values.vllm.latestImage.tag }}
+      image: {{ .Values.llama_4_scout_17b_16e_instruct.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_4_scout_17b_16e_instruct.image.vllm.tag | default .Values.vllm.latestImage.tag }}
       ports:
         - containerPort: 8080
           name: http1

@@ -612,8 +612,12 @@ llama_4_maverick_17b_128e_instruct_fp8:
   minReplicas: 1
   maxReplicas: 1
   image:
-    repository:
-    tag:
+    vllm:
+      repository:
+      tag:
+    srt:
+      repository:
+      tag:
 
 llama_4_scout_17b_16e_instruct:
   enabled: false
@@ -638,8 +642,12 @@ llama_4_scout_17b_16e_instruct:
   minReplicas: 1
   maxReplicas: 1
   image:
-    repository:
-    tag:
+    vllm:
+      repository:
+      tag:
+    srt:
+      repository:
+      tag:
 
 phi_3_vision_128k_instruct:
   enabled: false

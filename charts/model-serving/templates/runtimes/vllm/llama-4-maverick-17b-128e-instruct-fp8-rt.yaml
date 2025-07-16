@@ -72,7 +72,7 @@ spec:
                   - BM.GPU.H100-NC.8
   containers:
     - name: ome-container
-      image: {{ .Values.llama_4_maverick_17b_128e_instruct_fp8.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_4_maverick_17b_128e_instruct_fp8.image.tag | default .Values.vllm.latestImage.tag }}
+      image: {{ .Values.llama_4_maverick_17b_128e_instruct_fp8.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_4_maverick_17b_128e_instruct_fp8.image.vllm.tag | default .Values.vllm.latestImage.tag }}
       ports:
         - containerPort: 8080
           name: http1
