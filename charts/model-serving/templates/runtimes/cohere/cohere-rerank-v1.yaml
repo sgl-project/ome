@@ -38,6 +38,7 @@ spec:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           preference:
@@ -62,6 +63,7 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   protocolVersions:
     - cohere
   schedulerName: {{ .Values.commonSchedulerName }}

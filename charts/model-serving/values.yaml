@@ -247,6 +247,7 @@ llama_3_70b_instruct:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           preference:
@@ -264,6 +265,7 @@ llama_3_70b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: { }
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -304,6 +306,7 @@ llama_3_1_70b_instruct:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           preference:
@@ -321,6 +324,7 @@ llama_3_1_70b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: {}
   tolerations: []
   topologySpreadConstraints: []
@@ -348,6 +352,7 @@ llama_3_3_70b_instruct:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
@@ -366,6 +371,7 @@ llama_3_3_70b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -391,6 +397,7 @@ llama_3_3_70b_instruct_fp8_dynamic:
                 values:
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
           preference:
@@ -406,6 +413,7 @@ llama_3_3_70b_instruct_fp8_dynamic:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   tolerations: []
   topologySpreadConstraints: []
   volumes: []
@@ -431,6 +439,7 @@ llama_3_2_1b_instruct:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: { }
   tolerations: [ ]
   volumes: [ ]
@@ -456,6 +465,7 @@ llama_3_2_3b_instruct:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: { }
   tolerations: [ ]
   volumes: [ ]
@@ -481,6 +491,7 @@ llama_3_8b_instruct:
             - BM.GPU4.8
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
+            - BM.GPU.H200.8
       preferredDuringSchedulingIgnoredDuringExecution:
       - weight: 100
         preference:
@@ -498,6 +509,7 @@ llama_3_8b_instruct:
             operator: In
             values:
             - BM.GPU.H100.8
+            - BM.GPU.H200.8
   labels: {}
   tolerations: []
   topologySpreadConstraints: []
@@ -522,6 +534,7 @@ llama_3_1_8b_instruct:
             values:
             - BM.GPU.A100-v2.8
             - BM.GPU.H100.8
+            - BM.GPU.H200.8
       preferredDuringSchedulingIgnoredDuringExecution:
       - weight: 100
         preference:
@@ -537,6 +550,7 @@ llama_3_1_8b_instruct:
             operator: In
             values:
             - BM.GPU.H100.8
+            - BM.GPU.H200.8
   labels: {}
   tolerations: []
   topologySpreadConstraints: []
@@ -564,6 +578,7 @@ llama_3_1_405b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   tolerations: []
   topologySpreadConstraints: []
   volumes: []
@@ -589,6 +604,7 @@ llama_4_maverick_17b_128e_instruct_fp8:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -614,6 +630,7 @@ llama_4_scout_17b_16e_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -636,6 +653,7 @@ phi_3_vision_128k_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: { }
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -659,6 +677,7 @@ e5_mistral_7b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
   tolerations: [ ]
   labels: { }
@@ -686,6 +705,7 @@ mixtral_8x7b_instruct_v0_1_chat:
                   - BM.GPU4.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   tolerations: [ ]
   topologySpreadConstraints: [ ]
   volumes: [ ]
@@ -708,6 +728,7 @@ mistral_7b_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
   labels: { }
   tolerations: [ ]
@@ -732,6 +753,7 @@ nl2rqs_7b_v1:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: { }
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -755,6 +777,7 @@ nl2rqs_70b:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   labels: { }
   tolerations: [ ]
   topologySpreadConstraints: [ ]
@@ -778,6 +801,7 @@ llama_3_2_90b_vision_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   tolerations: []
   topologySpreadConstraints: []
   volumes: []
@@ -803,6 +827,7 @@ llama_3_2_90b_vision_fp8_dynamic:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   tolerations: []
   topologySpreadConstraints: []
   volumes: []
@@ -826,6 +851,7 @@ llama_3_2_11b_vision_instruct:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
   tolerations: []
   topologySpreadConstraints: []
   volumes: []

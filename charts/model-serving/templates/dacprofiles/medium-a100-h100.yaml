@@ -22,6 +22,7 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.B4.8
                   - BM.GPU4.8
@@ -42,3 +43,4 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8

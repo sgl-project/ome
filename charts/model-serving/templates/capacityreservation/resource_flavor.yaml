@@ -14,6 +14,14 @@ spec:
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ResourceFlavor
 metadata:
+  name: bm-gpu-h200-8
+spec:
+  nodeLabels:
+    node.kubernetes.io/instance-type: BM.GPU.H200.8
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
   name: bm-gpu-a100-v2-8
 spec:
   nodeLabels:

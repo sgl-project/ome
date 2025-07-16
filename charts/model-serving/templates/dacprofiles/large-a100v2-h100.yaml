@@ -22,6 +22,7 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100-NC.8
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -39,4 +40,5 @@ spec:
                 operator: In
                 values:
                   - BM.GPU.H100.8
+                  - BM.GPU.H200.8
                   - BM.GPU.H100-NC.8
