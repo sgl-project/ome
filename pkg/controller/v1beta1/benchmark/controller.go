@@ -494,9 +494,18 @@ func (r *BenchmarkJobReconciler) updateStatus(ctx context.Context, benchmarkJob 
 		var isComplete, isFailed bool
 		var completionTime *metav1.Time
 
+		// A job is considered completed if it has a completion time or a condition that indicates completion.
 		if job.Status.CompletionTime != nil {
 			isComplete = true
 			completionTime = job.Status.CompletionTime
+		} else {
+			for _, cond := range job.Status.Conditions {
+				if cond.Type == batchv1.JobComplete && cond.Status == v1.ConditionTrue {
+					isComplete = true
+					completionTime = &cond.LastTransitionTime
+					break
+				}
+			}
 		}
 
 		// A job is considered failed if it has backoffLimit reached or conditions show failure.
@@ -547,7 +556,7 @@ func (r *BenchmarkJobReconciler) updateStatus(ctx context.Context, benchmarkJob 
 
 	// Update the BenchmarkJob status on the cluster if changed.
 	// This ensures the status is stored and reflected in the resource.
-	return r.Update(ctx, benchmarkJob)
+	return r.Status().Update(ctx, benchmarkJob)
 }
 
 // SetupWithManager sets up the controller with the Manager.
