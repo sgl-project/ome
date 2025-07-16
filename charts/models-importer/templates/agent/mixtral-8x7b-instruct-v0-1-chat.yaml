@@ -34,7 +34,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LLAMA2_70
+        - name: MEDIUM_GENERIC_V2
           quotaUnit: 1
           default: true
     internalName: "mixtral-8x7b-instruct-v0-1"
