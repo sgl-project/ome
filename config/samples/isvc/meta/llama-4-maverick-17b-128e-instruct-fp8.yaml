@@ -10,6 +10,8 @@ kind: InferenceService
 metadata:
   name: llama-4-maverick-17b-128e-instruct-fp8
   namespace: llama-4-maverick-17b-128e-instruct-fp8
+  annotations:
+    ome.io/ingress-disable-creation: "true"
 spec:
   model:
     name: llama-4-maverick-17b-128e-instruct-fp8
