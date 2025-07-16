@@ -527,6 +527,7 @@ func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 		benchmarkJob  *v1beta1.BenchmarkJob
 		existingJob   *batchv1.Job
 		expectedError bool
+		expectedState string
 	}{
 		{
 			name: "job not found",
@@ -538,6 +539,32 @@ func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 			},
 			existingJob:   nil,
 			expectedError: false,
+			expectedState: "Pending",
+		},
+		{
+			name: "job exists and failed",
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+			},
+			existingJob: &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{
+						{
+							Type:   batchv1.JobFailed,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+			},
+			expectedError: false,
+			expectedState: "Failed",
 		},
 		{
 			name: "job exists and completed",
@@ -553,6 +580,7 @@ func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 					Namespace: "default",
 				},
 				Status: batchv1.JobStatus{
+					CompletionTime: &metav1.Time{Time: time.Now()},
 					Conditions: []batchv1.JobCondition{
 						{
 							Type:   batchv1.JobComplete,
@@ -562,6 +590,27 @@ func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 				},
 			},
 			expectedError: false,
+			expectedState: "Completed",
+		},
+		{
+			name: "job exists and running",
+			benchmarkJob: &v1beta1.BenchmarkJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+			},
+			existingJob: &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-job",
+					Namespace: "default",
+				},
+				Status: batchv1.JobStatus{
+					StartTime: &metav1.Time{Time: time.Now()},
+				},
+			},
+			expectedError: false,
+			expectedState: "Running",
 		},
 	}
 
@@ -576,7 +625,8 @@ func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 			// Start building the client
 			clientBuilder := cfake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(benchmarkJobCopy)
+				WithObjects(benchmarkJobCopy).
+				WithStatusSubresource(benchmarkJobCopy)
 
 			// Add the Job to the client builder if it exists
 			if tt.existingJob != nil {
@@ -596,6 +646,7 @@ func TestBenchmarkJobReconciler_updateStatus(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedState, benchmarkJobCopy.Status.State)
 			}
 		})
 	}
