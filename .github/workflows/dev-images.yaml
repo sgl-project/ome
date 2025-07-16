@@ -140,27 +140,31 @@ jobs:
           
           # Update chart versions with dev version
           for chart in charts/*/; do
+            chart_name=$(basename ${chart})
+            dev_chart="charts/${chart_name}-dev"
+            
             # Create a copy of the chart for dev
-            cp -r ${chart} ${chart%.}/dev/
+            cp -r ${chart} ${dev_chart}/
+
             
             # Update versions in the dev copy
-            yq eval -i ".version = \"${DEV_VERSION}\"" ${chart}dev/Chart.yaml
-            yq eval -i ".appVersion = \"dev\"" ${chart}dev/Chart.yaml
+            yq eval -i ".version = \"${DEV_VERSION}\"" ${dev_chart}/Chart.yaml
+            yq eval -i ".appVersion = \"dev\"" ${dev_chart}/Chart.yaml
             
             # Update image tags in values.yaml for ome-resources chart
-            if [[ -f ${chart}dev/values.yaml ]] && [[ $(basename ${chart}) == "ome-resources" ]]; then
+            if [[ -f ${dev_chart}/values.yaml ]] && [[ $chart_name == "ome-resources" ]]; then
               # Update all image tags to use dev
-              yq eval -i ".ome.version = \"dev\"" ${chart}dev/values.yaml
-              yq eval -i ".ome.benchmarkJob.tag = \"dev\"" ${chart}dev/values.yaml
-              yq eval -i ".ome.multinodeProber.tag = \"dev\"" ${chart}dev/values.yaml
-              yq eval -i ".ome.omeAgent.tag = \"dev\"" ${chart}dev/values.yaml
-              yq eval -i ".modelAgent.image.tag = \"dev\"" ${chart}dev/values.yaml
+              yq eval -i ".ome.version = \"dev\"" ${dev_chart}/values.yaml
+              yq eval -i ".ome.benchmarkJob.tag = \"dev\"" ${dev_chart}/values.yaml
+              yq eval -i ".ome.multinodeProber.tag = \"dev\"" ${dev_chart}/values.yaml
+              yq eval -i ".ome.omeAgent.tag = \"dev\"" ${dev_chart}/values.yaml
+              yq eval -i ".modelAgent.image.tag = \"dev\"" ${dev_chart}/values.yaml
             fi
           done
 
       - name: Package and push dev charts
         run: |
-          for chart in charts/*/dev/; do
+          for chart in charts/*-dev/; do
             # Package the dev chart
             helm package ${chart}
             
