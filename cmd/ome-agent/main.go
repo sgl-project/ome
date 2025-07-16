@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sgl-project/ome/pkg/version"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "ome-agent",
-	Short: "Run OME Agent",
-	Long:  "OME Agent is a swiss army knife for OME inference service, training job, model management, etc.",
+	Use:     "ome-agent",
+	Short:   "Run OME Agent",
+	Long:    "OME Agent is a swiss army knife for OME inference service, training job, model management, etc.",
+	Version: fmt.Sprintf("gitVersion=%s, gitCommit=%s", version.GitVersion, version.GitCommit),
 }
 
 func main() {

@@ -17,6 +17,7 @@ import (
 	v1beta1isvccontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice"
 	"github.com/sgl-project/ome/pkg/runtimeselector"
 	"github.com/sgl-project/ome/pkg/utils"
+	"github.com/sgl-project/ome/pkg/version"
 	"github.com/sgl-project/ome/pkg/webhook/admission/benchmark"
 	"github.com/sgl-project/ome/pkg/webhook/admission/isvc"
 	"github.com/sgl-project/ome/pkg/webhook/admission/pod"
@@ -140,9 +141,10 @@ func GetOptions() Options {
 }
 
 func main() {
-	setupLog.Info("Initializing controller manager")
 	options := GetOptions()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&options.zapOpts)))
+
+	setupLog.Info("Initializing", "gitVersion", version.GitVersion, "gitCommit", version.GitCommit)
 
 	// Get a config to talk to the apiserver
 	setupLog.Info("Configuring API client connection")
