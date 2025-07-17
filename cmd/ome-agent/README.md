@@ -23,11 +23,6 @@ OME-Agent offers the following capabilities:
 3. **Model Weight Encryption and Decryption**
     - **OCI Vault Integration**: Uses OCI Vault and Key Management Service (KMS) for secure decryption of model weights.
     - **Advanced Encryption Standards**: Protects sensitive model data with encryption for regulated environments.
-   
-4. **Training Sidecar Agent**
-    - **Training Input Preparation**: Downloads the training data from Object Storage to a local directory.
-    - **Training Lifecycle Management**: Manages the training lifecycle: kick-off training, monitor progress, and handle training completion.
-    - **Training Output Handling**: Uploads fine-tuned model weights and model performance metrics to a designated Object Storage bucket.
 
 ## Getting Started
 
@@ -95,80 +90,45 @@ secret_name: "command_r-dek"
 Supported environment variables:
 All environment variables ***must*** start the prefix `OME_AGENT_` to be recognized by the OME-Agent.
 
-| YAML Key                                      | Environment Variable                                   | Default                   | Required                                                                             |
-|-----------------------------------------------|--------------------------------------------------------|---------------------------|--------------------------------------------------------------------------------------|
-| `auth_type`                                   | `OME_AGENT_AUTH_TYPE`                                  |                           | yes                                                                                  |
-| `profile`                                     | `OME_AGENT_PROFILE`                                    | DEFAULT                   | no                                                                                   |
-| `local_path`                                  | `OME_AGENT_LOCAL_PATH`                                 |                           | yes                                                                                  |
-| `model_store_directory`                       | `OME_AGENT_MODEL_STORE_DIRECTORY`                      | /opt/ml/model             | no                                                                                   |
-| `skip_sha`                                    | `OME_AGENT_SKIP_SHA`                                   | false                     | no                                                                                   |
-| `max_retry`                                   | `OME_AGENT_MAX_RETRY`                                  | 5                         | no                                                                                   |
-| `retry_internal_in_seconds`                   | `OME_AGENT_RETRY_INTERVAL_IN_SECONDS`                  | 10                        | no                                                                                   |
-| `model_name`                                  | `OME_AGENT_MODEL_NAME`                                 |                           | yes                                                                                  |
-| `hf_token`                                    | `OME_AGENT_HF_TOKEN`                                   |                           | no                                                                                   |
-| `num_connections`                             | `OME_AGENT_NUM_CONNECTIONS`                            | 10                        | no                                                                                   |
-| `download_size_limit_gb`                      | `OME_AGENT_DOWNLOAD_SIZE_LIMIT_GB`                     | 650                       | no                                                                                   |
-| `enable_size_limit_check`                     | `OME_AGENT_ENABLE_SIZE_LIMIT_CHECK`                    | true                      | no                                                                                   |
-| `source.bucket_name`                          | `OME_AGENT_SOURCE_BUCKET_NAME`                         |                           | yes                                                                                  |
-| `source.prefix`                               | `OME_AGENT_SOURCE_PREFIX`                              |                           | no                                                                                   |
-| `source.region`                               | `OME_AGENT_SOURCE_REGION`                              |                           | yes                                                                                  |
-| `source.namespace`                            | `OME_AGENT_SOURCE_NAMESPACE`                           |                           | yes                                                                                  |
-| `target.bucket_name`                          | `OME_AGENT_TARGET_BUCKET_NAME`                         |                           | yes                                                                                  |
-| `target.prefix`                               | `OME_AGENT_TARGET_PREFIX`                              |                           | no                                                                                   |
-| `target.region`                               | `OME_AGENT_TARGET_REGION`                              |                           | yes                                                                                  |
-| `target.namespace`                            | `OME_AGENT_TARGET_NAMESPACE`                           |                           | yes                                                                                  |
-| `compartment_id`                              | `OME_AGENT_COMPARTMENT_ID`                             |                           | yes                                                                                  |
-| `vault_id`                                    | `OME_AGENT_VAULT_ID`                                   |                           | yes                                                                                  |
-| `key_name`                                    | `OME_AGENT_KEY_NAME`                                   |                           | yes                                                                                  |
-| `secret_name`                                 | `OME_AGENT_SECRET_NAME`                                | <key_name>-dek            | no                                                                                   |
-| `model_type`                                  | `OME_AGENT_MODEL_TYPE`                                 |                           | yes                                                                                  |
-| `model_framework`                             | `OME_AGENT_MODEL_FRAMEWORK`                            | tensorrtllm               | yes                                                                                  |
-| `tensorrtllm_version`                        | `OME_AGENT_TENSORRTLLM_VERSION`                        | v0.11.0                   | yes                                                                                  |
-| `node_shape_alias`                            | `OME_AGENT_NODE_SHAPE_ALIAS`                           |                           | no                                                                                   |
-| `num_of_gpu`                                  | `OME_AGENT_NUM_OF_GPU`                                 | 1                         | yes                                                                                  |
-| `disable_model_decryption`                    | `OME_AGENT_DISABLE_MODEL_DECRYPTION`                   | false                     | no                                                                                   |
-| `runtime`                                     | `OME_AGENT_RUNTIME`                                    | cohere                    | yes                                                                                  |
-| `training_name`                               | `OME_AGENT_TRAINING_NAME`                              |                           | yes                                                                                  |
-| `model_directory`                             | `OME_AGENT_MODEL_DIRECTORY`                            |                           | yes                                                                                  |
-| `input_object_store.enable_obo_token`         | `OME_AGENT_INPUT_OBJECT_STORE_ENABLE_OBO_TOKEN`        | true                      | no                                                                                   |
-| `input_object_store.obo_token`                | `OME_AGENT_INPUT_OBJECT_STORE_OBO_TOKEN`               |                           | yes when `input_object_store.enable_obo_token` == `true`                             |
-| `training_data.bucket_name`                   | `OME_AGENT_TRAINING_DATA_BUCKET_NAME`                  |                           | yes                                                                                  |
-| `training_data.namespace`                     | `OME_AGENT_TRAINING_DATA_NAMESPACE`                    |                           | yes                                                                                  |
-| `training_data.object_name`                   | `OME_AGENT_TRAINING_DATA_OBJECT_NAME`                  |                           | yes                                                                                  |
-| `model.bucket_name`                           | `OME_AGENT_MODEL_BUCKET_NAME`                          | fine-tuned-model-weights  | no                                                                                   |
-| `model.namespace`                             | `OME_AGENT_MODEL_NAMESPACE`                            |                           | yes                                                                                  |
-| `model.object_name`                           | `OME_AGENT_MODEL_OBJECT_NAME`                          | equals to `training_name` | no                                                                                   |
-| `training_metrics.bucket_name`                | `OME_AGENT_TRAINING_METRICS_BUCKET_NAME`               | model-training-metrics    | no                                                                                   |
-| `training_metrics.namespace`                  | `OME_AGENT_TRAINING_METRICS_NAMESPACE`                 |                           | yes                                                                                  |
-| `training_metrics.object_name`                | `OME_AGENT_TRAINING_METRICS_OBJECT_NAME`               | equals to `training_name` | no                                                                                   |
-| `cohere_ft.name`                              | `OME_AGENT_COHERE_FT_NAME`                             | equals to `training_name` | no                                                                                   |
-| `cohere_ft.size`                              | `OME_AGENT_COHERE_FT_SIZE`                             |                           | yes                                                                                  |
-| `cohere_ft.strategy`                          | `OME_AGENT_COHERE_FT_STRATEGY`                         |                           | yes                                                                                  |
-| `cohere_ft.serving_strategy`                  | `OME_AGENT_COHERE_FT_SERVING_STRATEGY`                 |                           | yes when `runtime` == `cohere-commandr`                                              |
-| `cohere_ft.train_epochs`                      | `OME_AGENT_COHERE_FT_TRAIN_EPOCHS`                     |                           | yes                                                                                  |
-| `cohere_ft.learning_rate`                     | `OME_AGENT_COHERE_FT_LEARNING_RATE`                    |                           | yes                                                                                  |
-| `cohere_ft.train_batch_size`                  | `OME_AGENT_COHERE_FT_TRAIN_BATCH_SIZE`                 |                           | yes                                                                                  |
-| `cohere_ft.early_stopping_patience`           | `OME_AGENT_COHERE_FT_EARLY_STOPPING_PATIENCE`          |                           | yes                                                                                  |
-| `cohere_ft.early_stopping_threshold`          | `OME_AGENT_COHERE_FT_EARLY_STOPPING_THRESHOLD`         |                           | yes                                                                                  |
-| `cohere_ft.log_train_status_every_steps`      | `OME_AGENT_COHERE_FT_LOG_TRAIN_STATUS_EVERY_STEPS`     |                           | yes when `runtime` == `cohere`                                                       |
-| `cohere_ft.n_last_layers`                     | `OME_AGENT_COHERE_FT_N_LAST_LAYERS`                    |                           | yes when `runtime` == `cohere` && `cohere_ft.strategy` == `vanilla`                  |
-| `cohere_ft.tensor_parallel_size`              | `OME_AGENT_COHERE_FT_TENSOR_PARALLEL_SIZE`             |                           | yes when `runtime` == `cohere-commandr` && `cohere_ft.serving_strategy` == `vanilla` |
-| `cohere_ft.base_model`                        | `OME_AGENT_COHERE_FT_BASE_MODEL`                       |                           | yes when `runtime` == `cohere-commandr`                                              |
-| `cohere_ft.lora_config.rank`                  | `OME_AGENT_COHERE_FT_LORA_CONFIG_RANK`                 |                           | yes when `cohere_ft.strategy` == `lora`                                              |
-| `cohere_ft.lora_config.alpha`                 | `OME_AGENT_COHERE_FT_LORA_CONFIG_ALPHA`                |                           | yes when `cohere_ft.strategy` == `lora`                                              |
-| `peft_ft.model_name`                          | `OME_AGENT_PEFT_FT_MODEL_NAME`                         |                           | yes                                                                                  |
-| `peft_ft.train_dataset_file`                  | `OME_AGENT_PEFT_FT_TRAIN_DATASET_FILE`                 |                           | yes                                                                                  |
-| `peft_ft.num_train_epochs`                    | `OME_AGENT_PEFT_FT_NUM_TRAIN_EPOCHS`                   |                           | yes                                                                                  |
-| `peft_ft.learning_rate`                       | `OME_AGENT_PEFT_FT_LEARNING_RATE`                      |                           | yes                                                                                  |
-| `peft_ft.train_batch_size`                    | `OME_AGENT_PEFT_FT_TRAIN_BATCH_SIZE`                   |                           | yes                                                                                  |
-| `peft_ft.early_stopping_patience`             | `OME_AGENT_PEFT_FT_EARLY_STOPPING_PATIENCE`            |                           | yes                                                                                  |
-| `peft_ft.early_stopping_threshold`            | `OME_AGENT_PEFT_FT_EARLY_STOPPING_THRESHOLD`           |                           | yes                                                                                  |
-| `peft_ft.log_model_metrics_interval_in_steps` | `OME_AGENT_PEFT_FT_LOG_MODEL_METRICS_INTERNAL_IN_STEPS` |                           | yes                                                                                  |
-| `peft_ft.peft_type`                           | `OME_AGENT_PEFT_FT_PEFT_TYPE`                          | lora                      | yes                                                                                  |
-| `peft_ft.lora_r`                              | `OME_AGENT_PEFT_FT_LORA_R`                             |                           | yes                                                                                  |
-| `peft_ft.lora_alpha`                          | `OME_AGENT_PEFT_FT_LORA_ALPHA`                         |                           | yes                                                                                  |
-| `peft_ft.lora_dropout`                        | `OME_AGENT_PEFT_FT_LORA_DROPOUT`                       |                           | yes                                                                                  |
-
+| YAML Key                                      | Environment Variable                                    | Default                   | Required                                                                             |
+|-----------------------------------------------|---------------------------------------------------------|---------------------------|--------------------------------------------------------------------------------------|
+| `auth_type`                                   | `OME_AGENT_AUTH_TYPE`                                   |                           | yes                                                                                  |
+| `profile`                                     | `OME_AGENT_PROFILE`                                     | DEFAULT                   | no                                                                                   |
+| `local_path`                                  | `OME_AGENT_LOCAL_PATH`                                  |                           | yes                                                                                  |
+| `model_store_directory`                       | `OME_AGENT_MODEL_STORE_DIRECTORY`                       | /opt/ml/model             | no                                                                                   |
+| `skip_sha`                                    | `OME_AGENT_SKIP_SHA`                                    | false                     | no                                                                                   |
+| `max_retry`                                   | `OME_AGENT_MAX_RETRY`                                   | 5                         | no                                                                                   |
+| `retry_internal_in_seconds`                   | `OME_AGENT_RETRY_INTERVAL_IN_SECONDS`                   | 10                        | no                                                                                   |
+| `model_name`                                  | `OME_AGENT_MODEL_NAME`                                  |                           | yes                                                                                  |
+| `hf_token`                                    | `OME_AGENT_HF_TOKEN`                                    |                           | no                                                                                   |
+| `num_connections`                             | `OME_AGENT_NUM_CONNECTIONS`                             | 10                        | no                                                                                   |
+| `download_size_limit_gb`                      | `OME_AGENT_DOWNLOAD_SIZE_LIMIT_GB`                      | 650                       | no                                                                                   |
+| `enable_size_limit_check`                     | `OME_AGENT_ENABLE_SIZE_LIMIT_CHECK`                     | true                      | no                                                                                   |
+| `source.bucket_name`                          | `OME_AGENT_SOURCE_BUCKET_NAME`                          |                           | yes                                                                                  |
+| `source.prefix`                               | `OME_AGENT_SOURCE_PREFIX`                               |                           | no                                                                                   |
+| `source.region`                               | `OME_AGENT_SOURCE_REGION`                               |                           | yes                                                                                  |
+| `source.namespace`                            | `OME_AGENT_SOURCE_NAMESPACE`                            |                           | yes                                                                                  |
+| `target.bucket_name`                          | `OME_AGENT_TARGET_BUCKET_NAME`                          |                           | yes                                                                                  |
+| `target.prefix`                               | `OME_AGENT_TARGET_PREFIX`                               |                           | no                                                                                   |
+| `target.region`                               | `OME_AGENT_TARGET_REGION`                               |                           | yes                                                                                  |
+| `target.namespace`                            | `OME_AGENT_TARGET_NAMESPACE`                            |                           | yes                                                                                  |
+| `compartment_id`                              | `OME_AGENT_COMPARTMENT_ID`                              |                           | yes                                                                                  |
+| `vault_id`                                    | `OME_AGENT_VAULT_ID`                                    |                           | yes                                                                                  |
+| `key_name`                                    | `OME_AGENT_KEY_NAME`                                    |                           | yes                                                                                  |
+| `secret_name`                                 | `OME_AGENT_SECRET_NAME`                                 | <key_name>-dek            | no                                                                                   |
+| `model_type`                                  | `OME_AGENT_MODEL_TYPE`                                  |                           | yes                                                                                  |
+| `model_framework`                             | `OME_AGENT_MODEL_FRAMEWORK`                             | tensorrtllm               | yes                                                                                  |
+| `tensorrtllm_version`                         | `OME_AGENT_TENSORRTLLM_VERSION`                         | v0.11.0                   | yes                                                                                  |
+| `node_shape_alias`                            | `OME_AGENT_NODE_SHAPE_ALIAS`                            |                           | no                                                                                   |
+| `num_of_gpu`                                  | `OME_AGENT_NUM_OF_GPU`                                  | 1                         | yes                                                                                  |
+| `disable_model_decryption`                    | `OME_AGENT_DISABLE_MODEL_DECRYPTION`                    | false                     | no                                                                                   |
+| `model_directory`                             | `OME_AGENT_MODEL_DIRECTORY`                             |                           | yes                                                                                  |
+| `input_object_store.enable_obo_token`         | `OME_AGENT_INPUT_OBJECT_STORE_ENABLE_OBO_TOKEN`         | true                      | no                                                                                   |
+| `input_object_store.obo_token`                | `OME_AGENT_INPUT_OBJECT_STORE_OBO_TOKEN`                |                           | yes when `input_object_store.enable_obo_token` == `true`                             |
+| `model.bucket_name`                           | `OME_AGENT_MODEL_BUCKET_NAME`                           | fine-tuned-model-weights  | no                                                                                   |
+| `model.namespace`                             | `OME_AGENT_MODEL_NAMESPACE`                             |                           | yes                                                                                  |
+| `model.object_name`                           | `OME_AGENT_MODEL_OBJECT_NAME`                           | equals to `training_name` | no                                                                                   |
+| 
 
 ### Usage
 OME-Agent uses subcommands to run specific tasks. Use the following commands:=
