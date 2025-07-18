@@ -128,12 +128,10 @@ func buildArgsFromEndpoint(endpoint *v1beta1.Endpoint) map[string]string {
 }
 
 // UpdateVolumeMounts updates the volume mounts for the benchmark container if a base model is defined.
-func UpdateVolumeMounts(isvc *v1beta1.InferenceService, container *v1.Container, baseModel *v1beta1.BaseModelSpec) {
-	if isvc.Spec.Predictor.Model == nil || isvc.Spec.Predictor.Model.BaseModel == nil || baseModel == nil {
+func UpdateVolumeMounts(container *v1.Container, baseModelName string, baseModel *v1beta1.BaseModelSpec) {
+	if baseModelName == "" || baseModel == nil {
 		return
 	}
-
-	baseModelName := *isvc.Spec.Predictor.Model.BaseModel
 
 	// Define the volume mount
 	volumeMount := v1.VolumeMount{
