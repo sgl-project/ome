@@ -260,7 +260,7 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		if err != nil {
 			return nil, err
 		}
-		benchmarkutils.UpdateVolumeMounts(inferenceService, &defaultContainer, baseModel)
+		benchmarkutils.UpdateVolumeMounts(&defaultContainer, baseModelName, baseModel)
 
 		volumes = append(volumes, v1.Volume{
 			Name: baseModelName,

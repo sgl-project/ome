@@ -468,23 +468,16 @@ func TestBuildInferenceServiceArgs(t *testing.T) {
 func TestUpdateVolumeMounts(t *testing.T) {
 	tests := []struct {
 		name      string
-		isvc      *v1beta1.InferenceService
 		model     *v1beta1.ClusterBaseModel
 		container *v1.Container
 		want      *v1.Container
 	}{
 		{
 			name: "with base model",
-			isvc: &v1beta1.InferenceService{
-				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{
-						Model: &v1beta1.ModelSpec{
-							BaseModel: strPtr("test-model"),
-						},
-					},
-				},
-			},
 			model: &v1beta1.ClusterBaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-model",
+				},
 				Spec: v1beta1.BaseModelSpec{
 					Storage: &v1beta1.StorageSpec{
 						Path: strPtr("/model/test-model"),
@@ -509,12 +502,7 @@ func TestUpdateVolumeMounts(t *testing.T) {
 			},
 		},
 		{
-			name: "without base model",
-			isvc: &v1beta1.InferenceService{
-				Spec: v1beta1.InferenceServiceSpec{
-					Predictor: v1beta1.PredictorSpec{},
-				},
-			},
+			name:      "without base model",
 			container: &v1.Container{},
 			want:      &v1.Container{},
 		},
@@ -523,9 +511,9 @@ func TestUpdateVolumeMounts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.model != nil {
-				UpdateVolumeMounts(tt.isvc, tt.container, &tt.model.Spec)
+				UpdateVolumeMounts(tt.container, tt.model.Name, &tt.model.Spec)
 			} else {
-				UpdateVolumeMounts(tt.isvc, tt.container, nil)
+				UpdateVolumeMounts(tt.container, "", nil)
 			}
 			if !reflect.DeepEqual(tt.container, tt.want) {
 				t.Errorf("UpdateVolumeMounts() = %v, want %v", tt.container, tt.want)
