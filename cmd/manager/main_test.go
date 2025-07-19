@@ -7,10 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-
 	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
-	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	istionetworking "istio.io/api/networking/v1beta1"
@@ -25,6 +22,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	volcano "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 func TestGetOptions(t *testing.T) {

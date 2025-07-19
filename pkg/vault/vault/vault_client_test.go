@@ -8,12 +8,13 @@ import (
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/vault"
-	"github.com/sgl-project/ome/pkg/principals"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
-	vaultUtils "github.com/sgl-project/ome/pkg/vault"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/sgl-project/ome/pkg/principals"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	vaultUtils "github.com/sgl-project/ome/pkg/vault"
 )
 
 // MockVaultsClientInterface defines the interface for mocking vault client

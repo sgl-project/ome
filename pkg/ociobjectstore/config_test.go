@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/principals"
 )
 
 // MockLogger is a mock implementation of logging.Interface for testing

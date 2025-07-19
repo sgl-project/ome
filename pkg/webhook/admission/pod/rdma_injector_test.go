@@ -3,10 +3,11 @@ package pod
 import (
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 func TestRDMAInjector_InjectRDMA(t *testing.T) {

@@ -3,9 +3,10 @@ package ociobjectstore
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/principals"
-	"github.com/stretchr/testify/assert"
 )
 
 // TestLogger for testing

@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	"github.com/sgl-project/ome/pkg/client/clientset/versioned"
-	"github.com/sgl-project/ome/pkg/hfutil/modelconfig"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/client/clientset/versioned"
+	"github.com/sgl-project/ome/pkg/hfutil/modelconfig"
 )
 
 // mockHuggingFaceModel implements the modelconfig.HuggingFaceModel interface for testing

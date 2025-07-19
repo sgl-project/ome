@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/logging"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 func TestDefaultFactory(t *testing.T) {

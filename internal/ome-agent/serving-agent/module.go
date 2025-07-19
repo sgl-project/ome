@@ -3,10 +3,11 @@ package serving_agent
 import (
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 type servingSidecarParams struct {

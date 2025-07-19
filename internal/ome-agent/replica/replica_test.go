@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/utils/storage"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 type TestReplicaAgent struct {

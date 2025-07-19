@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	v1 "k8s.io/api/core/v1"
+
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/utils"
-	v1 "k8s.io/api/core/v1"
 )
 
 const (

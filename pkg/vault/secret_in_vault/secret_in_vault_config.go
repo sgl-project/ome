@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/spf13/viper"
+
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/principals"
-	"github.com/spf13/viper"
 )
 
 const (

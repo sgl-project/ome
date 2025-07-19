@@ -7,17 +7,14 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 var (
@@ -255,7 +252,6 @@ func migrateFromPredictorToNewArchitecture(isvc *v1beta1.InferenceService) {
 			Kind: &clusterServingRuntime, // Kind is a *string, needs to be a pointer
 		}
 	}
-
 }
 
 // migrateSpecViaJSON uses JSON marshaling/unmarshaling to safely migrate from one spec to another

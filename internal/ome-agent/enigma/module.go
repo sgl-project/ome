@@ -3,12 +3,13 @@ package enigma
 import (
 	"fmt"
 
+	"github.com/spf13/viper"
+	"go.uber.org/fx"
+
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
 	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
 	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
-	"github.com/spf13/viper"
-	"go.uber.org/fx"
 )
 
 type enigmaParams struct {

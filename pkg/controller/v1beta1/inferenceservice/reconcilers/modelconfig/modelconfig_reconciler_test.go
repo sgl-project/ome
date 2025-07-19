@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/go-logr/logr"
+	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,13 +17,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"github.com/go-logr/logr"
-	"github.com/onsi/gomega"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestModelConfigReconciler_Reconcile(t *testing.T) {

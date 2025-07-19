@@ -2,13 +2,13 @@ package pod
 
 import (
 	"strconv"
+	"testing"
 
-	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/kmp"
 
-	"testing"
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 const sklearnPrometheusPort = "8080"

@@ -6,9 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	modelVer "github.com/sgl-project/ome/pkg/modelver"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // DefaultRuntimeMatcher implements RuntimeMatcher with comprehensive compatibility checking.

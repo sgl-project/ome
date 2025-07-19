@@ -1,8 +1,9 @@
 package v1beta1
 
 import (
-	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 // PredictorImplementation defines common functions for all predictors e.g Tensorflow, Triton, etc

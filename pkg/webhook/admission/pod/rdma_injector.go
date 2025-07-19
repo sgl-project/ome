@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sgl-project/ome/pkg/constants"
 	v1 "k8s.io/api/core/v1"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 const (

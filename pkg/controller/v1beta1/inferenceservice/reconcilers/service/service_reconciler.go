@@ -4,9 +4,6 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
-	"github.com/sgl-project/ome/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -16,6 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 var log = logf.Log.WithName("ServiceReconciler")

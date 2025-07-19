@@ -3,12 +3,13 @@ package status
 import (
 	"reflect"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/apis"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	lwsspec "sigs.k8s.io/lws/api/leaderworkerset/v1"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // Constants for magic numbers and string literals
