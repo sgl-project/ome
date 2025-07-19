@@ -9,9 +9,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
-	"go.uber.org/zap/zaptest"
 )
 
 // mockCredentialsProvider implements aws.CredentialsProvider for testing

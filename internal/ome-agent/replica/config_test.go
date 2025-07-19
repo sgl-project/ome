@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
-
-	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
-	"github.com/sgl-project/ome/pkg/utils/storage"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+
+	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 // Define reusable struct types to avoid repetition

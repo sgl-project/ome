@@ -4,12 +4,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/utils/storage"
-
-	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	testingPkg "github.com/sgl-project/ome/pkg/testing"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 type mockReplicationObject struct{}

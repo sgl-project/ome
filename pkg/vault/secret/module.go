@@ -3,9 +3,10 @@ package ocisecret
 import (
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 type appParams struct {

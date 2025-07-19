@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/sgl-project/ome/pkg/configutils"
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
+
+	"github.com/sgl-project/ome/pkg/configutils"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 // ProgressDisplayMode defines how download progress is displayed

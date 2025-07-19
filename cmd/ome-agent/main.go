@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sgl-project/ome/pkg/version"
 	"github.com/spf13/cobra"
+
+	"github.com/sgl-project/ome/pkg/version"
 )
 
 var rootCmd = &cobra.Command{

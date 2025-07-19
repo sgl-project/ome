@@ -4,11 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -19,6 +15,10 @@ import (
 	"knative.dev/pkg/kmp"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/constants"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 var log = logf.Log.WithName("DeploymentReconciler")

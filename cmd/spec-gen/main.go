@@ -6,10 +6,11 @@ import (
 	"os"
 	"strings"
 
-	omev1beta1 "github.com/sgl-project/ome/pkg/openapi"
 	"k8s.io/klog/v2"
 	"k8s.io/kube-openapi/pkg/common"
 	spec "k8s.io/kube-openapi/pkg/validation/spec"
+
+	omev1beta1 "github.com/sgl-project/ome/pkg/openapi"
 )
 
 // Generate OpenAPI spec definitions for InferenceService Resource

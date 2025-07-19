@@ -4,8 +4,9 @@ import (
 	"context"
 	"math"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // DefaultRuntimeScorer implements RuntimeScorer with configurable scoring weights.

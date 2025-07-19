@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 // mockClient implements kclient.Client interface for testing error conditions

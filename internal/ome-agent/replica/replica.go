@@ -3,11 +3,12 @@ package replica
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/utils/storage"
-	"golang.org/x/net/context"
 )
 
 const (

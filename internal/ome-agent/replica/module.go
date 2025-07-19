@@ -3,11 +3,12 @@ package replica
 import (
 	"fmt"
 
+	"github.com/spf13/viper"
+	"go.uber.org/fx"
+
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"github.com/spf13/viper"
-	"go.uber.org/fx"
 )
 
 type replicaParams struct {

@@ -3,9 +3,10 @@ package secret_retrieval
 import (
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 func ProvideSecretRetrievalConfig(v *viper.Viper, logger logging.Interface) (*SecretRetrievalConfig, error) {

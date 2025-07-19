@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	goerrors "github.com/pkg/errors"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // GetBaseModel retrieves a BaseModel or ClusterBaseModel by name.

@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/spf13/viper"
+
 	"github.com/sgl-project/ome/pkg/configutils"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/logging"
@@ -12,7 +14,6 @@ import (
 	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
 	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
 	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
-	"github.com/spf13/viper"
 )
 
 type ModelFramework string

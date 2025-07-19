@@ -1,13 +1,13 @@
 package common
 
 import (
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
-
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 )
 
 // PodSpecReconciler handles common pod spec reconciliation logic

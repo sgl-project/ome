@@ -3,12 +3,11 @@ package interfaces
 import (
 	"context"
 
-	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
 )
 
 // IngressStrategy defines the interface for different ingress reconciliation strategies

@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // defaultSelector is the default implementation of the Selector interface.

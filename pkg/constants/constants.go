@@ -9,12 +9,9 @@ import (
 	"strings"
 
 	rayutils "github.com/ray-project/kuberay/ray-operator/controllers/ray/utils"
-
-	"knative.dev/serving/pkg/apis/autoscaling"
-
-	"knative.dev/pkg/network"
-
 	"k8s.io/apimachinery/pkg/types"
+	"knative.dev/pkg/network"
+	"knative.dev/serving/pkg/apis/autoscaling"
 )
 
 // OME Constants

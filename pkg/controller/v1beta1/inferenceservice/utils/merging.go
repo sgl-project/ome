@@ -6,10 +6,11 @@ import (
 	"html/template"
 
 	goerrors "github.com/pkg/errors"
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // MergeRuntimeContainers Merge the predictor Container struct with the runtime Container struct, allowing users

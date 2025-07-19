@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"os"
 
+	"golang.org/x/oauth2/google"
+
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
-	"golang.org/x/oauth2/google"
 )
 
 // Factory creates GCP credentials

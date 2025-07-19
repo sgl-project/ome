@@ -4,14 +4,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
-
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	pkgtest "github.com/sgl-project/ome/pkg/testing"
 )
 

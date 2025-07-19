@@ -6,9 +6,10 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/spf13/viper"
+
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/principals"
-	"github.com/spf13/viper"
 )
 
 // Viper keys must match the `mapstructure` tags defined in the Config struct

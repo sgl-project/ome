@@ -4,8 +4,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 func TestParseOCIStorageURI(t *testing.T) {

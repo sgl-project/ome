@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sgl-project/ome/pkg/auth"
-	"github.com/sgl-project/ome/pkg/logging"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/oauth2"
+
+	"github.com/sgl-project/ome/pkg/auth"
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 func TestGCPCredentials_Provider(t *testing.T) {

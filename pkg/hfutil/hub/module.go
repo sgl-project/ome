@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 // HubClientParams represents the parameters that can be injected into the Hub client

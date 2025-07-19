@@ -6,14 +6,15 @@ import (
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/keymanagement"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/sgl-project/ome/pkg/constants"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/vault/kmscrypto"
 	"github.com/sgl-project/ome/pkg/vault/kmsmgm"
 	ocisecret "github.com/sgl-project/ome/pkg/vault/secret"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewApplication(t *testing.T) {

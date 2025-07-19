@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/principals"
 )
 
 // MockConfigProvider implements common.ConfigurationProvider for testing

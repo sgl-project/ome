@@ -3,10 +3,11 @@ package replica
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/utils/storage"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewReplicator(t *testing.T) {

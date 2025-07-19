@@ -3,9 +3,10 @@ package utils
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestResolveIngressConfig(t *testing.T) {

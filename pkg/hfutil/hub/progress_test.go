@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/schollz/progressbar/v3"
-	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/sgl-project/ome/pkg/logging"
 )
 
 func TestNewProgressManager(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/onsi/gomega"
 	gomegaTypes "github.com/onsi/gomega/types"
-	"github.com/sgl-project/ome/pkg/constants"
 	"gomodules.xyz/jsonpatch/v2"
 	"google.golang.org/protobuf/proto"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -18,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/sgl-project/ome/pkg/constants"
 )
 
 func TestMutator_Handle(t *testing.T) {

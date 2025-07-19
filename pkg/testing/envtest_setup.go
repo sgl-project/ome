@@ -5,11 +5,10 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
 	netv1 "k8s.io/api/networking/v1"
-
-	"github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
 	knservingv1 "knative.dev/serving/pkg/apis/serving/v1"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"

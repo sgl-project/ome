@@ -3,8 +3,9 @@ package runtimeselector
 import (
 	"context"
 
-	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 )
 
 // Selector is the main interface for runtime selection.

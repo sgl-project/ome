@@ -2,6 +2,7 @@ package replica
 
 import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
+
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
