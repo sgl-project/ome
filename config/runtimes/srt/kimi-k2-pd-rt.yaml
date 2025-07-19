@@ -28,6 +28,8 @@ spec:
           effect: "NoSchedule"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
       volumes:
         - name: dshm
           emptyDir:
@@ -42,6 +44,9 @@ spec:
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
+        ports:
+          - containerPort: 30000
+            protocol: TCP
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -53,44 +58,67 @@ spec:
             value: "/tmp/sglang-recorder"
           - name: SGLANG_TORCH_PROFILER_DIR
             value: "/tmp/sglang-profiler"
+          - name: SGLANG_DUMPER_DIR
+            value: "/mnt/shared-fs/zbx/tmp"
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --port 8080
-            --host 0.0.0.0
-            --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_1
-            --chunked-prefill-size 524288
-            --max-prefill-tokens 32768
-            --page-size 64
-            --ep-dispatch-algorithm dynamic
-            --eplb-algorithm deepseek
-            --enable-dp-lm-head
-            --watchdog-timeout 1000000
-            --disable-cuda-graph
-            --enable-two-batch-overlap
-            --enable-dp-attention
-            --disable-shared-experts-fusion
-            --dp-size ${PARALLELISM_SIZE}
-            --disable-radix-cache
-            --enable-deepep-moe
-            --deepep-mode normal
-            --disaggregation-mode prefill
-            --mem-fraction-static 0.849
-            --context-length 2176
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --trust-remote-code
-            --moe-dense-tp-size 1
-            --decode-log-interval 1
-            --max-running-requests 1024
-            --max-total-tokens 131072
-            --ep-num-redundant-experts ${PARALLELISM_SIZE}
-            --enable-eplb
+          - python3
+          - -m
+          - sglang.launch_server
+          - --port
+          - "30000"
+          - --host
+          - "0.0.0.0"
+          - --model-path
+          - $(MODEL_PATH)
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --chunked-prefill-size
+          - "524288"
+          - --ep-dispatch-algorithm
+          - dynamic
+          - --eplb-algorithm
+          - deepseek
+          - --enable-dp-lm-head
+          - --disable-cuda-graph
+          - --enable-two-batch-overlap
+          - --enable-dp-attention
+          -  --disable-shared-experts-fusion
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --enable-deepep-moe
+          - --deepep-mode
+          - normal
+          - --disaggregation-mode
+          - prefill
+          - --mem-fraction-static
+          - "0.849"
+          - --context-length
+          - "2176"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --decode-log-interval
+          - "1"
+          - --max-running-requests
+          - "1024"
+          - --max-total-tokens
+          - "131072"
+          - --log-level
+          - debug
+          - --enable-eplb
         resources:
           requests:
             nvidia.com/gpu: 8
@@ -119,6 +147,8 @@ spec:
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
       volumes:
         - name: dshm
           emptyDir:
@@ -133,6 +163,9 @@ spec:
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
+        ports:
+          - containerPort: 30001
+            protocol: TCP
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -144,44 +177,63 @@ spec:
             value: "/tmp/sglang-recorder"
           - name: SGLANG_TORCH_PROFILER_DIR
             value: "/tmp/sglang-profiler"
+          - name: SGLANG_DUMPER_DIR
+            value: "/mnt/shared-fs/zbx/tmp"
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_1
-            --chunked-prefill-size 524288
-            --max-prefill-tokens 32768
-            --page-size 64
-            --ep-dispatch-algorithm dynamic
-            --eplb-algorithm deepseek
-            --enable-dp-lm-head
-            --enable-dp-attention
-            --dp-size ${PARALLELISM_SIZE}
-            --disable-radix-cache
-            --enable-deepep-moe
-            --disable-cuda-graph
-            --enable-two-batch-overlap
-            --disable-shared-experts-fusion
-            --deepep-mode normal
-            --disaggregation-mode prefill
-            --max-total-tokens 131072
-            --watchdog-timeout 1000000
-            --mem-fraction-static 0.849
-            --context-length 2176
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --port 8080
-            --trust-remote-code
-            --moe-dense-tp-size 1
-            --decode-log-interval 1
-            --host 0.0.0.0
-            --max-running-requests 1024
-            --ep-num-redundant-experts ${PARALLELISM_SIZE}
-            --enable-eplb
+          - python3
+          - -m
+          - sglang.launch_server
+          - --model-path
+          - $(MODEL_PATH)
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --chunked-prefill-size
+          - "524288"
+          - --ep-dispatch-algorithm
+          - dynamic
+          - --eplb-algorithm
+          - deepseek
+          - --enable-dp-lm-head
+          - --disable-cuda-graph
+          - --enable-two-batch-overlap
+          - --enable-dp-attention
+          - --disable-shared-experts-fusion
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --enable-deepep-moe
+          - --deepep-mode
+          - normal
+          - --disaggregation-mode
+          - prefill
+          - --mem-fraction-static
+          - "0.849"
+          - --context-length
+          - "2176"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --decode-log-interval
+          - "1"
+          - --max-running-requests
+          - "1024"
+          - --max-total-tokens
+          - "131072"
+          - --log-level
+          - debug
+          - --enable-eplb
         resources:
           limits:
             nvidia.com/gpu: "8"
@@ -221,8 +273,13 @@ spec:
           effect: "NoSchedule"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
       runner:
         name: ome-container
+        ports:
+          - containerPort: 30000
+            protocol: TCP
         image: docker.io/lmsysorg/sglang:dev
         env:
           - name: MC_TE_METRIC
@@ -232,46 +289,69 @@ spec:
           - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
             value: "176"
           - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
-            value: "256"
+            value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
           - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
             value: "/tmp/sglang-recorder"
           - name: SGLANG_TORCH_PROFILER_DIR
             value: "/tmp/sglang-profiler"
+          - name: SGLANG_DUMPER_DIR
+            value: "/mnt/shared-fs/zbx/tmp"
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --port 8080
-            --host 0.0.0.0
-            --page-size 64
-            --model-path ${MODEL_PATH}
-            --enable-dp-attention
-            --enable-dp-lm-head
-            --dp-size ${PARALLELISM_SIZE}
-            --disable-radix-cache
-            --disable-shared-experts-fusion
-            --enable-deepep-moe
-            --deepep-mode low_latency
-            --disaggregation-mode decode
-            --enable-two-batch-overlap
-            --watchdog-timeout 1000000
-            --mem-fraction-static 0.849
-            --context-length 2176
-            --disaggregation-ib-device mlx5_1
-            --cuda-graph-bs 256
-            --max-running-requests 24576
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --decode-log-interval 1
-            --trust-remote-code
-            --moe-dense-tp-size 1
-            --ep-num-redundant-experts ${PARALLELISM_SIZE}
-            --enable-eplb
+          - python3
+          - -m
+          - sglang.launch_server
+          - --port
+          - "30000"
+          - --host
+          - "0.0.0.0"
+          - --model-path
+          - $(MODEL_PATH)
+          - --enable-dp-attention
+          - --enable-dp-lm-head
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --disable-shared-experts-fusion
+          - --enable-deepep-moe
+          - --deepep-mode
+          - low_latency
+          - --disaggregation-mode
+          - decode
+          - --enable-two-batch-overlap
+          - --mem-fraction-static
+          - "0.8"
+          - --context-length
+          - "2176"
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --cuda-graph-bs
+          - "480"
+          - --max-running-requests
+          - "46080"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --decode-log-interval
+          - "1"
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
+          - --log-level
+          - debug
+          - --enable-eplb
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -300,6 +380,8 @@ spec:
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
       volumes:
         - name: dshm
           emptyDir:
@@ -314,6 +396,9 @@ spec:
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
+        ports:
+          - containerPort: 30001
+            protocol: TCP
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -322,46 +407,65 @@ spec:
           - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
             value: "176"
           - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
-            value: "256"
+            value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
           - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
             value: "/tmp/sglang-recorder"
           - name: SGLANG_TORCH_PROFILER_DIR
             value: "/tmp/sglang-profiler"
+          - name: SGLANG_DUMPER_DIR
+            value: "/mnt/shared-fs/zbx/tmp"
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --model-path ${MODEL_PATH}
-            --page-size 64
-            --enable-dp-attention
-            --enable-dp-lm-head
-            --dp-size ${PARALLELISM_SIZE}
-            --disable-radix-cache
-            --disable-shared-experts-fusion
-            --enable-deepep-moe
-            --deepep-mode low_latency
-            --watchdog-timeout 1000000
-            --enable-two-batch-overlap
-            --disaggregation-mode decode
-            --mem-fraction-static 0.849
-            --context-length 2176
-            --disaggregation-ib-device mlx5_1
-            --cuda-graph-bs 256
-            --max-running-requests 24576
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --port 8080
-            --decode-log-interval 1
-            --host 0.0.0.0
-            --trust-remote-code
-            --moe-dense-tp-size 1
-            --ep-num-redundant-experts ${PARALLELISM_SIZE}
-            --enable-eplb
+          - python3
+          - -m
+          - sglang.launch_server
+          - --model-path
+          - $(MODEL_PATH)
+          - --enable-dp-attention
+          - --enable-dp-lm-head
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --disable-shared-experts-fusion
+          - --enable-deepep-moe
+          - --deepep-mode
+          - low_latency
+          - --disaggregation-mode
+          - decode
+          - --enable-two-batch-overlap
+          - --mem-fraction-static
+          - "0.8"
+          - --context-length
+          - "2176"
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --cuda-graph-bs
+          - "480"
+          - --max-running-requests
+          - "46080"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --decode-log-interval
+          - "1"
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
+          - --log-level
+          - debug
+          - --enable-eplb
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -394,21 +498,33 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host 0.0.0.0
-          --port 8080
-          --pd-disaggregation
-          --policy random
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
-          --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --max-payload-size 2147483648
-          --worker-startup-timeout-secs 1200
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --pd-disaggregation
+        - --policy
+        - random
+        - --service-discovery
+        - --service-discovery-namespace
+        - kimi-k2-instruct
+        - --service-discovery-port
+        - "30000"
+        - --prefill-selector
+        - component=engine
+        - leaderworkerset.sigs.k8s.io/worker-index=0
+        - ome.io/inferenceservice=kimi-k2-instruct
+        - --decode-selector
+        - component=decoder
+        - leaderworkerset.sigs.k8s.io/worker-index=0
+        - ome.io/inferenceservice=kimi-k2-instruct
+        - --max-payload-size
+        - "2147483648"
+        - --worker-startup-timeout-secs
+        - "1200"
       env:
         - name: NAMESPACE
           valueFrom:
