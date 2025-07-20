@@ -281,11 +281,11 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.7"
+          - "0.75"
           - --disaggregation-ib-device
           - mlx5_1
           - --max-running-requests
-          - "46080"
+          - "24576"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -373,11 +373,11 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.7"
+          - "0.75"
           - --disaggregation-ib-device
           - mlx5_1
           - --max-running-requests
-          - "46080"
+          - "24576"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
