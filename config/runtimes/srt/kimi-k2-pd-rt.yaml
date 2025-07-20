@@ -37,10 +37,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
@@ -54,12 +50,6 @@ spec:
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -129,10 +119,6 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
@@ -173,12 +159,6 @@ spec:
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -244,10 +224,6 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
@@ -263,10 +239,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"
@@ -292,12 +264,6 @@ spec:
             value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -357,10 +323,6 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
@@ -389,10 +351,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
@@ -410,12 +368,6 @@ spec:
             value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -471,10 +423,6 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
