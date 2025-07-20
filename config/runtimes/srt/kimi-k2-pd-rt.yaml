@@ -281,7 +281,7 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.8"
+          - "0.75"
           - --disaggregation-ib-device
           - mlx5_1
           - --max-running-requests
@@ -373,7 +373,7 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.8"
+          - "0.75"
           - --disaggregation-ib-device
           - mlx5_1
           - --max-running-requests
