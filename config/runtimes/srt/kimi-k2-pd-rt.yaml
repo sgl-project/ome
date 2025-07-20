@@ -37,10 +37,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
@@ -54,12 +50,6 @@ spec:
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -97,8 +87,6 @@ spec:
           - prefill
           - --mem-fraction-static
           - "0.849"
-          - --context-length
-          - "2176"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -116,9 +104,9 @@ spec:
           - "1024"
           - --max-total-tokens
           - "131072"
-          - --log-level
-          - debug
           - --enable-eplb
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
         resources:
           requests:
             nvidia.com/gpu: 8
@@ -129,10 +117,6 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
@@ -156,10 +140,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
@@ -173,12 +153,6 @@ spec:
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -212,8 +186,6 @@ spec:
           - prefill
           - --mem-fraction-static
           - "0.849"
-          - --context-length
-          - "2176"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -231,9 +203,9 @@ spec:
           - "1024"
           - --max-total-tokens
           - "131072"
-          - --log-level
-          - debug
           - --enable-eplb
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
         resources:
           limits:
             nvidia.com/gpu: "8"
@@ -244,10 +216,6 @@ spec:
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
@@ -263,10 +231,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"
@@ -286,18 +250,10 @@ spec:
             value: "true"
           - name: PYTHONUNBUFFERED
             value: "1"
-          - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
-            value: "176"
           - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
             value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -326,12 +282,8 @@ spec:
           - --enable-two-batch-overlap
           - --mem-fraction-static
           - "0.8"
-          - --context-length
-          - "2176"
           - --disaggregation-ib-device
           - mlx5_1
-          - --cuda-graph-bs
-          - "480"
           - --max-running-requests
           - "46080"
           - --tp-size
@@ -349,18 +301,12 @@ spec:
           - "1"
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
-          - --log-level
-          - debug
           - --enable-eplb
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
@@ -389,10 +335,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
@@ -404,18 +346,10 @@ spec:
             value: "true"
           - name: PYTHONUNBUFFERED
             value: "1"
-          - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
-            value: "176"
           - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
             value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
-          - name: SGLANG_EXPERT_DISTRIBUTION_RECORDER_DIR
-            value: "/tmp/sglang-recorder"
-          - name: SGLANG_TORCH_PROFILER_DIR
-            value: "/tmp/sglang-profiler"
-          - name: SGLANG_DUMPER_DIR
-            value: "/mnt/shared-fs/zbx/tmp"
           - name: NODE_IP
             valueFrom:
               fieldRef:
@@ -440,12 +374,8 @@ spec:
           - --enable-two-batch-overlap
           - --mem-fraction-static
           - "0.8"
-          - --context-length
-          - "2176"
           - --disaggregation-ib-device
           - mlx5_1
-          - --cuda-graph-bs
-          - "480"
           - --max-running-requests
           - "46080"
           - --tp-size
@@ -463,18 +393,12 @@ spec:
           - "1"
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
-          - --log-level
-          - debug
           - --enable-eplb
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
           - mountPath: /dev/infiniband
             name: devinf
-          - mountPath: /tmp/sglang-recorder
-            name: sglang-recorder-dir
-          - mountPath: /tmp/sglang-profiler
-            name: sglang-profiler-dir
         securityContext:
           capabilities:
             add:
