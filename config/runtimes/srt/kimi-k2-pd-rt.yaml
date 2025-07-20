@@ -285,9 +285,9 @@ spec:
           - --disaggregation-ib-device
           - mlx5_1
           - --cuda-graph-bs
-          - "480"
+          - "256"
           - --max-running-requests
-          - "46080"
+          - "24576"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -379,9 +379,9 @@ spec:
           - --disaggregation-ib-device
           - mlx5_1
           - --cuda-graph-bs
-          - "480"
+          - "256"
           - --max-running-requests
-          - "46080"
+          - "24576"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
