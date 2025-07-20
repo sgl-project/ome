@@ -281,13 +281,13 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.65"
+          - "0.6"
           - --disaggregation-ib-device
           - mlx5_1
           - --cuda-graph-bs
-          - "256"
+          - "480"
           - --max-running-requests
-          - "24576"
+          - "46080"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -375,13 +375,13 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.65"
+          - "0.6"
           - --disaggregation-ib-device
           - mlx5_1
           - --cuda-graph-bs
-          - "256"
+          - "480"
           - --max-running-requests
-          - "24576"
+          - "46080"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
