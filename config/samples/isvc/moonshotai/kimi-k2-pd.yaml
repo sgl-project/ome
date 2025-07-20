@@ -10,6 +10,8 @@ kind: InferenceService
 metadata:
   name: kimi-k2-instruct
   namespace: kimi-k2-instruct
+  annotations:
+    ome.io/ingress-disable-creation: "true"
 spec:
   model:
     name: kimi-k2-instruct
