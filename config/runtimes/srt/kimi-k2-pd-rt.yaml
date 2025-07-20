@@ -87,8 +87,6 @@ spec:
           - prefill
           - --mem-fraction-static
           - "0.849"
-          - --context-length
-          - "2176"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -106,9 +104,9 @@ spec:
           - "1024"
           - --max-total-tokens
           - "131072"
-          - --log-level
-          - debug
           - --enable-eplb
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
         resources:
           requests:
             nvidia.com/gpu: 8
@@ -142,10 +140,6 @@ spec:
         - name: devinf
           hostPath:
             path: /dev/infiniband
-        - name: sglang-recorder-dir
-          emptyDir: {}
-        - name: sglang-profiler-dir
-          emptyDir: {}
       runner:
         name: ome-container
         image: docker.io/lmsysorg/sglang:dev
@@ -192,8 +186,6 @@ spec:
           - prefill
           - --mem-fraction-static
           - "0.849"
-          - --context-length
-          - "2176"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -211,9 +203,9 @@ spec:
           - "1024"
           - --max-total-tokens
           - "131072"
-          - --log-level
-          - debug
           - --enable-eplb
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
         resources:
           limits:
             nvidia.com/gpu: "8"
@@ -258,8 +250,6 @@ spec:
             value: "true"
           - name: PYTHONUNBUFFERED
             value: "1"
-          - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
-            value: "176"
           - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
             value: "480"
           - name: GLOO_SOCKET_IFNAME
@@ -291,9 +281,7 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.8"
-          - --context-length
-          - "2176"
+          - "0.6"
           - --disaggregation-ib-device
           - mlx5_1
           - --cuda-graph-bs
@@ -315,8 +303,6 @@ spec:
           - "1"
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
-          - --log-level
-          - debug
           - --enable-eplb
         volumeMounts:
           - mountPath: /dev/shm
@@ -362,8 +348,6 @@ spec:
             value: "true"
           - name: PYTHONUNBUFFERED
             value: "1"
-          - name: SGLANG_NUM_RESERVED_DECODE_TOKENS
-            value: "176"
           - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
             value: "480"
           - name: GLOO_SOCKET_IFNAME
@@ -391,9 +375,7 @@ spec:
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.8"
-          - --context-length
-          - "2176"
+          - "0.6"
           - --disaggregation-ib-device
           - mlx5_1
           - --cuda-graph-bs
@@ -415,8 +397,6 @@ spec:
           - "1"
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
-          - --log-level
-          - debug
           - --enable-eplb
         volumeMounts:
           - mountPath: /dev/shm
@@ -446,33 +426,21 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - python3
-        - -m
-        - sglang_router.launch_router
-        - --host
-        - "0.0.0.0"
-        - --port
-        - "8080"
-        - --pd-disaggregation
-        - --policy
-        - random
-        - --service-discovery
-        - --service-discovery-namespace
-        - kimi-k2-instruct
-        - --service-discovery-port
-        - "30000"
-        - --prefill-selector
-        - component=engine
-        - leaderworkerset.sigs.k8s.io/worker-index=0
-        - ome.io/inferenceservice=kimi-k2-instruct
-        - --decode-selector
-        - component=decoder
-        - leaderworkerset.sigs.k8s.io/worker-index=0
-        - ome.io/inferenceservice=kimi-k2-instruct
-        - --max-payload-size
-        - "2147483648"
-        - --worker-startup-timeout-secs
-        - "1200"
+        - sh
+        - -c
+        - >
+          python3 -m sglang_router.launch_router
+          --host 0.0.0.0
+          --port 8080
+          --pd-disaggregation
+          --policy random
+          --service-discovery
+          --service-discovery-namespace "${NAMESPACE}"
+          --service-discovery-port 30000
+          --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --max-payload-size 2147483648
+          --worker-startup-timeout-secs 1200
       env:
         - name: NAMESPACE
           valueFrom:
