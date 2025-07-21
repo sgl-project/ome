@@ -7,11 +7,11 @@ spec:
   resources:
     limits:
       cpu: 20
-      memory: 240Gi
+      memory: 300Gi
       nvidia.com/gpu: 1
     requests:
       cpu: 20
-      memory: 240Gi
+      memory: 300Gi
       nvidia.com/gpu: 1
   affinity:
     nodeAffinity:

@@ -6,12 +6,12 @@ spec:
   count: 1
   resources:
     limits:
-      cpu: 20
-      memory: 240Gi
+      cpu: 40
+      memory: 300Gi
       nvidia.com/gpu: 2
     requests:
-      cpu: 20
-      memory: 240Gi
+      cpu: 40
+      memory: 300Gi
       nvidia.com/gpu: 2
   affinity:
     nodeAffinity:
