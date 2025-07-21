@@ -1,0 +1,20 @@
+{{- if .Values.command_a_vision.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-a-vision
+  namespace: command-a-vision
+spec:
+  predictor:
+    model:
+      runtime: cohere-command-a-vision
+      baseModel: command-a-vision
+      protocolVersion: cohere
+    minReplicas: {{ .Values.command_a_vision.minReplicas}}
+    maxReplicas: {{ .Values.command_a_vision.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-a-vision
+{{- end }}

@@ -144,6 +144,10 @@ command-a-032025-drcc:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+command-a-vision:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 cohere-command-r-082024-v1-6-tp4-128k:
   enabled: false 
   lifecyclePhase: "ACTIVE"
