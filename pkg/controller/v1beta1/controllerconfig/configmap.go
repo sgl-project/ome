@@ -177,8 +177,7 @@ func NewDeployConfig(clientset kubernetes.Interface) (*DeployConfig, error) {
 
 		if deployConfig.DefaultDeploymentMode != string(constants.Serverless) &&
 			deployConfig.DefaultDeploymentMode != string(constants.RawDeployment) {
-			return nil, fmt.Errorf("invalid deployment mode. Supported modes are Serverless," +
-				" RawDeployment and ModelMesh")
+			return nil, fmt.Errorf("invalid deployment mode. Supported modes are %s and %s", constants.Serverless, constants.RawDeployment)
 		}
 	}
 	return deployConfig, nil
