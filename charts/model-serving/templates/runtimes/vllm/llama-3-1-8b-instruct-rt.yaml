@@ -65,6 +65,16 @@ spec:
       modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
       priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.53.0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      autoSelect: true
+      modelArchitecture: LlamaForCausalLM
+      version: "1.0.0"
+      priority: 1
   modelSizeRange:
     min: 7B
     max: 13B
