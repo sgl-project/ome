@@ -55,7 +55,7 @@ func NewAutoscalerReconciler(
 	componentMeta metav1.ObjectMeta,
 	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
 ) (*AutoscalerReconciler, error) {
-	as, err := createAutoscaler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
+	as, err := createAutoscaler(client, scheme, componentMeta, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,6 @@ func getAutoscalerClass(metadata metav1.ObjectMeta) constants.AutoscalerClassTyp
 }
 
 func createAutoscaler(client client.Client,
-	clientset kubernetes.Interface,
 	scheme *runtime.Scheme, componentMeta metav1.ObjectMeta,
 	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
 ) (Autoscaler, error) {
@@ -86,10 +85,12 @@ func createAutoscaler(client client.Client,
 	switch ac {
 	// HPA and KEDA can not coexist for the same deployment
 	case constants.AutoscalerClassHPA, constants.AutoscalerClassExternal:
-		// Before creating HPA, ensure any existing ScaledObject is deleted
-		err := deleteExistingScaledObject(client, componentMeta)
-		if err != nil {
-			return nil, fmt.Errorf("failed to delete existing ScaledObject: %w", err)
+		if scheme.IsGroupRegistered(kedav1.SchemeGroupVersion.Group) {
+			// Before creating HPA, ensure any existing ScaledObject is deleted
+			err := deleteExistingScaledObject(client, componentMeta)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete existing ScaledObject: %w", err)
+			}
 		}
 		return hpa.NewHPAReconciler(client, scheme, componentMeta, &inferenceServiceSpec.Predictor.ComponentExtensionSpec), nil
 	case constants.AutoscalerClassKEDA:
