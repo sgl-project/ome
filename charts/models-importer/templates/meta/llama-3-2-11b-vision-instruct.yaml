@@ -33,11 +33,15 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
+    {{/* this model will use small_generic_v1 in PHX, small_generic_v2 in other regions*/}}
+    {{- $cfg := index .Values "llama-3-2-11b-vision-instruct" "compatibleDACShapes" -}}
+    {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: SMALL_GENERIC_V2
+        - name: {{ $cfg }}
           quotaUnit: 1
           default: true
+    {{ end }}
     internalName: "llama-3-2-11b-vision-instruct"
     type: "Serving"
     image-text-to-text: "true"

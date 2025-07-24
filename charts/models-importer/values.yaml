@@ -61,6 +61,7 @@ llama-3-2-90b-vision-instruct-fp8-dynamic:
 llama-3-2-11b-vision-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SMALL_GENERIC_V2"
 
 llama-3-70b-instruct:
   enabled: false
@@ -135,6 +136,7 @@ nl2sql-m1-premium-70b:
 llama-3-2-11b-vision-ft-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SMALL_GENERIC_V2"
 
 command-a-032025:
   enabled: false
