@@ -2,10 +2,12 @@ package replica
 
 import (
 	"fmt"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 
+	"github.com/sgl-project/ome/pkg/afero"
 	"github.com/sgl-project/ome/pkg/configutils"
 	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
@@ -25,11 +27,13 @@ type Config struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 		OCIOSDataStore *ociobjectstore.OCIOSDataStore
 		HubClient      *hf.HubClient
+		PVCFileSystem  *afero.OsFs
 	} `mapstructure:"source"`
 
 	Target struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 		OCIOSDataStore *ociobjectstore.OCIOSDataStore
+		PVCFileSystem  *afero.OsFs
 	} `mapstructure:"target"`
 }
 
@@ -130,11 +134,15 @@ func (c *Config) ValidateRequiredDependencies(sourceStorageType storage.StorageT
 	// Validate source dependencies
 	switch sourceStorageType {
 	case storage.StorageTypeOCI:
-		if err := requireNonNil("Source.OCIOSDataStore", c.Source.OCIOSDataStore); err != nil {
+		if err := common.RequireNonNil("Source.OCIOSDataStore", c.Source.OCIOSDataStore); err != nil {
 			return err
 		}
 	case storage.StorageTypeHuggingFace:
-		if err := requireNonNil("Source.HubClient", c.Source.HubClient); err != nil {
+		if err := common.RequireNonNil("Source.HubClient", c.Source.HubClient); err != nil {
+			return err
+		}
+	case storage.StorageTypePVC:
+		if err := common.RequireNonNil("Source.PVCFileSystem", c.Source.PVCFileSystem); err != nil {
 			return err
 		}
 	}
@@ -142,7 +150,11 @@ func (c *Config) ValidateRequiredDependencies(sourceStorageType storage.StorageT
 	// Validate target dependencies
 	switch targetStorageType {
 	case storage.StorageTypeOCI:
-		if err := requireNonNil("Target.OCIOSDataStore", c.Target.OCIOSDataStore); err != nil {
+		if err := common.RequireNonNil("Target.OCIOSDataStore", c.Target.OCIOSDataStore); err != nil {
+			return err
+		}
+	case storage.StorageTypePVC:
+		if err := common.RequireNonNil("Target.PVCFileSystem", c.Target.PVCFileSystem); err != nil {
 			return err
 		}
 	}

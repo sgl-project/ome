@@ -177,7 +177,7 @@ func TestModuleProvider(t *testing.T) {
 					t.Logf("Got non-critical error: %v", err)
 				} else {
 					assert.NotNil(t, agent)
-					assert.Equal(t, params.AnotherLogger, agent.logger)
+					assert.Equal(t, params.AnotherLogger, agent.Logger)
 				}
 			}
 		})

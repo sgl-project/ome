@@ -1,6 +1,7 @@
 package replica
 
 import (
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -16,13 +17,13 @@ import (
 
 type TestReplicaAgent struct {
 	*ReplicaAgent
-	mockListSourceObjects func() ([]ReplicationObject, error)
-	mockValidateModelSize func(objects []ReplicationObject)
+	mockListSourceObjects func() ([]common.ReplicationObject, error)
+	mockValidateModelSize func(objects []common.ReplicationObject)
 }
 
 // Override Start method to use the mock
 func (t *TestReplicaAgent) Start() error {
-	t.logger.Infof("Start replication from %+v to %+v", t.ReplicationInput.source, t.ReplicationInput.target)
+	t.Logger.Infof("Start replication from %+v to %+v", t.ReplicationInput.Source, t.ReplicationInput.Target)
 
 	sourceObjs, err := t.mockListSourceObjects()
 	if err != nil {
@@ -70,11 +71,11 @@ func TestNewReplicaAgent(t *testing.T) {
 				DownloadSizeLimitGB:  10,
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
-				Source: sourceStruct{
+				Source: SourceStruct{
 					StorageURIStr:  "oci://n/src-ns/b/src-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
-				Target: targetStruct{
+				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
@@ -90,11 +91,11 @@ func TestNewReplicaAgent(t *testing.T) {
 				DownloadSizeLimitGB:  10,
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
-				Source: sourceStruct{
+				Source: SourceStruct{
 					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct",
 					HubClient:     &hf.HubClient{},
 				},
-				Target: targetStruct{
+				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
@@ -110,11 +111,11 @@ func TestNewReplicaAgent(t *testing.T) {
 				DownloadSizeLimitGB:  10,
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
-				Source: sourceStruct{
+				Source: SourceStruct{
 					StorageURIStr:  "invalid://storage/uri",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
-				Target: targetStruct{
+				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
@@ -131,11 +132,11 @@ func TestNewReplicaAgent(t *testing.T) {
 				DownloadSizeLimitGB:  10,
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
-				Source: sourceStruct{
+				Source: SourceStruct{
 					StorageURIStr:  "oci://n/src-ns/b/src-bucket/o/models",
 					OCIOSDataStore: nil, // Missing OCI data store
 				},
-				Target: targetStruct{
+				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
@@ -152,11 +153,11 @@ func TestNewReplicaAgent(t *testing.T) {
 				DownloadSizeLimitGB:  10,
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
-				Source: sourceStruct{
+				Source: SourceStruct{
 					StorageURIStr:  "oci://n/src-ns/b/src-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
-				Target: targetStruct{
+				Target: TargetStruct{
 					StorageURIStr:  "s3://bucket/prefix", // S3 not supported for target
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
@@ -181,14 +182,14 @@ func TestNewReplicaAgent(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, agent)
 				assert.Equal(t, tt.config, &agent.Config)
-				assert.Equal(t, tt.config.AnotherLogger, agent.logger)
+				assert.Equal(t, tt.config.AnotherLogger, agent.Logger)
 
 				// Verify ReplicationInput is properly set
 				assert.NotNil(t, agent.ReplicationInput)
-				assert.NotEmpty(t, agent.ReplicationInput.sourceStorageType)
-				assert.NotEmpty(t, agent.ReplicationInput.targetStorageType)
-				assert.NotNil(t, agent.ReplicationInput.source)
-				assert.NotNil(t, agent.ReplicationInput.target)
+				assert.NotEmpty(t, agent.ReplicationInput.SourceStorageType)
+				assert.NotEmpty(t, agent.ReplicationInput.TargetStorageType)
+				assert.NotNil(t, agent.ReplicationInput.Source)
+				assert.NotNil(t, agent.ReplicationInput.Target)
 			}
 		})
 	}
@@ -200,7 +201,7 @@ func TestValidateModelSize(t *testing.T) {
 	tests := []struct {
 		name          string
 		config        Config
-		objects       []ReplicationObject
+		objects       []common.ReplicationObject
 		expectPanic   bool
 		panicContains string
 		skip          bool
@@ -212,15 +213,15 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []ReplicationObject {
+			objects: func() []common.ReplicationObject {
 				name := "test.bin"
 				size := 1 * GB // 1 GB
 				summary := objectstorage.ObjectSummary{
 					Name: &name,
 					Size: &size,
 				}
-				return []ReplicationObject{
-					ObjectSummaryReplicationObject{summary},
+				return []common.ReplicationObject{
+					common.ObjectSummaryReplicationObject{summary},
 				}
 			}(),
 			expectPanic: false,
@@ -232,16 +233,16 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []ReplicationObject {
-				return []ReplicationObject{
-					RepoFileReplicationObject{
+			objects: func() []common.ReplicationObject {
+				return []common.ReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "pytorch_model.bin",
 							Size: 1 * GB, // 1 GB
 							Type: "file",
 						},
 					},
-					RepoFileReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "config.json",
 							Size: 1024, // 1 KB
@@ -259,7 +260,7 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []ReplicationObject {
+			objects: func() []common.ReplicationObject {
 				name := "test.bin"
 				size := 2 * GB // 2 GB
 
@@ -267,8 +268,8 @@ func TestValidateModelSize(t *testing.T) {
 					Name: &name,
 					Size: &size,
 				}
-				return []ReplicationObject{
-					ObjectSummaryReplicationObject{summary},
+				return []common.ReplicationObject{
+					common.ObjectSummaryReplicationObject{summary},
 				}
 			}(),
 			expectPanic:   true,
@@ -282,23 +283,23 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []ReplicationObject {
-				return []ReplicationObject{
-					RepoFileReplicationObject{
+			objects: func() []common.ReplicationObject {
+				return []common.ReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "pytorch_model-00001-of-00002.bin",
 							Size: 1 * GB, // 1 GB
 							Type: "file",
 						},
 					},
-					RepoFileReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "pytorch_model-00002-of-00002.bin",
 							Size: 1 * GB, // 1 GB
 							Type: "file",
 						},
 					},
-					RepoFileReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "config.json",
 							Size: 1024, // 1 KB
@@ -318,7 +319,7 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: false,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []ReplicationObject {
+			objects: func() []common.ReplicationObject {
 				name := "test.bin"
 				size := int64(2 * GB) // 2 GB
 
@@ -326,8 +327,8 @@ func TestValidateModelSize(t *testing.T) {
 					Name: &name,
 					Size: &size,
 				}
-				return []ReplicationObject{
-					ObjectSummaryReplicationObject{summary},
+				return []common.ReplicationObject{
+					common.ObjectSummaryReplicationObject{summary},
 				}
 			}(),
 			expectPanic: false,
@@ -339,16 +340,16 @@ func TestValidateModelSize(t *testing.T) {
 				EnableSizeLimitCheck: false,
 				AnotherLogger:        testingPkg.SetupMockLogger(),
 			},
-			objects: func() []ReplicationObject {
-				return []ReplicationObject{
-					RepoFileReplicationObject{
+			objects: func() []common.ReplicationObject {
+				return []common.ReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "pytorch_model.bin",
 							Size: 2 * GB, // 2 GB
 							Type: "file",
 						},
 					},
-					RepoFileReplicationObject{
+					common.RepoFileReplicationObject{
 						RepoFile: hf.RepoFile{
 							Path: "tokenizer.json",
 							Size: 512 * 1024, // 512 KB
@@ -369,7 +370,7 @@ func TestValidateModelSize(t *testing.T) {
 			}
 
 			agent := &ReplicaAgent{
-				logger: tt.config.AnotherLogger,
+				Logger: tt.config.AnotherLogger,
 				Config: tt.config,
 			}
 
@@ -402,37 +403,37 @@ func TestReplicaAgent_Start(t *testing.T) {
 	mockLogger := testingPkg.SetupMockLogger()
 
 	// Mocked source objects to be returned by listSourceObjects
-	mockSourceObjects := []ReplicationObject{}
+	mockSourceObjects := []common.ReplicationObject{}
 
 	testAgent := &TestReplicaAgent{
 		ReplicaAgent: &ReplicaAgent{
-			logger: mockLogger,
+			Logger: mockLogger,
 			Config: Config{
 				AnotherLogger:        mockLogger,
 				LocalPath:            "/test/path",
 				NumConnections:       1,
 				DownloadSizeLimitGB:  100,
 				EnableSizeLimitCheck: true,
-				Source: sourceStruct{
+				Source: SourceStruct{
 					StorageURIStr:  "oci://n/src-ns/b/src-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
-				Target: targetStruct{
+				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
 			},
-			ReplicationInput: ReplicationInput{
-				sourceStorageType: storage.StorageTypeOCI,
-				targetStorageType: storage.StorageTypeOCI,
-				source:            ociobjectstore.ObjectURI{BucketName: "src-bucket", Namespace: "src-ns", Prefix: "models/"},
-				target:            ociobjectstore.ObjectURI{BucketName: "tgt-bucket", Namespace: "tgt-ns", Prefix: "models/"},
+			ReplicationInput: common.ReplicationInput{
+				SourceStorageType: storage.StorageTypeOCI,
+				TargetStorageType: storage.StorageTypeOCI,
+				Source:            ociobjectstore.ObjectURI{BucketName: "src-bucket", Namespace: "src-ns", Prefix: "models/"},
+				Target:            ociobjectstore.ObjectURI{BucketName: "tgt-bucket", Namespace: "tgt-ns", Prefix: "models/"},
 			},
 		},
-		mockListSourceObjects: func() ([]ReplicationObject, error) {
+		mockListSourceObjects: func() ([]common.ReplicationObject, error) {
 			return mockSourceObjects, nil
 		},
-		mockValidateModelSize: func(objects []ReplicationObject) {},
+		mockValidateModelSize: func(objects []common.ReplicationObject) {},
 	}
 
 	err := testAgent.Start()

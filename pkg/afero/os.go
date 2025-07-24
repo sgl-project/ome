@@ -3,6 +3,7 @@ package afero
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/afero"
@@ -10,6 +11,11 @@ import (
 
 type OsFs struct {
 	*afero.OsFs
+}
+
+type FileEntry struct {
+	FileInfo os.FileInfo
+	FilePath string
 }
 
 // Lchown changes the numeric uid and gid of the named file.
@@ -38,6 +44,31 @@ func (m *OsFs) LOwnership(name string) (uid, gid int, err error) {
 	}
 
 	return -1, -1, fmt.Errorf("unable to get ownership info of %s", name)
+}
+
+func (m *OsFs) ListFiles(dir string) ([]FileEntry, error) {
+	var files []FileEntry
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err // Stop walking on error
+		}
+
+		if d.IsDir() {
+			return nil // Skip directories
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		files = append(files, FileEntry{
+			FileInfo: info,
+			FilePath: path,
+		})
+		return nil
+	})
+	return files, err
 }
 
 var _ Fs = (*OsFs)(nil)
