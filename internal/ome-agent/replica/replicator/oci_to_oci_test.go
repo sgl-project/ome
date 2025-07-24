@@ -7,13 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/utils/storage"
+	"github.com/stretchr/testify/assert"
 )
 
 // --- Mock replication object ---
@@ -136,37 +133,6 @@ func TestReplicate(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestPrepareObjectChannel(t *testing.T) {
-	objName1 := "test1.bin"
-	objName2 := "test2.bin"
-
-	objects := []common.ReplicationObject{
-		common.ObjectSummaryReplicationObject{
-			ObjectSummary: objectstorage.ObjectSummary{
-				Name: &objName1,
-			},
-		},
-		common.ObjectSummaryReplicationObject{
-			ObjectSummary: objectstorage.ObjectSummary{
-				Name: &objName2,
-			},
-		},
-	}
-
-	replicator := &OCIToOCIReplicator{}
-	objChan := replicator.prepareObjectChannel(objects)
-
-	// Collect objects from channel
-	var receivedObjects []common.ReplicationObject
-	for obj := range objChan {
-		receivedObjects = append(receivedObjects, obj)
-	}
-
-	assert.Equal(t, len(objects), len(receivedObjects))
-	assert.Equal(t, objects[0].GetName(), receivedObjects[0].GetName())
-	assert.Equal(t, objects[1].GetName(), receivedObjects[1].GetName())
-}
-
 func TestGetTargetObjectURI(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -233,18 +199,4 @@ func TestGetTargetObjectURI(t *testing.T) {
 			assert.Equal(t, tt.expectedURI.ObjectName, result.ObjectName)
 		})
 	}
-}
-
-func TestLogProgress(t *testing.T) {
-	mockLogger := testingPkg.SetupMockLogger()
-
-	replicator := &OCIToOCIReplicator{
-		Logger: mockLogger,
-	}
-
-	startTime := time.Now().Add(-10 * time.Second)
-	replicator.logProgress(5, 1, 10, startTime)
-
-	// Verify the logger was called with the expected info
-	mockLogger.AssertCalled(t, "Infof", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
