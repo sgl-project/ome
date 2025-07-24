@@ -3,6 +3,8 @@ package replicator
 import (
 	"errors"
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"github.com/sgl-project/ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/logging"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +32,7 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 
 	downloadCalled := false
 	uploadCalled := false
-	downloadFromHFFunc = func(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
 		downloadCalled = true
 		return "/tmp/model", nil
 	}
@@ -43,7 +45,6 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 	replicator := &HFToOCIReplicator{
 		Logger: logger,
 		Config: HFToOCIReplicatorConfig{
-			Logger:         logger,
 			LocalPath:      "/tmp/model",
 			NumConnections: 1,
 		},
@@ -61,7 +62,7 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 	assert.True(t, uploadCalled, "uploadDirectoryToOCIOSDataStore should be called")
 
 	// Test download error
-	downloadFromHFFunc = func(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
 		return "", errors.New("download error")
 	}
 	uploadCalled = false
@@ -70,7 +71,7 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 	assert.False(t, uploadCalled, "uploadDirectoryToOCIOSDataStore should not be called if download fails")
 
 	// Test upload error
-	downloadFromHFFunc = func(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
 		return "/tmp/model", nil
 	}
 	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {

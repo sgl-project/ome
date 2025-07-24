@@ -19,7 +19,6 @@ type OCIToOCIReplicator struct {
 }
 
 type OCIToOCIReplicatorConfig struct {
-	Logger               logging.Interface
 	LocalPath            string
 	NumConnections       int
 	SourceOCIOSDataStore *ociobjectstore.OCIOSDataStore
@@ -36,7 +35,7 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	r.Logger.Info("Starting replication to target")
 
 	startTime := time.Now()
-	objChan := r.prepareObjectChannel(objects)
+	objChan := PrepareObjectChannel(objects)
 	resultChan := make(chan *ReplicationResult, len(objects))
 
 	var wg sync.WaitGroup
@@ -44,7 +43,7 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processObjectReplication(objChan, resultChan, len(objects))
+			r.processObjectReplication(objChan, resultChan)
 		}()
 	}
 
@@ -62,7 +61,7 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 			successCount++
 			r.Logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
 		}
-		r.logProgress(successCount, errorCount, len(objects), startTime)
+		LogProgress(successCount, errorCount, len(objects), startTime, r.Logger)
 	}
 
 	r.Logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
@@ -72,18 +71,7 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	return nil
 }
 
-func (r *OCIToOCIReplicator) prepareObjectChannel(objects []common.ReplicationObject) chan common.ReplicationObject {
-	objChan := make(chan common.ReplicationObject, len(objects))
-	go func() {
-		defer close(objChan)
-		for _, object := range objects {
-			objChan <- object
-		}
-	}()
-	return objChan
-}
-
-func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.ReplicationObject, results chan<- *ReplicationResult, totalObjects int) {
+func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.ReplicationObject, results chan<- *ReplicationResult) {
 	for obj := range objects {
 		if obj.GetName() == r.ReplicationInput.Source.Prefix {
 			continue
@@ -97,7 +85,7 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 		result := ReplicationResult{source: srcObj}
 
 		downloadStart := time.Now()
-		err := r.downloadObject(srcObj)
+		err := DownloadObject(r.Config.SourceOCIOSDataStore, srcObj, r.Config.LocalPath)
 		downloadDuration := time.Since(downloadStart)
 		if err != nil {
 			result.error = err
@@ -121,17 +109,6 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 	}
 }
 
-func (r *OCIToOCIReplicator) downloadObject(srcObj ociobjectstore.ObjectURI) error {
-	err := r.Config.SourceOCIOSDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
-		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
-		ociobjectstore.WithThreads(DefaultDownloadThreads))
-	if err != nil {
-		r.Logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
-		return err
-	}
-	return nil
-}
-
 func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
 	targetObjName := strings.Replace(objName, r.ReplicationInput.Source.Prefix, r.ReplicationInput.Target.Prefix, 1)
 	return ociobjectstore.ObjectURI{
@@ -139,10 +116,4 @@ func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.O
 		BucketName: r.ReplicationInput.Target.BucketName,
 		ObjectName: targetObjName,
 	}
-}
-
-func (r *OCIToOCIReplicator) logProgress(successCount, errorCount, totalObjects int, startTime time.Time) {
-	progress := float64(successCount+errorCount) / float64(totalObjects) * 100
-	elapsedTime := time.Since(startTime)
-	r.Logger.Infof("Progress: %.2f%%, Success: %d, Errors: %d, Total: %d, Elapsed Time: %v", progress, successCount, errorCount, totalObjects, elapsedTime)
 }

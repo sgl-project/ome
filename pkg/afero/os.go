@@ -2,6 +2,7 @@ package afero
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -78,4 +79,38 @@ func NewOsFs() Fs {
 	return &OsFs{
 		OsFs: afero.NewOsFs().(*afero.OsFs),
 	}
+}
+
+func CopyFileBetweenFS(srcFs, dstFs afero.Fs, srcPath, dstPath string, mode os.FileMode) error {
+	in, err := srcFs.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer func() {
+		cerr := in.Close()
+		if cerr != nil && err == nil {
+			err = fmt.Errorf("error closing source file: %w", cerr)
+		}
+	}()
+
+	out, err := dstFs.Create(dstPath)
+	if err != nil {
+		_ = in.Close() // Best effort
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer func() {
+		cerr := out.Close()
+		if cerr != nil && err == nil {
+			err = fmt.Errorf("error closing destination file: %w", cerr)
+		}
+	}()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return fmt.Errorf("failed to copy contents: %w", err)
+	}
+
+	if err = dstFs.Chmod(dstPath, mode); err != nil {
+		return fmt.Errorf("failed to chmod destination file: %w", err)
+	}
+	return nil
 }
