@@ -1,6 +1,8 @@
 package replica
 
 import (
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/replicator"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,13 +28,13 @@ func TestNewReplicator(t *testing.T) {
 			name:       "HF to OCI",
 			sourceType: storage.StorageTypeHuggingFace,
 			targetType: storage.StorageTypeOCI,
-			expectType: &HFToOCIReplicator{},
+			expectType: &replicator.HFToOCIReplicator{},
 		},
 		{
 			name:       "OCI to OCI",
 			sourceType: storage.StorageTypeOCI,
 			targetType: storage.StorageTypeOCI,
-			expectType: &OCIToOCIReplicator{},
+			expectType: &replicator.OCIToOCIReplicator{},
 		},
 		{
 			name:              "Unsupported",
@@ -46,13 +48,13 @@ func TestNewReplicator(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			agent := &ReplicaAgent{
-				logger: dummyLogger,
+				Logger: dummyLogger,
 				Config: dummyConfig,
-				ReplicationInput: ReplicationInput{
-					sourceStorageType: tt.sourceType,
-					targetStorageType: tt.targetType,
-					source:            dummyObj,
-					target:            dummyObj,
+				ReplicationInput: common.ReplicationInput{
+					SourceStorageType: tt.sourceType,
+					TargetStorageType: tt.targetType,
+					Source:            dummyObj,
+					Target:            dummyObj,
 				},
 			}
 			rep, err := NewReplicator(agent)

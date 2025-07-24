@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+	"github.com/sgl-project/ome/pkg/afero"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -14,15 +15,17 @@ import (
 )
 
 // Define reusable struct types to avoid repetition
-type sourceStruct struct {
+type SourceStruct struct {
 	StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
 	HubClient      *hf.HubClient
+	PVCFileSystem  *afero.OsFs
 }
 
-type targetStruct struct {
+type TargetStruct struct {
 	StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
+	PVCFileSystem  *afero.OsFs
 }
 
 func TestNewReplicaConfig(t *testing.T) {
@@ -282,10 +285,10 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:  100,
 					EnableSizeLimitCheck: true,
 					NumConnections:       5,
-					Source: sourceStruct{
+					Source: SourceStruct{
 						StorageURIStr: validSourceURI,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						StorageURIStr: validTargetURI,
 					},
 				}
@@ -299,10 +302,10 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:  100,
 					EnableSizeLimitCheck: true,
 					NumConnections:       5,
-					Source: sourceStruct{
+					Source: SourceStruct{
 						StorageURIStr: validSourceURI,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						StorageURIStr: validTargetURI,
 					},
 				}
@@ -317,10 +320,10 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:  100,
 					EnableSizeLimitCheck: true,
 					NumConnections:       5,
-					Source: sourceStruct{
+					Source: SourceStruct{
 						StorageURIStr: "",
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						StorageURIStr: validTargetURI,
 					},
 				}
@@ -335,10 +338,10 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:  100,
 					EnableSizeLimitCheck: true,
 					NumConnections:       5,
-					Source: sourceStruct{
+					Source: SourceStruct{
 						StorageURIStr: validSourceURI,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						StorageURIStr: "",
 					},
 				}
@@ -353,10 +356,10 @@ func TestConfig_Validate(t *testing.T) {
 					DownloadSizeLimitGB:  100,
 					EnableSizeLimitCheck: true,
 					NumConnections:       5,
-					Source: sourceStruct{
+					Source: SourceStruct{
 						StorageURIStr: invalidURI,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						StorageURIStr: validTargetURI,
 					},
 				}
@@ -405,10 +408,10 @@ func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 			name: "valid OCI source and OCI target with all dependencies",
 			setupConfig: func() *Config {
 				return &Config{
-					Source: sourceStruct{
+					Source: SourceStruct{
 						OCIOSDataStore: mockOCIOSDataStore,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						OCIOSDataStore: mockOCIOSDataStore,
 					},
 				}
@@ -421,10 +424,10 @@ func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 			name: "valid HuggingFace source and OCI target with all dependencies",
 			setupConfig: func() *Config {
 				return &Config{
-					Source: sourceStruct{
+					Source: SourceStruct{
 						HubClient: mockHubClient,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						OCIOSDataStore: mockOCIOSDataStore,
 					},
 				}
@@ -437,10 +440,10 @@ func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 			name: "missing Source.OCIOSDataStore for OCI source",
 			setupConfig: func() *Config {
 				return &Config{
-					Source: sourceStruct{
+					Source: SourceStruct{
 						OCIOSDataStore: nil,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						OCIOSDataStore: mockOCIOSDataStore,
 					},
 				}
@@ -454,10 +457,10 @@ func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 			name: "missing Source.HubClient for HuggingFace source",
 			setupConfig: func() *Config {
 				return &Config{
-					Source: sourceStruct{
+					Source: SourceStruct{
 						HubClient: nil,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						OCIOSDataStore: mockOCIOSDataStore,
 					},
 				}
@@ -471,10 +474,10 @@ func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 			name: "missing Target.OCIOSDataStore for OCI target",
 			setupConfig: func() *Config {
 				return &Config{
-					Source: sourceStruct{
+					Source: SourceStruct{
 						OCIOSDataStore: mockOCIOSDataStore,
 					},
-					Target: targetStruct{
+					Target: TargetStruct{
 						OCIOSDataStore: nil,
 					},
 				}

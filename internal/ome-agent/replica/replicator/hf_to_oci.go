@@ -1,9 +1,10 @@
-package replica
+package replicator
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,43 +20,52 @@ var downloadFromHFFunc = downloadFromHF
 var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
 
 type HFToOCIReplicator struct {
-	logger           logging.Interface
-	Config           Config
-	ReplicationInput ReplicationInput
+	Logger           logging.Interface
+	Config           HFToOCIReplicatorConfig
+	ReplicationInput common.ReplicationInput
 }
 
-func (r *HFToOCIReplicator) Replicate(objects []ReplicationObject) error {
-	r.logger.Info("Starting replication to target")
+type HFToOCIReplicatorConfig struct {
+	Logger logging.Interface
+
+	LocalPath      string
+	NumConnections int
+	HubClient      *hub.HubClient
+	OCIOSDataStore *ociobjectstore.OCIOSDataStore
+}
+
+func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error {
+	r.Logger.Info("Starting replication to target")
 	// Download
 	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config)
 	if err != nil {
-		r.logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.source.BucketName, err)
+		r.Logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.Source.BucketName, err)
 		return err
 	}
-	r.logger.Infof("Successfully downloaded model %s from HF to %s ", r.ReplicationInput.source.BucketName, downloadPath)
+	r.Logger.Infof("Successfully downloaded model %s from HF to %s ", r.ReplicationInput.Source.BucketName, downloadPath)
 
 	// Upload
-	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.Target.OCIOSDataStore, r.ReplicationInput.target, r.Config.LocalPath, len(objects), r.Config.NumConnections); err != nil {
-		r.logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", r.Config.LocalPath, r.ReplicationInput.target, err)
+	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.OCIOSDataStore, r.ReplicationInput.Target, r.Config.LocalPath, len(objects), r.Config.NumConnections); err != nil {
+		r.Logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", r.Config.LocalPath, r.ReplicationInput.Target, err)
 		return err
 	}
-	r.logger.Infof("All files under %s uploaded successfully", r.Config.LocalPath)
-	r.logger.Infof("Replication completed from HuggingFace to OCI Object Storage for model %s", r.ReplicationInput.source.BucketName)
+	r.Logger.Infof("All files under %s uploaded successfully", r.Config.LocalPath)
+	r.Logger.Infof("Replication completed from HuggingFace to OCI Object Storage for model %s", r.ReplicationInput.Source.BucketName)
 	return nil
 }
 
-func downloadFromHF(input ReplicationInput, config Config) (string, error) {
+func downloadFromHF(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
 	var downloadOptions []hub.DownloadOption
 	// Set revision if specified
-	if input.source.Prefix != "" {
-		downloadOptions = append(downloadOptions, hub.WithRevision(input.source.Prefix))
+	if input.Source.Prefix != "" {
+		downloadOptions = append(downloadOptions, hub.WithRevision(input.Source.Prefix))
 	}
 	// Set repository type (always model for HuggingFace)
 	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
-	downloadPath, err := config.Source.HubClient.SnapshotDownload(
+	downloadPath, err := config.HubClient.SnapshotDownload(
 		context.Background(),
-		input.source.BucketName,
+		input.Source.BucketName,
 		config.LocalPath,
 		downloadOptions...,
 	)
@@ -67,9 +77,9 @@ func downloadFromHF(input ReplicationInput, config Config) (string, error) {
 			errors.As(err, &httpErr) && httpErr.StatusCode == 429 ||
 			strings.Contains(err.Error(), "429") ||
 			strings.Contains(err.Error(), "rate limit") {
-			config.AnotherLogger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.source.BucketName, err)
+			config.Logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.Source.BucketName, err)
 		} else {
-			config.AnotherLogger.Errorf("Failed to download HuggingFace model %s: %v", input.source.BucketName, err)
+			config.Logger.Errorf("Failed to download HuggingFace model %s: %v", input.Source.BucketName, err)
 		}
 		return downloadPath, err
 	}
@@ -102,7 +112,7 @@ func uploadDirectoryToOCIOSDataStore(
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				if err := uploadObjectToOCIOSDataStore(ociOSDataStore, task.targetObj, task.filePath); err != nil {
+				if err := UploadObjectToOCIOSDataStore(ociOSDataStore, task.targetObj, task.filePath); err != nil {
 					errCh <- fmt.Errorf("upload failed for %s: %w", task.filePath, err)
 				}
 			}
