@@ -4,20 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
-
-// Indirection for testability
-var downloadFromHFFunc = downloadFromHF
-var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
 
 type HFToOCIReplicator struct {
 	Logger           logging.Interface
@@ -26,8 +23,6 @@ type HFToOCIReplicator struct {
 }
 
 type HFToOCIReplicatorConfig struct {
-	Logger logging.Interface
-
 	LocalPath      string
 	NumConnections int
 	HubClient      *hub.HubClient
@@ -37,7 +32,7 @@ type HFToOCIReplicatorConfig struct {
 func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error {
 	r.Logger.Info("Starting replication to target")
 	// Download
-	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config)
+	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, r.Config.LocalPath, r.Logger)
 	if err != nil {
 		r.Logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.Source.BucketName, err)
 		return err
@@ -54,7 +49,7 @@ func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error 
 	return nil
 }
 
-func downloadFromHF(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
+func downloadFromHF(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
 	var downloadOptions []hub.DownloadOption
 	// Set revision if specified
 	if input.Source.Prefix != "" {
@@ -63,10 +58,10 @@ func downloadFromHF(input common.ReplicationInput, config HFToOCIReplicatorConfi
 	// Set repository type (always model for HuggingFace)
 	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
-	downloadPath, err := config.HubClient.SnapshotDownload(
+	downloadPath, err := hubClient.SnapshotDownload(
 		context.Background(),
 		input.Source.BucketName,
-		config.LocalPath,
+		downloadDir,
 		downloadOptions...,
 	)
 	if err != nil {
@@ -77,9 +72,9 @@ func downloadFromHF(input common.ReplicationInput, config HFToOCIReplicatorConfi
 			errors.As(err, &httpErr) && httpErr.StatusCode == 429 ||
 			strings.Contains(err.Error(), "429") ||
 			strings.Contains(err.Error(), "rate limit") {
-			config.Logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.Source.BucketName, err)
+			logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.Source.BucketName, err)
 		} else {
-			config.Logger.Errorf("Failed to download HuggingFace model %s: %v", input.Source.BucketName, err)
+			logger.Errorf("Failed to download HuggingFace model %s: %v", input.Source.BucketName, err)
 		}
 		return downloadPath, err
 	}
@@ -100,6 +95,12 @@ func uploadDirectoryToOCIOSDataStore(
 	numberOfConnections int) error {
 	if ociOSDataStore == nil {
 		return fmt.Errorf("target ociOSDataStore is nil")
+	}
+
+	// Early return if no objects to upload
+	if numberOfObjects <= 0 {
+		ociOSDataStore.Config.AnotherLogger.Infof("No objects to upload (numberOfObjects: %d), skipping upload", numberOfObjects)
+		return nil
 	}
 
 	tasks := make(chan UploadTask, numberOfObjects)

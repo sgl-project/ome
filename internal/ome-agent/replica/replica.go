@@ -80,10 +80,10 @@ func (r *ReplicaAgent) Start() error {
 	if err != nil {
 		return err
 	}
+
 	r.validateModelSize(sourceObjs)
 
 	replicatorImp, err := NewReplicator(r)
-
 	if err != nil {
 		return err
 	}

@@ -64,6 +64,9 @@ type PVCFileReplicationObject struct {
 }
 
 func (a PVCFileReplicationObject) GetName() string {
+	if a.FileInfo == nil {
+		return ""
+	}
 	return a.FileInfo.Name()
 }
 
@@ -72,5 +75,8 @@ func (a PVCFileReplicationObject) GetPath() string {
 }
 
 func (a PVCFileReplicationObject) GetSize() int64 {
+	if a.FileInfo == nil {
+		return 0
+	}
 	return a.FileInfo.Size()
 }

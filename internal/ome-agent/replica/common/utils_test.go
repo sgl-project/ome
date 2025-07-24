@@ -1,11 +1,13 @@
 package common
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sgl-project/ome/pkg/afero"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
@@ -167,6 +169,65 @@ func TestConvertToReplicationObjectsFromRepoFile(t *testing.T) {
 				assert.Equal(t, tt.repo[i].Path, replicationObj.GetPath())
 				assert.Equal(t, tt.repo[i].Size, replicationObj.GetSize())
 				assert.Equal(t, tt.repo[i].Path, replicationObj.GetName())
+			}
+		})
+	}
+}
+
+func TestConvertToReplicationObjectsFromFileInfo(t *testing.T) {
+	tests := []struct {
+		name     string
+		files    []afero.FileEntry
+		expected int
+	}{
+		{
+			name:     "empty slice",
+			files:    []afero.FileEntry{},
+			expected: 0,
+		},
+		{
+			name: "multiple files",
+			files: func() []afero.FileEntry {
+				fs := afero.NewMemMapFs()
+				paths := []string{"/mnt/pvc/models/file1.bin", "/mnt/pvc/models/file2.bin", "/mnt/pvc/models/file3.bin"}
+				entries := make([]afero.FileEntry, 0, len(paths))
+				for i, p := range paths {
+					content := []byte(fmt.Sprintf("data%d", i))
+					afero.WriteFile(fs, p, content, 0644)
+					fileInfo, _ := fs.Stat(p)
+					entries = append(entries, afero.FileEntry{FileInfo: fileInfo, FilePath: p})
+				}
+				return entries
+			}(),
+			expected: 3,
+		},
+		{
+			name: "nil FileInfo",
+			files: []afero.FileEntry{
+				{FileInfo: nil, FilePath: ""},
+			},
+			expected: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertToReplicationObjectsFromFileInfo(tt.files)
+			assert.Len(t, result, tt.expected)
+			for i, obj := range result {
+				replicationObj, ok := obj.(PVCFileReplicationObject)
+				assert.True(t, ok, "Result should be PVCFileReplicationObject")
+				// Verify the underlying FileEntry is preserved
+				assert.Equal(t, tt.files[i], replicationObj.FileEntry)
+				// Test the interface methods
+				if tt.files[i].FileInfo != nil {
+					assert.Equal(t, tt.files[i].FileInfo.Name(), replicationObj.GetName())
+					assert.Equal(t, tt.files[i].FileInfo.Size(), replicationObj.GetSize())
+				} else {
+					assert.Equal(t, "", replicationObj.GetName())
+					assert.Equal(t, int64(0), replicationObj.GetSize())
+				}
+				assert.Equal(t, tt.files[i].FilePath, replicationObj.GetPath())
 			}
 		})
 	}
