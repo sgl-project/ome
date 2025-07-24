@@ -2,37 +2,27 @@ package replica
 
 import (
 	"fmt"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"path/filepath"
 
 	"golang.org/x/net/context"
 
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 const (
-	DefaultDownloadChunkSizeInMB = 20
-	DefaultDownloadThreads       = 20
-	DefaultUploadChunkSizeInMB   = 50
-	DefaultUploadThreads         = 10
-	GB                           = 1073741824
+	GB = 1073741824
 
 	SourceStorageConfigKeyName = "source"
 	TargetStorageConfigKeyName = "target"
 )
 
 type ReplicaAgent struct {
-	logger           logging.Interface
+	Logger           logging.Interface
 	Config           Config
-	ReplicationInput ReplicationInput
-}
-
-type ReplicationInput struct {
-	sourceStorageType storage.StorageType
-	targetStorageType storage.StorageType
-	source            ociobjectstore.ObjectURI
-	target            ociobjectstore.ObjectURI
+	ReplicationInput common.ReplicationInput
 }
 
 // NewReplicaAgent constructs a new replica agent from the given configuration.
@@ -71,20 +61,20 @@ func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
 	}
 
 	return &ReplicaAgent{
-		logger: config.AnotherLogger,
+		Logger: config.AnotherLogger,
 		Config: *config,
-		ReplicationInput: ReplicationInput{
-			sourceStorageType: sourceStorageType,
-			targetStorageType: targetStorageType,
-			source:            *sourceObjectURI,
-			target:            *targetObjectURI,
+		ReplicationInput: common.ReplicationInput{
+			SourceStorageType: sourceStorageType,
+			TargetStorageType: targetStorageType,
+			Source:            *sourceObjectURI,
+			Target:            *targetObjectURI,
 		},
 	}, nil
 }
 
 // Start initiates the replication process.
 func (r *ReplicaAgent) Start() error {
-	r.logger.Infof("Start replication from %+v to %+v", r.ReplicationInput.source, r.ReplicationInput.target)
+	r.Logger.Infof("Start replication from %+v to %+v", r.ReplicationInput.Source, r.ReplicationInput.Target)
 
 	sourceObjs, err := r.listSourceObjects()
 	if err != nil {
@@ -92,55 +82,64 @@ func (r *ReplicaAgent) Start() error {
 	}
 	r.validateModelSize(sourceObjs)
 
-	replicator, err := NewReplicator(r)
+	replicatorImp, err := NewReplicator(r)
+
 	if err != nil {
 		return err
 	}
 
-	return replicator.Replicate(sourceObjs)
+	return replicatorImp.Replicate(sourceObjs)
 }
 
-func (r *ReplicaAgent) listSourceObjects() ([]ReplicationObject, error) {
-	switch r.ReplicationInput.sourceStorageType {
+func (r *ReplicaAgent) listSourceObjects() ([]common.ReplicationObject, error) {
+	switch r.ReplicationInput.SourceStorageType {
 	case storage.StorageTypeOCI:
-		listOfObjectSummary, err := r.Config.Source.OCIOSDataStore.ListObjects(r.ReplicationInput.source)
+		listOfObjectSummary, err := r.Config.Source.OCIOSDataStore.ListObjects(r.ReplicationInput.Source)
 		if err != nil {
 			return nil, err
 		}
-		r.logger.Infof("Listed %d model weight objects under prefix %s", len(listOfObjectSummary), r.ReplicationInput.source.Prefix)
-		return convertToReplicationObjectsFromObjectSummary(listOfObjectSummary), nil
+		r.Logger.Infof("Listed %d model weight objects under prefix %s", len(listOfObjectSummary), r.ReplicationInput.Source.Prefix)
+		return common.ConvertToReplicationObjectsFromObjectSummary(listOfObjectSummary), nil
 	case storage.StorageTypeHuggingFace:
-		repoFiles, err := r.Config.Source.HubClient.ListFiles(context.Background(), r.ReplicationInput.source.BucketName, hub.WithRepoType(hub.RepoTypeModel))
+		repoFiles, err := r.Config.Source.HubClient.ListFiles(context.Background(), r.ReplicationInput.Source.BucketName, hub.WithRepoType(hub.RepoTypeModel))
 		if err != nil {
 			return nil, err
 		}
-		r.logger.Infof("Listed %d model weight files under model %s with %s branch", len(repoFiles), r.ReplicationInput.source.BucketName, r.ReplicationInput.source.Prefix)
-		return convertToReplicationObjectsFromRepoFile(repoFiles), nil
+		r.Logger.Infof("Listed %d model weight files under model %s with %s branch", len(repoFiles), r.ReplicationInput.Source.BucketName, r.ReplicationInput.Source.Prefix)
+		return common.ConvertToReplicationObjectsFromRepoFile(repoFiles), nil
+	case storage.StorageTypePVC:
+		sourceDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Source.Prefix)
+		files, err := r.Config.Source.PVCFileSystem.ListFiles(sourceDirPath)
+		if err != nil {
+			return nil, err
+		}
+		r.Logger.Infof("Listed %d model weight files under path %s", len(files), sourceDirPath)
+		return common.ConvertToReplicationObjectsFromFileInfo(files), nil
 	default:
-		return nil, fmt.Errorf("unsupported source storage type: %s", string(r.ReplicationInput.sourceStorageType))
+		return nil, fmt.Errorf("unsupported source storage type: %s", string(r.ReplicationInput.SourceStorageType))
 	}
 }
 
-func (r *ReplicaAgent) validateModelSize(objects []ReplicationObject) {
-	r.logger.Info("Calculating model size from source")
+func (r *ReplicaAgent) validateModelSize(objects []common.ReplicationObject) {
+	r.Logger.Info("Calculating model size from source")
 
 	sizeLimit := int64(r.Config.DownloadSizeLimitGB) * GB
 	var totalSize int64
 
 	for _, object := range objects {
 		if object.GetName() == "" || object.GetSize() == 0 {
-			r.logger.Errorf("Invalid object with missing name or size: %+v", object)
+			r.Logger.Errorf("Invalid object with missing name or size: %+v", object)
 			continue
 		}
 
 		totalSize += object.GetSize()
 		if r.Config.EnableSizeLimitCheck && totalSize > sizeLimit {
-			r.logger.Fatalf("Model weights exceed size limit of %d bytes", sizeLimit)
+			r.Logger.Fatalf("Model weights exceed size limit of %d bytes", sizeLimit)
 		}
 	}
 
 	if totalSize == 0 {
-		r.logger.Fatal("No model weights exist in the model folder")
+		r.Logger.Fatal("No model weights exist in the model folder")
 	}
-	r.logger.Infof("Total model size: %d bytes", totalSize)
+	r.Logger.Infof("Total model size: %d bytes", totalSize)
 }

@@ -1,7 +1,8 @@
-package replica
+package replicator
 
 import (
 	"fmt"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,9 +13,17 @@ import (
 )
 
 type OCIToOCIReplicator struct {
-	logger           logging.Interface
-	Config           Config
-	ReplicationInput ReplicationInput
+	Logger           logging.Interface
+	Config           OCIToOCIReplicatorConfig
+	ReplicationInput common.ReplicationInput
+}
+
+type OCIToOCIReplicatorConfig struct {
+	Logger               logging.Interface
+	LocalPath            string
+	NumConnections       int
+	SourceOCIOSDataStore *ociobjectstore.OCIOSDataStore
+	TargetOCIOSDataStore *ociobjectstore.OCIOSDataStore
 }
 
 type ReplicationResult struct {
@@ -23,8 +32,8 @@ type ReplicationResult struct {
 	error  error
 }
 
-func (r *OCIToOCIReplicator) Replicate(objects []ReplicationObject) error {
-	r.logger.Info("Starting replication to target")
+func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error {
+	r.Logger.Info("Starting replication to target")
 
 	startTime := time.Now()
 	objChan := r.prepareObjectChannel(objects)
@@ -48,23 +57,23 @@ func (r *OCIToOCIReplicator) Replicate(objects []ReplicationObject) error {
 	for result := range resultChan {
 		if result.error != nil {
 			errorCount++
-			r.logger.Errorf("Replication failed for %s to %s: %v", result.source, result.target, result.error)
+			r.Logger.Errorf("Replication failed for %s to %s: %v", result.source, result.target, result.error)
 		} else {
 			successCount++
-			r.logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
+			r.Logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
 		}
 		r.logProgress(successCount, errorCount, len(objects), startTime)
 	}
 
-	r.logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
+	r.Logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
 	if errorCount > 0 {
 		return fmt.Errorf("%d/%d replications failed", errorCount, len(objects))
 	}
 	return nil
 }
 
-func (r *OCIToOCIReplicator) prepareObjectChannel(objects []ReplicationObject) chan ReplicationObject {
-	objChan := make(chan ReplicationObject, len(objects))
+func (r *OCIToOCIReplicator) prepareObjectChannel(objects []common.ReplicationObject) chan common.ReplicationObject {
+	objChan := make(chan common.ReplicationObject, len(objects))
 	go func() {
 		defer close(objChan)
 		for _, object := range objects {
@@ -74,15 +83,15 @@ func (r *OCIToOCIReplicator) prepareObjectChannel(objects []ReplicationObject) c
 	return objChan
 }
 
-func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan ReplicationObject, results chan<- *ReplicationResult, totalObjects int) {
+func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.ReplicationObject, results chan<- *ReplicationResult, totalObjects int) {
 	for obj := range objects {
-		if obj.GetName() == r.ReplicationInput.source.Prefix {
+		if obj.GetName() == r.ReplicationInput.Source.Prefix {
 			continue
 		}
 
 		srcObj := ociobjectstore.ObjectURI{
-			Namespace:  r.ReplicationInput.source.Namespace,
-			BucketName: r.ReplicationInput.source.BucketName,
+			Namespace:  r.ReplicationInput.Source.Namespace,
+			BucketName: r.ReplicationInput.Source.BucketName,
 			ObjectName: obj.GetName(),
 		}
 		result := ReplicationResult{source: srcObj}
@@ -95,39 +104,39 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan Replication
 			results <- &result
 			continue
 		}
-		r.logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
+		r.Logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
 
 		targetObj := r.getTargetObjectURI(obj.GetName())
 		result.target = targetObj
 
 		uploadStart := time.Now()
-		err = uploadObjectToOCIOSDataStore(r.Config.Target.OCIOSDataStore, targetObj, filepath.Join(r.Config.LocalPath, obj.GetName()))
+		err = UploadObjectToOCIOSDataStore(r.Config.TargetOCIOSDataStore, targetObj, filepath.Join(r.Config.LocalPath, obj.GetName()))
 		uploadDuration := time.Since(uploadStart)
 		if err != nil {
 			result.error = err
 		} else {
-			r.logger.Infof("Uploaded object to %s in %v", targetObj.ObjectName, uploadDuration)
+			r.Logger.Infof("Uploaded object to %s in %v", targetObj.ObjectName, uploadDuration)
 		}
 		results <- &result
 	}
 }
 
 func (r *OCIToOCIReplicator) downloadObject(srcObj ociobjectstore.ObjectURI) error {
-	err := r.Config.Source.OCIOSDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
+	err := r.Config.SourceOCIOSDataStore.MultipartDownload(srcObj, r.Config.LocalPath,
 		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
 		ociobjectstore.WithThreads(DefaultDownloadThreads))
 	if err != nil {
-		r.logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
+		r.Logger.Errorf("Failed to download object %s: %+v", srcObj.ObjectName, err)
 		return err
 	}
 	return nil
 }
 
 func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
-	targetObjName := strings.Replace(objName, r.ReplicationInput.source.Prefix, r.ReplicationInput.target.Prefix, 1)
+	targetObjName := strings.Replace(objName, r.ReplicationInput.Source.Prefix, r.ReplicationInput.Target.Prefix, 1)
 	return ociobjectstore.ObjectURI{
-		Namespace:  r.ReplicationInput.target.Namespace,
-		BucketName: r.ReplicationInput.target.BucketName,
+		Namespace:  r.ReplicationInput.Target.Namespace,
+		BucketName: r.ReplicationInput.Target.BucketName,
 		ObjectName: targetObjName,
 	}
 }
@@ -135,5 +144,5 @@ func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.O
 func (r *OCIToOCIReplicator) logProgress(successCount, errorCount, totalObjects int, startTime time.Time) {
 	progress := float64(successCount+errorCount) / float64(totalObjects) * 100
 	elapsedTime := time.Since(startTime)
-	r.logger.Infof("Progress: %.2f%%, Success: %d, Errors: %d, Total: %d, Elapsed Time: %v", progress, successCount, errorCount, totalObjects, elapsedTime)
+	r.Logger.Infof("Progress: %.2f%%, Success: %d, Errors: %d, Total: %d, Elapsed Time: %v", progress, successCount, errorCount, totalObjects, elapsedTime)
 }

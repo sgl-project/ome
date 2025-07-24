@@ -1,7 +1,8 @@
-package replica
+package replicator
 
 import (
 	"errors"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 
 	downloadCalled := false
 	uploadCalled := false
-	downloadFromHFFunc = func(input ReplicationInput, config Config) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
 		downloadCalled = true
 		return "/tmp/model", nil
 	}
@@ -40,27 +41,27 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 
 	logger := testingPkg.SetupMockLogger()
 	replicator := &HFToOCIReplicator{
-		logger: logger,
-		Config: Config{
-			AnotherLogger:  logger,
+		Logger: logger,
+		Config: HFToOCIReplicatorConfig{
+			Logger:         logger,
 			LocalPath:      "/tmp/model",
 			NumConnections: 1,
 		},
-		ReplicationInput: ReplicationInput{
-			sourceStorageType: storage.StorageTypeHuggingFace,
-			targetStorageType: storage.StorageTypeOCI,
-			source:            ociobjectstore.ObjectURI{BucketName: "meta-llama/llama-3-70b-instruct"},
-			target:            ociobjectstore.ObjectURI{BucketName: "target-bucket"},
+		ReplicationInput: common.ReplicationInput{
+			SourceStorageType: storage.StorageTypeHuggingFace,
+			TargetStorageType: storage.StorageTypeOCI,
+			Source:            ociobjectstore.ObjectURI{BucketName: "meta-llama/llama-3-70b-instruct"},
+			Target:            ociobjectstore.ObjectURI{BucketName: "target-bucket"},
 		},
 	}
-	objs := []ReplicationObject{mockReplicationObject{}}
+	objs := []common.ReplicationObject{mockReplicationObject{}}
 	err := replicator.Replicate(objs)
 	assert.NoError(t, err)
 	assert.True(t, downloadCalled, "downloadFromHF should be called")
 	assert.True(t, uploadCalled, "uploadDirectoryToOCIOSDataStore should be called")
 
 	// Test download error
-	downloadFromHFFunc = func(input ReplicationInput, config Config) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
 		return "", errors.New("download error")
 	}
 	uploadCalled = false
@@ -69,7 +70,7 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 	assert.False(t, uploadCalled, "uploadDirectoryToOCIOSDataStore should not be called if download fails")
 
 	// Test upload error
-	downloadFromHFFunc = func(input ReplicationInput, config Config) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, config HFToOCIReplicatorConfig) (string, error) {
 		return "/tmp/model", nil
 	}
 	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {

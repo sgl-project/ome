@@ -1,4 +1,4 @@
-package replica
+package common
 
 import (
 	"testing"
@@ -52,7 +52,7 @@ func TestConvertToReplicationObjectsFromObjectSummary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToReplicationObjectsFromObjectSummary(tt.summaries)
+			result := ConvertToReplicationObjectsFromObjectSummary(tt.summaries)
 
 			assert.Len(t, result, tt.expected)
 
@@ -151,7 +151,7 @@ func TestConvertToReplicationObjectsFromRepoFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToReplicationObjectsFromRepoFile(tt.repo)
+			result := ConvertToReplicationObjectsFromRepoFile(tt.repo)
 
 			assert.Len(t, result, tt.expected)
 
@@ -247,7 +247,7 @@ func TestRequireNonNil(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := requireNonNil("testValue", tt.value)
+			err := RequireNonNil("testValue", tt.value)
 
 			if tt.expected == nil {
 				assert.NoError(t, err)
