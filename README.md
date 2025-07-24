@@ -19,6 +19,8 @@ Read the [documentation](https://sgl-project.github.io/ome/docs/) to learn more 
 
 - **Model Management:** Models are first-class citizen custom resources in OME. Sophisticated model parsing extracts architecture, parameter count, and capabilities directly from model files. Supports distributed storage with automated repair, double encryption, namespace scoping, and multiple formats (SafeTensors, PyTorch, TensorRT, ONNX).
 
+- **Flexible Storage Backends:** Serve models directly from Kubernetes Persistent Volume Claims (PVCs), HuggingFace Hub, cloud object storage (OCI, S3, Azure, GCS), or GitHub releases. PVC storage avoids data duplication and is documented in the [PVC user guide](https://sgl-project.github.io/ome/docs/user-guide/storage/pvc-storage/).
+
 - **Intelligent Runtime Selection:** Automatic matching of models to optimal runtime configurations through weighted scoring based on architecture, format, quantization, parameter size, and framework compatibility.
 
 - **Optimized Deployments:** Supports multiple deployment patterns including prefill-decode disaggregation, multi-node inference, and traditional Kubernetes deployments with advanced scaling controls.
