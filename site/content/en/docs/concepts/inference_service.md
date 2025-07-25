@@ -157,7 +157,7 @@ spec:
 ```
 This deployment mode leverages Knative Serving for request-based autoscaling, scale-to-zero when idle, and is ideal for variable workloads and cost-sensitive environments.
 
-**⚠️ WARNING**: This deployment mode leverages Knative Serving for request-based autoscaling, scale-to-zero when idle, and is ideal for variable workloads and cost-sensitive environments; however, it may introduce additional startup latency for large language models due to cold starts and model loading time.
+> **⚠️ WARNING**: This deployment mode leverages Knative Serving for request-based autoscaling, scale-to-zero when idle, and is ideal for variable workloads and cost-sensitive environments; however, it may introduce additional startup latency for large language models due to cold starts and model loading time.
 
 ### Multi-Node Mode
 
@@ -180,7 +180,7 @@ spec:
 ```
 This deployment mode enables distributed inference using LeaderWorkerSet or Ray, with support for multi-GPU and multi-node setups, and is optimized for large language models through automatic coordination between nodes
 
-**⚠️ WARNING**: Multi-node configurations typically require high-performance networking such as RoCE or InfiniBand, and performance may vary depending on the underlying network topology and hardware provided by different cloud vendors.
+> **⚠️ WARNING**: Multi-node configurations typically require high-performance networking such as RoCE or InfiniBand, and performance may vary depending on the underlying network topology and hardware provided by different cloud vendors.
 
 ### Disaggregated Serving (Prefill-Decode)
 

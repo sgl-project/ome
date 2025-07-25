@@ -366,7 +366,4 @@ spec:
 - If more than one serving runtime supports the model format and none of them specified the priority then, there is no guarantee _which_ runtime will be selected.
 - If a serving runtime supports multiple versions of a models, then it should have the same priority.
 
-!!! Warning
-If multiple runtimes list the same format and/or version as auto-selectable and the priority is not specified, the runtime is selected based on the `creationTimestamp` i.e. the most recently created runtime is selected. So there is no guarantee _which_ runtime will be selected.
-So users and cluster-administrators should enable `autoSelect` with care.
-```
+> **⚠️ WARNING**: If multiple runtimes list the same format and/or version as auto-selectable and the priority is not specified, the runtime is selected based on the `creationTimestamp` i.e. the most recently created runtime is selected. So there is no guarantee _which_ runtime will be selected. So users and cluster-administrators should enable `autoSelect` with care.
