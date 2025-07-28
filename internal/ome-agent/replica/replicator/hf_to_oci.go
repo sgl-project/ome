@@ -4,20 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
-
-// Indirection for testability
-var downloadFromHFFunc = downloadFromHF
-var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
 
 type HFToOCIReplicator struct {
 	Logger           logging.Interface
@@ -98,6 +95,12 @@ func uploadDirectoryToOCIOSDataStore(
 	numberOfConnections int) error {
 	if ociOSDataStore == nil {
 		return fmt.Errorf("target ociOSDataStore is nil")
+	}
+
+	// Early return if no objects to upload
+	if numberOfObjects <= 0 {
+		ociOSDataStore.Config.AnotherLogger.Infof("No objects to upload (numberOfObjects: %d), skipping upload", numberOfObjects)
+		return nil
 	}
 
 	tasks := make(chan UploadTask, numberOfObjects)

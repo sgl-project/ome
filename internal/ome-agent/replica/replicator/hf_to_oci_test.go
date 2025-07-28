@@ -14,12 +14,6 @@ import (
 	"github.com/sgl-project/ome/pkg/utils/storage"
 )
 
-type mockReplicationObject struct{}
-
-func (m mockReplicationObject) GetName() string { return "file1" }
-func (m mockReplicationObject) GetPath() string { return "file1" }
-func (m mockReplicationObject) GetSize() int64  { return 123 }
-
 func TestHFToOCIReplicator_Replicate(t *testing.T) {
 	// Save original functions
 	origDownloadFromHF := downloadFromHFFunc
@@ -55,7 +49,7 @@ func TestHFToOCIReplicator_Replicate(t *testing.T) {
 			Target:            ociobjectstore.ObjectURI{BucketName: "target-bucket"},
 		},
 	}
-	objs := []common.ReplicationObject{mockReplicationObject{}}
+	objs := CreateCommonMockReplicationObjects(1)
 	err := replicator.Replicate(objs)
 	assert.NoError(t, err)
 	assert.True(t, downloadCalled, "downloadFromHF should be called")

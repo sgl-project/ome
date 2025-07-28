@@ -15,6 +15,10 @@ const (
 	DefaultDownloadThreads       = 20
 )
 
+// Indirection for testability
+var downloadFromHFFunc = downloadFromHF
+var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
+
 func UploadObjectToOCIOSDataStore(ociOSDataStore *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, filePath string) error {
 	if ociOSDataStore == nil {
 		return fmt.Errorf("target ociOSDataStore is nil")

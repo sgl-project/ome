@@ -21,7 +21,7 @@ type HFToPVCReplicatorConfig struct {
 func (r *HFToPVCReplicator) Replicate(objects []common.ReplicationObject) error {
 	r.Logger.Info("Starting replication to target")
 
-	targetDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Source.Prefix)
+	targetDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Target.Prefix)
 	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, targetDirPath, r.Logger)
 	if err != nil {
 		r.Logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.Source.BucketName, err)

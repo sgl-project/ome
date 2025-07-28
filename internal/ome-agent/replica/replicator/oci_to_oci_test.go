@@ -13,15 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- Mock replication object ---
-type MockReplicationObject struct {
-	name string
-}
-
-func (m *MockReplicationObject) GetName() string { return m.name }
-func (m *MockReplicationObject) GetPath() string { return m.name }
-func (m *MockReplicationObject) GetSize() int64  { return 42 }
-
 type TestReplicator struct {
 	*OCIToOCIReplicator
 	mockPrepareObjectChannel     func(objects []common.ReplicationObject) chan common.ReplicationObject
@@ -74,8 +65,8 @@ func TestReplicate(t *testing.T) {
 	logger := testingPkg.SetupMockLogger()
 
 	objects := []common.ReplicationObject{
-		&MockReplicationObject{name: "file1"},
-		&MockReplicationObject{name: "file2"},
+		NewCustomMockReplicationObject("file1", "file1", 123),
+		NewCustomMockReplicationObject("file2", "file2", 456),
 	}
 	objectChan := make(chan common.ReplicationObject, len(objects))
 	for _, obj := range objects {
