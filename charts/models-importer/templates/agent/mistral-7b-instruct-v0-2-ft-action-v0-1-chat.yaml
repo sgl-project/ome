@@ -32,11 +32,15 @@ spec:
     - "CHAT"
   maxTokens: 32768
   additionalMetadata:
+    {{/* this model will use LARGE_COHERE in PHX, SMALL_GENERIC_V2 in other regions*/}}
+    {{- $cfg := index .Values "mistral-7b-instruct-v0-2-ft-action-v0-1-chat" "compatibleDACShapes" -}}
+    {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: SMALL_GENERIC_V2
+        - name: {{ $cfg }}
           quotaUnit: 1
           default: true
+    {{ end }}
     internalName: "action-mistral-7b-v0.2-finetuned-model-v0.1"
     type: "Serving"
   modelConfiguration:

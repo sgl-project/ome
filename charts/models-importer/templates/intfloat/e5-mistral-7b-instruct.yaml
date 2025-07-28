@@ -35,11 +35,15 @@ spec:
     - "TEXT_EMBEDDINGS"
   maxTokens: 32768
   additionalMetadata:
+    {{/* this model will use LARGE_COHERE in PHX, SMALL_GENERIC_V2 in other regions*/}}
+    {{- $cfg := index .Values "e5-mistral-7b-instruct" "compatibleDACShapes" -}}
+    {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: SMALL_GENERIC_V2
+        - name: {{ $cfg }}
           quotaUnit: 1
           default: true
+    {{ end }}
     internalName: "e5-mistral-7b-instruct"
     type: "Serving"
   modelConfiguration:

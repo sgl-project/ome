@@ -35,11 +35,15 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
+    {{/* this model will use LARGE_COHERE in PHX, SMALL_GENERIC_V2 in other regions*/}}
+    {{- $cfg := index .Values "nl2rqs-7b-v4" "compatibleDACShapes" -}}
+    {{- if $cfg }}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: SMALL_GENERIC_V2
+        - name: {{ $cfg }}
           quotaUnit: 1
           default: true
+    {{ end }}
     internalName: "nl2rqs-7b-v4"
     type: "Serving"
   modelConfiguration:
