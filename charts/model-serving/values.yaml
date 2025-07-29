@@ -610,8 +610,17 @@ llama_3_1_405b_instruct:
   minReplicas: 1
   maxReplicas: 1
   image:
-    repository:
-    tag:
+    vllm:
+      multiNode:
+        repository:
+        tag:
+      singleNode:
+        repository:
+        tag:
+    srt:
+      singleNode:
+        repository:
+        tag:
 
 llama_4_maverick_17b_128e_instruct_fp8:
   enabled: false

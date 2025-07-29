@@ -62,7 +62,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_1_405b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.llama_3_1_405b_instruct.image.srt.singleNode.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_1_405b_instruct.image.srt.singleNode.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1

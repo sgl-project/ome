@@ -64,7 +64,7 @@ spec:
     max: 410B
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_1_405b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_405b_instruct.image.tag | default .Values.vllm.latestImage.tag }}
+      image: {{ .Values.llama_3_1_405b_instruct.image.vllm.singleNode.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_405b_instruct.image.vllm.singleNode.tag | default .Values.vllm.latestImage.tag }}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1
@@ -83,8 +83,10 @@ spec:
           --served-model-name={{ .Values.vllm.serveModelName }} \
           --tensor-parallel-size=8 \
           --max-model-len=131072 \
-          --gpu-memory-utilization=0.9 \
+          --gpu-memory-utilization=0.95 \
           --enable-chunked-prefill \
+          --preemption-mode=swap \
+          --swap-space=10 \
           --enable-auto-tool-choice \
           --tool-call-parser=llama3_json \
           --chat-template=examples/tool_chat_template_llama3.1_json.jinja
