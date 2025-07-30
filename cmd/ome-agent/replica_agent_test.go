@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sgl-project/ome/pkg/afero"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 )
 
@@ -63,5 +64,46 @@ func TestOCIOSDataStoreListProvider(t *testing.T) {
 		_, err = provideTargetOCIOSDataStoreConfig(logger, v)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unmarshalling key target")
+	})
+}
+
+func TestPVCFileSystemProviders(t *testing.T) {
+	t.Run("Source/Target PVC disabled returns nil", func(t *testing.T) {
+		v := viper.New()
+		v.Set("source.pvc.enabled", false)
+		v.Set("target.pvc.enabled", false)
+
+		sourceFS := provideSourcePVCFileSystem(v)
+		assert.Nil(t, sourceFS)
+
+		targetFS := provideTargetPVCFileSystem(v)
+		assert.Nil(t, targetFS)
+	})
+
+	t.Run("Source/Target PVC enabled returns OsFs instance", func(t *testing.T) {
+		v := viper.New()
+		v.Set("source.pvc.enabled", true)
+		v.Set("target.pvc.enabled", true)
+
+		sourceFS := provideSourcePVCFileSystem(v)
+		assert.NotNil(t, sourceFS)
+		assert.IsType(t, &afero.OsFs{}, sourceFS)
+
+		targetFS := provideTargetPVCFileSystem(v)
+		assert.NotNil(t, targetFS)
+		assert.IsType(t, &afero.OsFs{}, targetFS)
+	})
+
+	t.Run("Mixed PVC enabled/disabled returns correct results", func(t *testing.T) {
+		v := viper.New()
+		v.Set("source.pvc.enabled", true)
+		v.Set("target.pvc.enabled", false)
+
+		sourceFS := provideSourcePVCFileSystem(v)
+		assert.NotNil(t, sourceFS)
+		assert.IsType(t, &afero.OsFs{}, sourceFS)
+
+		targetFS := provideTargetPVCFileSystem(v)
+		assert.Nil(t, targetFS)
 	})
 }
