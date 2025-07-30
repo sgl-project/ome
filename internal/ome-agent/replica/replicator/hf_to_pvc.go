@@ -1,10 +1,11 @@
 package replicator
 
 import (
+	"path/filepath"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
-	"path/filepath"
 )
 
 type HFToPVCReplicator struct {

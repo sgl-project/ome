@@ -2,11 +2,12 @@ package replicator
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/pkg/afero"
 	"github.com/sgl-project/ome/pkg/logging"
-	"os"
-	"path/filepath"
 )
 
 type PVCToPVCReplicator struct {

@@ -2,11 +2,12 @@ package replicator
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"

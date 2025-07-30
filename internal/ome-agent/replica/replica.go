@@ -2,8 +2,9 @@ package replica
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"path/filepath"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"golang.org/x/net/context"
 

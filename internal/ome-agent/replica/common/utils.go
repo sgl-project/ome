@@ -2,8 +2,9 @@ package common
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/pkg/afero"
 	"reflect"
+
+	"github.com/sgl-project/ome/pkg/afero"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 
