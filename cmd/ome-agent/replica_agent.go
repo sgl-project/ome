@@ -50,6 +50,7 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		logging.ModuleNamed("another_log"),
 		logging.ModuleNamed("hub_logger"),
 		OCIOSDataStoreListProvider(),
+		PVCFileSystemProviders(),
 		hub.Module,
 		replica.Module,
 		fx.Populate(&r.agent),
@@ -117,4 +118,33 @@ func provideTargetOCIOSDataStoreConfig(logger logging.Interface, v *viper.Viper)
 	return OCIOSDataStoreConfigWrapper{
 		OCIOSDataStoreConfig: targetOCIOSDataStoreConfig,
 	}, nil
+}
+
+func PVCFileSystemProviders() fx.Option {
+	return fx.Provide(
+		fx.Annotate(
+			provideSourcePVCFileSystem,
+			fx.ResultTags(`name:"source_pvc_fs"`),
+		),
+		fx.Annotate(
+			provideTargetPVCFileSystem,
+			fx.ResultTags(`name:"target_pvc_fs"`),
+		),
+	)
+}
+
+func provideSourcePVCFileSystem(v *viper.Viper) *afero.OsFs {
+	sourcePVCEnabled := v.GetBool("source.pvc.enabled")
+	if !sourcePVCEnabled {
+		return nil
+	}
+	return afero.NewOsFs().(*afero.OsFs)
+}
+
+func provideTargetPVCFileSystem(v *viper.Viper) *afero.OsFs {
+	targetPVCEnabled := v.GetBool("target.pvc.enabled")
+	if !targetPVCEnabled {
+		return nil
+	}
+	return afero.NewOsFs().(*afero.OsFs)
 }

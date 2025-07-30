@@ -2,8 +2,9 @@ package replica
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/pkg/afero"
 	"testing"
+
+	"github.com/sgl-project/ome/pkg/afero"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -224,14 +225,20 @@ func TestWithAppParams(t *testing.T) {
 		Config: &ociobjectstore.Config{Name: ociobjectstore.TargetOsConfigName},
 	}
 	mockHubClient := &hf.HubClient{}
+	sourcePVCFileSystem := afero.NewOsFs().(*afero.OsFs)
+	targetPVCFileSystem := afero.NewOsFs().(*afero.OsFs)
 
 	tests := []struct {
-		name            string
-		dataStores      []*ociobjectstore.OCIOSDataStore
-		hubClient       *hf.HubClient
-		expectSource    *ociobjectstore.OCIOSDataStore
-		expectTarget    *ociobjectstore.OCIOSDataStore
-		expectHubClient *hf.HubClient
+		name                string
+		dataStores          []*ociobjectstore.OCIOSDataStore
+		hubClient           *hf.HubClient
+		sourcePVCFileSystem *afero.OsFs
+		targetPVCFileSystem *afero.OsFs
+		expectSource        *ociobjectstore.OCIOSDataStore
+		expectTarget        *ociobjectstore.OCIOSDataStore
+		expectHubClient     *hf.HubClient
+		expectSourcePVC     *afero.OsFs
+		expectTargetPVC     *afero.OsFs
 	}{
 		{
 			name:         "both source OCI data store and target OCI data store present",
@@ -247,14 +254,30 @@ func TestWithAppParams(t *testing.T) {
 			expectTarget:    targetDataStore,
 			expectHubClient: mockHubClient,
 		},
+		{
+			name:                "source and target PVC file systems present",
+			sourcePVCFileSystem: sourcePVCFileSystem,
+			targetPVCFileSystem: targetPVCFileSystem,
+			expectSourcePVC:     sourcePVCFileSystem,
+			expectTargetPVC:     targetPVCFileSystem,
+		},
+		{
+			name:                "mixed OCI and PVC storage",
+			dataStores:          []*ociobjectstore.OCIOSDataStore{sourceDataStore},
+			targetPVCFileSystem: targetPVCFileSystem,
+			expectSource:        sourceDataStore,
+			expectTargetPVC:     targetPVCFileSystem,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			params := replicaParams{
-				AnotherLogger:      testingPkg.SetupMockLogger(),
-				OCIOSDataStoreList: tt.dataStores,
-				HubClient:          tt.hubClient,
+				AnotherLogger:       testingPkg.SetupMockLogger(),
+				OCIOSDataStoreList:  tt.dataStores,
+				HubClient:           tt.hubClient,
+				SourcePVCFileSystem: tt.sourcePVCFileSystem,
+				TargetPVCFileSystem: tt.targetPVCFileSystem,
 			}
 			config := &Config{}
 			err := WithAppParams(params)(config)
@@ -262,6 +285,8 @@ func TestWithAppParams(t *testing.T) {
 			assert.Equal(t, tt.expectSource, config.Source.OCIOSDataStore)
 			assert.Equal(t, tt.expectTarget, config.Target.OCIOSDataStore)
 			assert.Equal(t, tt.expectHubClient, config.Source.HubClient)
+			assert.Equal(t, tt.expectSourcePVC, config.Source.PVCFileSystem)
+			assert.Equal(t, tt.expectTargetPVC, config.Target.PVCFileSystem)
 		})
 	}
 }
@@ -486,6 +511,88 @@ func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 			targetStorageType: storage.StorageTypeOCI,
 			expectError:       true,
 			expectedErrorMsg:  "required Target.OCIOSDataStore is nil",
+		},
+		{
+			name: "valid PVC source and PVC target with all dependencies",
+			setupConfig: func() *Config {
+				return &Config{
+					Source: SourceStruct{
+						PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+					},
+					Target: TargetStruct{
+						PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+					},
+				}
+			},
+			sourceStorageType: storage.StorageTypePVC,
+			targetStorageType: storage.StorageTypePVC,
+			expectError:       false,
+		},
+		{
+			name: "missing Source.PVCFileSystem for PVC source",
+			setupConfig: func() *Config {
+				return &Config{
+					Source: SourceStruct{
+						PVCFileSystem: nil,
+					},
+					Target: TargetStruct{
+						PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+					},
+				}
+			},
+			sourceStorageType: storage.StorageTypePVC,
+			targetStorageType: storage.StorageTypePVC,
+			expectError:       true,
+			expectedErrorMsg:  "required Source.PVCFileSystem is nil",
+		},
+		{
+			name: "valid HuggingFace source and PVC target with all dependencies",
+			setupConfig: func() *Config {
+				return &Config{
+					Source: SourceStruct{
+						HubClient: mockHubClient,
+					},
+					Target: TargetStruct{
+						PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+					},
+				}
+			},
+			sourceStorageType: storage.StorageTypeHuggingFace,
+			targetStorageType: storage.StorageTypePVC,
+			expectError:       false,
+		},
+		{
+			name: "valid OCI source and PVC target with all dependencies",
+			setupConfig: func() *Config {
+				return &Config{
+					Source: SourceStruct{
+						OCIOSDataStore: mockOCIOSDataStore,
+					},
+					Target: TargetStruct{
+						PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+					},
+				}
+			},
+			sourceStorageType: storage.StorageTypeOCI,
+			targetStorageType: storage.StorageTypePVC,
+			expectError:       false,
+		},
+		{
+			name: "missing Target.PVCFileSystem for OCI source and PVC target",
+			setupConfig: func() *Config {
+				return &Config{
+					Source: SourceStruct{
+						OCIOSDataStore: mockOCIOSDataStore,
+					},
+					Target: TargetStruct{
+						PVCFileSystem: nil,
+					},
+				}
+			},
+			sourceStorageType: storage.StorageTypeOCI,
+			targetStorageType: storage.StorageTypePVC,
+			expectError:       true,
+			expectedErrorMsg:  "required Target.PVCFileSystem is nil",
 		},
 	}
 
