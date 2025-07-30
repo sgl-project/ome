@@ -2,12 +2,13 @@ package replicator
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
-	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"github.com/sgl-project/ome/pkg/logging"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
 type OCIToPVCReplicator struct {
@@ -34,7 +35,7 @@ func (r *OCIToPVCReplicator) Replicate(objects []common.ReplicationObject) error
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.processObjectReplication(objChan, resultChan)
+			downloadObjectsFromOCIOSDataStoreFunc(objChan, r.Config.OCIOSDataStore, r.ReplicationInput, r.Config.LocalPath, resultChan)
 		}()
 	}
 
@@ -62,28 +63,34 @@ func (r *OCIToPVCReplicator) Replicate(objects []common.ReplicationObject) error
 	return nil
 }
 
-func (r *OCIToPVCReplicator) processObjectReplication(objects <-chan common.ReplicationObject, results chan<- *ReplicationResult) {
+func downloadObjectsFromOCIOSDataStore(
+	objects <-chan common.ReplicationObject,
+	ociOSDataStore *ociobjectstore.OCIOSDataStore,
+	replicationInput common.ReplicationInput,
+	localDirectoryPath string,
+	results chan<- *ReplicationResult) {
 	for obj := range objects {
-		if obj.GetName() == r.ReplicationInput.Source.Prefix {
+		if obj.GetName() == replicationInput.Source.Prefix {
 			continue
 		}
 
 		srcObj := ociobjectstore.ObjectURI{
-			Namespace:  r.ReplicationInput.Source.Namespace,
-			BucketName: r.ReplicationInput.Source.BucketName,
+			Namespace:  replicationInput.Source.Namespace,
+			BucketName: replicationInput.Source.BucketName,
 			ObjectName: obj.GetName(),
 		}
 		result := ReplicationResult{source: srcObj}
 
 		downloadStart := time.Now()
-		err := DownloadObject(r.Config.OCIOSDataStore, srcObj, filepath.Join(r.Config.LocalPath, r.ReplicationInput.Target.BucketName))
+		err := DownloadObject(ociOSDataStore, srcObj, filepath.Join(localDirectoryPath, replicationInput.Target.BucketName))
 		downloadDuration := time.Since(downloadStart)
 		if err != nil {
 			result.error = err
 			results <- &result
 			continue
 		}
-		r.Logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
+
+		ociOSDataStore.Config.AnotherLogger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
 		results <- &result
 	}
 }

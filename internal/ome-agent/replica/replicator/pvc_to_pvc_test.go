@@ -20,9 +20,9 @@ func TestPVCToPVCReplicator_Replicate_Success(t *testing.T) {
 	defer cleanup()
 
 	// Create source and target directories
-	// The replicator expects the path to be: LocalPath/BucketName/Prefix
-	sourceDir := filepath.Join(tmpDir, "bucket1", "prefix1")
-	targetDir := filepath.Join(tmpDir, "bucket2", "prefix2")
+	// The replicator expects the path to be: LocalPath/pvcName/pvcPath
+	sourceDir := filepath.Join(tmpDir, "pvcName1", "pvcPath1")
+	targetDir := filepath.Join(tmpDir, "pvcName2", "pvcPath2")
 
 	// Create source directory structure
 	err = os.MkdirAll(sourceDir, 0755)
@@ -58,14 +58,14 @@ func TestPVCToPVCReplicator_Replicate_Success(t *testing.T) {
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
-				Namespace:  "namespace1",
-				BucketName: "bucket1",
-				Prefix:     "prefix1",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName1",
+				Prefix:     "pvcPath1",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "namespace2",
-				BucketName: "bucket2",
-				Prefix:     "prefix2",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName2",
+				Prefix:     "pvcPath2",
 			},
 		},
 	}
@@ -98,8 +98,8 @@ func TestPVCToPVCReplicator_Replicate_WalkFunctionCalledCorrectly(t *testing.T) 
 	defer cleanup()
 
 	// Create source and target directories
-	sourceDir := filepath.Join(tmpDir, "bucket1", "prefix1")
-	targetDir := filepath.Join(tmpDir, "bucket2", "prefix2")
+	sourceDir := filepath.Join(tmpDir, "pvcName1", "pvcPath1")
+	targetDir := filepath.Join(tmpDir, "pvcName2", "pvcPath2")
 
 	// Create source directory structure
 	err = os.MkdirAll(sourceDir, 0755)
@@ -135,14 +135,14 @@ func TestPVCToPVCReplicator_Replicate_WalkFunctionCalledCorrectly(t *testing.T) 
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
-				Namespace:  "namespace1",
-				BucketName: "bucket1",
-				Prefix:     "prefix1",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName1",
+				Prefix:     "pvcPath1",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "namespace2",
-				BucketName: "bucket2",
-				Prefix:     "prefix2",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName2",
+				Prefix:     "pvcPath2",
 			},
 		},
 	}
@@ -194,14 +194,14 @@ func TestPVCToPVCReplicator_Replicate_SameSourceAndTarget(t *testing.T) {
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
-				Namespace:  "namespace1",
-				BucketName: "bucket1",
-				Prefix:     "prefix1",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName",
+				Prefix:     "pvcPath",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "namespace1", // Same namespace
-				BucketName: "bucket1",    // Same bucket
-				Prefix:     "prefix1",    // Same prefix
+				Namespace:  "pvcNamespace", // Same namespace
+				BucketName: "pvcName",      // Same bucket
+				Prefix:     "pvcPath",      // Same prefix
 			},
 		},
 	}
@@ -227,14 +227,14 @@ func TestPVCToPVCReplicator_Replicate_SourceDirectoryNotExists(t *testing.T) {
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
-				Namespace:  "namespace1",
-				BucketName: "nonexistent-bucket",
-				Prefix:     "nonexistent-prefix",
+				Namespace:  "pvcNamespace",
+				BucketName: "nonexistent-pvc",
+				Prefix:     "nonexistent-pvcPath",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "namespace2",
-				BucketName: "bucket2",
-				Prefix:     "prefix2",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName",
+				Prefix:     "pvcPath",
 			},
 		},
 	}
@@ -259,14 +259,14 @@ func TestPVCToPVCReplicator_Replicate_FileSystemError(t *testing.T) {
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
-				Namespace:  "namespace1",
-				BucketName: "nonexistent-bucket",
-				Prefix:     "nonexistent-prefix",
+				Namespace:  "pvcNamespace",
+				BucketName: "nonexistent-pvc",
+				Prefix:     "nonexistent-pvcPath",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "namespace2",
-				BucketName: "bucket2",
-				Prefix:     "prefix2",
+				Namespace:  "pvcNamespace",
+				BucketName: "pvcName",
+				Prefix:     "pvcPath",
 			},
 		},
 	}

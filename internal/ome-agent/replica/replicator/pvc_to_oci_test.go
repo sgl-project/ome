@@ -54,7 +54,7 @@ func TestPVCToOCIReplicator_Replicate_Success(t *testing.T) {
 				Prefix:     "models",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "amaaaaaax7756raaolxvbyk7toite23tbfkarxhiipv6jdy3tgwjjq4l6zma",
+				Namespace:  "target-namespace",
 				BucketName: "model-storage",
 				Prefix:     "models",
 			},
@@ -92,7 +92,7 @@ func TestPVCToOCIReplicator_Replicate_Failure(t *testing.T) {
 				Prefix:     "models",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "amaaaaaax7756raaolxvbyk7toite23tbfkarxhiipv6jdy3tgwjjq4l6zma",
+				Namespace:  "target-namespace",
 				BucketName: "model-storage",
 				Prefix:     "models",
 			},
@@ -134,7 +134,7 @@ func TestPVCToOCIReplicator_Replicate_WithNilOCIOSDataStore(t *testing.T) {
 				Prefix:     "models",
 			},
 			Target: ociobjectstore.ObjectURI{
-				Namespace:  "amaaaaaax7756raaolxvbyk7toite23tbfkarxhiipv6jdy3tgwjjq4l6zma",
+				Namespace:  "target-namespace",
 				BucketName: "model-storage",
 				Prefix:     "models",
 			},

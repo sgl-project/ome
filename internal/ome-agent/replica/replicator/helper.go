@@ -2,10 +2,11 @@ package replicator
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"time"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 // Indirection for testability
 var downloadFromHFFunc = downloadFromHF
 var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
+var downloadObjectsFromOCIOSDataStoreFunc = downloadObjectsFromOCIOSDataStore
 
 func UploadObjectToOCIOSDataStore(ociOSDataStore *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, filePath string) error {
 	if ociOSDataStore == nil {
@@ -33,6 +35,10 @@ func UploadObjectToOCIOSDataStore(ociOSDataStore *ociobjectstore.OCIOSDataStore,
 }
 
 func DownloadObject(ociOSDataStore *ociobjectstore.OCIOSDataStore, srcObj ociobjectstore.ObjectURI, downloadPath string) error {
+	if ociOSDataStore == nil {
+		return fmt.Errorf("source ociOSDataStore is nil")
+	}
+
 	err := ociOSDataStore.MultipartDownload(srcObj, downloadPath,
 		ociobjectstore.WithChunkSize(DefaultDownloadChunkSizeInMB),
 		ociobjectstore.WithThreads(DefaultDownloadThreads))
