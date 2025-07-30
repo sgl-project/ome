@@ -2,13 +2,15 @@ package replicator
 
 import (
 	"errors"
+	"strings"
+	"sync"
+	"testing"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/utils/storage"
 	"github.com/stretchr/testify/assert"
-	"sync"
-	"testing"
 )
 
 // TestOCIToPVCReplicator_Replicate_Success tests successful replication
@@ -68,7 +70,7 @@ func TestOCIToPVCReplicator_Replicate_Success(t *testing.T) {
 
 		// Simulate successful downloads
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
+			if strings.HasSuffix(obj.GetName(), "/") {
 				continue
 			}
 
@@ -153,7 +155,7 @@ func TestOCIToPVCReplicator_Replicate_PartialFailure(t *testing.T) {
 
 		objectCount := 0
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
+			if strings.HasSuffix(obj.GetName(), "/") {
 				continue
 			}
 
@@ -245,7 +247,7 @@ func TestOCIToPVCReplicator_Replicate_AllFailures(t *testing.T) {
 		downloadCalled = true
 
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
+			if strings.HasSuffix(obj.GetName(), "/") {
 				continue
 			}
 
@@ -333,8 +335,8 @@ func TestOCIToPVCReplicator_Replicate_SkipPrefixObject(t *testing.T) {
 		results chan<- *ReplicationResult) {
 
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
-				continue // Skip prefix object
+			if strings.HasSuffix(obj.GetName(), "/") {
+				continue // Skip directories
 			}
 
 			// Thread-safe access to processedObjects

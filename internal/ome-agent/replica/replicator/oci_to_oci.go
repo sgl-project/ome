@@ -2,11 +2,13 @@ package replicator
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
@@ -56,10 +58,10 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	for result := range resultChan {
 		if result.error != nil {
 			errorCount++
-			r.Logger.Errorf("Replication failed for %s to %s: %v", result.source, result.target, result.error)
+			r.Logger.Errorf("Replication failed for %+v to %+v: %v", result.source, result.target, result.error)
 		} else {
 			successCount++
-			r.Logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
+			r.Logger.Infof("Replication succeeded for %+v to %+v", result.source, result.target)
 		}
 		LogProgress(successCount, errorCount, len(objects), startTime, r.Logger)
 	}
@@ -68,24 +70,37 @@ func (r *OCIToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	if errorCount > 0 {
 		return fmt.Errorf("%d/%d replications failed", errorCount, len(objects))
 	}
+
+	// Cleanup
+	if err := os.RemoveAll(filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath)); err != nil {
+		r.Logger.Warnf("Failed to clean up the temp local directory %s: %v", filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath), err)
+	}
 	return nil
 }
 
 func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.ReplicationObject, results chan<- *ReplicationResult) {
 	for obj := range objects {
-		if obj.GetName() == r.ReplicationInput.Source.Prefix {
+		// Skip directories
+		if strings.HasSuffix(obj.GetName(), "/") {
 			continue
 		}
 
+		// Set up result object
 		srcObj := ociobjectstore.ObjectURI{
 			Namespace:  r.ReplicationInput.Source.Namespace,
 			BucketName: r.ReplicationInput.Source.BucketName,
 			ObjectName: obj.GetName(),
 		}
-		result := ReplicationResult{source: srcObj}
+		targetObj := r.getTargetObjectURI(obj.GetName())
+		result := ReplicationResult{
+			source: srcObj,
+			target: targetObj,
+		}
 
+		// Download
 		downloadStart := time.Now()
-		err := DownloadObject(r.Config.SourceOCIOSDataStore, srcObj, r.Config.LocalPath)
+		tempDirPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath)
+		err := DownloadObject(r.Config.SourceOCIOSDataStore, srcObj, tempDirPath)
 		downloadDuration := time.Since(downloadStart)
 		if err != nil {
 			result.error = err
@@ -94,11 +109,10 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 		}
 		r.Logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
 
-		targetObj := r.getTargetObjectURI(obj.GetName())
-		result.target = targetObj
-
+		// Upload
 		uploadStart := time.Now()
-		err = UploadObjectToOCIOSDataStore(r.Config.TargetOCIOSDataStore, targetObj, filepath.Join(r.Config.LocalPath, obj.GetName()))
+		uploadedFilePath := filepath.Join(tempDirPath, obj.GetName())
+		err = UploadObjectToOCIOSDataStore(r.Config.TargetOCIOSDataStore, targetObj, uploadedFilePath)
 		uploadDuration := time.Since(uploadStart)
 		if err != nil {
 			result.error = err

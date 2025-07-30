@@ -16,7 +16,7 @@ enable_symlinks: true
 
 # Model Download Configuration
 model_name: "meta-llama/Llama-3.2-1B"
-local_path: "/opt/ml/model"
+local_path: "/tmp/replica-test"
 revision: "main"  # renamed from 'branch' to 'revision' to match hub module
 repo_type: "model"
 
@@ -30,23 +30,33 @@ download_size_limit_gb: 650
 enable_size_limit_check: true
 
 source:
-  storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+  storage_uri: "pvc://source-pvc/replica"
+#  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/test-model/"
+#  storage_uri: "hf://BAAI/bge-small-en-v1.5"
+  #  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/llama-3-8b-instruct/"
+#  storage_uri: "pvc://source-pvc/models"
   oci:
-    enabled: true
+    enabled: false
     enable_obo_token: true
-    obo_token: "dummy-obo-token"
+    obo_token: "eyJraWQiOiJhc3dfZnJhXzE3MTM0ODA4MDUwNTMiLCJhbGciOiJSUzI1NiJ9.eyJ0Z3QiOiJhbGxfc3ZjIiwic3ViIjoib2NpZDEudXNlci5vYzEuLmFhYWFhYWFhNWtreGp1aGJ0b2ZuZHlpeTdtZjNhbzJsenB4M3F3ZXVvYndob21lYXhycXN1Y2UzMnpzYSIsImNoYWluIjoiIiwidGd0X25hbWUiOiJhbGxfc3ZjIiwiY2FsbF9zdmMiOiJnZW5lcmF0aXZlYWlkZXYiLCJ0Z3RzIjoiW1wiYWxsX3N2Y1wiXSIsIm93biI6Im9jaWQxLnRlbmFuY3kub2MxLi5hYWFhYWFhYWt5dmVydG1vNHRpbmV1Ym56eGZ0YXRvenZxbWRoNmFuYjNicGx2ZHFnc2czeTYzY3R6anEiLCJpc3MiOiJhdXRoU2VydmljZS5vcmFjbGUuY29tIiwicHR5cGUiOiJ1c2VyIiwidGd0X25hbWVzIjoiW1wiYWxsX3N2Y1wiXSIsImF1ZCI6Im9jaSIsInBzdHlwZSI6Im5hdGYiLCJ0dHlwZSI6Im9ibyIsImV4cCI6MTc1NDEyODEzMywiaWF0IjoxNzU0MDQxNzMzLCJvYm9fdHlwZSI6InNlcnZpY2UiLCJqdGkiOiI5MjZjNTRiMC1hNTJkLTRiMDgtOTY5ZS0yZDIzYzExZDIxMjciLCJ0ZW5hbnQiOiJvY2lkMS50ZW5hbmN5Lm9jMS4uYWFhYWFhYWFna2J6Z2c2bHB6cmY0N3h6eTRyam94ZzRkZTZuY2ZpcTJybmNtaml1anZ5MmhqZ3h2emlxIiwibmFtZS1jaGFpbiI6IiJ9.HWgqFYHsxzBxvQj1Q4O65ze925tiGZUEaqyoV5ja1RFSkGTISPJ5mW56g8haf-ZYcbnBOoM9UGTLomVwvS8F3xGVtTj1T6L13YhkC_HP5mMwgOYu5ko6wYPcrH5keybVtFXKYYSnsFen4vlgmjYjLG7n0trw1s7IRJAxMhgko_2TIPOoVVExSAowH0-03mEBXvBaMWMmYn9iW287Lwme6YrscyuWHNQ6MG-vNhQYWMRpH3M93CqV5B0DEvU3Y1BMiPkfaN9gAolOW-1vX4mjqc0Qw1I7U0iB_ntqZ6yuP9MQl1AL3I19FU-b9OHD1S_5BagjTTWm7etH4DyPvr5TSA"
     auth_type: "InstancePrincipal"
     region: "eu-frankfurt-1"
     compartment_id: ""
+  pvc:
+    enabled: true
 
 target:
-  storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+#  storage_uri: "pvc://source-pvc/data"
+#  storage_uri: "pvc://target-pvc/models"
+  storage_uri: "oci://n/idqj093njucb/b/beiwen_test/o/test-pvc-to-ociii/"
   oci:
     enabled: true
     enable_obo_token: false
     obo_token: ""
     auth_type: "InstancePrincipal"
     region: "us-chicago-1"
+  pvc:
+    enabled: false
 
 model_framework: tensorrtllm
 tensorrtllm_version: "v0.11.0"

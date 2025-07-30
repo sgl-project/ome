@@ -1,13 +1,14 @@
 package replicator
 
 import (
+	"testing"
+	"time"
+
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"testing"
-	"time"
 )
 
 func TestPrepareObjectChannel(t *testing.T) {

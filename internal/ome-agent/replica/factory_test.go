@@ -1,9 +1,10 @@
 package replica
 
 import (
+	"testing"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/internal/ome-agent/replica/replicator"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 
@@ -37,9 +38,40 @@ func TestNewReplicator(t *testing.T) {
 			expectType: &replicator.OCIToOCIReplicator{},
 		},
 		{
-			name:              "Unsupported",
-			sourceType:        storage.StorageTypeHuggingFace,
-			targetType:        "UNKNOWNSTORAGE",
+			name:       "PVC to OCI",
+			sourceType: storage.StorageTypePVC,
+			targetType: storage.StorageTypeOCI,
+			expectType: &replicator.PVCToOCIReplicator{},
+		},
+		{
+			name:       "HF to PVC",
+			sourceType: storage.StorageTypeHuggingFace,
+			targetType: storage.StorageTypePVC,
+			expectType: &replicator.HFToPVCReplicator{},
+		},
+		{
+			name:       "OCI to PVC",
+			sourceType: storage.StorageTypeOCI,
+			targetType: storage.StorageTypePVC,
+			expectType: &replicator.OCIToPVCReplicator{},
+		},
+		{
+			name:       "PVC to PVC",
+			sourceType: storage.StorageTypePVC,
+			targetType: storage.StorageTypePVC,
+			expectType: &replicator.PVCToPVCReplicator{},
+		},
+		{
+			name:              "Unsupported Vendor to OCI",
+			sourceType:        storage.StorageTypeVendor,
+			targetType:        storage.StorageTypeOCI,
+			expectType:        nil,
+			expectErrContains: "unsupported replication",
+		},
+		{
+			name:              "Unsupported GitHub to PVC",
+			sourceType:        storage.StorageTypeGitHub,
+			targetType:        storage.StorageTypePVC,
 			expectType:        nil,
 			expectErrContains: "unsupported replication",
 		},

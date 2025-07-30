@@ -14,6 +14,8 @@ const (
 	DefaultUploadThreads         = 10
 	DefaultDownloadChunkSizeInMB = 20
 	DefaultDownloadThreads       = 20
+
+	ReplicaWorkspacePath = "replica"
 )
 
 // Indirection for testability

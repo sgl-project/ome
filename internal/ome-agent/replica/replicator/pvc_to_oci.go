@@ -1,10 +1,11 @@
 package replicator
 
 import (
+	"path/filepath"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
-	"path/filepath"
 )
 
 type PVCToOCIReplicator struct {

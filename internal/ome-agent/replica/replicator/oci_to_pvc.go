@@ -3,6 +3,7 @@ package replicator
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,10 +49,10 @@ func (r *OCIToPVCReplicator) Replicate(objects []common.ReplicationObject) error
 	for result := range resultChan {
 		if result.error != nil {
 			errorCount++
-			r.Logger.Errorf("Replication failed for %s to PVC %s under path %s: %v", result.source, r.ReplicationInput.Target.BucketName, r.ReplicationInput.Target.Prefix, result.error)
+			r.Logger.Errorf("Replication failed for %+v to PVC %s under path '%s': %v", result.source, r.ReplicationInput.Target.BucketName, r.ReplicationInput.Target.Prefix, result.error)
 		} else {
 			successCount++
-			r.Logger.Infof("Replication succeeded for %s to PVC %s under path %s", result.source, r.ReplicationInput.Target.Prefix, result.target)
+			r.Logger.Infof("Replication succeeded for %+v to PVC %s under path %+v", result.source, r.ReplicationInput.Target.Prefix, result.target)
 		}
 		LogProgress(successCount, errorCount, len(objects), startTime, r.Logger)
 	}
@@ -70,8 +71,8 @@ func downloadObjectsFromOCIOSDataStore(
 	localDirectoryPath string,
 	results chan<- *ReplicationResult) {
 	for obj := range objects {
-		if obj.GetName() == replicationInput.Source.Prefix {
-			continue
+		if strings.HasSuffix(obj.GetName(), "/") {
+			continue // Skip directories
 		}
 
 		srcObj := ociobjectstore.ObjectURI{
@@ -82,7 +83,7 @@ func downloadObjectsFromOCIOSDataStore(
 		result := ReplicationResult{source: srcObj}
 
 		downloadStart := time.Now()
-		err := DownloadObject(ociOSDataStore, srcObj, filepath.Join(localDirectoryPath, replicationInput.Target.BucketName))
+		err := DownloadObject(ociOSDataStore, srcObj, filepath.Join(localDirectoryPath, replicationInput.Target.Prefix))
 		downloadDuration := time.Since(downloadStart)
 		if err != nil {
 			result.error = err

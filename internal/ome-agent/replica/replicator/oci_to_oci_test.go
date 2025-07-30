@@ -2,10 +2,11 @@ package replicator
 
 import (
 	"errors"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"

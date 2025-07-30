@@ -21,8 +21,8 @@ func TestPVCToPVCReplicator_Replicate_Success(t *testing.T) {
 
 	// Create source and target directories
 	// The replicator expects the path to be: LocalPath/pvcName/pvcPath
-	sourceDir := filepath.Join(tmpDir, "pvcName1", "pvcPath1")
-	targetDir := filepath.Join(tmpDir, "pvcName2", "pvcPath2")
+	sourceDir := filepath.Join(tmpDir, "pvcPath1")
+	targetDir := filepath.Join(tmpDir, "targetPVCName", "pvcPath2")
 
 	// Create source directory structure
 	err = os.MkdirAll(sourceDir, 0755)
@@ -59,12 +59,12 @@ func TestPVCToPVCReplicator_Replicate_Success(t *testing.T) {
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
 				Namespace:  "pvcNamespace",
-				BucketName: "pvcName1",
+				BucketName: "sourcePVCName",
 				Prefix:     "pvcPath1",
 			},
 			Target: ociobjectstore.ObjectURI{
 				Namespace:  "pvcNamespace",
-				BucketName: "pvcName2",
+				BucketName: "targetPVCName",
 				Prefix:     "pvcPath2",
 			},
 		},
@@ -98,8 +98,8 @@ func TestPVCToPVCReplicator_Replicate_WalkFunctionCalledCorrectly(t *testing.T) 
 	defer cleanup()
 
 	// Create source and target directories
-	sourceDir := filepath.Join(tmpDir, "pvcName1", "pvcPath1")
-	targetDir := filepath.Join(tmpDir, "pvcName2", "pvcPath2")
+	sourceDir := filepath.Join(tmpDir, "pvcPath1")
+	targetDir := filepath.Join(tmpDir, "targetPVCName", "pvcPath2")
 
 	// Create source directory structure
 	err = os.MkdirAll(sourceDir, 0755)
@@ -136,12 +136,12 @@ func TestPVCToPVCReplicator_Replicate_WalkFunctionCalledCorrectly(t *testing.T) 
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
 				Namespace:  "pvcNamespace",
-				BucketName: "pvcName1",
+				BucketName: "sourcePVCName",
 				Prefix:     "pvcPath1",
 			},
 			Target: ociobjectstore.ObjectURI{
 				Namespace:  "pvcNamespace",
-				BucketName: "pvcName2",
+				BucketName: "targetPVCName",
 				Prefix:     "pvcPath2",
 			},
 		},

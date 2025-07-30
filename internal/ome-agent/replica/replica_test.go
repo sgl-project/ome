@@ -1,8 +1,9 @@
 package replica
 
 import (
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"testing"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
@@ -221,7 +222,7 @@ func TestValidateModelSize(t *testing.T) {
 					Size: &size,
 				}
 				return []common.ReplicationObject{
-					common.ObjectSummaryReplicationObject{summary},
+					common.ObjectSummaryReplicationObject{ObjectSummary: summary},
 				}
 			}(),
 			expectPanic: false,
@@ -269,7 +270,7 @@ func TestValidateModelSize(t *testing.T) {
 					Size: &size,
 				}
 				return []common.ReplicationObject{
-					common.ObjectSummaryReplicationObject{summary},
+					common.ObjectSummaryReplicationObject{ObjectSummary: summary},
 				}
 			}(),
 			expectPanic:   true,
@@ -328,7 +329,7 @@ func TestValidateModelSize(t *testing.T) {
 					Size: &size,
 				}
 				return []common.ReplicationObject{
-					common.ObjectSummaryReplicationObject{summary},
+					common.ObjectSummaryReplicationObject{ObjectSummary: summary},
 				}
 			}(),
 			expectPanic: false,
