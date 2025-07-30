@@ -97,8 +97,11 @@ modelAgent:
 
   nodeSelector: {}
 
-  tolerations: []
-  
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
   health:
     port: 8080
   
