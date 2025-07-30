@@ -21,6 +21,7 @@ OME Resources and Controller
 | modelAgent.resources.requests.cpu | string | `"10"` |  |
 | modelAgent.resources.requests.memory | string | `"100Gi"` |  |
 | modelAgent.serviceAccountName | string | `"ome-model-agent"` |  |
+| modelAgent.tolerations | list | `[]` |  |
 | ome.benchmarkJob.cpuLimit | string | `"2"` |  |
 | ome.benchmarkJob.cpuRequest | string | `"2"` |  |
 | ome.benchmarkJob.image | string | `"ghcr.io/moirai-internal/genai-bench"` |  |

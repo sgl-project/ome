@@ -71,8 +71,8 @@ spec:
         {{- if .Values.modelAgent.resources }}
         resources:
           {{- toYaml .Values.modelAgent.resources | nindent 10 }}
-        {{- end }}   
+        {{- end }}
+      {{- with .Values.modelAgent.tolerations }}
       tolerations:
-        - key: nvidia.com/gpu
-          operator: Exists  
-          effect: NoSchedule
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

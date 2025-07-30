@@ -96,6 +96,8 @@ modelAgent:
     tag: *defaultVersion
 
   nodeSelector: {}
+
+  tolerations: []
   
   health:
     port: 8080
