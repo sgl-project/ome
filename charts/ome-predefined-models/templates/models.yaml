@@ -1,0 +1,187 @@
+{{- if or .Values.global.enableAll .Values.models.meta.enabled }}
+{{- if or .Values.global.enableAll .Values.models.meta.llama_3_3_70b_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-3-3-70b-instruct
+spec:
+  disabled: false
+  displayName: meta.llama-3.3-70b-instruct
+  storage:
+    storageUri: hf://meta-llama/Llama-3.3-70B-Instruct
+    path: /raid/models/meta/llama-3-3-70b-instruct
+    key: "hf-token"
+  vendor: meta
+  version: "1.0.0"
+{{- end }}
+{{- if or .Values.global.enableAll .Values.models.meta.llama_4_maverick_17b_128e_instruct_fp8.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-4-maverick-17b-128e-instruct-fp8
+spec:
+  vendor: meta
+  disabled: false
+  displayName: meta.llama-4-maverick-17b-128e-instruct-fp8
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.51.0.dev0"
+  modelType: llama
+  modelArchitecture: Llama4ForConditionalGeneration
+  storage:
+    storageUri: hf://meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+    path: /raid/models/meta/llama-4-maverick-17b-128e-instruct-fp8
+    key: "hf-token"
+{{- end }}
+{{- if or .Values.global.enableAll .Values.models.meta.llama_4_scout_17b_16e_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-4-scout-17b-16e-instruct
+spec:
+  disabled: false
+  displayName: meta.llama-4-scout-17b-16e-instruct
+  vendor: meta
+  version: "1.0.0"
+  storage:
+    storageUri: hf://meta-llama/Llama-4-Scout-17B-16E-Instruct
+    path: /raid/models/meta/llama-4-scout-17b-16e-instruct
+    key: "hf-token"
+{{- end }}
+{{- end }}
+
+{{- if or .Values.global.enableAll .Values.models.deepseek.enabled }}
+{{- if or .Values.global.enableAll .Values.models.deepseek.deepseek_v3.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deepseek-v3
+spec:
+  vendor: deepseek-ai
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://deepseek-ai/DeepSeek-V3
+    path: /raid/models/deepseek-ai/deepseek-v3
+{{- end }}
+{{- if or .Values.global.enableAll .Values.models.deepseek.deepseek_r1.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deepseek-r1
+spec:
+  vendor: deepseek-ai
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://deepseek-ai/DeepSeek-R1
+    path: /raid/models/deepseek-ai/deepseek-r1
+{{- end }}
+{{- end }}
+
+{{- if or .Values.global.enableAll .Values.models.intfloat.enabled }}
+{{- if or .Values.global.enableAll .Values.models.intfloat.e5_mistral_7b_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: e5-mistral-7b-instruct
+spec:
+  disabled: false
+  displayName: intfloat.e5-mistral-7b-instruct
+  storage:
+    storageUri: hf://intfloat/e5-mistral-7b-instruct
+    path: /raid/models/intfloat/e5-mistral-7b-instruct
+  vendor: intfloat
+  version: "0.0"
+{{- end }}
+{{- end }}
+
+{{- if or .Values.global.enableAll .Values.models.microsoft.enabled }}
+{{- if or .Values.global.enableAll .Values.models.microsoft.phi_3_vision_128k_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: phi-3-vision-128k-instruct
+spec:
+  disabled: false
+  displayName: microsoft.phi-3-vision-128k-instruct
+  storage:
+    storageUri: hf://microsoft/Phi-3-vision-128k-instruct
+    path: /raid/models/microsoft/phi-3-vision-128k-instruct
+  vendor: microsoft
+  version: "0.1"
+{{- end }}
+{{- end }}
+
+{{- if or .Values.global.enableAll .Values.models.moonshotai.enabled }}
+{{- if or .Values.global.enableAll .Values.models.moonshotai.kimi_k2_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: kimi-k2-instruct
+spec:
+  vendor: moonshotai
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://moonshotai/Kimi-K2-Instruct
+    path: /raid/models/moonshotai/Kimi-K2-Instruct
+{{- end }}
+{{- end }}
+
+{{- if or .Values.global.enableAll .Values.models.nvidia.enabled }}
+{{- if or .Values.global.enableAll .Values.models.nvidia.llama_3_1_nemotron_ultra_253b_v1.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-3-1-nemotron-ultra-253b-v1
+spec:
+  vendor: nvidia
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://nvidia/Llama-3.1-Nemotron-70B-Instruct
+    path: /raid/models/nvidia/llama-3-1-nemotron-ultra-253b-v1
+{{- end }}
+{{- if or .Values.global.enableAll .Values.models.nvidia.llama_3_3_nemotron_super_49b_v1.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-3-3-nemotron-super-49b-v1
+spec:
+  vendor: nvidia
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://nvidia/Llama-3.3-Nemotron-Super-49B-v1
+    path: /raid/models/nvidia/llama-3-3-nemotron-super-49b-v1
+{{- end }}
+{{- if or .Values.global.enableAll .Values.models.nvidia.llama_3_1_nemotron_nano_8b_v1.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-3-1-nemotron-nano-8b-v1
+spec:
+  vendor: nvidia
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+    path: /raid/models/nvidia/llama-3-1-nemotron-nano-8b-v1
+{{- end }}
+{{- end }} 
