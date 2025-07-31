@@ -26,8 +26,7 @@ This Helm chart provides a collection of predefined models and serving runtimes 
 ### Install the chart
 
 ```bash
-# Add the repository (if using a Helm repository)
-helm repo add ome <repository-url>
+helm repo add ome https://sgl-project.github.io/ome
 helm repo update
 
 # Install with default values
@@ -191,35 +190,6 @@ runtimes:
     enabled: true
     deepseek_rdma:
       enabled: true
-```
-
-## Monitoring
-
-All deployed runtimes include Prometheus metrics endpoints configured for monitoring:
-
-- Metrics endpoint: `/metrics`
-- Health check endpoint: `/health`  
-- Generate health check: `/health_generate` (for SRT runtimes)
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Models not downloading**: Ensure proper Hugging Face token is configured
-2. **GPU resources**: Verify GPU nodes have sufficient resources
-3. **RDMA configuration**: For RDMA-enabled runtimes, ensure proper network setup
-
-### Debugging Commands
-
-```bash
-# Check deployed models
-kubectl get clusterbasemodels
-
-# Check deployed runtimes
-kubectl get clusterservingruntimes
-
-# Check pod logs
-kubectl logs -l app=ome-predefined-models
 ```
 
 ## Contributing
