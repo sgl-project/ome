@@ -56,6 +56,11 @@ spec:
     {{- end }}
   containers:
     - name: ome-container
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      env:
+        - name: "OPENSSL_FORCE_FIPS_MODE"
+          value: "0"
+      {{- end}}
       image: "{{ .Values.cohere.commandAImage.repository }}:{{ .Values.cohere.commandAImage.tag }}"
       ports:
         - containerPort: 8080
