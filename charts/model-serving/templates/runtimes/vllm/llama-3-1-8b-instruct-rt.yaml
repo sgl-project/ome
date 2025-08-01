@@ -47,16 +47,6 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.44.2"
-      modelFormat:
-        name: safetensors
-        version: "1.0.0"
-      autoSelect: true
-      modelArchitecture: LlamaForCausalLM
-      version: "1.0.0"
-      priority: 1
-    - modelFramework:
-        name: transformers
         version: "4.42.3"
       modelFormat:
         name: safetensors

@@ -34,6 +34,11 @@ llama-3-1-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+llama-3-1-8b-instruct:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SMALL_GENERIC_V1"
+
 llama-3-3-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
