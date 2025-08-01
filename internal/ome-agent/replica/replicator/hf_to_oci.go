@@ -32,7 +32,8 @@ type HFToOCIReplicatorConfig struct {
 func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error {
 	r.Logger.Info("Starting replication to target")
 	// Download
-	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, r.Config.LocalPath, r.Logger)
+	tempDirPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath)
+	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, tempDirPath, r.Logger)
 	if err != nil {
 		r.Logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.Source.BucketName, err)
 		return err
@@ -40,12 +41,17 @@ func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error 
 	r.Logger.Infof("Successfully downloaded model %s from HF to %s ", r.ReplicationInput.Source.BucketName, downloadPath)
 
 	// Upload
-	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.OCIOSDataStore, r.ReplicationInput.Target, r.Config.LocalPath, len(objects), r.Config.NumConnections); err != nil {
-		r.Logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", r.Config.LocalPath, r.ReplicationInput.Target, err)
+	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.OCIOSDataStore, r.ReplicationInput.Target, tempDirPath, len(objects), r.Config.NumConnections); err != nil {
+		r.Logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", tempDirPath, r.ReplicationInput.Target, err)
 		return err
 	}
-	r.Logger.Infof("All files under %s uploaded successfully", r.Config.LocalPath)
+	r.Logger.Infof("All files under %s uploaded successfully", tempDirPath)
 	r.Logger.Infof("Replication completed from HuggingFace to OCI Object Storage for model %s", r.ReplicationInput.Source.BucketName)
+
+	// Clean up temporary directory
+	if err := os.RemoveAll(tempDirPath); err != nil {
+		r.Logger.Warnf("Failed to clean up the temp local directory %s: %v", tempDirPath, err)
+	}
 	return nil
 }
 

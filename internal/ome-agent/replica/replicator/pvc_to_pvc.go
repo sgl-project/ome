@@ -24,6 +24,11 @@ type PVCToPVCReplicatorConfig struct {
 
 func (r *PVCToPVCReplicator) Replicate(objects []common.ReplicationObject) error {
 	r.Logger.Info("Starting replication to target")
+	if r.ReplicationInput.Source.Namespace != r.ReplicationInput.Target.Namespace {
+		return fmt.Errorf("source PVC and target PVC namespaces do not match: %s != %s",
+			r.ReplicationInput.Source.Namespace, r.ReplicationInput.Target.Namespace)
+	}
+	
 	if r.ReplicationInput.Source.Namespace == r.ReplicationInput.Target.Namespace &&
 		r.ReplicationInput.Source.BucketName == r.ReplicationInput.Target.BucketName &&
 		r.ReplicationInput.Source.Prefix == r.ReplicationInput.Target.Prefix {
@@ -31,7 +36,7 @@ func (r *PVCToPVCReplicator) Replicate(objects []common.ReplicationObject) error
 		return nil
 	}
 
-	sourceDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Source.BucketName, r.ReplicationInput.Source.Prefix)
+	sourceDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Source.Prefix)
 	targetDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Target.BucketName, r.ReplicationInput.Target.Prefix)
 
 	err := afero.Walk(r.Config.SourcePVCFileSystem, sourceDirPath, func(path string, info os.FileInfo, err error) error {
@@ -57,7 +62,7 @@ func (r *PVCToPVCReplicator) Replicate(objects []common.ReplicationObject) error
 		return fmt.Errorf("replication failed: %w", err)
 	}
 
-	r.Logger.Infof("Replication completed successfully for PVC %s under path %s to PVC %s under path %s",
+	r.Logger.Infof("Replication completed successfully for PVC %s under path '%s' to PVC %s under path '%s'",
 		r.ReplicationInput.Source.BucketName,
 		r.ReplicationInput.Source.Prefix,
 		r.ReplicationInput.Target.BucketName,

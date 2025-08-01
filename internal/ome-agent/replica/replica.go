@@ -75,7 +75,7 @@ func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
 
 // Start initiates the replication process.
 func (r *ReplicaAgent) Start() error {
-	r.Logger.Infof("Start replication from %+v to %+v", r.ReplicationInput.Source, r.ReplicationInput.Target)
+	r.Logger.Infof("Start replication from %s %v to %s %v", r.ReplicationInput.SourceStorageType, r.ReplicationInput.Source, r.ReplicationInput.TargetStorageType, r.ReplicationInput.Target)
 
 	sourceObjs, err := r.listSourceObjects()
 	if err != nil {

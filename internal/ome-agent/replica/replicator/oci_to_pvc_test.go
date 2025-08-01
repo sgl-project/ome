@@ -2,6 +2,7 @@ package replicator
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -69,7 +70,7 @@ func TestOCIToPVCReplicator_Replicate_Success(t *testing.T) {
 
 		// Simulate successful downloads
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
+			if strings.HasSuffix(obj.GetName(), "/") {
 				continue
 			}
 
@@ -154,7 +155,7 @@ func TestOCIToPVCReplicator_Replicate_PartialFailure(t *testing.T) {
 
 		objectCount := 0
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
+			if strings.HasSuffix(obj.GetName(), "/") {
 				continue
 			}
 
@@ -246,7 +247,7 @@ func TestOCIToPVCReplicator_Replicate_AllFailures(t *testing.T) {
 		downloadCalled = true
 
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
+			if strings.HasSuffix(obj.GetName(), "/") {
 				continue
 			}
 
@@ -334,8 +335,8 @@ func TestOCIToPVCReplicator_Replicate_SkipPrefixObject(t *testing.T) {
 		results chan<- *ReplicationResult) {
 
 		for obj := range objects {
-			if obj.GetName() == replicationInput.Source.Prefix {
-				continue // Skip prefix object
+			if strings.HasSuffix(obj.GetName(), "/") {
+				continue // Skip directories
 			}
 
 			// Thread-safe access to processedObjects
