@@ -28,7 +28,7 @@ func (r *PVCToPVCReplicator) Replicate(objects []common.ReplicationObject) error
 		return fmt.Errorf("source PVC and target PVC namespaces do not match: %s != %s",
 			r.ReplicationInput.Source.Namespace, r.ReplicationInput.Target.Namespace)
 	}
-	
+
 	if r.ReplicationInput.Source.Namespace == r.ReplicationInput.Target.Namespace &&
 		r.ReplicationInput.Source.BucketName == r.ReplicationInput.Target.BucketName &&
 		r.ReplicationInput.Source.Prefix == r.ReplicationInput.Target.Prefix {

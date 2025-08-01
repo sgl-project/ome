@@ -1,6 +1,7 @@
 package replica
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/sgl-project/ome/pkg/afero"
 	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
@@ -85,7 +87,7 @@ func TestNewReplicaAgent(t *testing.T) {
 			description: "Should successfully create agent with valid OCI source and target",
 		},
 		{
-			name: "valid HuggingFace to OCI configuration",
+			name: "valid HuggingFace to OCI configuration with branch",
 			config: &Config{
 				AnotherLogger:        mockLogger,
 				LocalPath:            "/tmp/replica",
@@ -93,7 +95,7 @@ func TestNewReplicaAgent(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
 				Source: SourceStruct{
-					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct",
+					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct@experimental",
 					HubClient:     &hf.HubClient{},
 				},
 				Target: TargetStruct{
@@ -102,10 +104,10 @@ func TestNewReplicaAgent(t *testing.T) {
 				},
 			},
 			expectError: false,
-			description: "Should successfully create agent with HuggingFace source and OCI target",
+			description: "Should successfully create agent with HuggingFace source (with branch) and OCI target",
 		},
 		{
-			name: "invalid source storage URI",
+			name: "valid HuggingFace to PVC configuration with branch",
 			config: &Config{
 				AnotherLogger:        mockLogger,
 				LocalPath:            "/tmp/replica",
@@ -113,17 +115,97 @@ func TestNewReplicaAgent(t *testing.T) {
 				EnableSizeLimitCheck: true,
 				NumConnections:       5,
 				Source: SourceStruct{
-					StorageURIStr:  "invalid://storage/uri",
-					OCIOSDataStore: createMockOCIOSDataStore(),
+					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct@experimental",
+					HubClient:     &hf.HubClient{},
+				},
+				Target: TargetStruct{
+					StorageURIStr: "pvc://target-pvc/models",
+					PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+				},
+			},
+			expectError: false,
+			description: "Should successfully create agent with HuggingFace source (with branch) and PVC target",
+		},
+		{
+			name: "valid PVC to OCI configuration",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr: "pvc://source-pvc/models",
+					PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
 				},
 				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
 			},
+			expectError: false,
+			description: "Should successfully create agent with PVC source and OCI target",
+		},
+		{
+			name: "valid OCI to PVC configuration",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr:  "oci://n/src-ns/b/src-bucket/o/models",
+					OCIOSDataStore: createMockOCIOSDataStore(),
+				},
+				Target: TargetStruct{
+					StorageURIStr: "pvc://target-pvc/models",
+					PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+				},
+			},
+			expectError: false,
+			description: "Should successfully create agent with OCI source and PVC target",
+		},
+		{
+			name: "valid PVC to PVC configuration",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr: "pvc://source-pvc/models",
+					PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+				},
+				Target: TargetStruct{
+					StorageURIStr: "pvc://target-pvc/models",
+					PVCFileSystem: afero.NewOsFs().(*afero.OsFs),
+				},
+			},
+			expectError: false,
+			description: "Should successfully create agent with PVC source and PVC target",
+		},
+		{
+			name: "invalid target storage URI",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr:  "oci://n/src-ns/b/src-bucket/o/models",
+					OCIOSDataStore: createMockOCIOSDataStore(),
+				},
+				Target: TargetStruct{
+					StorageURIStr:  "invalid://storage/uri",
+					OCIOSDataStore: createMockOCIOSDataStore(),
+				},
+			},
 			expectError: true,
 			errorMsg:    "unknown storage type",
-			description: "Should fail with invalid source storage URI",
+			description: "Should fail with invalid target storage URI",
 		},
 		{
 			name: "missing OCI data store for OCI source",
@@ -147,7 +229,7 @@ func TestNewReplicaAgent(t *testing.T) {
 			description: "Should fail when OCI source is missing OCIOSDataStore",
 		},
 		{
-			name: "unsupported storage type for target",
+			name: "missing OCI data store for OCI target",
 			config: &Config{
 				AnotherLogger:        mockLogger,
 				LocalPath:            "/tmp/replica",
@@ -159,13 +241,76 @@ func TestNewReplicaAgent(t *testing.T) {
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
 				Target: TargetStruct{
-					StorageURIStr:  "s3://bucket/prefix", // S3 not supported for target
+					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
+					OCIOSDataStore: nil, // Missing OCI data store
+				},
+			},
+			expectError: true,
+			errorMsg:    "Target.OCIOSDataStore",
+			description: "Should fail when OCI target is missing OCIOSDataStore",
+		},
+		{
+			name: "missing HubClient for HuggingFace source",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct",
+					HubClient:     nil, // Missing HubClient
+				},
+				Target: TargetStruct{
+					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
 					OCIOSDataStore: createMockOCIOSDataStore(),
 				},
 			},
 			expectError: true,
-			errorMsg:    "unsupported storage type for object URI",
-			description: "Should fail with unsupported target storage type",
+			errorMsg:    "Source.HubClient",
+			description: "Should fail when HuggingFace source is missing HubClient",
+		},
+		{
+			name: "missing PVCFileSystem for PVC source",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr: "pvc://source-pvc/models",
+					PVCFileSystem: nil, // Missing PVCFileSystem
+				},
+				Target: TargetStruct{
+					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
+					OCIOSDataStore: createMockOCIOSDataStore(),
+				},
+			},
+			expectError: true,
+			errorMsg:    "Source.PVCFileSystem",
+			description: "Should fail when PVC source is missing PVCFileSystem",
+		},
+		{
+			name: "invalid HuggingFace URI format",
+			config: &Config{
+				AnotherLogger:        mockLogger,
+				LocalPath:            "/tmp/replica",
+				DownloadSizeLimitGB:  10,
+				EnableSizeLimitCheck: true,
+				NumConnections:       5,
+				Source: SourceStruct{
+					StorageURIStr: "hf://", // Invalid: missing model ID
+					HubClient:     &hf.HubClient{},
+				},
+				Target: TargetStruct{
+					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
+					OCIOSDataStore: createMockOCIOSDataStore(),
+				},
+			},
+			expectError: true,
+			errorMsg:    "failed to parse source storage URI",
+			description: "Should fail with invalid HuggingFace URI format",
 		},
 	}
 
@@ -187,10 +332,38 @@ func TestNewReplicaAgent(t *testing.T) {
 
 				// Verify ReplicationInput is properly set
 				assert.NotNil(t, agent.ReplicationInput)
-				assert.NotEmpty(t, agent.ReplicationInput.SourceStorageType)
-				assert.NotEmpty(t, agent.ReplicationInput.TargetStorageType)
 				assert.NotNil(t, agent.ReplicationInput.Source)
 				assert.NotNil(t, agent.ReplicationInput.Target)
+				assert.NotEmpty(t, agent.ReplicationInput.SourceStorageType)
+				assert.NotEmpty(t, agent.ReplicationInput.TargetStorageType)
+
+				// Verify OCI-specific handling for source
+				if strings.HasPrefix(tt.config.Source.StorageURIStr, "oci://") {
+					assert.Equal(t, tt.config.Source.OCIOSDataStore.Config.Region, agent.ReplicationInput.Source.Region)
+					assert.Equal(t, "src-ns", agent.ReplicationInput.Source.Namespace)
+					assert.Equal(t, "src-bucket", agent.ReplicationInput.Source.BucketName)
+					assert.Equal(t, "models/", agent.ReplicationInput.Source.Prefix)
+				}
+
+				// Verify OCI-specific handling for target
+				if strings.HasPrefix(tt.config.Target.StorageURIStr, "oci://") {
+					assert.Equal(t, tt.config.Target.OCIOSDataStore.Config.Region, agent.ReplicationInput.Target.Region)
+					assert.Equal(t, "tgt-ns", agent.ReplicationInput.Target.Namespace)
+					assert.Equal(t, "tgt-bucket", agent.ReplicationInput.Target.BucketName)
+					assert.Equal(t, "models/", agent.ReplicationInput.Target.Prefix)
+				}
+
+				// Verify HF-specific handling for source
+				if strings.HasPrefix(tt.config.Source.StorageURIStr, "hf://") {
+					assert.Equal(t, "meta-llama/Llama-3-70B-Instruct", agent.ReplicationInput.Source.BucketName)
+					assert.Equal(t, "experimental", agent.ReplicationInput.Source.Prefix)
+				}
+
+				// Verify PVC-specific handling for source
+				if strings.HasPrefix(tt.config.Source.StorageURIStr, "pvc://") {
+					assert.Equal(t, "source-pvc", agent.ReplicationInput.Source.BucketName)
+					assert.Equal(t, "models", agent.ReplicationInput.Source.Prefix)
+				}
 			}
 		})
 	}

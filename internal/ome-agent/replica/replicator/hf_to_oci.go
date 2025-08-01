@@ -147,6 +147,10 @@ func uploadDirectoryToOCIOSDataStore(
 
 		// Create the OCI ObjectURI with target prefix
 		objectName := strings.TrimSuffix(object.Prefix, "/") + "/" + relPath
+		// Handle the case when directly uploading to root directory in OCI bucket
+		if object.Prefix == "" {
+			objectName = relPath
+		}
 		targetObj := ociobjectstore.ObjectURI{
 			BucketName: object.BucketName,
 			Namespace:  object.Namespace,
