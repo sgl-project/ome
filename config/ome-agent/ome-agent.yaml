@@ -30,9 +30,10 @@ download_size_limit_gb: 650
 enable_size_limit_check: true
 
 source:
-  storage_uri: "pvc://source-pvc/replica"
-#  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/test-model/"
-#  storage_uri: "hf://BAAI/bge-small-en-v1.5"
+#  storage_uri: "pvc://source-pvc/data"
+#  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/"
+#  storage_uri: "oci://n/id2imsfqczrq/b/bucket-20240312-1047/o/"
+  storage_uri: "hf://BAAI/bge-small-en-v1.5"
   #  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/llama-3-8b-instruct/"
 #  storage_uri: "pvc://source-pvc/models"
   oci:
@@ -43,12 +44,12 @@ source:
     region: "eu-frankfurt-1"
     compartment_id: ""
   pvc:
-    enabled: true
+    enabled: false
 
 target:
 #  storage_uri: "pvc://source-pvc/data"
 #  storage_uri: "pvc://target-pvc/models"
-  storage_uri: "oci://n/idqj093njucb/b/beiwen_test/o/test-pvc-to-ociii/"
+  storage_uri: "oci://n/idqj093njucb/b/bucket-20250801-1654/o/"
   oci:
     enabled: true
     enable_obo_token: false

@@ -3,6 +3,7 @@ package replica
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
@@ -56,9 +57,15 @@ func NewReplicaAgent(config *Config) (*ReplicaAgent, error) {
 
 	if sourceStorageType == storage.StorageTypeOCI {
 		sourceObjectURI.Region = config.Source.OCIOSDataStore.Config.Region
+		if !strings.HasSuffix(sourceObjectURI.Prefix, "/") && sourceObjectURI.Prefix != "" {
+			sourceObjectURI.Prefix += "/"
+		}
 	}
 	if targetStorageType == storage.StorageTypeOCI {
 		targetObjectURI.Region = config.Target.OCIOSDataStore.Config.Region
+		if !strings.HasSuffix(targetObjectURI.Prefix, "/") && targetObjectURI.Prefix != "" {
+			targetObjectURI.Prefix += "/"
+		}
 	}
 
 	return &ReplicaAgent{
