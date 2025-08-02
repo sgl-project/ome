@@ -10,8 +10,8 @@ description: >
 - [Before you begin](#before-you-begin)
   - [Required Components](#required-components)
   - [Optional Components](#optional-components)
-  - [1. Install Istio](#1-install-istio)
-  - [2. Install Cert Manager](#2-install-cert-manager)
+  - [1. Install Cert Manager (Required)](#1-install-cert-manager-required)
+  - [2. Install Istio (Optional - Serverless mode and virtual service ingress)](#2-install-istio-optional---serverless-mode-and-virtual-service-ingress)
   - [3. Install Knative Serving (Optional - Serverless mode only)](#3-install-knative-serving-optional---serverless-mode-only)
   - [4. Install KEDA (Optional - Custom metrics scaling)](#4-install-keda-optional---custom-metrics-scaling)
   - [5. Install Prometheus (Optional - Custom metrics scaling)](#5-install-prometheus-optional---custom-metrics-scaling)
@@ -55,7 +55,16 @@ The following components are optional and only required for specific features:
 !!! warning
     **Important**: If you plan to use `MultiNode` or `MultiNodeRayVLLM` deployment modes, you MUST install the corresponding optional components (Ray and/or LWS) BEFORE installing OME. The controller may panic if these CRDs are not available when needed.
 
-### 1. Install Istio
+### 1. Install Cert Manager (Required)
+
+**Required**
+
+The minimally required Cert Manager version is 1.9.0, and you can refer to [Cert Manager installation guide](https://cert-manager.io/docs/installation/).
+
+!!! Note
+    Cert manager is required to provision webhook certs for production grade installation. Alternatively, you can run a self-signed certs generation script.
+
+### 2. Install Istio (Optional - Serverless mode and virtual service ingress)
 
 **Optional - Required only for Serverless mode and Virtual Service ingress**
 
@@ -76,15 +85,6 @@ spec:
 
 !!! Note
     Istio ingress is recommended for Serverless mode, but you can choose to install with other [Ingress controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) and create `IngressClass` resource for your Ingress option.
-
-### 2. Install Cert Manager
-
-**Required**
-
-The minimally required Cert Manager version is 1.9.0, and you can refer to [Cert Manager installation guide](https://cert-manager.io/docs/installation/).
-
-!!! Note
-    Cert manager is required to provision webhook certs for production grade installation. Alternatively, you can run a self-signed certs generation script.
 
 ### 3. Install Knative Serving (Optional - Serverless mode only)
 
