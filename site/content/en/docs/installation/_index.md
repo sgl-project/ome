@@ -55,7 +55,7 @@ The following components are optional and only required for specific features:
 !!! warning
     **Important**: If you plan to use `MultiNode` or `MultiNodeRayVLLM` deployment modes, you MUST install the corresponding optional components (Ray and/or LWS) BEFORE installing OME. The controller may panic if these CRDs are not available when needed.
 
-###  1. Install Cert Manager (Required)
+### 1. Install Cert Manager (Required)
 
 **Required**
 
