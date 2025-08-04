@@ -80,6 +80,10 @@ llama-4-maverick-17b-128e-instruct-fp8:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+llama-guard-4-12b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 mixtral-8x7b-instruct-v0-1-chat:
   enabled: false
   lifecyclePhase: "ACTIVE"

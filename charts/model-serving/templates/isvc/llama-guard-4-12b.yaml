@@ -1,0 +1,21 @@
+{{- if .Values.llama_guard_4_12b.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-guard-4-12b
+  namespace: llama-guard-4-12b
+spec:
+  predictor:
+    model:
+      baseModel: llama-guard-4-12b
+      protocolVersion: openAI
+    minReplicas: {{ .Values.llama_guard_4_12b.minReplicas}}
+    maxReplicas: {{ .Values.llama_guard_4_12b.maxReplicas}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-guard-4-12b
+
+{{- end }}
