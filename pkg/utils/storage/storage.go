@@ -103,19 +103,6 @@ type GitHubStorageComponents struct {
 	Tag        string // Optional tag/release name
 }
 
-//type StorageComponents interface {
-//	StorageType() string
-//}
-//
-//func (o OCIStorageComponents) StorageType() string         { return string(StorageTypeOCI) }
-//func (p PVCStorageComponents) StorageType() string         { return string(StorageTypePVC) }
-//func (v VendorStorageComponents) StorageType() string      { return string(StorageTypeVendor) }
-//func (h HuggingFaceStorageComponents) StorageType() string { return string(StorageTypeHuggingFace) }
-//func (s S3StorageComponents) StorageType() string          { return string(StorageTypeS3) }
-//func (a AzureStorageComponents) StorageType() string       { return string(StorageTypeAzure) }
-//func (g GitHubStorageComponents) StorageType() string      { return string(StorageTypeVendor) }
-//func (g GCSStorageComponents) StorageType() string         { return "GCS" }
-
 // ParseOCIStorageURI parses an OCI storage URI and returns its components
 // Format: oci://n/{namespace}/b/{bucket}/o/{object_path}
 func ParseOCIStorageURI(uri string) (*OCIStorageComponents, error) {
