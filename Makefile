@@ -61,8 +61,8 @@ $(shell perl -pi -e 's/cpu:.*/cpu: $(OME_CONTROLLER_CPU_LIMIT)/' config/default/
 $(shell perl -pi -e 's/memory:.*/memory: $(OME_CONTROLLER_MEMORY_LIMIT)/' config/default/manager_resources_patch.yaml)
 
 
-# Default to not waiting for controller
-WAIT_FOR_CONTROLLER ?= false
+# By default, wait for the OME controller pod to become ready
+WAIT_FOR_CONTROLLER ?= true
 
 .PHONY: all
 all: test ## 🎯 Run all tests
