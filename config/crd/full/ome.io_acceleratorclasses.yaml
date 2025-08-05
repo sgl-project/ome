@@ -207,6 +207,9 @@ spec:
               availableAccelerators:
                 format: int32
                 type: integer
+              availableNodes:
+                format: int32
+                type: integer
               conditions:
                 items:
                   properties:
