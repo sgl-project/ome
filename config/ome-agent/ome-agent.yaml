@@ -38,6 +38,8 @@ source:
     auth_type: "InstancePrincipal"
     region: "eu-frankfurt-1"
     compartment_id: ""
+  pvc:
+    enabled: false
 
 target:
   storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
@@ -47,6 +49,8 @@ target:
     obo_token: ""
     auth_type: "InstancePrincipal"
     region: "us-chicago-1"
+  pvc:
+    enabled: false
 
 model_framework: tensorrtllm
 tensorrtllm_version: "v0.11.0"

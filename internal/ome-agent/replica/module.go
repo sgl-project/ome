@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
+	"github.com/sgl-project/ome/pkg/afero"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
@@ -14,9 +15,11 @@ import (
 type replicaParams struct {
 	fx.In
 
-	AnotherLogger      logging.Interface                `name:"another_log"`
-	OCIOSDataStoreList []*ociobjectstore.OCIOSDataStore `optional:"true"`
-	HubClient          *hub.HubClient                   `optional:"true"`
+	AnotherLogger       logging.Interface                `name:"another_log"`
+	OCIOSDataStoreList  []*ociobjectstore.OCIOSDataStore `optional:"true"`
+	HubClient           *hub.HubClient                   `optional:"true"`
+	SourcePVCFileSystem *afero.OsFs                      `name:"source_pvc_fs" optional:"true"`
+	TargetPVCFileSystem *afero.OsFs                      `name:"target_pvc_fs" optional:"true"`
 }
 
 var Module = fx.Provide(

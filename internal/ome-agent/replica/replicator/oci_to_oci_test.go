@@ -1,4 +1,4 @@
-package replica
+package replicator
 
 import (
 	"errors"
@@ -6,37 +6,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/utils/storage"
+	"github.com/stretchr/testify/assert"
 )
-
-// --- Mock replication object ---
-type MockReplicationObject struct {
-	name string
-}
-
-func (m *MockReplicationObject) GetName() string { return m.name }
-func (m *MockReplicationObject) GetPath() string { return m.name }
-func (m *MockReplicationObject) GetSize() int64  { return 42 }
 
 type TestReplicator struct {
 	*OCIToOCIReplicator
-	mockPrepareObjectChannel     func(objects []ReplicationObject) chan ReplicationObject
-	mockProcessObjectReplication func(objChan chan ReplicationObject, resultChan chan *ReplicationResult, total int)
+	mockPrepareObjectChannel     func(objects []common.ReplicationObject) chan common.ReplicationObject
+	mockProcessObjectReplication func(objChan chan common.ReplicationObject, resultChan chan *ReplicationResult, total int)
 	mockLogProgress              func(successCount, errorCount, total int, start time.Time)
-	prepChan                     chan ReplicationObject
+	prepChan                     chan common.ReplicationObject
 	resultSet                    []*ReplicationResult
 	logs                         []string
 	logMu                        sync.Mutex
 }
 
-func (t *TestReplicator) Replicate(objects []ReplicationObject) error {
-	t.logger.Info("Starting replication to target")
+func (t *TestReplicator) Replicate(objects []common.ReplicationObject) error {
+	t.Logger.Info("Starting replication to target")
 
 	startTime := time.Now()
 	objChan := t.mockPrepareObjectChannel(objects)
@@ -60,26 +50,26 @@ func (t *TestReplicator) Replicate(objects []ReplicationObject) error {
 	for result := range resultChan {
 		if result.error != nil {
 			errorCount++
-			t.logger.Errorf("Replication failed for %s to %s: %v", result.source, result.target, result.error)
+			t.Logger.Errorf("Replication failed for %s to %s: %v", result.source, result.target, result.error)
 		} else {
 			successCount++
-			t.logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
+			t.Logger.Infof("Replication succeeded for %s to %s", result.source, result.target)
 		}
 		t.mockLogProgress(successCount, errorCount, len(objects), startTime)
 	}
 
-	t.logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
+	t.Logger.Infof("Replication completed with %d successes and %d errors in %v", successCount, errorCount, time.Since(startTime))
 	return nil
 }
 
 func TestReplicate(t *testing.T) {
 	logger := testingPkg.SetupMockLogger()
 
-	objects := []ReplicationObject{
-		&MockReplicationObject{name: "file1"},
-		&MockReplicationObject{name: "file2"},
+	objects := []common.ReplicationObject{
+		NewCustomMockReplicationObject("file1", "file1", 123),
+		NewCustomMockReplicationObject("file2", "file2", 456),
 	}
-	objectChan := make(chan ReplicationObject, len(objects))
+	objectChan := make(chan common.ReplicationObject, len(objects))
 	for _, obj := range objects {
 		objectChan <- obj
 	}
@@ -95,33 +85,27 @@ func TestReplicate(t *testing.T) {
 
 	testRep := &TestReplicator{
 		OCIToOCIReplicator: &OCIToOCIReplicator{
-			logger: logger,
-			Config: Config{
+			Logger: logger,
+			Config: OCIToOCIReplicatorConfig{
 				LocalPath: "/tmp/model",
-				Source: sourceStruct{
-					StorageURIStr: "oci://n/src-ns/b/src-bucket/o/src-prefix",
-				},
-				Target: targetStruct{
-					StorageURIStr: "oci://n/tgt-ns/b/tgt-bucket/o/tgt-prefix",
-				},
 			},
-			ReplicationInput: ReplicationInput{
-				sourceStorageType: storage.StorageTypeOCI,
-				targetStorageType: storage.StorageTypeOCI,
-				source: ociobjectstore.ObjectURI{
+			ReplicationInput: common.ReplicationInput{
+				SourceStorageType: storage.StorageTypeOCI,
+				TargetStorageType: storage.StorageTypeOCI,
+				Source: ociobjectstore.ObjectURI{
 					Namespace:  "src-ns",
 					BucketName: "src-bucket",
 					Prefix:     "src-prefix/",
 				},
-				target: ociobjectstore.ObjectURI{
+				Target: ociobjectstore.ObjectURI{
 					Namespace:  "tgt-ns",
 					BucketName: "tgt-bucket",
 					Prefix:     "tgt-prefix/",
 				},
 			},
 		},
-		mockPrepareObjectChannel: func(objects []ReplicationObject) chan ReplicationObject { return objectChan },
-		mockProcessObjectReplication: func(objChan chan ReplicationObject, resultChan chan *ReplicationResult, total int) {
+		mockPrepareObjectChannel: func(objects []common.ReplicationObject) chan common.ReplicationObject { return objectChan },
+		mockProcessObjectReplication: func(objChan chan common.ReplicationObject, resultChan chan *ReplicationResult, total int) {
 			for _, result := range results {
 				resultChan <- result
 			}
@@ -141,55 +125,24 @@ func TestReplicate(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestPrepareObjectChannel(t *testing.T) {
-	objName1 := "test1.bin"
-	objName2 := "test2.bin"
-
-	objects := []ReplicationObject{
-		ObjectSummaryReplicationObject{
-			ObjectSummary: objectstorage.ObjectSummary{
-				Name: &objName1,
-			},
-		},
-		ObjectSummaryReplicationObject{
-			ObjectSummary: objectstorage.ObjectSummary{
-				Name: &objName2,
-			},
-		},
-	}
-
-	replicator := &OCIToOCIReplicator{}
-	objChan := replicator.prepareObjectChannel(objects)
-
-	// Collect objects from channel
-	var receivedObjects []ReplicationObject
-	for obj := range objChan {
-		receivedObjects = append(receivedObjects, obj)
-	}
-
-	assert.Equal(t, len(objects), len(receivedObjects))
-	assert.Equal(t, objects[0].GetName(), receivedObjects[0].GetName())
-	assert.Equal(t, objects[1].GetName(), receivedObjects[1].GetName())
-}
-
 func TestGetTargetObjectURI(t *testing.T) {
 	tests := []struct {
 		name             string
-		replicationInput ReplicationInput
+		replicationInput common.ReplicationInput
 		objName          string
 		expectedURI      ociobjectstore.ObjectURI
 	}{
 		{
 			name: "replace source prefix with target prefix",
-			replicationInput: ReplicationInput{
-				sourceStorageType: storage.StorageTypeOCI,
-				targetStorageType: storage.StorageTypeOCI,
-				source: ociobjectstore.ObjectURI{
+			replicationInput: common.ReplicationInput{
+				SourceStorageType: storage.StorageTypeOCI,
+				TargetStorageType: storage.StorageTypeOCI,
+				Source: ociobjectstore.ObjectURI{
 					Namespace:  "src-ns",
 					BucketName: "src-bucket",
 					Prefix:     "src-prefix/",
 				},
-				target: ociobjectstore.ObjectURI{
+				Target: ociobjectstore.ObjectURI{
 					Namespace:  "tgt-ns",
 					BucketName: "tgt-bucket",
 					Prefix:     "tgt-prefix/",
@@ -204,13 +157,13 @@ func TestGetTargetObjectURI(t *testing.T) {
 		},
 		{
 			name: "source and target with same prefix",
-			replicationInput: ReplicationInput{
-				source: ociobjectstore.ObjectURI{
+			replicationInput: common.ReplicationInput{
+				Source: ociobjectstore.ObjectURI{
 					Namespace:  "src-ns",
 					BucketName: "src-bucket",
 					Prefix:     "models/",
 				},
-				target: ociobjectstore.ObjectURI{
+				Target: ociobjectstore.ObjectURI{
 					Namespace:  "tgt-ns",
 					BucketName: "tgt-bucket",
 					Prefix:     "models/",
@@ -238,18 +191,4 @@ func TestGetTargetObjectURI(t *testing.T) {
 			assert.Equal(t, tt.expectedURI.ObjectName, result.ObjectName)
 		})
 	}
-}
-
-func TestLogProgress(t *testing.T) {
-	mockLogger := testingPkg.SetupMockLogger()
-
-	replicator := &OCIToOCIReplicator{
-		logger: mockLogger,
-	}
-
-	startTime := time.Now().Add(-10 * time.Second)
-	replicator.logProgress(5, 1, 10, startTime)
-
-	// Verify the logger was called with the expected info
-	mockLogger.AssertCalled(t, "Infof", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
