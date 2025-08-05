@@ -1,4 +1,4 @@
-package replica
+package replicator
 
 import (
 	"context"
@@ -9,54 +9,65 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
+
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
 
-// Indirection for testability
-var downloadFromHFFunc = downloadFromHF
-var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
-
 type HFToOCIReplicator struct {
-	logger           logging.Interface
-	Config           Config
-	ReplicationInput ReplicationInput
+	Logger           logging.Interface
+	Config           HFToOCIReplicatorConfig
+	ReplicationInput common.ReplicationInput
 }
 
-func (r *HFToOCIReplicator) Replicate(objects []ReplicationObject) error {
-	r.logger.Info("Starting replication to target")
+type HFToOCIReplicatorConfig struct {
+	LocalPath      string
+	NumConnections int
+	HubClient      *hub.HubClient
+	OCIOSDataStore *ociobjectstore.OCIOSDataStore
+}
+
+func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error {
+	r.Logger.Info("Starting replication to target")
 	// Download
-	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config)
+	tempDirPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath)
+	downloadPath, err := downloadFromHFFunc(r.ReplicationInput, r.Config.HubClient, tempDirPath, r.Logger)
 	if err != nil {
-		r.logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.source.BucketName, err)
+		r.Logger.Errorf("Failed to download model %s from HuggingFace: %v", r.ReplicationInput.Source.BucketName, err)
 		return err
 	}
-	r.logger.Infof("Successfully downloaded model %s from HF to %s ", r.ReplicationInput.source.BucketName, downloadPath)
+	r.Logger.Infof("Successfully downloaded model %s from HF to %s ", r.ReplicationInput.Source.BucketName, downloadPath)
 
 	// Upload
-	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.Target.OCIOSDataStore, r.ReplicationInput.target, r.Config.LocalPath, len(objects), r.Config.NumConnections); err != nil {
-		r.logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", r.Config.LocalPath, r.ReplicationInput.target, err)
+	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.OCIOSDataStore, r.ReplicationInput.Target, tempDirPath, len(objects), r.Config.NumConnections); err != nil {
+		r.Logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", tempDirPath, r.ReplicationInput.Target, err)
 		return err
 	}
-	r.logger.Infof("All files under %s uploaded successfully", r.Config.LocalPath)
-	r.logger.Infof("Replication completed from HuggingFace to OCI Object Storage for model %s", r.ReplicationInput.source.BucketName)
+	r.Logger.Infof("All files under %s uploaded successfully", tempDirPath)
+	r.Logger.Infof("Replication completed from HuggingFace to OCI Object Storage for model %s", r.ReplicationInput.Source.BucketName)
+
+	// Clean up temporary directory
+	if err := os.RemoveAll(tempDirPath); err != nil {
+		r.Logger.Warnf("Failed to clean up the temp local directory %s: %v", tempDirPath, err)
+	}
 	return nil
 }
 
-func downloadFromHF(input ReplicationInput, config Config) (string, error) {
+func downloadFromHF(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
 	var downloadOptions []hub.DownloadOption
 	// Set revision if specified
-	if input.source.Prefix != "" {
-		downloadOptions = append(downloadOptions, hub.WithRevision(input.source.Prefix))
+	if input.Source.Prefix != "" {
+		downloadOptions = append(downloadOptions, hub.WithRevision(input.Source.Prefix))
 	}
 	// Set repository type (always model for HuggingFace)
 	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
-	downloadPath, err := config.Source.HubClient.SnapshotDownload(
+	downloadPath, err := hubClient.SnapshotDownload(
 		context.Background(),
-		input.source.BucketName,
-		config.LocalPath,
+		input.Source.BucketName,
+		downloadDir,
 		downloadOptions...,
 	)
 	if err != nil {
@@ -67,9 +78,9 @@ func downloadFromHF(input ReplicationInput, config Config) (string, error) {
 			errors.As(err, &httpErr) && httpErr.StatusCode == 429 ||
 			strings.Contains(err.Error(), "429") ||
 			strings.Contains(err.Error(), "rate limit") {
-			config.AnotherLogger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.source.BucketName, err)
+			logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.Source.BucketName, err)
 		} else {
-			config.AnotherLogger.Errorf("Failed to download HuggingFace model %s: %v", input.source.BucketName, err)
+			logger.Errorf("Failed to download HuggingFace model %s: %v", input.Source.BucketName, err)
 		}
 		return downloadPath, err
 	}
@@ -92,6 +103,12 @@ func uploadDirectoryToOCIOSDataStore(
 		return fmt.Errorf("target ociOSDataStore is nil")
 	}
 
+	// Early return if no objects to upload
+	if numberOfObjects <= 0 {
+		ociOSDataStore.Config.AnotherLogger.Infof("No objects to upload (numberOfObjects: %d), skipping upload", numberOfObjects)
+		return nil
+	}
+
 	tasks := make(chan UploadTask, numberOfObjects)
 	errCh := make(chan error, numberOfObjects)
 
@@ -102,7 +119,7 @@ func uploadDirectoryToOCIOSDataStore(
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
-				if err := uploadObjectToOCIOSDataStore(ociOSDataStore, task.targetObj, task.filePath); err != nil {
+				if err := UploadObjectToOCIOSDataStore(ociOSDataStore, task.targetObj, task.filePath); err != nil {
 					errCh <- fmt.Errorf("upload failed for %s: %w", task.filePath, err)
 				}
 			}
@@ -130,6 +147,10 @@ func uploadDirectoryToOCIOSDataStore(
 
 		// Create the OCI ObjectURI with target prefix
 		objectName := strings.TrimSuffix(object.Prefix, "/") + "/" + relPath
+		// Handle the case when directly uploading to root directory in OCI bucket
+		if object.Prefix == "" {
+			objectName = relPath
+		}
 		targetObj := ociobjectstore.ObjectURI{
 			BucketName: object.BucketName,
 			Namespace:  object.Namespace,

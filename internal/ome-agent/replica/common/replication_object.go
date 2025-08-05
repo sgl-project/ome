@@ -1,10 +1,19 @@
-package replica
+package common
 
 import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-
+	"github.com/sgl-project/ome/pkg/afero"
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/ociobjectstore"
+	"github.com/sgl-project/ome/pkg/utils/storage"
 )
+
+type ReplicationInput struct {
+	SourceStorageType storage.StorageType
+	TargetStorageType storage.StorageType
+	Source            ociobjectstore.ObjectURI
+	Target            ociobjectstore.ObjectURI
+}
 
 type ReplicationObject interface {
 	GetName() string
@@ -48,4 +57,26 @@ func (a RepoFileReplicationObject) GetPath() string {
 
 func (a RepoFileReplicationObject) GetSize() int64 {
 	return a.Size
+}
+
+type PVCFileReplicationObject struct {
+	afero.FileEntry
+}
+
+func (a PVCFileReplicationObject) GetName() string {
+	if a.FileInfo == nil {
+		return ""
+	}
+	return a.FileInfo.Name()
+}
+
+func (a PVCFileReplicationObject) GetPath() string {
+	return a.FilePath
+}
+
+func (a PVCFileReplicationObject) GetSize() int64 {
+	if a.FileInfo == nil {
+		return 0
+	}
+	return a.FileInfo.Size()
 }

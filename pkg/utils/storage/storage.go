@@ -566,9 +566,28 @@ func NewObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 		return parseOCIObjectURI(uriStr)
 	case StorageTypeHuggingFace:
 		return parseHuggingFaceObjectURI(uriStr)
+	case StorageTypePVC:
+		return parsePVCStorageURI(uriStr)
 	default:
 		return nil, fmt.Errorf("unsupported storage type for object URI: %s", storageType)
 	}
+}
+
+func parsePVCStorageURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
+	pvcComponents, err := ParsePVCStorageURI(uriStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// For PVCs:
+	// - Use Namespace field to store the namespace (if specified)
+	// - Use BucketName field to store the PVC name
+	// - Use Prefix field to store the sub-path
+	return &ociobjectstore.ObjectURI{
+		Namespace:  pvcComponents.Namespace,
+		BucketName: pvcComponents.PVCName,
+		Prefix:     pvcComponents.SubPath,
+	}, nil
 }
 
 // parseHuggingFaceObjectURI parses a Hugging Face URI into an ObjectURI
