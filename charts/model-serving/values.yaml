@@ -713,8 +713,8 @@ llama_guard_4_12b:
   maxReplicas: 1
   image:
     vllm:
-      repository: fra.ocir.io/idqj093njucb/official-vllm-openai
-      tag: v0.9.1.2f12e796
+      repository:
+      tag:
     srt:
       repository:
       tag:
