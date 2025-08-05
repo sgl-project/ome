@@ -30,4 +30,6 @@ spec:
   modelCapabilities:
     - "CHAT"
   maxTokens: 1048576
+  additionalMetadata:
+    image-text-to-text: "{{ index .Values "gemini-2.0-flash-lite" "enableImageInput" }}"
 {{- end }}

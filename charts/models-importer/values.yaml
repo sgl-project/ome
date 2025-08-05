@@ -477,6 +477,18 @@ gemini-2-0-flash:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+gemini-2-5-flash:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-2-5-flash-lite:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gemini-2-5-pro:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 grok-3-0404:
   enabled: false
   lifecyclePhase: "ACTIVE"
