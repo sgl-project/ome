@@ -137,11 +137,14 @@ func (c *GptOssConfig) GetParameterCount() int64 {
 	// Log the error
 	fmt.Printf("Warning: failed to get parameter count from safetensors: %v\n", err)
 
-	// Estimate based on known GPT-OSS 20B configuration
-	// This is a MoE model with 32 experts, 4 experts per token
-	// The configuration suggests this is approximately 20B parameters
+	// Estimate based on known GPT-OSS configurations
+	// GPT-OSS 20B: 24 layers, 32 experts, 4 experts per token
 	if c.HiddenSize == 2880 && c.NumHiddenLayers == 24 && c.NumLocalExperts == 32 {
 		return 20_000_000_000 // 20B parameters
+	}
+	// GPT-OSS 120B: 36 layers, 128 experts, 4 experts per token
+	if c.HiddenSize == 2880 && c.NumHiddenLayers == 36 && c.NumLocalExperts == 128 {
+		return 120_000_000_000 // 120B parameters
 	}
 
 	// Fallback estimation for MoE architectures
