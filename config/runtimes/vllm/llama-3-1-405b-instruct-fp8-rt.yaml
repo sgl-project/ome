@@ -37,6 +37,7 @@ spec:
       autoSelect: true
       priority: 1
       version: "1.0.0"
+      quantization: fp8
   volumes:
     - name: dshm
       emptyDir:
@@ -48,7 +49,7 @@ spec:
     max: 410B
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.7.3.78f0810ef
+      image: fra.ocir.io/idqj093njucb/official-vllm-openai:v0.9.2.881ad1a
       ports:
         - containerPort: 8080
           name: http1
@@ -67,11 +68,12 @@ spec:
           --served-model-name=vllm-model \
           --tensor-parallel-size=8 \
           --max-model-len=131072 \
-          --gpu-memory-utilization=0.95 \
+          --gpu-memory-utilization=0.9 \
           --enable-chunked-prefill \
           --enable-auto-tool-choice \
           --tool-call-parser=llama3_json \
-          --chat-template=examples/tool_chat_template_llama3.1_json.jinja
+          --chat-template=examples/tool_chat_template_llama3.1_json.jinja \
+          --cuda-graph-sizes=256
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
