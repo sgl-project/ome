@@ -220,6 +220,40 @@ func TestGptOssConfigValidation(t *testing.T) {
 	}
 }
 
+func TestLoadGptOss120BConfig(t *testing.T) {
+	// Test loading the 120B model configuration
+	configPath := "testdata/gpt_oss_120b.json"
+
+	config, err := LoadGptOssConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load GPT-OSS 120B config: %v", err)
+	}
+
+	// Test basic properties
+	if config.GetModelType() != "gpt_oss" {
+		t.Errorf("Expected model type 'gpt_oss', got '%s'", config.GetModelType())
+	}
+
+	if config.NumHiddenLayers != 36 {
+		t.Errorf("Expected 36 hidden layers, got %d", config.NumHiddenLayers)
+	}
+
+	if config.NumLocalExperts != 128 {
+		t.Errorf("Expected 128 local experts, got %d", config.NumLocalExperts)
+	}
+
+	// Test parameter count estimation for 120B model
+	paramCount := config.GetParameterCount()
+	if paramCount != 120_000_000_000 {
+		t.Errorf("Expected parameter count 120B, got %d", paramCount)
+	}
+
+	// Test that layer_types array has correct length (should be 36 for 120B model)
+	if len(config.LayerTypes) != 36 {
+		t.Errorf("Expected 36 layer types, got %d", len(config.LayerTypes))
+	}
+}
+
 func TestGptOssHuggingFaceModelInterface(t *testing.T) {
 	config := &GptOssConfig{
 		BaseModelConfig: BaseModelConfig{
