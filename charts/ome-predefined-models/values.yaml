@@ -1,0 +1,134 @@
+# OME Predefined Models and Serving Runtimes Configuration
+
+# Global settings
+global:
+  # Set to true to enable all predefined resources by default
+  enableAll: false
+
+# Predefined Models Configuration
+models:
+  # Meta/Llama models
+  meta:
+    enabled: true
+    llama_3_3_70b_instruct:
+      enabled: true
+    llama_4_maverick_17b_128e_instruct_fp8:
+      enabled: false
+    llama_4_scout_17b_16e_instruct:
+      enabled: false
+
+  # DeepSeek models
+  deepseek:
+    enabled: true
+    deepseek_v3:
+      enabled: true
+    deepseek_r1:
+      enabled: false
+
+  # Intfloat models
+  intfloat:
+    enabled: true
+    e5_mistral_7b_instruct:
+      enabled: true
+
+  # Microsoft models
+  microsoft:
+    enabled: false
+    phi_3_vision_128k_instruct:
+      enabled: false
+
+  # Moonshot AI models
+  moonshotai:
+    enabled: false
+    kimi_k2_instruct:
+      enabled: false
+
+  # NVIDIA models
+  nvidia:
+    enabled: false
+    llama_3_1_nemotron_ultra_253b_v1:
+      enabled: false
+    llama_3_3_nemotron_super_49b_v1:
+      enabled: false
+    llama_3_1_nemotron_nano_8b_v1:
+      enabled: false
+
+# Serving Runtimes Configuration
+runtimes:
+  # SRT (Shared Runtime) configurations
+  srt:
+    enabled: true
+    deepseek_rdma:
+      enabled: true
+    deepseek_rdma_pd:
+      enabled: false
+    llama_4_maverick_17b_128e_instruct_fp8:
+      enabled: false
+    llama_4_maverick_17b_128e_instruct_fp8_pd:
+      enabled: false
+    llama_4_scout_17b_16e_instruct:
+      enabled: false
+    llama_4_scout_17b_16e_instruct_pd:
+      enabled: false
+    e5_mistral_7b_instruct:
+      enabled: true
+    llama_3_3_70b_instruct:
+      enabled: true
+    llama_3_3_70b_instruct_pd:
+      enabled: false
+    mistral_7b_instruct:
+      enabled: false
+    mistral_7b_instruct_pd:
+      enabled: false
+    mixtral_8x7b_instruct:
+      enabled: false
+    mixtral_8x7b_instruct_pd:
+      enabled: false
+    llama_3_2_1b_instruct:
+      enabled: false
+    llama_3_2_3b_instruct:
+      enabled: false
+    llama_3_2_3b_instruct_pd:
+      enabled: false
+    llama_3_2_90b_vision_instruct:
+      enabled: false
+    llama_3_1_70b_instruct:
+      enabled: false
+    llama_3_1_70b_instruct_pd:
+      enabled: false
+    llama_3_2_11b_vision_instruct:
+      enabled: false
+    llama_3_2_1b_instruct_pd:
+      enabled: false
+    kimi_k2_pd:
+      enabled: false
+
+  # vLLM runtime configurations
+  vllm:
+    enabled: true
+    mistral_7b_instruct:
+      enabled: false
+    mixtral_8x7b_instruct:
+      enabled: false
+    e5_mistral_7b_instruct:
+      enabled: true
+    llama_3_1_405b_instruct_fp8:
+      enabled: false
+    llama_3_1_nemotron_nano_8b_v1:
+      enabled: false
+    llama_3_1_nemotron_ultra_253b_v1:
+      enabled: false
+    llama_3_2_11b_vision_instruct:
+      enabled: false
+    llama_3_2_1b_instruct:
+      enabled: false
+    llama_3_2_3b_instruct:
+      enabled: false
+    llama_3_3_70b_instruct:
+      enabled: true
+    llama_3_3_nemotron_super_49b_v1:
+      enabled: false
+    llama_4_maverick_17b_128e_instruct_fp8:
+      enabled: false
+    llama_4_scout_17b_16e_instruct:
+      enabled: false
