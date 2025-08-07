@@ -397,6 +397,22 @@ gpt-4-1-nano-2025-04-14:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-oss-120b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-oss-20b:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-oss-120b-bf16:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+gpt-oss-20b-bf16:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 o1:
   enabled: false
   enableImageInput: true
