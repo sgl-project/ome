@@ -48,6 +48,9 @@ spec:
         - name: LARGE_GENERIC
           quotaUnit: 1
           default: true
+        - name: LARGE_GENERIC_V2
+          quotaUnit: 1
+          default: false
   modelConfiguration:
     {
       "architectures": [

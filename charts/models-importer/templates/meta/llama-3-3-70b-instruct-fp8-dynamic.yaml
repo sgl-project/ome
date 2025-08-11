@@ -35,11 +35,23 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
+    {{/* this model will use LARGE_GENERIC only in regions with no H100, both LARGE_GENERIC and LARGE_GENERIC_V2 in other regions*/}}
+    {{- if index .Values "llama-3-3-70b-instruct-fp8-dynamic" "isA100Only" -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: LARGE_GENERIC
-          quotaUnit: 2
+          quotaUnit: 1
           default: true
+    {{- else }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC
+          quotaUnit: 1
+          default: true
+        - name: LARGE_GENERIC_V2
+          quotaUnit: 1
+          default: false
+    {{- end }}
   modelConfiguration:
     {
       "_name_or_path": "/models/Llama-3.3-70B-Instruct",
