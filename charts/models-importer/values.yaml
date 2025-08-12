@@ -397,6 +397,36 @@ gpt-4-1-nano-2025-04-14:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-5:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-2025-08-07:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-mini:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-mini-2025-08-07:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-nano:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-nano-2025-08-07:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
 gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"

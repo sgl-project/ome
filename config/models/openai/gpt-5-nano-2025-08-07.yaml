@@ -1,0 +1,30 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gpt-5-nano-2025-08-07
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+  annotations:
+    models.ome.io/runtime: ""
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "false"
+    models.ome.io/internal: "false"
+    models.ome.io/lifecycle-phase: "ACTIVE"
+spec:
+  disabled: false
+  displayName: openai.gpt-5-nano-2025-08-07
+  storage:
+    storageUri: "vendor://openai/models/gpt-5-nano-2025-08-07"
+  vendor: openai
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: OpenAIForCausalLM
+  modelParameterSize: 1.0T
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 128000
