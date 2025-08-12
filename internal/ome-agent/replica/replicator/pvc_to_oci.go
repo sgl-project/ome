@@ -17,6 +17,7 @@ type PVCToOCIReplicator struct {
 type PVCToOCIReplicatorConfig struct {
 	LocalPath      string
 	NumConnections int
+	ChecksumConfig *common.ChecksumConfig
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
 }
 
@@ -24,7 +25,14 @@ func (r *PVCToOCIReplicator) Replicate(objects []common.ReplicationObject) error
 	r.Logger.Info("Starting replication to target")
 
 	sourceDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Source.Prefix)
-	if err := uploadDirectoryToOCIOSDataStoreFunc(r.Config.OCIOSDataStore, r.ReplicationInput.Target, sourceDirPath, len(objects), r.Config.NumConnections); err != nil {
+	if err := uploadDirectoryToOCIOSDataStoreFunc(
+		r.Config.OCIOSDataStore,
+		r.ReplicationInput.Target,
+		sourceDirPath,
+		r.Config.ChecksumConfig,
+		len(objects),
+		r.Config.NumConnections,
+	); err != nil {
 		r.Logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", sourceDirPath, r.ReplicationInput.Target, err)
 		return err
 	}

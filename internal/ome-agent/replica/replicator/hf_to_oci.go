@@ -25,6 +25,7 @@ type HFToOCIReplicator struct {
 type HFToOCIReplicatorConfig struct {
 	LocalPath      string
 	NumConnections int
+	ChecksumConfig *common.ChecksumConfig
 	HubClient      *hub.HubClient
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
 }
@@ -41,7 +42,14 @@ func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error 
 	r.Logger.Infof("Successfully downloaded model %s from HF to %s ", r.ReplicationInput.Source.BucketName, downloadPath)
 
 	// Upload
-	if err = uploadDirectoryToOCIOSDataStoreFunc(r.Config.OCIOSDataStore, r.ReplicationInput.Target, tempDirPath, len(objects), r.Config.NumConnections); err != nil {
+	if err = uploadDirectoryToOCIOSDataStoreFunc(
+		r.Config.OCIOSDataStore,
+		r.ReplicationInput.Target,
+		tempDirPath,
+		r.Config.ChecksumConfig,
+		len(objects),
+		r.Config.NumConnections,
+	); err != nil {
 		r.Logger.Errorf("Failed to upload files under %s to OCI Object Storage %v: %v", tempDirPath, r.ReplicationInput.Target, err)
 		return err
 	}
@@ -97,6 +105,7 @@ func uploadDirectoryToOCIOSDataStore(
 	ociOSDataStore *ociobjectstore.OCIOSDataStore,
 	object ociobjectstore.ObjectURI,
 	localDirectoryPath string,
+	checksumConfig *common.ChecksumConfig,
 	numberOfObjects int,
 	numberOfConnections int) error {
 	if ociOSDataStore == nil {
@@ -144,6 +153,7 @@ func uploadDirectoryToOCIOSDataStore(
 
 		// Normalize path to use "/" for OCI Object Storage
 		relPath = filepath.ToSlash(relPath)
+		filePath := filepath.Join(localDirectoryPath, relPath)
 
 		// Create the OCI ObjectURI with target prefix
 		objectName := strings.TrimSuffix(object.Prefix, "/") + "/" + relPath
@@ -151,13 +161,16 @@ func uploadDirectoryToOCIOSDataStore(
 		if object.Prefix == "" {
 			objectName = relPath
 		}
+
+		metadata := GetObjectMetadatWithFileChecksum(checksumConfig, filePath, ociOSDataStore.Config.AnotherLogger)
 		targetObj := ociobjectstore.ObjectURI{
 			BucketName: object.BucketName,
 			Namespace:  object.Namespace,
 			ObjectName: objectName,
+			Metadata:   metadata,
 		}
 
-		tasks <- UploadTask{targetObj: targetObj, filePath: filepath.Join(localDirectoryPath, relPath)}
+		tasks <- UploadTask{targetObj: targetObj, filePath: filePath}
 		return nil
 	})
 

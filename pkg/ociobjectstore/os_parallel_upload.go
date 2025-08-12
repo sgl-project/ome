@@ -25,6 +25,7 @@ func (cds *OCIOSDataStore) prepareMultipartUploadRequest(target ObjectURI, chunk
 		NumberOfGoroutines:                  common.Int(uploadThreads),
 		ObjectStorageClient:                 cds.Client,
 		EnableMultipartChecksumVerification: common.Bool(true),
+		Metadata:                            target.Metadata,
 	}
 	return &uploadRequest, nil
 }

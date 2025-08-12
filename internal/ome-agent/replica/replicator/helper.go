@@ -1,7 +1,13 @@
 package replicator
 
 import (
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
+	"hash"
+	"io"
+	"os"
 	"time"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
@@ -16,6 +22,12 @@ const (
 	DefaultDownloadThreads       = 20
 
 	ReplicaWorkspacePath = "replica"
+
+	MD5ChecksumAlgorithm    = "MD5"
+	SHA256ChecksumAlgorithm = "SHA256"
+
+	OCIObjectMD5MetadataKey    = "opc-meta-md5"
+	OCIObjectSHA256MetadataKey = "opc-meta-sha256"
 )
 
 // Indirection for testability
@@ -66,4 +78,50 @@ func LogProgress(successCount, errorCount, totalObjects int, startTime time.Time
 	progress := float64(successCount+errorCount) / float64(totalObjects) * 100
 	elapsedTime := time.Since(startTime)
 	logger.Infof("Progress: %.2f%%, Success: %d, Errors: %d, Total: %d, Elapsed Time: %v", progress, successCount, errorCount, totalObjects, elapsedTime)
+}
+
+func GetFileChecksum(filePath string, algorithm string) (string, error) {
+	var h hash.Hash
+
+	switch algorithm {
+	case MD5ChecksumAlgorithm:
+		h = md5.New()
+	case SHA256ChecksumAlgorithm:
+		h = sha256.New()
+	default:
+		return "", fmt.Errorf("unsupported checksum algorithm: %s", algorithm)
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(h, file); err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
+}
+
+func GetObjectMetadatWithFileChecksum(config *common.ChecksumConfig, filePath string, logger logging.Interface) map[string]string {
+	var metadata map[string]string = nil
+	if config != nil && config.UploadEnabled {
+		checksum, err := GetFileChecksum(filePath, config.ChecksumAlgorithm)
+		if err != nil {
+			logger.Warnf("Failed to compute checksum for %s: %+v", filePath, err)
+		}
+
+		if config.ChecksumAlgorithm == MD5ChecksumAlgorithm {
+			metadata = map[string]string{
+				OCIObjectMD5MetadataKey: checksum,
+			}
+		} else if config.ChecksumAlgorithm == SHA256ChecksumAlgorithm {
+			metadata = map[string]string{
+				OCIObjectSHA256MetadataKey: checksum,
+			}
+		}
+	}
+	return metadata
 }

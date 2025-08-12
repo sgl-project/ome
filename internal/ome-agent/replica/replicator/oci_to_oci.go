@@ -23,6 +23,7 @@ type OCIToOCIReplicator struct {
 type OCIToOCIReplicatorConfig struct {
 	LocalPath            string
 	NumConnections       int
+	ChecksumConfig       *common.ChecksumConfig
 	SourceOCIOSDataStore *ociobjectstore.OCIOSDataStore
 	TargetOCIOSDataStore *ociobjectstore.OCIOSDataStore
 }
@@ -125,9 +126,12 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 
 func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
 	targetObjName := strings.Replace(objName, r.ReplicationInput.Source.Prefix, r.ReplicationInput.Target.Prefix, 1)
+	targetObjLocalPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath, objName)
+	metadata := GetObjectMetadatWithFileChecksum(r.Config.ChecksumConfig, targetObjLocalPath, r.Logger)
 	return ociobjectstore.ObjectURI{
 		Namespace:  r.ReplicationInput.Target.Namespace,
 		BucketName: r.ReplicationInput.Target.BucketName,
 		ObjectName: targetObjName,
+		Metadata:   metadata,
 	}
 }

@@ -31,7 +31,7 @@ func TestHFToOCIReplicator_Replicate_Success(t *testing.T) {
 		downloadCalled = true
 		return "/tmp/model", nil
 	}
-	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {
+	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {
 		uploadCalled = true
 		return nil
 	}
@@ -88,7 +88,7 @@ func TestHFToOCIReplicator_Replicate_Failure(t *testing.T) {
 		return "", errors.New("download error")
 	}
 	uploadCalled := false
-	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {
+	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {
 		uploadCalled = true
 		return nil
 	}
@@ -101,7 +101,7 @@ func TestHFToOCIReplicator_Replicate_Failure(t *testing.T) {
 	downloadFromHFFunc = func(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
 		return "/tmp/model", nil
 	}
-	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {
+	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {
 		return errors.New("upload error")
 	}
 	err = replicator.Replicate(objs)

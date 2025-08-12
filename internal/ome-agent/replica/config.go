@@ -2,7 +2,6 @@ package replica
 
 import (
 	"fmt"
-
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/go-playground/validator/v10"
@@ -35,6 +34,7 @@ type Config struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 		OCIOSDataStore *ociobjectstore.OCIOSDataStore
 		PVCFileSystem  *afero.OsFs
+		ChecksumConfig *common.ChecksumConfig `mapstructure:"checksum"`
 	} `mapstructure:"target"`
 }
 

@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"testing"
 
 	"github.com/sgl-project/ome/pkg/afero"
@@ -27,6 +28,7 @@ type TargetStruct struct {
 	StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
 	PVCFileSystem  *afero.OsFs
+	ChecksumConfig *common.ChecksumConfig `mapstructure:"checksum"`
 }
 
 func TestNewReplicaConfig(t *testing.T) {

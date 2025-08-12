@@ -43,6 +43,9 @@ source:
 
 target:
   storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+  checksum: # Only applied when target.storage_uri is OCI
+    upload_enabled: true # Enable checksum upload to object metadata
+    algorithm: "SHA256" # MD5 or SHA256
   oci:
     enabled: true
     enable_obo_token: false
