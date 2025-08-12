@@ -36,27 +36,32 @@ Benchmark results using `genai-bench vX.Y.Z`
 #### [Model Name (e.g., llama-4-scout-17b)]
 Tested with [# GPUs] x [GPU Model]
 
-| Scenario                                | TTFT (sec) | Max Server Output Throughput (tokens/sec) |
-|----------------------------------------|------------|--------------------------------------------|
-| Scenario 1: Fusion N(...)              |            |                                            |
-| Scenario 2: Chatbot/Dialog (...)       |            |                                            |
-| Scenario 3: Generation Heavy (...)     |            |                                            |
-| Scenario 4: Typical RAG (...)          |            |                                            |
-| Scenario 5: Heavier RAG (...)          |            |                                            |
-| Scenario 6: Heaviest RAG (...)         |            |                                            |
+| Scenario                           | TTFT (sec) | Max Server Output Throughput (tokens/sec) |
+|------------------------------------|------------|-------------------------------------------|
+| Scenario 1: Fusion N(...)          |            |                                           |
+| Scenario 2: Chatbot/Dialog (...)   |            |                                           |
+| Scenario 3: Generation Heavy (...) |            |                                           |
+| Scenario 4: Typical RAG (...)      |            |                                           |
+| Scenario 5: Heavier RAG (...)      |            |                                           |
+| Scenario 6: Heaviest RAG (...)     |            |                                           |
 
 ---
 
 ### Sanity & Eval Results
 <!-- Include pass/fail thresholds and evaluation scores -->
 
-| Benchmark Suite      | Result (%) | Threshold (%) |
-|----------------------|------------|----------------|
-| Sanity Check Script  |            |                |
-| Loogle Eval          |            |                |
-| GSM8K                |            |                |
-| MMLU Pro             |            |                |
-| [Other Benchmarks]   |            |                |
+- [ ] Put version comparison results to features branch on github. File link: [Link]
+
+| Benchmark Suite    | Result (%) | Threshold (%)                                              |
+|--------------------|------------|------------------------------------------------------------|
+| Version Comparison |            |                                                            |
+| Consistency        |            |                                                            |
+| Features Test      |            |                                                            |
+| Loogle Eval        |            |                                                            |
+| GSM8K              |            |                                                            |
+| MMLU Pro           |            |                                                            |
+| BFCL               |            | Check out https://gorilla.cs.berkeley.edu/leaderboard.html |
+| [Other Benchmarks] |            |                                                            |
 
 ---
 
