@@ -1,0 +1,20 @@
+{{- if .Values.gpt_oss_120b.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gpt-oss-120b
+  namespace: gpt-oss-120b
+spec:
+  predictor:
+    model:
+      runtime: srt-gpt-oss-120b-mxfp4
+      baseModel: gpt-oss-120b
+      protocolVersion: openai
+    minReplicas: {{ .Values.gpt_oss_120b.minReplicas}}
+    maxReplicas: {{ .Values.gpt_oss_120b.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpt-oss-120b
+{{- end }}

@@ -1,0 +1,20 @@
+{{- if .Values.gpt_oss_20b.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gpt-oss-20b
+  namespace: gpt-oss-20b
+spec:
+  predictor:
+    model:
+      runtime: srt-gpt-oss-20b
+      baseModel: gpt-oss-20b
+      protocolVersion: openai
+    minReplicas: {{ .Values.gpt_oss_20b.minReplicas}}
+    maxReplicas: {{ .Values.gpt_oss_20b.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpt-oss-20b
+{{- end }}

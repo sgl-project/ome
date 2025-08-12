@@ -4,31 +4,31 @@ metadata:
   name: srt-gpt-oss-120b
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.gpt_oss_120b.annotations }}
+  {{- if or .Values.commonAnnotations .Values.gpt_oss_120b_bf16.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.gpt_oss_120b.annotations }}
-    {{ toYaml .Values.gpt_oss_120b.annotations | nindent 6 }}
+    {{- if .Values.gpt_oss_120b_bf16.annotations }}
+    {{ toYaml .Values.gpt_oss_120b_bf16.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.gpt_oss_120b.labels }}
+  {{- if or .Values.commonLabels .Values.gpt_oss_120b_bf16.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.gpt_oss_120b.labels }}
-    {{ toYaml .Values.gpt_oss_120b.labels | nindent 6 }}
+    {{- if .Values.gpt_oss_120b_bf16.labels }}
+    {{ toYaml .Values.gpt_oss_120b_bf16.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.gpt_oss_120b.tolerations }}
+  {{- if or .Values.commonTolerations .Values.gpt_oss_120b_bf16.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.gpt_oss_120b.tolerations }}
-    {{ toYaml .Values.gpt_oss_120b.tolerations | nindent 6 }}
+    {{- if .Values.gpt_oss_120b_bf16.tolerations }}
+    {{ toYaml .Values.gpt_oss_120b_bf16.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,7 +41,7 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.gpt_oss_120b }}
+  {{ with .Values.gpt_oss_120b_bf16 }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
@@ -62,7 +62,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.gpt_oss_120b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.gpt_oss_120b_bf16.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b_bf16.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1

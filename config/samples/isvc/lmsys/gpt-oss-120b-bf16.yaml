@@ -1,0 +1,18 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gpt-oss-120b-bf16
+  namespace: gpt-oss-120b-bf16
+spec:
+  predictor:
+    model:
+      runtime: srt-gpt-oss-120b
+      baseModel: gpt-oss-120b-bf16
+      protocolVersion: openai
+    minReplicas: 1
+    maxReplicas: 1
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpt-oss-120b-bf16
