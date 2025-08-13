@@ -110,9 +110,12 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 		}
 		r.Logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
 
+		// Set up checksum as metadata
+		uploadedFilePath := filepath.Join(tempDirPath, obj.GetName())
+		targetObj.Metadata = GetObjectMetadatWithFileChecksum(r.Config.ChecksumConfig, uploadedFilePath, r.Logger)
+
 		// Upload
 		uploadStart := time.Now()
-		uploadedFilePath := filepath.Join(tempDirPath, obj.GetName())
 		err = UploadObjectToOCIOSDataStore(r.Config.TargetOCIOSDataStore, targetObj, uploadedFilePath)
 		uploadDuration := time.Since(uploadStart)
 		if err != nil {
@@ -126,12 +129,9 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 
 func (r *OCIToOCIReplicator) getTargetObjectURI(objName string) ociobjectstore.ObjectURI {
 	targetObjName := strings.Replace(objName, r.ReplicationInput.Source.Prefix, r.ReplicationInput.Target.Prefix, 1)
-	targetObjLocalPath := filepath.Join(r.Config.LocalPath, ReplicaWorkspacePath, objName)
-	metadata := GetObjectMetadatWithFileChecksum(r.Config.ChecksumConfig, targetObjLocalPath, r.Logger)
 	return ociobjectstore.ObjectURI{
 		Namespace:  r.ReplicationInput.Target.Namespace,
 		BucketName: r.ReplicationInput.Target.BucketName,
 		ObjectName: targetObjName,
-		Metadata:   metadata,
 	}
 }

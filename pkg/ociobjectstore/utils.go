@@ -1,6 +1,7 @@
 package ociobjectstore
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -181,4 +182,45 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func IsReaderEmpty(streamReader io.Reader) bool {
+	switch v := streamReader.(type) {
+	case *bytes.Buffer:
+		return v.Len() == 0
+	case *bytes.Reader:
+		return v.Len() == 0
+	case *strings.Reader:
+		return v.Len() == 0
+	case *os.File:
+		fi, err := v.Stat()
+		if err != nil {
+			return false
+		}
+		return fi.Size() == 0
+	default:
+		return false
+	}
+}
+
+// RemoveOpcMetaPrefix Update metadata map to remove "opc-meta-" prefix from keys
+// Need to do it since for single part upload (UploadFilePutObject) metadata keys are attached with "opc-meta-" prefix automatically
+// while for multipart upload (UploadFileMultiparts) metadata keys are not prefixed with "opc-meta-"
+func RemoveOpcMetaPrefix(metadata map[string]string) map[string]string {
+	if metadata == nil {
+		return metadata
+	}
+
+	updatedMetadata := make(map[string]string)
+	for key, value := range metadata {
+		if strings.HasPrefix(key, "opc-meta-") {
+			// Remove "opc-meta-" prefix
+			newKey := key[9:]
+			updatedMetadata[newKey] = value
+		} else {
+			// Keep original key-value pair
+			updatedMetadata[key] = value
+		}
+	}
+	return updatedMetadata
 }

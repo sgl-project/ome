@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/go-playground/validator/v10"

@@ -16,7 +16,7 @@ enable_symlinks: true
 
 # Model Download Configuration
 model_name: "meta-llama/Llama-3.2-1B"
-local_path: "/opt/ml/model"
+local_path: "/tmp/ome"
 revision: "main"  # renamed from 'branch' to 'revision' to match hub module
 repo_type: "model"
 
@@ -30,11 +30,16 @@ download_size_limit_gb: 650
 enable_size_limit_check: true
 
 source:
-  storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+#  storage_uri: "pvc://source-pvc/replica"
+  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/test-model"
+  #  storage_uri: "oci://n/id2imsfqczrq/b/bucket-20240312-1047/o/"
+#  storage_uri: "hf://BAAI/bge-small-en-v1.5"
+#  storage_uri: "oci://n/id2imsfqczrq/b/beiwen_test/o/llama-3-8b-instruct"
+  #  storage_uri: "pvc://source-pvc/models"
   oci:
     enabled: true
     enable_obo_token: true
-    obo_token: "dummy-obo-token"
+    obo_token: "eyJraWQiOiJhc3dfZnJhXzE3MTM0ODA4MDUwNTMiLCJhbGciOiJSUzI1NiJ9.eyJ0Z3QiOiJhbGxfc3ZjIiwic3ViIjoib2NpZDEudXNlci5vYzEuLmFhYWFhYWFhNWtreGp1aGJ0b2ZuZHlpeTdtZjNhbzJsenB4M3F3ZXVvYndob21lYXhycXN1Y2UzMnpzYSIsImNoYWluIjoiIiwidGd0X25hbWUiOiJhbGxfc3ZjIiwiY2FsbF9zdmMiOiJnZW5lcmF0aXZlYWlkZXYiLCJ0Z3RzIjoiW1wiYWxsX3N2Y1wiXSIsIm93biI6Im9jaWQxLnRlbmFuY3kub2MxLi5hYWFhYWFhYWt5dmVydG1vNHRpbmV1Ym56eGZ0YXRvenZxbWRoNmFuYjNicGx2ZHFnc2czeTYzY3R6anEiLCJpc3MiOiJhdXRoU2VydmljZS5vcmFjbGUuY29tIiwicHR5cGUiOiJ1c2VyIiwidGd0X25hbWVzIjoiW1wiYWxsX3N2Y1wiXSIsImF1ZCI6Im9jaSIsInBzdHlwZSI6Im5hdGYiLCJ0dHlwZSI6Im9ibyIsImV4cCI6MTc1NTEyODc2NCwiaWF0IjoxNzU1MDQyMzY0LCJvYm9fdHlwZSI6InNlcnZpY2UiLCJqdGkiOiIzNzliNWVjMi01NmNmLTQzZjMtOWNjNC01YjU0YWJjMTcyZjUiLCJ0ZW5hbnQiOiJvY2lkMS50ZW5hbmN5Lm9jMS4uYWFhYWFhYWFna2J6Z2c2bHB6cmY0N3h6eTRyam94ZzRkZTZuY2ZpcTJybmNtaml1anZ5MmhqZ3h2emlxIiwibmFtZS1jaGFpbiI6IiJ9.hfovi_lTMjGNB3RjiBs1cyDBtPjGjEawN7mI5qpQsSIyHD_MEtLGh7c47RC5uiDxAusRwehWRPRp_9TQsGA0oRZ9w94WtJ2MDanEVxkU_ZBQxUoU5kwVZT_OOLrPLabJopSiJq4Fh9sPmd_Hhg0ObiaUeHSrwDglNTAXbsNriYgjkTZIBlSHQDMDPw3hw2L_Y50njPKRWfF4pV9Q5vucxgEoy_QMUSCxZyT7zwnB7tzefL69kLrMyP7aKyo_k-Te1vV2q5IeH44pmqpdxQna13g6LA9h1P-FPMFSdTutTWvxeSr8YQ9a-zf40T-s2_XjgquRjPfiJ5Vxd5oDAsWmvA"
     auth_type: "InstancePrincipal"
     region: "eu-frankfurt-1"
     compartment_id: ""
@@ -42,10 +47,13 @@ source:
     enabled: false
 
 target:
-  storage_uri: "oci://n/<namespace>/b/<bucket-name>/o/<object-name>"
+  #  storage_uri: "pvc://source-pvc/data"
+  #  storage_uri: "pvc://target-pvc/models"
+  storage_uri: "oci://n/idqj093njucb/b/beiwen_test/o/test-oci-to-oci"
+#  storage_uri: "oci://n/idqj093njucb/b/beiwen_test/o/test-model-1"
   checksum: # Only applied when target.storage_uri is OCI
     upload_enabled: true # Enable checksum upload to object metadata
-    algorithm: "SHA256" # MD5 or SHA256
+    algorithm: "md5" # md5 or sha256
   oci:
     enabled: true
     enable_obo_token: false

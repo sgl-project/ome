@@ -23,9 +23,8 @@ const (
 
 	ReplicaWorkspacePath = "replica"
 
-	MD5ChecksumAlgorithm    = "MD5"
-	SHA256ChecksumAlgorithm = "SHA256"
-
+	MD5ChecksumAlgorithm       = "md5"
+	SHA256ChecksumAlgorithm    = "sha256"
 	OCIObjectMD5MetadataKey    = "opc-meta-md5"
 	OCIObjectSHA256MetadataKey = "opc-meta-sha256"
 )

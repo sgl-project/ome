@@ -2,8 +2,9 @@ package replica
 
 import (
 	"fmt"
-	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"testing"
+
+	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/sgl-project/ome/pkg/afero"
 
