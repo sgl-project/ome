@@ -973,7 +973,8 @@ const (
 
 // Constants for aiplatform
 const (
-	ProjectFinalizerName = "project.ome.io.finalizers"
+	ProjectFinalizerName   = "project.ome.io.finalizers"
+	RateLimitFinalizerName = "ratelimit.ome.io.finalizers"
 )
 
 func (c CheckResultType) String() string {

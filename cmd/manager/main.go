@@ -11,6 +11,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	v1beta1projectcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/project"
+	v1beta1ratelimitcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/ratelimit"
 	v1beta1serviceaccountcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/aip/serviceaccount"
 	v1beta1basemodelcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/basemodel"
 	v1beta1benchmarkjobcontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark"
@@ -380,6 +381,21 @@ func main() {
 		Recorder:  serviceAccountEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create ServiceAccount controller")
+		os.Exit(1)
+	}
+
+	// Setup RateLimitReconciler with the manager
+	rateLimitEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up RateLimit controller")
+	rateLimitEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1ratelimitcontroller.RateLimitReconciler{
+		Client:    mgr.GetClient(),
+		Clientset: clientSet,
+		Log:       ctrl.Log.WithName("RateLimit"),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  rateLimitEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create RateLimit controller")
 		os.Exit(1)
 	}
 

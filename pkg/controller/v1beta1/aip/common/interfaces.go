@@ -56,6 +56,13 @@ type ServiceAccountOperation interface {
 	Delete(ctx context.Context) error
 }
 
+// RateLimitOperation defines operations for a rate limit
+type RateLimitOperation interface {
+	Create(ctx context.Context) error
+	Update(ctx context.Context) error
+	Delete(ctx context.Context) error
+}
+
 // ClientInitializer provides methods to initialize vendor clients
 type ClientInitializer interface {
 	// InitializeClient initializes a vendor client using organization credentials

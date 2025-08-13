@@ -250,6 +250,8 @@ type CrossReference struct {
 }
 
 type RateLimitConfig struct {
+	// Name is the name of the rate limit
+	Name string `json:"name"`
 	// Type is the type of rate limit (e.g., "requests", "tokens")
 	Type string `json:"type"`
 	// Limit is the maximum allowed value
@@ -391,4 +393,34 @@ func (s ServiceAccountStatusReason) IsError() bool {
 // IsSuccess returns true if the status represents a success condition
 func (s ServiceAccountStatusReason) IsSuccess() bool {
 	return s == ServiceAccountStatusCreated || s == ServiceAccountStatusDeleted
+}
+
+// RateLimitStatusReason represents the status of a rate limit operation
+type RateLimitStatusReason string
+
+const (
+	// RateLimitStatusCreated indicates the rate limit was successfully created
+	RateLimitStatusCreated RateLimitStatusReason = "RateLimitCreated"
+	// RateLimitStatusUpdated indicates the rate limit was successfully updated
+	RateLimitStatusUpdated RateLimitStatusReason = "RateLimitUpdated"
+	// RateLimitStatusArchived indicates the rate limit was successfully archived
+	RateLimitStatusArchived RateLimitStatusReason = "RateLimitArchived"
+	// RateLimitStatusInitError indicates an initialization error occurred
+	RateLimitStatusInitError RateLimitStatusReason = "RateLimitStatusInitError"
+	// RateLimitStatusAPIError indicates an API error occurred
+	RateLimitStatusAPIError RateLimitStatusReason = "RateLimitAPIError"
+	// RateLimitStatusConfigError indicates a configuration error occurred
+	RateLimitStatusConfigError RateLimitStatusReason = "RateLimitConfigError"
+)
+
+// String returns the string representation of RateLimitStatusReason
+func (s RateLimitStatusReason) String() string {
+	return string(s)
+}
+
+// IsError returns true if the status represents an error condition
+func (s RateLimitStatusReason) IsError() bool {
+	return s == RateLimitStatusInitError ||
+		s == RateLimitStatusAPIError ||
+		s == RateLimitStatusConfigError
 }

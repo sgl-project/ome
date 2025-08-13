@@ -36,12 +36,15 @@ spec:
                     limit:
                       format: int64
                       type: integer
+                    name:
+                      type: string
                     type:
                       type: string
                     window:
                       type: string
                   required:
                   - limit
+                  - name
                   - type
                   - window
                   type: object

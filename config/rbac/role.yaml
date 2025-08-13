@@ -291,6 +291,7 @@ rules:
   - inferenceservices
   - inferenceservices/finalizers
   - projects
+  - ratelimits
   - replicationjobs
   - serviceaccounts
   - servingruntimes
@@ -319,6 +320,8 @@ rules:
   - inferenceservices/status
   - projects/finalizers
   - projects/status
+  - ratelimits/finalizers
+  - ratelimits/status
   - replicationjobs/finalizers
   - replicationjobs/status
   - serviceaccounts/finalizers
