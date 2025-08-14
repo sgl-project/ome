@@ -174,8 +174,8 @@ func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 		args = append(args, "--upload-results")
 		args = append(args,
 			"--namespace", components.Namespace,
-			"--bucket", components.Bucket,
-			"--prefix", components.Prefix,
+			"--storage-bucket", components.Bucket,
+			"--storage-prefix", components.Prefix,
 		)
 
 		// Handle storage parameters
