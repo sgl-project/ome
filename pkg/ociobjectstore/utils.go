@@ -204,8 +204,9 @@ func IsReaderEmpty(streamReader io.Reader) bool {
 }
 
 // RemoveOpcMetaPrefix Update metadata map to remove "opc-meta-" prefix from keys
-// Need to do it since for single part upload (UploadFilePutObject) metadata keys are attached with "opc-meta-" prefix automatically
-// while for multipart upload (UploadFileMultiparts) metadata keys are not prefixed with "opc-meta-"
+// Need to do it since:
+// For single part upload (UploadFilePutObject) metadata keys are attached with "opc-meta-" prefix automatically;
+// While for multipart upload (UploadFileMultiparts) metadata keys are not prefixed with "opc-meta-".
 func RemoveOpcMetaPrefix(metadata map[string]string) map[string]string {
 	if metadata == nil {
 		return metadata

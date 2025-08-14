@@ -1,10 +1,14 @@
 package ociobjectstore
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/oracle/oci-go-sdk/v65/objectstorage/transfer"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/principals"
 )
@@ -302,5 +306,307 @@ func TestUploadMethodSignatures(t *testing.T) {
 		// Validate reasonable values for streaming
 		assert.GreaterOrEqual(t, chunkSizeInMB, 1)
 		assert.LessOrEqual(t, uploadThreads, 20) // Reasonable for streaming
+	})
+}
+
+// Test adjustMetadataForFileUpload function
+func TestAdjustMetadataForFileUpload(t *testing.T) {
+	// Create a test logger
+	logger := &TestUploadLogger{}
+
+	// Create a test OCIOSDataStore instance
+	cds := &OCIOSDataStore{
+		logger: logger,
+	}
+
+	t.Run("File size less than part size - should remove opc-meta- prefix", func(t *testing.T) {
+		// Create a temporary file smaller than the default part size
+		tempFile, err := os.CreateTemp("", "test-small-file-*.txt")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		// Write some content to make it smaller than 128MB
+		content := "small file content"
+		_, err = tempFile.WriteString(content)
+		assert.NoError(t, err)
+		tempFile.Close()
+
+		// Create upload request with metadata containing opc-meta- prefix
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: map[string]string{
+				"opc-meta-custom-key":   "custom-value",
+				"opc-meta-content-type": "text/plain",
+				"regular-key":           "regular-value",
+			},
+		}
+
+		// Call the function
+		err = cds.adjustMetadataForFileUpload(uploadRequest, tempFile.Name())
+		assert.NoError(t, err)
+
+		// Verify that opc-meta- prefix was removed
+		expectedMetadata := map[string]string{
+			"custom-key":   "custom-value",
+			"content-type": "text/plain",
+			"regular-key":  "regular-value",
+		}
+		assert.Equal(t, expectedMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("File size equal to part size - should remove opc-meta- prefix", func(t *testing.T) {
+		// Create a temporary file exactly equal to the default part size (128MB)
+		tempFile, err := os.CreateTemp("", "test-exact-size-file-*.bin")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		// Create a file exactly 128MB in size
+		exactSize := DefaultMultipartUploadFilePartSize
+		data := make([]byte, exactSize)
+		_, err = tempFile.Write(data)
+		assert.NoError(t, err)
+		tempFile.Close()
+
+		// Create upload request with metadata
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: map[string]string{
+				"opc-meta-test-key": "test-value",
+			},
+		}
+
+		// Call the function
+		err = cds.adjustMetadataForFileUpload(uploadRequest, tempFile.Name())
+		assert.NoError(t, err)
+
+		// Verify that opc-meta- prefix was removed
+		expectedMetadata := map[string]string{
+			"test-key": "test-value",
+		}
+		assert.Equal(t, expectedMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("File size greater than part size - should not remove opc-meta- prefix", func(t *testing.T) {
+		// Create a temporary file larger than the default part size
+		tempFile, err := os.CreateTemp("", "test-large-file-*.bin")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		// Create a file larger than 128MB (129MB)
+		largeSize := DefaultMultipartUploadFilePartSize + 1024*1024 // 128MB + 1MB
+		data := make([]byte, largeSize)
+		_, err = tempFile.Write(data)
+		assert.NoError(t, err)
+		tempFile.Close()
+
+		// Create upload request with metadata
+		originalMetadata := map[string]string{
+			"opc-meta-large-file-key": "large-file-value",
+			"regular-large-key":       "regular-large-value",
+		}
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: originalMetadata,
+		}
+
+		// Call the function
+		err = cds.adjustMetadataForFileUpload(uploadRequest, tempFile.Name())
+		assert.NoError(t, err)
+
+		// Verify that opc-meta- prefix was NOT removed (metadata should remain unchanged)
+		assert.Equal(t, originalMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("Multipart upload not allowed - should remove opc-meta- prefix", func(t *testing.T) {
+		// Create a temporary file
+		tempFile, err := os.CreateTemp("", "test-multipart-disabled-*.txt")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		// Write some content
+		content := "test content"
+		_, err = tempFile.WriteString(content)
+		assert.NoError(t, err)
+		tempFile.Close()
+
+		// Create upload request with multipart upload disabled
+		allowMultipart := false
+		uploadRequest := &transfer.UploadRequest{
+			AllowMultipartUploads: &allowMultipart,
+			Metadata: map[string]string{
+				"opc-meta-disabled-key": "disabled-value",
+			},
+		}
+
+		// Call the function
+		err = cds.adjustMetadataForFileUpload(uploadRequest, tempFile.Name())
+		assert.NoError(t, err)
+
+		// Verify that opc-meta- prefix was removed
+		expectedMetadata := map[string]string{
+			"disabled-key": "disabled-value",
+		}
+		assert.Equal(t, expectedMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("Custom part size - file size less than custom part size", func(t *testing.T) {
+		// Create a temporary file
+		tempFile, err := os.CreateTemp("", "test-custom-part-size-*.txt")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		// Write content smaller than custom part size
+		content := "small content"
+		_, err = tempFile.WriteString(content)
+		assert.NoError(t, err)
+		tempFile.Close()
+
+		// Create upload request with custom part size (1GB)
+		customPartSize := int64(1024 * 1024 * 1024) // 1GB
+		uploadRequest := &transfer.UploadRequest{
+			PartSize: &customPartSize,
+			Metadata: map[string]string{
+				"opc-meta-custom-part-key": "custom-part-value",
+			},
+		}
+
+		// Call the function
+		err = cds.adjustMetadataForFileUpload(uploadRequest, tempFile.Name())
+		assert.NoError(t, err)
+
+		// Verify that opc-meta- prefix was removed
+		expectedMetadata := map[string]string{
+			"custom-part-key": "custom-part-value",
+		}
+		assert.Equal(t, expectedMetadata, uploadRequest.Metadata)
+	})
+}
+
+// Test adjustMetadataForStreamUpload function
+func TestAdjustMetadataForStreamUpload(t *testing.T) {
+	// Create a test logger
+	logger := &TestUploadLogger{}
+
+	// Create a test OCIOSDataStore instance
+	cds := &OCIOSDataStore{
+		logger: logger,
+	}
+
+	t.Run("Empty stream reader wrapped with io.NopCloser - should NOT remove opc-meta- prefix", func(t *testing.T) {
+		// Create an empty buffer reader
+		emptyReader := bytes.NewBuffer([]byte{})
+
+		// Create upload request with metadata containing opc-meta- prefix
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: map[string]string{
+				"opc-meta-empty-stream-key": "empty-stream-value",
+				"opc-meta-content-type":     "application/octet-stream",
+				"regular-stream-key":        "regular-stream-value",
+			},
+		}
+
+		// Call the function
+		cds.adjustMetadataForStreamUpload(uploadRequest, io.NopCloser(emptyReader))
+
+		// Verify that opc-meta- prefix was NOT removed (IsReaderEmpty returns false for io.NopCloser wrapped readers)
+		expectedMetadata := map[string]string{
+			"opc-meta-empty-stream-key": "empty-stream-value",
+			"opc-meta-content-type":     "application/octet-stream",
+			"regular-stream-key":        "regular-stream-value",
+		}
+		assert.Equal(t, expectedMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("Non-empty stream reader - should not remove opc-meta- prefix", func(t *testing.T) {
+		// Create a non-empty buffer reader
+		nonEmptyReader := bytes.NewBuffer([]byte("some content"))
+
+		// Create upload request with metadata
+		originalMetadata := map[string]string{
+			"opc-meta-non-empty-key": "non-empty-value",
+			"regular-non-empty-key":  "regular-non-empty-value",
+		}
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: originalMetadata,
+		}
+
+		// Call the function
+		cds.adjustMetadataForStreamUpload(uploadRequest, io.NopCloser(nonEmptyReader))
+
+		// Verify that opc-meta- prefix was NOT removed (metadata should remain unchanged)
+		assert.Equal(t, originalMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("Nil stream reader - should handle gracefully", func(t *testing.T) {
+		// Create upload request with metadata
+		originalMetadata := map[string]string{
+			"opc-meta-nil-reader-key": "nil-reader-value",
+		}
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: originalMetadata,
+		}
+
+		// Call the function with nil reader
+		cds.adjustMetadataForStreamUpload(uploadRequest, nil)
+
+		// Verify that metadata remains unchanged
+		assert.Equal(t, originalMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("Empty file reader - should remove opc-meta- prefix", func(t *testing.T) {
+		// Create a temporary empty file
+		tempFile, err := os.CreateTemp("", "test-empty-file-*.txt")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+		tempFile.Close()
+
+		// Open the file as io.ReadCloser
+		file, err := os.Open(tempFile.Name())
+		assert.NoError(t, err)
+		defer file.Close()
+
+		// Create upload request with metadata containing opc-meta- prefix
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: map[string]string{
+				"opc-meta-file-key": "file-value",
+			},
+		}
+
+		// Call the function
+		cds.adjustMetadataForStreamUpload(uploadRequest, file)
+
+		// Verify that opc-meta- prefix was removed (IsReaderEmpty can detect empty files)
+		expectedMetadata := map[string]string{
+			"file-key": "file-value",
+		}
+		assert.Equal(t, expectedMetadata, uploadRequest.Metadata)
+	})
+
+	t.Run("Non-empty file reader - should NOT remove opc-meta- prefix", func(t *testing.T) {
+		// Create a temporary file with content
+		tempFile, err := os.CreateTemp("", "test-nonempty-file-*.txt")
+		assert.NoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		// Write some content
+		_, err = tempFile.WriteString("some content")
+		assert.NoError(t, err)
+		tempFile.Close()
+
+		// Open the file as io.ReadCloser
+		file, err := os.Open(tempFile.Name())
+		assert.NoError(t, err)
+		defer file.Close()
+
+		// Create upload request with metadata containing opc-meta- prefix
+		originalMetadata := map[string]string{
+			"opc-meta-nonempty-file-key": "nonempty-file-value",
+		}
+		uploadRequest := &transfer.UploadRequest{
+			Metadata: originalMetadata,
+		}
+
+		// Call the function
+		cds.adjustMetadataForStreamUpload(uploadRequest, file)
+
+		// Verify that opc-meta- prefix was NOT removed (file is not empty)
+		assert.Equal(t, originalMetadata, uploadRequest.Metadata)
 	})
 }
