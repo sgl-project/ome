@@ -54,6 +54,7 @@ spec:
       modelArchitecture: GptOssForCausalLM
       autoSelect: true
       priority: 1
+      quantization: mxfp4
     - modelFramework:
         name: transformers
         version: "4.55.0"

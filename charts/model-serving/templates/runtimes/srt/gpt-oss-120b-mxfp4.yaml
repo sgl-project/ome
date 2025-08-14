@@ -54,6 +54,7 @@ spec:
       modelArchitecture: GptOssForCausalLM
       autoSelect: true
       priority: 1
+      quantization: mxfp4
   modelSizeRange:
     min: 115B
     max: 125B
