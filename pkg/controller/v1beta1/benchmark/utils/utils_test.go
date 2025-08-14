@@ -104,8 +104,8 @@ func TestBuildStorageArgs(t *testing.T) {
 			want: []string{
 				"--upload-results",
 				"--namespace", "my-namespace",
-				"--bucket", "my-bucket",
-				"--prefix", "results",
+				"--storage-bucket", "my-bucket",
+				"--storage-prefix", "results",
 				"--auth", "instance_principal",
 				"--config-file", "/path/to/config",
 				"--profile", "DEFAULT",
@@ -125,8 +125,8 @@ func TestBuildStorageArgs(t *testing.T) {
 			want: []string{
 				"--upload-results",
 				"--namespace", "my-namespace",
-				"--bucket", "my-bucket",
-				"--prefix", "results",
+				"--storage-bucket", "my-bucket",
+				"--storage-prefix", "results",
 				"--auth", "instance_principal",
 			},
 			wantErr: false,
@@ -139,8 +139,8 @@ func TestBuildStorageArgs(t *testing.T) {
 			want: []string{
 				"--upload-results",
 				"--namespace", "my-namespace",
-				"--bucket", "my-bucket",
-				"--prefix", "results",
+				"--storage-bucket", "my-bucket",
+				"--storage-prefix", "results",
 			},
 			wantErr: false,
 		},
