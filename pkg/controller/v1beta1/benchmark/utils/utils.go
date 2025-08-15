@@ -95,9 +95,8 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 		if protocolVersion != "" {
 			args["--api-backend"] = string(protocolVersion)
 		} else {
-			// Default or error if protocol is mandatory?
-			// For now, let's assume a default or leave it empty if not critical
-			args["--api-backend"] = "vllm" // Assuming default if nil
+			// Default to openai for inference service
+			args["--api-backend"] = "openai"
 		}
 
 		// Extract the URL from the InferenceService's status if available
