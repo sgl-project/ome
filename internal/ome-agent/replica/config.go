@@ -35,6 +35,7 @@ type Config struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 		OCIOSDataStore *ociobjectstore.OCIOSDataStore
 		PVCFileSystem  *afero.OsFs
+		ChecksumConfig *common.ChecksumConfig `mapstructure:"checksum"`
 	} `mapstructure:"target"`
 }
 

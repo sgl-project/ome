@@ -1,9 +1,12 @@
 package ociobjectstore
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -672,6 +675,189 @@ func TestComputeTargetFilePath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := ComputeTargetFilePath(tc.source, tc.target, tc.options)
 			assert.Equal(t, tc.expectedOutput, result)
+		})
+	}
+}
+
+func TestIsReaderEmpty(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() io.Reader
+		expected bool
+	}{
+		{
+			name: "Empty bytes.Buffer",
+			setup: func() io.Reader {
+				return &bytes.Buffer{}
+			},
+			expected: true,
+		},
+		{
+			name: "Non-empty bytes.Buffer",
+			setup: func() io.Reader {
+				buf := &bytes.Buffer{}
+				buf.WriteString("test content")
+				return buf
+			},
+			expected: false,
+		},
+		{
+			name: "Empty bytes.Reader",
+			setup: func() io.Reader {
+				return bytes.NewReader([]byte{})
+			},
+			expected: true,
+		},
+		{
+			name: "Non-empty bytes.Reader",
+			setup: func() io.Reader {
+				return bytes.NewReader([]byte("test content"))
+			},
+			expected: false,
+		},
+		{
+			name: "Empty strings.Reader",
+			setup: func() io.Reader {
+				return strings.NewReader("")
+			},
+			expected: true,
+		},
+		{
+			name: "Non-empty strings.Reader",
+			setup: func() io.Reader {
+				return strings.NewReader("test content")
+			},
+			expected: false,
+		},
+		{
+			name: "Empty file",
+			setup: func() io.Reader {
+				// Create a temporary empty file
+				tmpFile, err := os.CreateTemp("", "test_empty_file")
+				if err != nil {
+					t.Fatalf("Failed to create temp file: %v", err)
+				}
+				tmpFile.Close()
+				t.Cleanup(func() {
+					os.Remove(tmpFile.Name())
+				})
+
+				file, err := os.Open(tmpFile.Name())
+				if err != nil {
+					t.Fatalf("Failed to open temp file: %v", err)
+				}
+				return file
+			},
+			expected: true,
+		},
+		{
+			name: "Non-empty file",
+			setup: func() io.Reader {
+				// Create a temporary file with content
+				tmpFile, err := os.CreateTemp("", "test_nonempty_file")
+				if err != nil {
+					t.Fatalf("Failed to create temp file: %v", err)
+				}
+				tmpFile.WriteString("test content")
+				tmpFile.Close()
+				t.Cleanup(func() {
+					os.Remove(tmpFile.Name())
+				})
+
+				file, err := os.Open(tmpFile.Name())
+				if err != nil {
+					t.Fatalf("Failed to open temp file: %v", err)
+				}
+				return file
+			},
+			expected: false,
+		},
+		{
+			name: "Unknown reader type",
+			setup: func() io.Reader {
+				// Use a simple reader that doesn't match any of the known types
+				return io.NopCloser(strings.NewReader("test"))
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := tt.setup()
+			result := IsReaderEmpty(reader)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRemoveOpcMetaPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		expected map[string]string
+	}{
+		{
+			name:     "Nil metadata",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name: "Metadata with opc-meta- prefix",
+			input: map[string]string{
+				"opc-meta-key1": "value1",
+				"opc-meta-key2": "value2",
+			},
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "Metadata without opc-meta- prefix",
+			input: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "Mixed metadata with and without prefix",
+			input: map[string]string{
+				"opc-meta-prefixed-key": "prefixed-value",
+				"regular-key":           "regular-value",
+				"opc-meta-another":      "another-value",
+			},
+			expected: map[string]string{
+				"prefixed-key": "prefixed-value",
+				"regular-key":  "regular-value",
+				"another":      "another-value",
+			},
+		},
+		{
+			name: "Metadata with partial opc-meta- prefix",
+			input: map[string]string{
+				"opc-met":    "should-not-change",
+				"opc-meta":   "should-not-change",
+				"opc-meta-":  "should-change-to-empty",
+				"opc-meta-a": "should-change",
+			},
+			expected: map[string]string{
+				"opc-met":  "should-not-change",
+				"opc-meta": "should-not-change",
+				"":         "should-change-to-empty",
+				"a":        "should-change",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RemoveOpcMetaPrefix(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

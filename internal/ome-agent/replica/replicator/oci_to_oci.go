@@ -23,6 +23,7 @@ type OCIToOCIReplicator struct {
 type OCIToOCIReplicatorConfig struct {
 	LocalPath            string
 	NumConnections       int
+	ChecksumConfig       *common.ChecksumConfig
 	SourceOCIOSDataStore *ociobjectstore.OCIOSDataStore
 	TargetOCIOSDataStore *ociobjectstore.OCIOSDataStore
 }
@@ -109,9 +110,12 @@ func (r *OCIToOCIReplicator) processObjectReplication(objects <-chan common.Repl
 		}
 		r.Logger.Infof("Downloaded object %s in %v", srcObj.ObjectName, downloadDuration)
 
+		// Set up checksum as metadata
+		uploadedFilePath := filepath.Join(tempDirPath, obj.GetName())
+		targetObj.Metadata = GetObjectMetadatWithFileChecksum(r.Config.ChecksumConfig, uploadedFilePath, r.Logger)
+
 		// Upload
 		uploadStart := time.Now()
-		uploadedFilePath := filepath.Join(tempDirPath, obj.GetName())
 		err = UploadObjectToOCIOSDataStore(r.Config.TargetOCIOSDataStore, targetObj, uploadedFilePath)
 		uploadDuration := time.Since(uploadStart)
 		if err != nil {

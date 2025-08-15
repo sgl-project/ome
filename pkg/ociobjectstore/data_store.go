@@ -8,6 +8,8 @@ type ObjectURI struct {
 	ObjectName string `mapstructure:"object_name" json:"object_name"`                     // Full object name or file name (e.g., "foo/bar.txt")
 	Prefix     string `mapstructure:"prefix" json:"prefix"`                               // Optional prefix to identify folder or logical path
 	Region     string `mapstructure:"region" json:"region"`                               // Optional region where the object is located
+
+	Metadata map[string]string `mapstructure:"metadata" json:"metadata"` // Optional metadata for the object, can be used for additional information
 }
 
 // DataStore defines a common interface for reading and writing data to/from a storage backend.
