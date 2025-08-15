@@ -75,6 +75,34 @@
         }
       }
     },
+    "v1beta1.AcceleratorClassList": {
+      "description": "AcceleratorClassList contains a list of AcceleratorClass",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.AcceleratorClass"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
     "v1beta1.AcceleratorClassSpec": {
       "type": "object",
       "required": [
@@ -249,6 +277,38 @@
         }
       }
     },
+    "v1beta1.AcceleratorModelConfig": {
+      "description": "AcceleratorModelConfig provides accelerator-specific overrides for this model format",
+      "type": "object",
+      "properties": {
+        "environmentOverride": {
+          "description": "EnvironmentOverride provides accelerator-specific environment variables",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "minMemoryPerBillionParams": {
+          "description": "MinMemoryPerBillionParams specifies memory required per billion parameters Used to calculate if a model fits on the accelerator",
+          "type": "integer",
+          "format": "int64"
+        },
+        "runtimeArgsOverride": {
+          "description": "RuntimeArgsOverride provides accelerator-specific runtime arguments",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "tensorParallelismOverride": {
+          "description": "TensorParallelismOverride overrides the default tensor parallelism settings",
+          "$ref": "#/definitions/v1beta1.TensorParallelismConfig"
+        }
+      }
+    },
     "v1beta1.AcceleratorPerformance": {
       "type": "object",
       "properties": {
@@ -275,6 +335,49 @@
         "latency": {
           "description": "Latency metrics",
           "$ref": "#/definitions/v1beta1.AcceleratorLatency"
+        }
+      }
+    },
+    "v1beta1.AcceleratorRequirements": {
+      "description": "AcceleratorRequirements specifies the accelerator requirements for this runtime",
+      "type": "object",
+      "properties": {
+        "acceleratorClasses": {
+          "description": "AcceleratorClasses lists the names of AcceleratorClasses this runtime supports If empty, the runtime supports any accelerator",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "minComputeCapability": {
+          "description": "MinComputeCapability specifies minimum compute capability in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "minMemory": {
+          "description": "MinMemory specifies minimum GPU memory required in GB",
+          "type": "integer",
+          "format": "int64"
+        },
+        "preferredPrecisions": {
+          "description": "PreferredPrecisions lists numeric precisions in order of preference Examples: [\"fp8\", \"fp16\", \"fp32\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "requiredFeatures": {
+          "description": "RequiredFeatures lists hardware features that must be present Examples: [\"tensor-cores\", \"fp8\", \"nvlink\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -1768,8 +1871,7 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/v1beta1.InferenceService"
-          },
-          "x-kubernetes-list-type": "set"
+          }
         },
         "kind": {
           "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
@@ -4186,6 +4288,10 @@
       "description": "ServingRuntimeSpec defines the desired state of ServingRuntime. This spec is currently provisional and are subject to change as details regarding single-model serving and multi-model serving are hammered out.",
       "type": "object",
       "properties": {
+        "acceleratorRequirements": {
+          "description": "AcceleratorRequirements specifies the accelerator requirements for this runtime",
+          "$ref": "#/definitions/v1beta1.AcceleratorRequirements"
+        },
         "affinity": {
           "description": "If specified, the pod's scheduling constraints",
           "$ref": "#/definitions/v1.Affinity"
@@ -4381,6 +4487,13 @@
         "modelFramework"
       ],
       "properties": {
+        "acceleratorConfig": {
+          "description": "AcceleratorConfig provides accelerator-specific overrides for this model format",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/v1beta1.AcceleratorModelConfig"
+          }
+        },
         "autoSelect": {
           "description": "Set to true to allow the ServingRuntime to be used for automatic model placement if this model format is specified with no explicit runtime.",
           "type": "boolean"
@@ -4436,6 +4549,27 @@
         "Spec": {
           "default": {},
           "$ref": "#/definitions/v1beta1.ServingRuntimeSpec"
+        }
+      }
+    },
+    "v1beta1.TensorParallelismConfig": {
+      "description": "TensorParallelismConfig specifies tensor parallelism settings",
+      "type": "object",
+      "properties": {
+        "dataParallelSize": {
+          "description": "dataParallelSize specifies the size of the data parallelism",
+          "type": "integer",
+          "format": "int64"
+        },
+        "pipelineParallelSize": {
+          "description": "pipelineParallelSize specifies the size of the pipeline parallelism",
+          "type": "integer",
+          "format": "int64"
+        },
+        "tensorParallelSize": {
+          "description": "tensorParallelSize specifies the size of the tensor parallelism",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
