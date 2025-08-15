@@ -11,6 +11,11 @@ import (
 	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
+type ChecksumConfig struct {
+	UploadEnabled     bool   `mapstructure:"upload_enabled"`
+	ChecksumAlgorithm string `mapstructure:"algorithm"`
+}
+
 func ConvertToReplicationObjectsFromObjectSummary(summaries []objectstorage.ObjectSummary) []ReplicationObject {
 	result := make([]ReplicationObject, len(summaries))
 	for i, summary := range summaries {

@@ -23,7 +23,7 @@ func TestPVCToOCIReplicator_Replicate_Success(t *testing.T) {
 
 	// Replace uploadDirectoryToOCIOSDataStoreFunc with a mock version
 	uploadCalled := false
-	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {
+	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {
 		uploadCalled = true
 		expectedPath := "/mnt/data/models"
 		if localPath != expectedPath {
@@ -72,7 +72,7 @@ func TestPVCToOCIReplicator_Replicate_Failure(t *testing.T) {
 		uploadDirectoryToOCIOSDataStoreFunc = originalUploadFunc
 	}()
 
-	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {
+	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {
 		return fmt.Errorf("mock upload error")
 	}
 
@@ -111,7 +111,7 @@ func TestPVCToOCIReplicator_Replicate_WithNilOCIOSDataStore(t *testing.T) {
 		uploadDirectoryToOCIOSDataStoreFunc = originalUploadFunc
 	}()
 
-	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, numObjects int, numConnections int) error {
+	uploadDirectoryToOCIOSDataStoreFunc = func(ds *ociobjectstore.OCIOSDataStore, target ociobjectstore.ObjectURI, localPath string, checksumConfig *common.ChecksumConfig, numObjects int, numConnections int) error {
 		if ds == nil {
 			return errors.New("OCIOSDataStore is nil")
 		}

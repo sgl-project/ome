@@ -17,6 +17,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 			Config: replicator.HFToOCIReplicatorConfig{
 				LocalPath:      r.Config.LocalPath,
 				NumConnections: r.Config.NumConnections,
+				ChecksumConfig: r.Config.Target.ChecksumConfig,
 				HubClient:      r.Config.Source.HubClient,
 				OCIOSDataStore: r.Config.Target.OCIOSDataStore,
 			},
@@ -28,6 +29,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 			Config: replicator.OCIToOCIReplicatorConfig{
 				LocalPath:            r.Config.LocalPath,
 				NumConnections:       r.Config.NumConnections,
+				ChecksumConfig:       r.Config.Target.ChecksumConfig,
 				SourceOCIOSDataStore: r.Config.Source.OCIOSDataStore,
 				TargetOCIOSDataStore: r.Config.Target.OCIOSDataStore,
 			},
@@ -39,6 +41,7 @@ func NewReplicator(r *ReplicaAgent) (replicator.Replicator, error) {
 			Config: replicator.PVCToOCIReplicatorConfig{
 				LocalPath:      r.Config.LocalPath,
 				NumConnections: r.Config.NumConnections,
+				ChecksumConfig: r.Config.Target.ChecksumConfig,
 				OCIOSDataStore: r.Config.Target.OCIOSDataStore,
 			},
 			ReplicationInput: r.ReplicationInput,
