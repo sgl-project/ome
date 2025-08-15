@@ -20,7 +20,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorDiscovery":       schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorIntegration":     schema_pkg_apis_ome_v1beta1_AcceleratorIntegration(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorLatency":         schema_pkg_apis_ome_v1beta1_AcceleratorLatency(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig":     schema_pkg_apis_ome_v1beta1_AcceleratorModelConfig(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorPerformance":     schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements":    schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorResource":        schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModel":                  schema_pkg_apis_ome_v1beta1_BaseModel(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModelList":              schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
@@ -78,6 +80,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec":                schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":       schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedRuntime":           schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":    schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":              schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec":                 schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
 	}
@@ -531,6 +534,70 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorLatency(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_AcceleratorModelConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AcceleratorModelConfig provides accelerator-specific overrides for this model format",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"minMemoryPerBillionParams": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinMemoryPerBillionParams specifies memory required per billion parameters Used to calculate if a model fits on the accelerator",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"tensorParallelismOverride": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TensorParallelismOverride overrides the default tensor parallelism settings",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig"),
+						},
+					},
+					"runtimeArgsOverride": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "RuntimeArgsOverride provides accelerator-specific runtime arguments",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"environmentOverride": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnvironmentOverride provides accelerator-specific environment variables",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -576,6 +643,93 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref common.ReferenceCall
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorLatency"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AcceleratorRequirements specifies the accelerator requirements for this runtime",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"acceleratorClasses": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AcceleratorClasses lists the names of AcceleratorClasses this runtime supports If empty, the runtime supports any accelerator",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"minMemory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinMemory specifies minimum GPU memory required in GB",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"minComputeCapability": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinComputeCapability specifies minimum compute capability in TFLOPS",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"requiredFeatures": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "RequiredFeatures lists hardware features that must be present Examples: [\"tensor-cores\", \"fp8\", \"nvlink\"]",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"preferredPrecisions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PreferredPrecisions lists numeric precisions in order of preference Examples: [\"fp8\", \"fp16\", \"fp32\"]",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -3054,6 +3208,7 @@ func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.Reference
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -3988,6 +4143,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFormat(ref common.ReferenceCallback) commo
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4029,6 +4185,7 @@ func schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref common.ReferenceCallback
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4083,6 +4240,7 @@ func schema_pkg_apis_ome_v1beta1_ModelRef(ref common.ReferenceCallback) common.O
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -4485,6 +4643,7 @@ func schema_pkg_apis_ome_v1beta1_ModelSpec(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -4622,6 +4781,7 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -5579,6 +5739,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref common.ReferenceCall
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7061,6 +7222,7 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 						},
 					},
 				},
+				
 			},
 		},
 		Dependencies: []string{
@@ -7426,6 +7588,7 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref common.ReferenceCallback)
 						},
 					},
 				},
+				
 			},
 		},
 	}
@@ -7687,11 +7850,17 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref common.ReferenceCallback
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec"),
 						},
 					},
+					"acceleratorRequirements": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AcceleratorRequirements specifies the accelerator requirements for this runtime",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume"},
 	}
 }
 
@@ -7860,12 +8029,27 @@ func schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref common.ReferenceCallba
 							Format:      "int32",
 						},
 					},
+					"acceleratorConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AcceleratorConfig provides accelerator-specific overrides for this model format",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"modelFormat", "modelFramework"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec"},
 	}
 }
 
@@ -7895,6 +8079,40 @@ func schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref common.ReferenceCallback) 
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TensorParallelismConfig specifies tensor parallelism settings",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"tensorParallelSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "tensorParallelSize specifies the size of the tensor parallelism",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"pipelineParallelSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "pipelineParallelSize specifies the size of the pipeline parallelism",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"dataParallelSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "dataParallelSize specifies the size of the data parallelism",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
