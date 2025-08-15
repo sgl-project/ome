@@ -19,8 +19,8 @@ type AcceleratorClass struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AcceleratorClassSpec   `json:"spec,omitempty"`
-	Status AcceleratorClassStatus `json:"status,omitempty"`
+	Spec   AcceleratorClassSpec   `json:"spec"`
+	Status AcceleratorClassStatus `json:"status"`
 }
 
 type AcceleratorClassSpec struct {
@@ -44,6 +44,7 @@ type AcceleratorClassSpec struct {
 
 	// Resources exposed by this accelerator
 	// +optional
+	// +listType=atomic
 	Resources []AcceleratorResource `json:"resources,omitempty"`
 
 	// Integration with external systems
@@ -80,6 +81,7 @@ type AcceleratorDiscovery struct {
 
 	// NodeSelectorTerms for more complex node selection
 	// +optional
+	// +listType=atomic
 	NodeSelectorTerms []v1.NodeSelectorTerm `json:"nodeSelectorTerms,omitempty"`
 
 	// PCIVendorID for device discovery (e.g., "10de" for NVIDIA)
@@ -88,6 +90,7 @@ type AcceleratorDiscovery struct {
 
 	// DeviceIDs list of PCI device IDs
 	// +optional
+	// +listType=atomic
 	DeviceIDs []string `json:"deviceIDs,omitempty"`
 }
 
@@ -114,6 +117,7 @@ type AcceleratorCapabilities struct {
 
 	// Features supported by this accelerator
 	// +optional
+	// +listType=atomic
 	Features []string `json:"features,omitempty"`
 
 	// Performance metrics
@@ -124,19 +128,19 @@ type AcceleratorCapabilities struct {
 type AcceleratorPerformance struct {
 	// FP32 performance in TFLOPS
 	// +optional
-	FP32TFLOPS *int64 `json:"fp32Tflops,omitempty"`
+	Fp32Tflops *int64 `json:"fp32Tflops,omitempty"`
 
 	// FP16 performance in TFLOPS
 	// +optional
-	FP16TFLOPS *int64 `json:"fp16Tflops,omitempty"`
+	Fp16Tflops *int64 `json:"fp16Tflops,omitempty"`
 
 	// INT8 performance in TOPS
 	// +optional
-	INT8TOPS *int64 `json:"int8Tops,omitempty"`
+	Int8Tops *int64 `json:"int8Tops,omitempty"`
 
 	// INT4 performance in TOPS
 	// +optional
-	INT4TOPS *int64 `json:"int4Tops,omitempty"`
+	Int4Tops *int64 `json:"int4Tops,omitempty"`
 
 	// Latency metrics
 	// +optional
@@ -158,7 +162,7 @@ type AcceleratorResource struct {
 
 	// Quantity per accelerator
 	// +kubebuilder:default="1"
-	Quantity resource.Quantity `json:"quantity,omitempty"`
+	Quantity resource.Quantity `json:"quantity"`
 
 	// Divisible indicates if the resource can be subdivided
 	// +optional
@@ -178,6 +182,7 @@ type AcceleratorIntegration struct {
 type AcceleratorClassStatus struct {
 	// Nodes that have this accelerator
 	// +optional
+	// +listType=atomic
 	Nodes []string `json:"nodes,omitempty"`
 
 	// Total number of accelerators in the cluster
@@ -190,10 +195,11 @@ type AcceleratorClassStatus struct {
 
 	// Last update time
 	// +optional
-	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
+	LastUpdated metav1.Time `json:"lastUpdated"`
 
 	// Conditions represent the latest available observations
 	// +optional
+	// +listType=atomic
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// AvailableNodes is the number of nodes that have this accelerator available

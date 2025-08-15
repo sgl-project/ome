@@ -50,6 +50,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: atomic
                   levelZeroVersion:
                     type: string
                   memoryBandwidthGBps:
@@ -118,6 +119,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: atomic
                   nodeSelector:
                     additionalProperties:
                       type: string
@@ -164,6 +166,7 @@ spec:
                       type: object
                       x-kubernetes-map-type: atomic
                     type: array
+                    x-kubernetes-list-type: atomic
                   pciVendorID:
                     type: string
                 type: object
@@ -194,8 +197,10 @@ spec:
                       x-kubernetes-int-or-string: true
                   required:
                   - name
+                  - quantity
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               vendor:
                 type: string
             required:
@@ -246,6 +251,7 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               lastUpdated:
                 format: date-time
                 type: string
@@ -253,10 +259,14 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               totalAccelerators:
                 format: int32
                 type: integer
             type: object
+        required:
+        - spec
+        - status
         type: object
     served: true
     storage: true

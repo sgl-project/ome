@@ -7,9 +7,306 @@
   },
   "paths": {},
   "definitions": {
+    "v1beta1.AcceleratorCapabilities": {
+      "type": "object",
+      "properties": {
+        "clockSpeedMHz": {
+          "description": "Clock speeds",
+          "type": "integer",
+          "format": "int32"
+        },
+        "computeCapability": {
+          "description": "Compute capability (NVIDIA) or equivalent",
+          "type": "string"
+        },
+        "features": {
+          "description": "Features supported by this accelerator",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "levelZeroVersion": {
+          "description": "Level Zero version (for Intel accelerators)",
+          "type": "string"
+        },
+        "memoryBandwidthGBps": {
+          "description": "Memory bandwidth",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "memoryGB": {
+          "description": "Memory capacity in GB",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "performance": {
+          "description": "Performance metrics",
+          "$ref": "#/definitions/v1beta1.AcceleratorPerformance"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClass": {
+      "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorClassSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorClassStatus"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClassSpec": {
+      "type": "object",
+      "required": [
+        "discovery",
+        "capabilities"
+      ],
+      "properties": {
+        "capabilities": {
+          "description": "Capabilities of this accelerator class",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorCapabilities"
+        },
+        "cost": {
+          "description": "Cost information for optimization decisions",
+          "$ref": "#/definitions/v1beta1.AcceleratorCost"
+        },
+        "discovery": {
+          "description": "Discovery patterns to identify nodes with this accelerator",
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorDiscovery"
+        },
+        "family": {
+          "description": "Family of the accelerator (ampere, hopper, cdna2, etc.)",
+          "type": "string"
+        },
+        "integration": {
+          "description": "Integration with external systems",
+          "$ref": "#/definitions/v1beta1.AcceleratorIntegration"
+        },
+        "model": {
+          "description": "Model name (a100, h100, mi250x, etc.)",
+          "type": "string"
+        },
+        "resources": {
+          "description": "Resources exposed by this accelerator",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.AcceleratorResource"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "vendor": {
+          "description": "Vendor of the accelerator (nvidia, amd, intel, etc.)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorClassStatus": {
+      "type": "object",
+      "properties": {
+        "availableAccelerators": {
+          "description": "Available accelerators (not allocated)",
+          "type": "integer",
+          "format": "int32"
+        },
+        "availableNodes": {
+          "description": "AvailableNodes is the number of nodes that have this accelerator available",
+          "type": "integer",
+          "format": "int32"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "lastUpdated": {
+          "description": "Last update time",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "nodes": {
+          "description": "Nodes that have this accelerator",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "totalAccelerators": {
+          "description": "Total number of accelerators in the cluster",
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1beta1.AcceleratorCost": {
+      "type": "object",
+      "properties": {
+        "perHour": {
+          "description": "Cost per hour in dollars",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "perMillionTokens": {
+          "description": "Cost per million tokens (for usage-based pricing)",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "spotPerHour": {
+          "description": "Spot instance pricing if available",
+          "$ref": "#/definitions/resource.Quantity"
+        },
+        "tier": {
+          "description": "Cost tier for simplified selection (low, medium, high)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorDiscovery": {
+      "type": "object",
+      "properties": {
+        "deviceIDs": {
+          "description": "DeviceIDs list of PCI device IDs",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector to identify nodes with this accelerator",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "nodeSelectorTerms": {
+          "description": "NodeSelectorTerms for more complex node selection",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.NodeSelectorTerm"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "pciVendorID": {
+          "description": "PCIVendorID for device discovery (e.g., \"10de\" for NVIDIA)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorIntegration": {
+      "type": "object",
+      "properties": {
+        "kueueResourceFlavor": {
+          "description": "KueueResourceFlavor name to sync with",
+          "type": "string"
+        },
+        "volcanoGPUType": {
+          "description": "VolcanoGPUType for Volcano integration",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.AcceleratorLatency": {
+      "type": "object",
+      "properties": {
+        "averageMillis": {
+          "description": "Average latency in milliseconds",
+          "type": "integer",
+          "format": "int64"
+        },
+        "maximumMillis": {
+          "description": "Maximum latency in milliseconds",
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "v1beta1.AcceleratorPerformance": {
+      "type": "object",
+      "properties": {
+        "fp16Tflops": {
+          "description": "FP16 performance in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "fp32Tflops": {
+          "description": "FP32 performance in TFLOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "int4Tops": {
+          "description": "INT4 performance in TOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "int8Tops": {
+          "description": "INT8 performance in TOPS",
+          "type": "integer",
+          "format": "int64"
+        },
+        "latency": {
+          "description": "Latency metrics",
+          "$ref": "#/definitions/v1beta1.AcceleratorLatency"
+        }
+      }
+    },
+    "v1beta1.AcceleratorResource": {
+      "type": "object",
+      "required": [
+        "name",
+        "quantity"
+      ],
+      "properties": {
+        "divisible": {
+          "description": "Divisible indicates if the resource can be subdivided",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name of the resource (e.g., nvidia.com/gpu)",
+          "type": "string",
+          "default": ""
+        },
+        "quantity": {
+          "description": "Quantity per accelerator",
+          "$ref": "#/definitions/resource.Quantity"
+        }
+      }
+    },
     "v1beta1.BaseModel": {
       "description": "BaseModel is the Schema for the basemodels API",
       "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -154,6 +451,10 @@
     "v1beta1.BenchmarkJob": {
       "description": "BenchmarkJob is the schema for the BenchmarkJobs API",
       "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -326,6 +627,10 @@
     "v1beta1.ClusterBaseModel": {
       "description": "ClusterBaseModel is the Schema for the basemodels API",
       "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1294,6 +1599,10 @@
     "v1beta1.FineTunedWeight": {
       "description": "FineTunedWeight is the Schema for the finetunedweights API",
       "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1416,6 +1725,10 @@
     "v1beta1.InferenceService": {
       "description": "InferenceService is the Schema for the InferenceServices API",
       "type": "object",
+      "required": [
+        "spec",
+        "status"
+      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
