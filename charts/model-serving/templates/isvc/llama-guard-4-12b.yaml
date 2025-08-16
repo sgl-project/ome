@@ -9,6 +9,7 @@ spec:
     model:
       baseModel: llama-guard-4-12b
       protocolVersion: openAI
+      runtime: vllm-llama-guard-4-12b
     minReplicas: {{ .Values.llama_guard_4_12b.minReplicas}}
     maxReplicas: {{ .Values.llama_guard_4_12b.maxReplicas}}
 

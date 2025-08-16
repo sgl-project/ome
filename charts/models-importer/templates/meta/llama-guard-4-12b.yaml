@@ -3,6 +3,18 @@ apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
   name: llama-guard-4-12b
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "llama-guard-4-12b" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "llama-guard-4-12b" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "llama-guard-4-12b" "timeDedicatedRetired" }}"
+  annotations:
+    # TODO clean up annotations after migration, which is used in MP
+    models.ome.io/runtime: "vllm-llama-guard-4-12b"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "llama-guard-4-12b" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "llama-guard-4-12b" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "llama-guard-4-12b" "lifecyclePhase" }}"
 spec:
   vendor: meta
   disabled: false
@@ -19,7 +31,7 @@ spec:
   modelParameterSize: 12B
   maxTokens: 10485760
   modelCapabilities:
-    - "CHAT"
+    - "IMAGE_CONTENT_MODERATION"
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-guard-4-12b" "osBucket" }}/o/{{ index .Values "llama-guard-4-12b" "vendor" }}/{{ index .Values "llama-guard-4-12b" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-guard-4-12b" "vendor" }}/{{ index .Values "llama-guard-4-12b" "osPrefixOverride" }}"
@@ -33,5 +45,6 @@ spec:
                   - BM.GPU.A100-v2.8
                   - BM.GPU.H100.8
                   - BM.GPU.B4.8
-
+  additionalMetadata:
+    image-text-to-text: "true"
 {{- end }}
