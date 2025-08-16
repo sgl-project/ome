@@ -1,5 +1,5 @@
 # Build the ome-agent binary
-FROM golang:1.24 AS builder
+FROM golang:1.25 AS builder
 
 # Build arguments for cross-compilation
 ARG TARGETOS
