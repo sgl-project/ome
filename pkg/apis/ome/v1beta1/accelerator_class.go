@@ -10,6 +10,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
+// +k8s:openapi-gen=true
 // +kubebuilder:printcolumn:name="Vendor",type=string,JSONPath=`.spec.vendor`
 // +kubebuilder:printcolumn:name="Family",type=string,JSONPath=`.spec.family`
 // +kubebuilder:printcolumn:name="Memory",type=string,JSONPath=`.spec.capabilities.memoryGB`
@@ -21,6 +22,15 @@ type AcceleratorClass struct {
 
 	Spec   AcceleratorClassSpec   `json:"spec"`
 	Status AcceleratorClassStatus `json:"status"`
+}
+
+// AcceleratorClassList contains a list of AcceleratorClass
+// +k8s:openapi-gen=true
+// +kubebuilder:object:root=true
+type AcceleratorClassList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []AcceleratorClass `json:"items"`
 }
 
 type AcceleratorClassSpec struct {
@@ -205,4 +215,8 @@ type AcceleratorClassStatus struct {
 	// AvailableNodes is the number of nodes that have this accelerator available
 	// +optional
 	AvailableNodes int32 `json:"availableNodes,omitempty"`
+}
+
+func init() {
+	SchemeBuilder.Register(&AcceleratorClass{}, &AcceleratorClassList{})
 }

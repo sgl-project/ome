@@ -1,4 +1,3 @@
-API rule violation: list_type_missing,github.com/sgl-project/ome/pkg/apis/ome/v1beta1,InferenceServiceList,Items
 API rule violation: names_match,github.com/sgl-project/ome/pkg/apis/ome/v1beta1,ModelStatusSpec,LifeCycle
 API rule violation: names_match,github.com/sgl-project/ome/pkg/apis/ome/v1beta1,PodSpec,DeprecatedServiceAccount
 API rule violation: names_match,github.com/sgl-project/ome/pkg/apis/ome/v1beta1,PredictorSpec,Worker

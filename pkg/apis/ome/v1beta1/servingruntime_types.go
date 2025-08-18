@@ -50,6 +50,50 @@ type SupportedModelFormat struct {
 	// Priority can be overridden by specifying the runtime in the InferenceService.
 	// +optional
 	Priority *int32 `json:"priority,omitempty"`
+
+	// AcceleratorConfig provides accelerator-specific overrides for this model format
+	// +optional
+	AcceleratorConfig map[string]*AcceleratorModelConfig `json:"acceleratorConfig,omitempty"`
+}
+
+// AcceleratorModelConfig provides accelerator-specific overrides for this model format
+// +k8s:openapi-gen=true
+type AcceleratorModelConfig struct {
+	// MinMemoryPerBillionParams specifies memory required per billion parameters
+	// Used to calculate if a model fits on the accelerator
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinMemoryPerBillionParams *int64 `json:"minMemoryPerBillionParams,omitempty"`
+
+	// TensorParallelismOverride overrides the default tensor parallelism settings
+	// +optional
+	TensorParallelismOverride *TensorParallelismConfig `json:"tensorParallelismOverride,omitempty"`
+
+	// RuntimeArgsOverride provides accelerator-specific runtime arguments
+	// +optional
+	// +listType=atomic
+	RuntimeArgsOverride []string `json:"runtimeArgsOverride,omitempty"`
+
+	// EnvironmentOverride provides accelerator-specific environment variables
+	// +optional
+	EnvironmentOverride map[string]string `json:"environmentOverride,omitempty"`
+}
+
+// TensorParallelismConfig specifies tensor parallelism settings
+// +k8s:openapi-gen=true
+type TensorParallelismConfig struct {
+	// tensorParallelSize specifies the size of the tensor parallelism
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	TensorParallelSize *int64 `json:"tensorParallelSize,omitempty"`
+	// pipelineParallelSize specifies the size of the pipeline parallelism
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	PipelineParallelSize *int64 `json:"pipelineParallelSize,omitempty"`
+	// dataParallelSize specifies the size of the data parallelism
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	DataParallelSize *int64 `json:"dataParallelSize,omitempty"`
 }
 
 // +k8s:openapi-gen=true
@@ -174,6 +218,42 @@ type ServingRuntimeSpec struct {
 	// WorkerPodSpec for the serving runtime, this is used for multi-node serving without Ray Cluster
 	// +optional
 	WorkerPodSpec *WorkerPodSpec `json:"workers,omitempty"`
+
+	// AcceleratorRequirements specifies the accelerator requirements for this runtime
+	// +optional
+	AcceleratorRequirements *AcceleratorRequirements `json:"acceleratorRequirements,omitempty"`
+}
+
+// AcceleratorRequirements specifies the accelerator requirements for this runtime
+// +k8s:openapi-gen=true
+type AcceleratorRequirements struct {
+	// AcceleratorClasses lists the names of AcceleratorClasses this runtime supports
+	// If empty, the runtime supports any accelerator
+	// +optional
+	// +listType=atomic
+	AcceleratorClasses []string `json:"acceleratorClasses,omitempty"`
+
+	// MinMemory specifies minimum GPU memory required in GB
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinMemory *int64 `json:"minMemory,omitempty"`
+
+	// MinComputeCapability specifies minimum compute capability in TFLOPS
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinComputeCapability *int64 `json:"minComputeCapability,omitempty"`
+
+	// RequiredFeatures lists hardware features that must be present
+	// Examples: ["tensor-cores", "fp8", "nvlink"]
+	// +optional
+	// +listType=atomic
+	RequiredFeatures []string `json:"requiredFeatures,omitempty"`
+
+	// PreferredPrecisions lists numeric precisions in order of preference
+	// Examples: ["fp8", "fp16", "fp32"]
+	// +optional
+	// +listType=atomic
+	PreferredPrecisions []string `json:"preferredPrecisions,omitempty"`
 }
 
 type WorkerPodSpec struct {
@@ -297,6 +377,32 @@ func (srSpec *ServingRuntimeSpec) GetPriority(modelName string) *int32 {
 	return nil
 }
 
-func (m *SupportedModelFormat) IsAutoSelectEnabled() bool {
-	return m.AutoSelect != nil && *m.AutoSelect
+func (f *SupportedModelFormat) IsAutoSelectEnabled() bool {
+	return f.AutoSelect != nil && *f.AutoSelect
+}
+
+func (srSpec *ServingRuntimeSpec) SupportsAcceleratorClass(acceleratorClass string) bool {
+	if srSpec.AcceleratorRequirements == nil || len(srSpec.AcceleratorRequirements.AcceleratorClasses) == 0 {
+		// No requirements means supports all accelerators
+		return true
+	}
+
+	for _, supported := range srSpec.AcceleratorRequirements.AcceleratorClasses {
+		if supported == acceleratorClass {
+			return true
+		}
+	}
+	return false
+}
+
+// GetAcceleratorConfig returns the accelerator-specific config for a model format
+func (f *SupportedModelFormat) GetAcceleratorConfig(acceleratorClass string) *AcceleratorModelConfig {
+	if f.AcceleratorConfig == nil {
+		return nil
+	}
+	config, ok := f.AcceleratorConfig[acceleratorClass]
+	if !ok {
+		return nil
+	}
+	return config
 }
