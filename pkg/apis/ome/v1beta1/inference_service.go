@@ -262,8 +262,7 @@ type InferenceService struct {
 type InferenceServiceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	// +listType=set
-	Items []InferenceService `json:"items"`
+	Items           []InferenceService `json:"items"`
 }
 
 func init() {
