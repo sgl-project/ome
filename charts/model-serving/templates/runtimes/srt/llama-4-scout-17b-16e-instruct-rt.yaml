@@ -77,6 +77,9 @@ spec:
         - containerPort: 8080
           name: http1
           protocol: TCP
+      env:
+        - name: SGLANG_VLM_CACHE_SIZE_MB
+          value: "2048"
       command:
         - /bin/bash
         - '-lc'
@@ -89,13 +92,15 @@ spec:
           --enable-metrics \
           --model-path="$MODEL_PATH" \
           --tp=4 \
-          --mem-frac=0.95 \
+          --mem-frac=0.85 \
           --context-length=196608 \
           --enable-multimodal \
           --tool-call-parser=pythonic \
-          --chat-template=sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
+          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
           --attention-backend=fa3 \
-          --log-requests
+          --log-requests \
+          --mm-attention-backend=fa3 \
+          --disable-fast-image-processor
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

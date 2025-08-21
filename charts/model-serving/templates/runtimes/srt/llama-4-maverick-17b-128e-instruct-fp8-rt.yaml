@@ -82,6 +82,9 @@ spec:
         - /bin/bash
         - '-lc'
         - --
+      env:
+        - name: SGLANG_VLM_CACHE_SIZE_MB
+          value: "2048"
       args:
         - |
           python3 -m sglang.launch_server \
@@ -90,13 +93,15 @@ spec:
           --enable-metrics \
           --model-path="$MODEL_PATH" \
           --tp=8 \
-          --mem-frac=0.9 \
+          --mem-frac=0.82 \
           --context-length=524288 \
           --enable-multimodal \
           --tool-call-parser=pythonic \
-          --chat-template=sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
+          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
           --attention-backend=fa3 \
-          --log-requests
+          --log-requests \
+          --mm-attention-backend=fa3 \
+          --disable-fast-image-processor
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
