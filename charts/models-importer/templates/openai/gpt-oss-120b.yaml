@@ -7,6 +7,7 @@ metadata:
     genai-model-deprecated-date: "{{ index .Values "gpt-oss-120b" "timeDeprecated" }}"
     genai-model-on-demand-retired-date: "{{ index .Values "gpt-oss-120b" "timeOnDemandRetired" }}"
     genai-model-dedicated-retired-date: "{{ index .Values "gpt-oss-120b" "timeDedicatedRetired" }}"
+    genai-managed-base-model-v1beta1: "true"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
     models.ome.io/runtime: "srt-gpt-oss-120b-mxfp4"
