@@ -9,7 +9,7 @@ metadata:
     genai-model-dedicated-retired-date: "{{ index .Values "gpt-oss-120b" "timeDedicatedRetired" }}"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
-    models.ome.io/runtime: "vllm-gpt-oss-120b"
+    models.ome.io/runtime: "srt-gpt-oss-120b-mxfp4"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "gpt-oss-120b" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "gpt-oss-120b" "isInternal" }}"

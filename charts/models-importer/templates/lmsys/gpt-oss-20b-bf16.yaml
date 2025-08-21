@@ -9,7 +9,7 @@ metadata:
     genai-model-dedicated-retired-date: "{{ index .Values "gpt-oss-20b-bf16" "timeDedicatedRetired" }}"
   annotations:
     # TODO clean up annotations after migration, which is used in MP
-    models.ome.io/runtime: "vllm-gpt-oss-20b-bf16"
+    models.ome.io/runtime: "srt-gpt-oss-20b"
     models.ome.io/category: "SMALL"
     models.ome.io/experimental: "{{ index .Values "gpt-oss-20b-bf16" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "gpt-oss-20b-bf16" "isInternal" }}"
@@ -18,7 +18,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: lmsys.gpt-oss-20b
+  displayName: openai.gpt-oss-20b
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "gpt-oss-20b-bf16" "osBucket" }}/o/{{ index .Values "gpt-oss-20b-bf16" "vendor" }}/{{ index .Values "gpt-oss-20b-bf16" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "gpt-oss-20b-bf16" "vendor" }}/{{ index .Values "gpt-oss-20b-bf16" "osPrefixOverride" }}"

@@ -79,20 +79,22 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp 4 \
-          --mem-frac=0.9 \
+          --tp 2 \
+          --tool-call-parser=gpt-oss \
+          --reasoning-parser=gpt-oss \
+          --context-length=131072
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 50
+          cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: 2
         limits:
-          cpu: 50
+          cpu: 30
           memory: 100Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:
