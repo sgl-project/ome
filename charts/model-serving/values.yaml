@@ -35,6 +35,11 @@ command_a_vision:
   minReplicas: 1
   maxReplicas: 1
 
+command_a_vision_drcc:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 cohere_rerank:
   enabled: false
   minReplicas: 1
@@ -173,7 +178,7 @@ cohere:
 
   commandAVisionImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.9.2-07032025"
+    tag: "v0.10.7-07312025"
 
   embedMultiModalImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all

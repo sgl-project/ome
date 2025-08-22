@@ -40,7 +40,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: MEDIUM_GENERIC_V2
+        - name: LLAMA2_70
           quotaUnit: 1
           default: true
     internalName: "command-a-vision"

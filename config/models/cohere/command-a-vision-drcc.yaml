@@ -1,12 +1,11 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: command-a-vision
+  name: command-a-vision-drcc
   labels:
-    ome.io/oci-compartmentid: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
     genai-managed-base-model-v1beta1: "true"
   annotations:
-    models.ome.io/runtime: "cohere-command-a-vision"
+    models.ome.io/runtime: "cohere-command-1-trt"
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "false"
     models.ome.io/internal: "false"
@@ -21,6 +20,7 @@ spec:
     path: /raid/models/cohere/command-a-vision
   vendor: cohere
   version: "1.0"
+  compartmentID: ocid1.compartment.oc1..aaaaaaaathgntpo75bdehisnl6wkxfc4slkd6rpheafbt5a6ekm2ri4bmeva
   # keep trt structure for now
   modelFormat:
     name: tensorrtllm
@@ -36,7 +36,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LLAMA2_70
+        - name: SMALL_COHERE_4
           quotaUnit: 1
           default: true
     internalName: "command-a-vision"
