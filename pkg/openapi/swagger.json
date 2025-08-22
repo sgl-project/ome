@@ -2790,7 +2790,7 @@
           "type": "string"
         },
         "targetPort": {
-          "description": "TargetPort is the port that MCP server listens to",
+          "description": "TargetPort is the port that MCP server listens to If not specified, defaults to the same value as Port (8080)",
           "type": "integer",
           "format": "int32"
         },
@@ -3316,7 +3316,7 @@
       ],
       "properties": {
         "configMap": {
-          "description": "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configmap\"",
+          "description": "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configMap\"",
           "$ref": "#/definitions/v1beta1.ConfigMapOIDCRef"
         },
         "inline": {

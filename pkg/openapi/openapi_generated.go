@@ -4880,7 +4880,7 @@ func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) com
 					},
 					"targetPort": {
 						SchemaProps: spec.SchemaProps{
-							Description: "TargetPort is the port that MCP server listens to",
+							Description: "TargetPort is the port that MCP server listens to If not specified, defaults to the same value as Port (8080)",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -5958,7 +5958,7 @@ func schema_pkg_apis_ome_v1beta1_OIDCConfigRef(ref common.ReferenceCallback) com
 					},
 					"configMap": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configmap\"",
+							Description: "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configMap\"",
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef"),
 						},
 					},

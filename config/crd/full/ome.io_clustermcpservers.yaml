@@ -486,8 +486,10 @@ spec:
                     properties:
                       key:
                         default: authz.json
+                        minLength: 1
                         type: string
                       name:
+                        minLength: 1
                         type: string
                     required:
                     - name
@@ -515,6 +517,11 @@ spec:
                 required:
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: configMap is required for configMap authorization configuration
+                  rule: 'self.type == ''configMap'' ? has(self.configMap) : true'
+                - message: inline is required for inline authorization configuration
+                  rule: 'self.type == ''inline'' ? has(self.inline) : true'
               capabilities:
                 properties:
                   prompts:
@@ -609,8 +616,10 @@ spec:
                     properties:
                       key:
                         default: oidc.json
+                        minLength: 1
                         type: string
                       name:
+                        minLength: 1
                         type: string
                     required:
                     - name
@@ -618,14 +627,17 @@ spec:
                   inline:
                     properties:
                       audience:
+                        minLength: 1
                         type: string
                       clientID:
                         type: string
                       clientSecret:
                         type: string
                       introspectionURL:
+                        pattern: ^https?://.*
                         type: string
                       issuer:
+                        pattern: ^https?://.*
                         type: string
                       jwksAllowPrivateIP:
                         default: false
@@ -633,6 +645,7 @@ spec:
                       jwksAuthTokenPath:
                         type: string
                       jwksURL:
+                        pattern: ^https?://.*
                         type: string
                       thvCABundlePath:
                         type: string
@@ -659,6 +672,7 @@ spec:
                         type: boolean
                     type: object
                   resourceURL:
+                    pattern: ^https?://.*
                     type: string
                   type:
                     default: kubernetes
@@ -670,14 +684,21 @@ spec:
                 required:
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: configMap is required for configMap OIDC configuration
+                  rule: 'self.type == ''configMap'' ? has(self.configMap) : true'
+                - message: inline is required for inline OIDC configuration
+                  rule: 'self.type == ''inline'' ? has(self.inline) : true'
               permissionProfile:
                 properties:
                   configMap:
                     properties:
                       key:
                         default: permissions.json
+                        minLength: 1
                         type: string
                       name:
+                        minLength: 1
                         type: string
                     required:
                     - name
@@ -716,6 +737,9 @@ spec:
                         x-kubernetes-list-type: set
                     type: object
                   name:
+                    enum:
+                    - none
+                    - network
                     type: string
                   type:
                     default: builtin
@@ -727,6 +751,14 @@ spec:
                 required:
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: name is required for builtin permission profiles
+                  rule: 'self.type == ''builtin'' ? has(self.name) && self.name !=
+                    '''' : true'
+                - message: configMap is required for configMap permission profiles
+                  rule: 'self.type == ''configMap'' ? has(self.configMap) : true'
+                - message: inline is required for inline permission profiles
+                  rule: 'self.type == ''inline'' ? has(self.inline) : true'
               podTemplateSpec:
                 properties:
                   metadata:
@@ -4423,10 +4455,13 @@ spec:
                 items:
                   properties:
                     key:
+                      minLength: 1
                       type: string
                     name:
+                      minLength: 1
                       type: string
                     targetEnvName:
+                      minLength: 1
                       type: string
                   required:
                   - key
@@ -4437,6 +4472,7 @@ spec:
               serviceAccount:
                 type: string
               targetPort:
+                default: 8080
                 format: int32
                 maximum: 65535
                 minimum: 1
@@ -5293,6 +5329,13 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
             type: object
+            x-kubernetes-validations:
+            - message: image is required for Hosted MCP servers
+              rule: 'self.type == ''Hosted'' ? has(self.image) && self.image != ''''
+                : true'
+            - message: url is required for Remote MCP servers
+              rule: 'self.type == ''Remote'' ? has(self.url) && self.url != '''' :
+                true'
           status:
             properties:
               conditions:
@@ -5360,7 +5403,16 @@ spec:
               url:
                 type: string
             type: object
+        required:
+        - spec
         type: object
+        x-kubernetes-validations:
+        - message: image is required for Hosted MCP servers
+          rule: 'has(self.spec.type) && (self.spec.type == ''Hosted'' ? has(self.spec.image)
+            && self.spec.image != '''' : true)'
+        - message: url is required for Remote MCP servers
+          rule: 'has(self.spec.type) && (self.spec.type == ''Remote'' ? has(self.spec.url)
+            && self.spec.url != '''' : true)'
     served: true
     storage: true
     subresources:

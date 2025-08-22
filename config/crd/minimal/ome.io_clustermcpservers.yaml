@@ -41,7 +41,16 @@ spec:
             type: object
             x-kubernetes-map-type: atomic
             x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
         type: object
+        x-kubernetes-validations:
+        - message: image is required for Hosted MCP servers
+          rule: 'has(self.spec.type) && (self.spec.type == ''Hosted'' ? has(self.spec.image)
+            && self.spec.image != '''' : true)'
+        - message: url is required for Remote MCP servers
+          rule: 'has(self.spec.type) && (self.spec.type == ''Remote'' ? has(self.spec.url)
+            && self.spec.url != '''' : true)'
     served: true
     storage: true
     subresources:
