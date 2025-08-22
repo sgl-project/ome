@@ -16,9 +16,6 @@ databases, APIs, file systems, and other external resources in a secure and cont
   - [User Stories](#user-stories)
     - [Story 1: Data Scientist with Database Access](#story-1-data-scientist-with-database-access)
     - [Story 2: DevOps Engineer with Infrastructure Tools](#story-2-devops-engineer-with-infrastructure-tools)
-    - [Story 3: Platform Team with Centralized MCP Services](#story-3-platform-team-with-centralized-mcp-services)
-    - [Story 4: Security-Conscious Organization](#story-4-security-conscious-organization)
-    - [Story 5: Multi-Tenant SaaS Provider](#story-5-multi-tenant-saas-provider)
   - [Notes/Constraints/Caveats](#notesconstraintscaveats)
   - [Risks and Mitigations](#risks-and-mitigations)
 - [Design Details](#design-details)
@@ -34,10 +31,7 @@ databases, APIs, file systems, and other external resources in a secure and cont
   - [Test Plan](#test-plan)
     - [Unit Tests](#unit-tests)
     - [Integration Tests](#integration-tests)
-  - [Graduation Criteria](#graduation-criteria)
-- [Implementation History](#implementation-history)
 - [Drawbacks](#drawbacks)
-- [Alternatives](#alternatives)
 <!-- /toc -->
 
 ## Summary
@@ -125,13 +119,11 @@ spec:
   image: mcp/postgres-server:latest
   transport: streamable-http
   
-  # Database connection configuration
-  env:
-    - name: DATABASE_URL
-      valueFrom:
-        secretKeyRef:
-          name: postgres-credentials
-          key: url
+  # Database connection configuration  
+  secrets:
+    - name: postgres-credentials
+      key: url
+      targetEnvName: DATABASE_URL
   
   # Security: Only allow database connections
   permissionProfile:
@@ -193,9 +185,10 @@ spec:
   
   # Custom permission profile for infrastructure access
   permissionProfile:
-    type: configmap
-    name: infra-permissions
-    key: policy.json
+    type: configMap
+    configMap:
+      name: infra-permissions
+      key: policy.json
   
   # Resource limits for safety
   resources:
@@ -320,218 +313,6 @@ spec:
 # by any external LLM applications that can access the cluster
 ```
 
-#### Story 4: Security-Conscious Organization
-
-Dave's organization has strict security requirements and needs fine-grained control over what MCP servers can access.
-
-```yaml
-# Step 1: Highly restricted MCP server
-apiVersion: ome.io/v1beta1
-kind: MCPServer
-metadata:
-  name: restricted-mcp
-  namespace: secure-workloads
-spec:
-  type: Hosted
-  image: mcp/secure-tools:latest
-  transport: streamable-http
-  
-  # Strict resource limits
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 512Mi
-  
-  # Custom security profile
-  permissionProfile:
-    type: configmap
-    name: secure-permissions
-    key: policy.json
-  
-  # Mutual TLS authentication
-  oidcConfig:
-    type: inline
-    inline:
-      issuer: https://auth.company.com
-      audience: secure-mcp-tools
-      jwksURL: https://auth.company.com/.well-known/jwks.json
-      thvCABundlePath: /etc/ssl/certs/company-ca.pem
-      jwksAuthTokenPath: /var/secrets/mcp-auth/token
-  
-  # Mount company CA and auth tokens
-  volumeMounts:
-    - name: company-ca
-      mountPath: /etc/ssl/certs/company-ca.pem
-      subPath: ca.pem
-      readOnly: true
-    - name: auth-token
-      mountPath: /var/secrets/mcp-auth
-      readOnly: true
-  
-  volumes:
-    - name: company-ca
-      configMap:
-        name: company-ca-bundle
-    - name: auth-token
-      secret:
-        secretName: mcp-auth-token
-
-  # Network policies
-  podTemplateSpec:
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 10001
-        fsGroup: 10001
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: mcp
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-            readOnlyRootFilesystem: true
-
----
-# Step 2: Security permission profile
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: secure-permissions
-  namespace: secure-workloads
-data:
-  policy.json: |
-    {
-      "read": ["/app/config", "/etc/ssl/certs"],
-      "write": ["/tmp/scratch"],
-      "network": {
-        "outbound": {
-          "insecureAllowAll": false,
-          "allowHost": [
-            "approved-api.company.com",
-            "audit-service.company.internal"
-          ],
-          "allowPort": [443]
-        }
-      }
-    }
-
----
-# Step 3: Deploy secure InferenceService separately  
-apiVersion: ome.io/v1beta1
-kind: InferenceService
-metadata:
-  name: llama-4-maverick-17b-128e-instruct-fp8
-  namespace: moirai
-spec:
-  model:
-    name: llama-4-maverick-17b-128e-instruct-fp8
-  runtime:
-    name: srt-llama-4-maverick-17b-128e-instruct-fp8
-
-# The secure MCPServer is now available for consumption by external applications
-# with strict security controls and fine-grained access policies
-```
-
-#### Story 5: Multi-Tenant SaaS Provider
-
-Emma runs a SaaS platform and needs to provide isolated MCP services for different customer organizations.
-
-```yaml
-# Step 1: Customer-specific MCP server
-apiVersion: ome.io/v1beta1
-kind: MCPServer
-metadata:
-  name: customer-tools-mcp
-  namespace: customer-acme
-  labels:
-    customer: acme-corp
-    tier: premium
-spec:
-  type: Hosted
-  image: mcp/saas-tools:v1.5.0
-  transport: streamable-http
-  
-  # Customer-specific configuration
-  env:
-    - name: CUSTOMER_ID
-      value: "acme-corp"
-    - name: TENANT_DATABASE_URL
-      valueFrom:
-        secretKeyRef:
-          name: acme-corp-db
-          key: url
-    - name: API_RATE_LIMIT
-      value: "1000" # Premium tier limits
-  
-  # Customer-specific authentication
-  oidcConfig:
-    type: configMap
-    configMap:
-      name: acme-corp-oidc-config
-      key: oidc.json
-  
-  # Tenant-specific authorization
-  authzConfig:
-    type: configMap
-    configMap:
-      name: acme-corp-authz-policy
-      key: policy.cedar
-  
-  # Resource allocation based on customer tier
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
-  
-  # High availability for premium customers
-  replicas: 2
-  
-  # Dedicated node scheduling
-  nodeSelector:
-    customer-tier: premium
-    
-  tolerations:
-    - key: premium-workload
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
-
----
-# Step 2: Customer-specific InferenceService (deployed separately)
-apiVersion: ome.io/v1beta1
-kind: InferenceService
-metadata:
-  name: acme-corp-llm
-  namespace: customer-acme
-  labels:
-    customer: acme-corp
-    tier: premium
-spec:
-  model:
-    name: llama-4
-  runtime:
-    name: srt-llama-4
-  # Customer-tier specific resource allocation
-  engine:
-    resources:
-      requests:
-        cpu: 500m
-        memory: 1Gi
-      limits:
-        cpu: 2000m
-        memory: 4Gi
-
-# The customer-specific MCPServer is now available for consumption
-# by the customer's applications with tenant isolation and premium tier resources
-```
 
 ### Notes/Constraints/Caveats
 
@@ -591,116 +372,328 @@ spec:
 
 #### MCPServer Resource
 
-The `MCPServer` is a namespaced resource that manages MCP server deployments within a specific namespace:
+The `MCPServer` is a namespaced resource that manages MCP server deployments within a specific namespace. The implementation includes comprehensive validation annotations and structural schemas for robust API enforcement:
 
 ```go
-// MCPServerSpec defines the desired state of MCPServer
+// MCPServerSpec defines the desired state of MCPServer with validation rules
+// +kubebuilder:validation:XValidation:rule="self.type == 'Hosted' ? has(self.image) && self.image != '' : true",message="image is required for Hosted MCP servers"
+// +kubebuilder:validation:XValidation:rule="self.type == 'Remote' ? has(self.url) && self.url != '' : true",message="url is required for Remote MCP servers"
 type MCPServerSpec struct {
     // Type specifies whether this is a hosted or remote MCP server
+    // Hosted servers run as containers in the cluster, Remote servers are accessed via URL
     // +kubebuilder:validation:Enum=Hosted;Remote
     // +kubebuilder:default=Hosted
+    // +optional
     Type MCPServerType `json:"type,omitempty"`
 
-    // Image is the container image for the MCP server (Hosted only)
+    // Image is the container image for the MCP server
+    // Required for Hosted servers, ignored for Remote servers.
+    // Must be a valid container image reference (e.g., "registry/image:tag")
+    // +optional
     Image string `json:"image,omitempty"`
 
-    // URL is the external URL for remote MCP servers (Remote only)
+    // URL is the external URL for remote MCP servers
+    // Required for Remote servers, ignored for Hosted servers
     // +kubebuilder:validation:Pattern=`^https?://.*`
+    // +optional
     URL string `json:"url,omitempty"`
 
-    // Transport specifies the communication protocol
-    // +kubebuilder:validation:Enum=stdio;streamable-http;sse
+    // Transport specifies the transport method for MCP communication
     // +kubebuilder:default=stdio
+    // +optional
     Transport MCPTransportType `json:"transport,omitempty"`
 
     // Protocol defines the MCP protocol specification
+    // +optional
     Protocol *MCPProtocolSpec `json:"protocol,omitempty"`
 
-    // Capabilities defines supported MCP capabilities
+    // Capabilities defines the MCP capabilities supported by this server
+    // +optional
     Capabilities *MCPCapabilities `json:"capabilities,omitempty"`
 
-    // Authentication and authorization configuration
-    OIDCConfig *OIDCConfigRef `json:"oidcConfig,omitempty"`
-    AuthzConfig *AuthzConfigRef `json:"authzConfig,omitempty"`
-    PermissionProfile *PermissionProfileRef `json:"permissionProfile,omitempty"`
+    // Version is the version of the MCP server software
+    // +optional
+    Version string `json:"version,omitempty"`
 
-    // Deployment configuration
+    // Replicas is the number of desired replicas for hosted MCP servers
+    // Only applicable for Hosted servers with HTTP transport
+    // +kubebuilder:validation:Minimum=0
+    // +kubebuilder:validation:Maximum=100
+    // +kubebuilder:default=1
+    // +optional
     Replicas *int32 `json:"replicas,omitempty"`
+
+    // Port is the port to expose the MCP server on
+    // +kubebuilder:validation:Minimum=1
+    // +kubebuilder:validation:Maximum=65535
+    // +kubebuilder:default=8080
+    // +optional
     Port int32 `json:"port,omitempty"`
+
+    // TargetPort is the port that MCP server listens to
+    // If not specified, defaults to the same value as Port (8080)
+    // +kubebuilder:validation:Minimum=1
+    // +kubebuilder:validation:Maximum=65535
+    // +kubebuilder:default=8080
+    // +optional
     TargetPort int32 `json:"targetPort,omitempty"`
     
-    // Container configuration
+    // Args are additional arguments to pass to the MCP server
+    // +optional
+    // +listType=atomic
     Args []string `json:"args,omitempty"`
+
+    // Env are environment variables to set in the MCP server container
+    // +optional
+    // +listType=map
+    // +listMapKey=name
     Env []corev1.EnvVar `json:"env,omitempty"`
-    Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-    
-    // Security and access control
-    Secrets []SecretRef `json:"secrets,omitempty"`
-    ServiceAccount *string `json:"serviceAccount,omitempty"`
-    ToolsFilter []string `json:"toolsFilter,omitempty"`
-    
-    // Kubernetes scheduling
-    NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-    Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-    Affinity *corev1.Affinity `json:"affinity,omitempty"`
-    
-    // Advanced configuration
-    PodTemplateSpec *corev1.PodTemplateSpec `json:"podTemplateSpec,omitempty"`
+
+    // Pod volumes to mount into the MCP server filesystem.
+    // +listType=map
+    // +listMapKey=name
+    // +optional
     VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+    // Secrets are references to secrets to mount in the MCP server container
+    // +optional
+    // +listType=atomic
+    Secrets []SecretRef `json:"secrets,omitempty"`
+
+    // ServiceAccount is the name of an already existing service account to use by the MCP server.
+    // If not specified, a ServiceAccount will be created automatically and used by the MCP server.
+    // +optional
+    ServiceAccount *string `json:"serviceAccount,omitempty"`
+
+    // PermissionProfile defines the permission profile to use
+    // +optional
+    PermissionProfile *PermissionProfileRef `json:"permissionProfile,omitempty"`
+
+    // PodTemplateSpec defines the pod template to use for the MCP server
+    // This allows for customizing the pod configuration beyond what is provided by the other fields.
+    // Note that to modify the specific container the MCP server runs in, you must specify
+    // the `mcp` container name in the PodTemplateSpec.
+    // +optional
+    PodTemplateSpec *corev1.PodTemplateSpec `json:"podTemplateSpec,omitempty"`
+
+    // OIDCConfig defines OIDC authentication configuration for the MCP server
+    // +optional
+    OIDCConfig *OIDCConfigRef `json:"oidcConfig,omitempty"`
+
+    // AuthzConfig defines authorization policy configuration for the MCP server
+    // +optional
+    AuthzConfig *AuthzConfigRef `json:"authzConfig,omitempty"`
+
+    // ToolsFilter is the filter on tools applied to the MCP server
+    // +optional
+    // +listType=set
+    ToolsFilter []string `json:"toolsFilter,omitempty"`
+
+    // Compute Resources required by this MCP server.
+    // Cannot be updated.
+    // More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+    // +optional
+    Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+    // If specified, the pod's tolerations.
+    // +optional
+    // +listType=atomic
+    Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+    // NodeSelector is a selector which must be true for the pod to fit on a node.
+    // Selector which must match a node's labels for the pod to be scheduled on that node.
+    // More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+    // +optional
+    // +mapType=atomic
+    NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+    // If specified, the pod's scheduling constraints
+    // +optional
+    Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+    // List of volumes that can be mounted by containers belonging to the pod.
+    // More info: https://kubernetes.io/docs/concepts/storage/volumes
+    // +optional
+    // +patchMergeKey=name
+    // +patchStrategy=merge,retainKeys
+    // +listType=atomic
     Volumes []corev1.Volume `json:"volumes,omitempty"`
+}
+```
+
+**Enhanced Validation Rules**
+
+The implementation includes comprehensive validation using XValidation rules:
+
+1. **Conditional Requirements**: 
+   - `image` field is required when `type == 'Hosted'`
+   - `url` field is required when `type == 'Remote'`
+
+2. **Resource Constraints**:
+   - Replicas: 0-100 range with default of 1
+   - Ports: 1-65535 range with default of 8080
+   - List types properly annotated (atomic, map, set)
+
+3. **Pattern Validation**:
+   - URL fields must match `^https?://.*` pattern
+   - Enum validations for transport types, server types, and phases
+
+```yaml
+# Example validation annotations from the implementation:
++kubebuilder:validation:XValidation:rule="self.type == 'Hosted' ? has(self.image) && self.image != '' : true",message="image is required for Hosted MCP servers"
++kubebuilder:validation:XValidation:rule="self.type == 'Remote' ? has(self.url) && self.url != '' : true",message="url is required for Remote MCP servers"
++kubebuilder:validation:Minimum=0
++kubebuilder:validation:Maximum=100
++kubebuilder:validation:Pattern=`^https?://.*`
+```
+
+**Transport Types and Protocol Specification**
+
+The implementation defines three transport types with proper enum validation:
+
+```go
+// MCPTransportType defines the transport method for MCP communication
+// +kubebuilder:validation:Enum=stdio;streamable-http;sse
+type MCPTransportType string
+
+const (
+    // MCPTransportStdio uses standard input/output for communication
+    MCPTransportStdio MCPTransportType = "stdio"
+
+    // MCPTransportStreamableHTTP uses HTTP with streaming support
+    MCPTransportStreamableHTTP MCPTransportType = "streamable-http"
+
+    // MCPTransportSSE uses Server-Sent Events for communication
+    MCPTransportSSE MCPTransportType = "sse"
+)
+
+// MCPProtocolSpec defines the MCP protocol specification
+type MCPProtocolSpec struct {
+    // Name of the protocol (always "JSON-RPC" for MCP)
+    // +kubebuilder:validation:Enum=JSON-RPC
+    // +kubebuilder:default="JSON-RPC"
+    // +optional
+    Name string `json:"name,omitempty"`
+
+    // Version of the JSON-RPC protocol (always "2.0" for MCP)
+    // +kubebuilder:validation:Enum="2.0"
+    // +kubebuilder:default="2.0"
+    // +optional
+    Version string `json:"version,omitempty"`
+}
+
+// MCPCapabilities defines the capabilities supported by the MCP server
+type MCPCapabilities struct {
+    // Tools indicates whether the server supports MCP tools
+    // +kubebuilder:default=true
+    // +optional
+    Tools *bool `json:"tools,omitempty"`
+
+    // Resources indicates whether the server supports MCP resources
+    // +kubebuilder:default=false
+    // +optional
+    Resources *bool `json:"resources,omitempty"`
+
+    // Prompts indicates whether the server supports MCP prompts
+    // +kubebuilder:default=false
+    // +optional
+    Prompts *bool `json:"prompts,omitempty"`
 }
 ```
 
 #### ClusterMCPServer Resource
 
-The `ClusterMCPServer` is a cluster-scoped resource for shared MCP servers:
+The `ClusterMCPServer` is a cluster-scoped resource for shared MCP servers with identical validation rules:
 
 ```go
 // ClusterMCPServer provides cluster-wide MCP server deployment
 // It shares the same spec as MCPServer but has cluster scope
+// +kubebuilder:validation:XValidation:rule="has(self.spec.type) && (self.spec.type == 'Hosted' ? has(self.spec.image) && self.spec.image != '' : true)",message="image is required for Hosted MCP servers"
+// +kubebuilder:validation:XValidation:rule="has(self.spec.type) && (self.spec.type == 'Remote' ? has(self.spec.url) && self.spec.url != '' : true)",message="url is required for Remote MCP servers"
 type ClusterMCPServer struct {
     metav1.TypeMeta   `json:",inline"`
     metav1.ObjectMeta `json:"metadata,omitempty"`
     
+    // +kubebuilder:validation:Required
     Spec   MCPServerSpec   `json:"spec,omitempty"`
+    // +optional
     Status MCPServerStatus `json:"status,omitempty"`
 }
 ```
 
-#### Transport Types
+#### Transport Types Implementation
 
 **stdio Transport**
 ```yaml
 spec:
   transport: stdio
   # stdin/stdout communication
-  # Single replica only
+  # Single replica only (cannot be scaled beyond 1)
   # Best for simple tools and debugging
+  # Default transport type
 ```
 
 **streamable-http Transport**
 ```yaml
 spec:
   transport: streamable-http
-  port: 8080
-  targetPort: 8080
+  port: 8080        # Default port with validation (1-65535)
+  targetPort: 8080  # Default targetPort with validation (1-65535)
+  replicas: 3       # Supports horizontal scaling (0-100)
   # HTTP with streaming support
-  # Supports horizontal scaling
-  # Production-ready
+  # Production-ready with load balancing
 ```
 
 **sse Transport**
 ```yaml
 spec:
   transport: sse
-  port: 8080
-  targetPort: 8080
+  port: 8080        # Default port with validation (1-65535)
+  targetPort: 8080  # Default targetPort with validation (1-65535)
+  replicas: 2       # Supports horizontal scaling (0-100)
   # Server-Sent Events
   # Real-time bidirectional communication
   # Web-friendly protocol
 ```
 
-#### Authentication and Authorization
+#### Authentication and Authorization Implementation
+
+**OIDC Configuration Reference**
+
+The implementation supports three types of OIDC configuration with validation:
+
+```go
+// OIDCConfigRef defines a reference to OIDC configuration
+// +kubebuilder:validation:XValidation:rule="self.type == 'configMap' ? has(self.configMap) : true",message="configMap is required for configMap OIDC configuration"
+// +kubebuilder:validation:XValidation:rule="self.type == 'inline' ? has(self.inline) : true",message="inline is required for inline OIDC configuration"
+type OIDCConfigRef struct {
+    // Type is the type of OIDC configuration
+    // +kubebuilder:validation:Enum=kubernetes;configMap;inline
+    // +kubebuilder:default=kubernetes
+    Type string `json:"type"`
+
+    // ResourceURL is the explicit resource URL for OAuth discovery endpoint (RFC 9728)
+    // If not specified, defaults to the in-cluster Kubernetes service URL
+    // +kubebuilder:validation:Pattern=`^https?://.*`
+    // +optional
+    ResourceURL string `json:"resourceURL,omitempty"`
+
+    // Kubernetes configures OIDC for Kubernetes service account token validation
+    // Only used when Type is "kubernetes"
+    // +optional
+    Kubernetes *KubernetesOIDCConfig `json:"kubernetes,omitempty"`
+
+    // ConfigMap references a ConfigMap containing OIDC configuration
+    // Only used when Type is "configMap"
+    // +optional
+    ConfigMap *ConfigMapOIDCRef `json:"configMap,omitempty"`
+
+    // Inline contains direct OIDC configuration
+    // Only used when Type is "inline"
+    // +optional
+    Inline *InlineOIDCConfig `json:"inline,omitempty"`
+}
+```
 
 **Kubernetes Service Account Authentication**
 ```yaml
@@ -708,24 +701,73 @@ spec:
   oidcConfig:
     type: kubernetes
     kubernetes:
-      namespace: default  # optional, defaults to MCPServer namespace
-      audience: mcp-tools
-      issuer: https://kubernetes.default.svc
-      useClusterAuth: true  # Use cluster CA and service account token
+      namespace: default      # optional, defaults to MCPServer namespace
+      audience: toolhive      # default audience
+      issuer: "https://kubernetes.default.svc"  # default issuer
+      useClusterAuth: true    # Use cluster CA and service account token
+      jwksURL: ""            # Optional, auto-discovered if empty
+      introspectionURL: ""   # Optional, auto-discovered if empty
 ```
 
-**External OIDC Provider**
+**ConfigMap OIDC Configuration**
+```yaml
+spec:
+  oidcConfig:
+    type: configMap
+    configMap:
+      name: my-oidc-config
+      key: oidc.json  # Default key if not specified
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-oidc-config
+data:
+  oidc.json: |
+    {
+      "issuer": "https://auth.company.com",
+      "audience": "mcp-services",
+      "jwksURL": "https://auth.company.com/.well-known/jwks.json"
+    }
+```
+
+**Inline OIDC Configuration**
 ```yaml
 spec:
   oidcConfig:
     type: inline
     inline:
-      issuer: https://auth.company.com
-      audience: mcp-services
-      jwksURL: https://auth.company.com/.well-known/jwks.json
-      # Optional mutual TLS
-      thvCABundlePath: /etc/ssl/certs/ca.pem
-      jwksAuthTokenPath: /var/secrets/auth/token
+      issuer: "https://auth.company.com"  # Required field
+      audience: "mcp-services"             # Optional
+      jwksURL: "https://auth.company.com/.well-known/jwks.json"  # Optional
+      introspectionURL: "https://auth.company.com/oauth/introspect"  # Optional
+      # Optional mutual TLS support
+      thvCABundlePath: "/etc/ssl/certs/ca.pem"
+      jwksAuthTokenPath: "/var/secrets/auth/token"
+      jwksAllowPrivateIP: false  # Default false for security
+```
+
+**Authorization Configuration**
+
+The implementation supports Cedar policy-based authorization:
+
+```go
+// AuthzConfigRef defines a reference to authorization configuration
+// +kubebuilder:validation:XValidation:rule="self.type == 'configMap' ? has(self.configMap) : true",message="configMap is required for configMap authorization configuration"
+// +kubebuilder:validation:XValidation:rule="self.type == 'inline' ? has(self.inline) : true",message="inline is required for inline authorization configuration"
+type AuthzConfigRef struct {
+    // Type is the type of authorization configuration
+    // +kubebuilder:validation:Enum=configMap;inline
+    // +kubebuilder:default=configMap
+    Type string `json:"type"`
+
+    // ConfigMap references a ConfigMap containing authorization configuration
+    ConfigMap *ConfigMapAuthzRef `json:"configMap,omitempty"`
+
+    // Inline contains direct authorization configuration
+    Inline *InlineAuthzConfig `json:"inline,omitempty"`
+}
 ```
 
 **Cedar Authorization Policies**
@@ -734,7 +776,7 @@ spec:
   authzConfig:
     type: inline
     inline:
-      policies:
+      policies:  # Required, minimum 1 policy
         - |
           permit(
             principal in Group::"developers",
@@ -749,11 +791,7 @@ spec:
             action,
             resource
           );
-      entitiesJSON: |
-        [
-          {"uid": {"type": "Group", "id": "developers"}, "attrs": {}, "parents": []},
-          {"uid": {"type": "Group", "id": "admins"}, "attrs": {}, "parents": []}
-        ]
+      entitiesJSON: "[]"  # Default empty entities array
 ```
 
 #### Permission Profiles
@@ -781,13 +819,46 @@ spec:
   # Suitable for API and database tools
 ```
 
-**Custom Permission Profiles**
+The implementation supports three types of permission profiles with comprehensive validation:
+
+```go
+// PermissionProfileRef defines a reference to a permission profile
+// +kubebuilder:validation:XValidation:rule="self.type == 'builtin' ? has(self.name) && self.name != '' : true",message="name is required for builtin permission profiles"
+// +kubebuilder:validation:XValidation:rule="self.type == 'configMap' ? has(self.configMap) : true",message="configMap is required for configMap permission profiles"
+// +kubebuilder:validation:XValidation:rule="self.type == 'inline' ? has(self.inline) : true",message="inline is required for inline permission profiles"
+type PermissionProfileRef struct {
+    // Type is the type of permission profile reference
+    // +kubebuilder:validation:Enum=builtin;configMap;inline
+    // +kubebuilder:default=builtin
+    Type string `json:"type"`
+
+    // Name is the name of the built-in permission profile
+    // If Type is "builtin", Name must be one of: "none", "network"
+    // Only used when Type is "builtin"
+    // +kubebuilder:validation:Enum=none;network
+    // +optional
+    Name string `json:"name,omitempty"`
+
+    // ConfigMap references a ConfigMap containing permission profile configuration
+    // Only used when Type is "configMap"
+    // +optional
+    ConfigMap *ConfigMapPermissionRef `json:"configMap,omitempty"`
+
+    // Inline contains direct permission profile configuration
+    // Only used when Type is "inline"
+    // +optional
+    Inline *PermissionProfileSpec `json:"inline,omitempty"`
+}
+```
+
+**ConfigMap Permission Profiles**
 ```yaml
 spec:
   permissionProfile:
-    type: configmap
-    name: custom-permissions
-    key: permissions.json
+    type: configMap
+    configMap:
+      name: custom-permissions
+      key: permissions.json  # Default key if not specified
 
 ---
 apiVersion: v1
@@ -818,6 +889,180 @@ data:
         }
       }
     }
+```
+
+**Inline Permission Profiles**
+```yaml
+spec:
+  permissionProfile:
+    type: inline
+    inline:
+      read:
+        - "/app/config"
+        - "/etc/ssl/certs"
+      write:
+        - "/tmp"
+      network:
+        outbound:
+          insecureAllowAll: false
+          allowHost:
+            - "trusted-api.company.com"
+          allowPort:
+            - 443
+            - 6379
+```
+
+**Permission Profile Schema**
+
+The `PermissionProfileSpec` defines the comprehensive permission structure:
+
+```go
+// PermissionProfileSpec defines the permissions for an MCP server
+type PermissionProfileSpec struct {
+    // Read is a list of paths that the MCP server can read from
+    // +optional
+    // +listType=set
+    Read []string `json:"read,omitempty"`
+
+    // Write is a list of paths that the MCP server can write to
+    // +optional
+    // +listType=set
+    Write []string `json:"write,omitempty"`
+
+    // Network defines the network permissions for the MCP server
+    // +optional
+    Network *NetworkPermissions `json:"network,omitempty"`
+}
+
+// NetworkPermissions defines the network permissions for an MCP server
+type NetworkPermissions struct {
+    // Outbound defines the outbound network permissions
+    // +optional
+    Outbound *OutboundNetworkPermissions `json:"outbound,omitempty"`
+}
+
+// OutboundNetworkPermissions defines the outbound network permissions
+type OutboundNetworkPermissions struct {
+    // InsecureAllowAll allows all outbound network connections (not recommended)
+    // +kubebuilder:default=false
+    // +optional
+    InsecureAllowAll bool `json:"insecureAllowAll,omitempty"`
+
+    // AllowHost is a list of hosts to allow connections to
+    // +optional
+    // +listType=set
+    AllowHost []string `json:"allowHost,omitempty"`
+
+    // AllowPort is a list of ports to allow connections to
+    // +optional
+    // +listType=set
+    AllowPort []int32 `json:"allowPort,omitempty"`
+}
+```
+
+**SecretRef Structure**
+
+Secrets are referenced with comprehensive validation:
+
+```go
+// SecretRef is a reference to a secret
+type SecretRef struct {
+    // Name is the name of the secret
+    // +kubebuilder:validation:Required
+    // +kubebuilder:validation:MinLength=1
+    Name string `json:"name"`
+
+    // Key is the key in the secret itself
+    // +kubebuilder:validation:Required
+    // +kubebuilder:validation:MinLength=1
+    Key string `json:"key"`
+
+    // TargetEnvName is the environment variable to be used when setting up the secret in the MCP server
+    // If left unspecified, it defaults to the key
+    // +kubebuilder:validation:MinLength=1
+    // +optional
+    TargetEnvName string `json:"targetEnvName,omitempty"`
+}
+```
+
+#### MCPServer Status and Phases
+
+The implementation includes comprehensive status reporting with structured phases:
+
+```go
+// MCPServerStatus defines the observed state of MCPServer
+type MCPServerStatus struct {
+    // Conditions represent the latest available observations of the MCPServer's state
+    // Standard condition types: Ready, Available, Progressing
+    // +optional
+    // +listType=map
+    // +listMapKey=type
+    Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+    // URL is the URL where the MCP server can be accessed
+    // For Hosted servers, this is the cluster-internal or external service URL
+    // For Remote servers, this reflects the configured external URL
+    // +optional
+    URL string `json:"url,omitempty"`
+
+    // Phase is the current phase of the MCPServer lifecycle
+    // +optional
+    Phase MCPServerPhase `json:"phase,omitempty"`
+
+    // Message provides additional information about the current phase
+    // +optional
+    Message string `json:"message,omitempty"`
+
+    // ObservedGeneration reflects the generation most recently observed by the controller
+    // +optional
+    ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+    // Replicas is the most recently observed number of replicas for hosted servers
+    // +optional
+    Replicas int32 `json:"replicas,omitempty"`
+
+    // ReadyReplicas is the number of ready replicas for hosted servers
+    // +optional
+    ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+    // LastUpdateTime is the last time the status was updated
+    // +optional
+    LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+}
+
+// MCPServerPhase is the phase of the MCPServer
+// +kubebuilder:validation:Enum=Pending;Starting;Running;Updating;Failed;Terminating
+type MCPServerPhase string
+
+const (
+    // MCPServerPhasePending means the MCPServer is being created
+    MCPServerPhasePending MCPServerPhase = "Pending"
+
+    // MCPServerPhaseStarting means the MCPServer is starting up
+    MCPServerPhaseStarting MCPServerPhase = "Starting"
+
+    // MCPServerPhaseRunning means the MCPServer is running and ready
+    MCPServerPhaseRunning MCPServerPhase = "Running"
+
+    // MCPServerPhaseUpdating means the MCPServer is being updated
+    MCPServerPhaseUpdating MCPServerPhase = "Updating"
+
+    // MCPServerPhaseFailed means the MCPServer failed to start or run
+    MCPServerPhaseFailed MCPServerPhase = "Failed"
+
+    // MCPServerPhaseTerminating means the MCPServer is being deleted
+    MCPServerPhaseTerminating MCPServerPhase = "Terminating"
+)
+```
+
+**Kubebuilder Print Columns**
+
+Both MCPServer and ClusterMCPServer resources include print columns for better kubectl experience:
+
+```yaml
+# +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
+# +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url" 
+# +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 ```
 
 ### Architecture Overview
