@@ -45,6 +45,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":        schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapAuthzRef":          schema_pkg_apis_ome_v1beta1_ConfigMapAuthzRef(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef":           schema_pkg_apis_ome_v1beta1_ConfigMapOIDCRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapPermissionRef":     schema_pkg_apis_ome_v1beta1_ConfigMapPermissionRef(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec":                schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.Endpoint":                   schema_pkg_apis_ome_v1beta1_Endpoint(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EndpointSpec":               schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
@@ -2071,6 +2072,34 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelection", "knative.dev/pkg/apis.URL", "knative.dev/pkg/apis/duck/v1.Addressable", "knative.dev/serving/pkg/apis/serving/v1.TrafficTarget"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ConfigMapPermissionRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ConfigMapPermissionRef references a ConfigMap containing permission profile configuration",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the ConfigMap",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Key is the key in the ConfigMap that contains the permission profile configuration",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -6052,23 +6081,29 @@ func schema_pkg_apis_ome_v1beta1_PermissionProfileRef(ref common.ReferenceCallba
 					},
 					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name is the name of the permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" If Type is \"configmap\", Name is the name of the ConfigMap",
-							Default:     "",
+							Description: "Name is the name of the built-in permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" Only used when Type is \"builtin\"",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"key": {
+					"configMap": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Key is the key in the ConfigMap that contains the permission profile Only used when Type is \"configmap\"",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "ConfigMap references a ConfigMap containing permission profile configuration Only used when Type is \"configMap\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapPermissionRef"),
+						},
+					},
+					"inline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Inline contains direct permission profile configuration Only used when Type is \"inline\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec"),
 						},
 					},
 				},
-				Required: []string{"type", "name"},
+				Required: []string{"type"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapPermissionRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec"},
 	}
 }
 

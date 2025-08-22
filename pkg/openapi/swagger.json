@@ -1123,6 +1123,21 @@
         }
       }
     },
+    "v1beta1.ConfigMapPermissionRef": {
+      "description": "ConfigMapPermissionRef references a ConfigMap containing permission profile configuration",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "Key is the key in the ConfigMap that contains the permission profile configuration",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the name of the ConfigMap",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.DecoderSpec": {
       "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
       "type": "object",
@@ -3370,18 +3385,20 @@
       "description": "PermissionProfileRef defines a reference to a permission profile",
       "type": "object",
       "required": [
-        "type",
-        "name"
+        "type"
       ],
       "properties": {
-        "key": {
-          "description": "Key is the key in the ConfigMap that contains the permission profile Only used when Type is \"configmap\"",
-          "type": "string"
+        "configMap": {
+          "description": "ConfigMap references a ConfigMap containing permission profile configuration Only used when Type is \"configMap\"",
+          "$ref": "#/definitions/v1beta1.ConfigMapPermissionRef"
+        },
+        "inline": {
+          "description": "Inline contains direct permission profile configuration Only used when Type is \"inline\"",
+          "$ref": "#/definitions/v1beta1.PermissionProfileSpec"
         },
         "name": {
-          "description": "Name is the name of the permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" If Type is \"configmap\", Name is the name of the ConfigMap",
-          "type": "string",
-          "default": ""
+          "description": "Name is the name of the built-in permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" Only used when Type is \"builtin\"",
+          "type": "string"
         },
         "type": {
           "description": "Type is the type of permission profile reference",
