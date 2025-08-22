@@ -227,7 +227,10 @@ const (
 	PermissionProfileTypeBuiltin = "builtin"
 
 	// PermissionProfileTypeConfigMap is the type for permission profiles stored in ConfigMaps
-	PermissionProfileTypeConfigMap = "configmap"
+	PermissionProfileTypeConfigMap = "configMap"
+
+	// PermissionProfileTypeInline is the type for inline permission profiles
+	PermissionProfileTypeInline = "inline"
 )
 
 // OIDC configuration types
@@ -254,20 +257,25 @@ const (
 // PermissionProfileRef defines a reference to a permission profile
 type PermissionProfileRef struct {
 	// Type is the type of permission profile reference
-	// +kubebuilder:validation:Enum=builtin;configmap
+	// +kubebuilder:validation:Enum=builtin;configMap;inline
 	// +kubebuilder:default=builtin
 	Type string `json:"type"`
 
-	// Name is the name of the permission profile
+	// Name is the name of the built-in permission profile
 	// If Type is "builtin", Name must be one of: "none", "network"
-	// If Type is "configmap", Name is the name of the ConfigMap
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Key is the key in the ConfigMap that contains the permission profile
-	// Only used when Type is "configmap"
+	// Only used when Type is "builtin"
 	// +optional
-	Key string `json:"key,omitempty"`
+	Name string `json:"name,omitempty"`
+
+	// ConfigMap references a ConfigMap containing permission profile configuration
+	// Only used when Type is "configMap"
+	// +optional
+	ConfigMap *ConfigMapPermissionRef `json:"configMap,omitempty"`
+
+	// Inline contains direct permission profile configuration
+	// Only used when Type is "inline"
+	// +optional
+	Inline *PermissionProfileSpec `json:"inline,omitempty"`
 }
 
 // PermissionProfileSpec defines the permissions for an MCP server
@@ -450,6 +458,18 @@ type AuthzConfigRef struct {
 	// Only used when Type is "inline"
 	// +optional
 	Inline *InlineAuthzConfig `json:"inline,omitempty"`
+}
+
+// ConfigMapPermissionRef references a ConfigMap containing permission profile configuration
+type ConfigMapPermissionRef struct {
+	// Name is the name of the ConfigMap
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Key is the key in the ConfigMap that contains the permission profile configuration
+	// +kubebuilder:default=permissions.json
+	// +optional
+	Key string `json:"key,omitempty"`
 }
 
 // ConfigMapAuthzRef references a ConfigMap containing authorization configuration
