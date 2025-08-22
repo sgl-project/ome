@@ -66,6 +66,8 @@ type MCPCapabilities struct {
 }
 
 // MCPServerSpec defines the desired state of MCPServer
+// +kubebuilder:validation:XValidation:rule="self.type == 'Hosted' ? has(self.image) && self.image != ” : true",message="image is required for Hosted MCP servers"
+// +kubebuilder:validation:XValidation:rule="self.type == 'Remote' ? has(self.url) && self.url != ” : true",message="url is required for Remote MCP servers"
 type MCPServerSpec struct {
 	// Type specifies whether this is a hosted or remote MCP server
 	// Hosted servers run as containers in the cluster, Remote servers are accessed via URL
@@ -115,11 +117,14 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +kubebuilder:default=8080
+	// +optional
 	Port int32 `json:"port,omitempty"`
 
 	// TargetPort is the port that MCP server listens to
+	// If not specified, defaults to the same value as Port (8080)
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=8080
 	// +optional
 	TargetPort int32 `json:"targetPort,omitempty"`
 
@@ -209,14 +214,17 @@ type MCPServerSpec struct {
 type SecretRef struct {
 	// Name is the name of the secret
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Key is the key in the secret itself
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Key string `json:"key"`
 
 	// TargetEnvName is the environment variable to be used when setting up the secret in the MCP server
 	// If left unspecified, it defaults to the key
+	// +kubebuilder:validation:MinLength=1
 	// +optional
 	TargetEnvName string `json:"targetEnvName,omitempty"`
 }
@@ -255,6 +263,9 @@ const (
 )
 
 // PermissionProfileRef defines a reference to a permission profile
+// +kubebuilder:validation:XValidation:rule="self.type == 'builtin' ? has(self.name) && self.name != ” : true",message="name is required for builtin permission profiles"
+// +kubebuilder:validation:XValidation:rule="self.type == 'configMap' ? has(self.configMap) : true",message="configMap is required for configMap permission profiles"
+// +kubebuilder:validation:XValidation:rule="self.type == 'inline' ? has(self.inline) : true",message="inline is required for inline permission profiles"
 type PermissionProfileRef struct {
 	// Type is the type of permission profile reference
 	// +kubebuilder:validation:Enum=builtin;configMap;inline
@@ -264,6 +275,7 @@ type PermissionProfileRef struct {
 	// Name is the name of the built-in permission profile
 	// If Type is "builtin", Name must be one of: "none", "network"
 	// Only used when Type is "builtin"
+	// +kubebuilder:validation:Enum=none;network
 	// +optional
 	Name string `json:"name,omitempty"`
 
@@ -321,6 +333,8 @@ type OutboundNetworkPermissions struct {
 }
 
 // OIDCConfigRef defines a reference to OIDC configuration
+// +kubebuilder:validation:XValidation:rule="self.type == 'configMap' ? has(self.configMap) : true",message="configMap is required for configMap OIDC configuration"
+// +kubebuilder:validation:XValidation:rule="self.type == 'inline' ? has(self.inline) : true",message="inline is required for inline OIDC configuration"
 type OIDCConfigRef struct {
 	// Type is the type of OIDC configuration
 	// +kubebuilder:validation:Enum=kubernetes;configMap;inline
@@ -329,6 +343,7 @@ type OIDCConfigRef struct {
 
 	// ResourceURL is the explicit resource URL for OAuth discovery endpoint (RFC 9728)
 	// If not specified, defaults to the in-cluster Kubernetes service URL
+	// +kubebuilder:validation:Pattern=`^https?://.*`
 	// +optional
 	ResourceURL string `json:"resourceURL,omitempty"`
 
@@ -338,7 +353,7 @@ type OIDCConfigRef struct {
 	Kubernetes *KubernetesOIDCConfig `json:"kubernetes,omitempty"`
 
 	// ConfigMap references a ConfigMap containing OIDC configuration
-	// Only used when Type is "configmap"
+	// Only used when Type is "configMap"
 	// +optional
 	ConfigMap *ConfigMapOIDCRef `json:"configMap,omitempty"`
 
@@ -391,10 +406,12 @@ type KubernetesOIDCConfig struct {
 type ConfigMapOIDCRef struct {
 	// Name is the name of the ConfigMap
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Key is the key in the ConfigMap that contains the OIDC configuration
 	// +kubebuilder:default=oidc.json
+	// +kubebuilder:validation:MinLength=1
 	// +optional
 	Key string `json:"key,omitempty"`
 }
@@ -403,17 +420,21 @@ type ConfigMapOIDCRef struct {
 type InlineOIDCConfig struct {
 	// Issuer is the OIDC issuer URL
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^https?://.*`
 	Issuer string `json:"issuer"`
 
 	// Audience is the expected audience for the token
+	// +kubebuilder:validation:MinLength=1
 	// +optional
 	Audience string `json:"audience,omitempty"`
 
 	// JWKSURL is the URL to fetch the JWKS from
+	// +kubebuilder:validation:Pattern=`^https?://.*`
 	// +optional
 	JWKSURL string `json:"jwksURL,omitempty"`
 
 	// IntrospectionURL is the URL for token introspection endpoint
+	// +kubebuilder:validation:Pattern=`^https?://.*`
 	// +optional
 	IntrospectionURL string `json:"introspectionURL,omitempty"`
 
@@ -443,6 +464,8 @@ type InlineOIDCConfig struct {
 }
 
 // AuthzConfigRef defines a reference to authorization configuration
+// +kubebuilder:validation:XValidation:rule="self.type == 'configMap' ? has(self.configMap) : true",message="configMap is required for configMap authorization configuration"
+// +kubebuilder:validation:XValidation:rule="self.type == 'inline' ? has(self.inline) : true",message="inline is required for inline authorization configuration"
 type AuthzConfigRef struct {
 	// Type is the type of authorization configuration
 	// +kubebuilder:validation:Enum=configMap;inline
@@ -464,10 +487,12 @@ type AuthzConfigRef struct {
 type ConfigMapPermissionRef struct {
 	// Name is the name of the ConfigMap
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Key is the key in the ConfigMap that contains the permission profile configuration
 	// +kubebuilder:default=permissions.json
+	// +kubebuilder:validation:MinLength=1
 	// +optional
 	Key string `json:"key,omitempty"`
 }
@@ -476,10 +501,12 @@ type ConfigMapPermissionRef struct {
 type ConfigMapAuthzRef struct {
 	// Name is the name of the ConfigMap
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
 	// Key is the key in the ConfigMap that contains the authorization configuration
 	// +kubebuilder:default=authz.json
+	// +kubebuilder:validation:MinLength=1
 	// +optional
 	Key string `json:"key,omitempty"`
 }
@@ -567,13 +594,17 @@ const (
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:validation:XValidation:rule="has(self.spec.type) && (self.spec.type == 'Hosted' ? has(self.spec.image) && self.spec.image != '' : true)",message="image is required for Hosted MCP servers"
+// +kubebuilder:validation:XValidation:rule="has(self.spec.type) && (self.spec.type == 'Remote' ? has(self.spec.url) && self.spec.url != '' : true)",message="url is required for Remote MCP servers"
 
 // MCPServer is the Schema for the mcpservers API
 type MCPServer struct {
 	metav1.TypeMeta   `json:",inline"` // nolint:revive
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MCPServerSpec   `json:"spec,omitempty"`
+	// +kubebuilder:validation:Required
+	Spec MCPServerSpec `json:"spec,omitempty"`
+	// +optional
 	Status MCPServerStatus `json:"status,omitempty"`
 }
 
@@ -583,13 +614,17 @@ type MCPServer struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:validation:XValidation:rule="has(self.spec.type) && (self.spec.type == 'Hosted' ? has(self.spec.image) && self.spec.image != '' : true)",message="image is required for Hosted MCP servers"
+// +kubebuilder:validation:XValidation:rule="has(self.spec.type) && (self.spec.type == 'Remote' ? has(self.spec.url) && self.spec.url != '' : true)",message="url is required for Remote MCP servers"
 
 // ClusterMCPServer is the cluster-scoped Schema for the mcpservers API
 type ClusterMCPServer struct {
 	metav1.TypeMeta   `json:",inline"` // nolint:revive
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MCPServerSpec   `json:"spec,omitempty"`
+	// +kubebuilder:validation:Required
+	Spec MCPServerSpec `json:"spec,omitempty"`
+	// +optional
 	Status MCPServerStatus `json:"status,omitempty"`
 }
 
