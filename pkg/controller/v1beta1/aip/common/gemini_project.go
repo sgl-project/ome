@@ -69,10 +69,17 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 	}
 
 	projectId := strings.ToLower(GenerateId("proj-", p.Resource.UID))
+
+	// GCP doesn't allow the length of project displayName > 30
+	displayName := p.Resource.Spec.Name
+	if len(displayName) > 30 {
+		displayName = displayName[:30]
+	}
+
 	req := &resourcemanagerpb.CreateProjectRequest{
 		Project: &resourcemanagerpb.Project{
 			ProjectId:   projectId,
-			DisplayName: p.Resource.Spec.Name,
+			DisplayName: displayName,
 			Parent:      googleConfig.ProjectFolder,
 		},
 	}
