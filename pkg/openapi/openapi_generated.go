@@ -37,10 +37,14 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":         schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":           schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":       schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServer":           schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServerList":       schema_pkg_apis_ome_v1beta1_ClusterMCPServerList(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":  schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":     schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":        schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapAuthzRef":          schema_pkg_apis_ome_v1beta1_ConfigMapAuthzRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef":           schema_pkg_apis_ome_v1beta1_ConfigMapOIDCRef(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec":                schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.Endpoint":                   schema_pkg_apis_ome_v1beta1_Endpoint(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EndpointSpec":               schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
@@ -55,8 +59,17 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":  schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":       schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":     schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineAuthzConfig":          schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig":           schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig":                 schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig":       schema_pkg_apis_ome_v1beta1_KubernetesOIDCConfig(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec":                 schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities":            schema_pkg_apis_ome_v1beta1_MCPCapabilities(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolSpec":            schema_pkg_apis_ome_v1beta1_MCPProtocolSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServer":                  schema_pkg_apis_ome_v1beta1_MCPServer(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerList":              schema_pkg_apis_ome_v1beta1_MCPServerList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec":              schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus":            schema_pkg_apis_ome_v1beta1_MCPServerStatus(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelCopies":                schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":         schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat":                schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
@@ -67,13 +80,19 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSpec":                  schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelStatus":                schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":            schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermissions":         schema_pkg_apis_ome_v1beta1_NetworkPermissions(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigRef":              schema_pkg_apis_ome_v1beta1_OIDCConfigRef(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ObjectReference":            schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OutboundNetworkPermissions": schema_pkg_apis_ome_v1beta1_OutboundNetworkPermissions(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileRef":       schema_pkg_apis_ome_v1beta1_PermissionProfileRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec":      schema_pkg_apis_ome_v1beta1_PermissionProfileSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PodOverride":                schema_pkg_apis_ome_v1beta1_PodOverride(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PodSpec":                    schema_pkg_apis_ome_v1beta1_PodSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":     schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorSpec":              schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SecretRef":                  schema_pkg_apis_ome_v1beta1_SecretRef(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
 		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
@@ -1653,6 +1672,104 @@ func schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref common.ReferenceCallba
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModel", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterMCPServer is the cluster-scoped Schema for the mcpservers API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nolint:revive",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterMCPServerList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterMCPServerList contains a list of ClusterMCPServer",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nolint:revive",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServer"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServer", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
 	}
 }
 
@@ -3786,6 +3903,126 @@ func schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref common.ReferenceCall
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InlineAuthzConfig contains direct authorization configuration",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"policies": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Policies is a list of Cedar policy strings",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"entitiesJSON": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EntitiesJSON is a JSON string representing Cedar entities",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"policies"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "InlineOIDCConfig contains direct OIDC configuration",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"issuer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Issuer is the OIDC issuer URL",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"audience": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Audience is the expected audience for the token",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"jwksURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "JWKSURL is the URL to fetch the JWKS from",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"introspectionURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IntrospectionURL is the URL for token introspection endpoint",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clientID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClientID is deprecated and will be removed in a future release.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"clientSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClientSecret is the client secret for introspection (optional)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"thvCABundlePath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ThvCABundlePath is the path to CA certificate bundle file for HTTPS requests The file must be mounted into the pod (e.g., via ConfigMap or Secret volume)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"jwksAuthTokenPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "JWKSAuthTokenPath is the path to file containing bearer token for JWKS/OIDC requests The file must be mounted into the pod (e.g., via Secret volume)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"jwksAllowPrivateIP": {
+						SchemaProps: spec.SchemaProps{
+							Description: "JWKSAllowPrivateIP allows JWKS/OIDC endpoints on private IP addresses Use with caution - only enable for trusted internal IDPs",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"issuer"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3825,6 +4062,68 @@ func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common
 						SchemaProps: spec.SchemaProps{
 							Description: "ScalingOperator specifies the comparison operator used by KEDA to decide whether to scale the Deployment. Common operators include: - \"GreaterThanOrEqual\": Scale up when the metric is >= ScalingThreshold. - \"LessThanOrEqual\": Scale down when the metric is <= ScalingThreshold.\n\nThis operator defines the condition under which scaling actions are triggered based on the evaluated metric.\n\nExample:\n  \"GreaterThanOrEqual\"",
 							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_KubernetesOIDCConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubernetesOIDCConfig configures OIDC for Kubernetes service account token validation",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"serviceAccount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceAccount is deprecated and will be removed in a future release.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace is the namespace of the service account If empty, uses the MCPServer's namespace",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"audience": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Audience is the expected audience for the token",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"issuer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Issuer is the OIDC issuer URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"jwksURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "JWKSURL is the URL to fetch the JWKS from If empty, OIDC discovery will be used to automatically determine the JWKS URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"introspectionURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IntrospectionURL is the URL for token introspection endpoint If empty, OIDC discovery will be used to automatically determine the introspection URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"useClusterAuth": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UseClusterAuth enables using the Kubernetes cluster's CA bundle and service account token When true, uses /var/run/secrets/kubernetes.io/serviceaccount/ca.crt for TLS verification and /var/run/secrets/kubernetes.io/serviceaccount/token for bearer token authentication Defaults to true if not specified",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -4320,6 +4619,540 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPCapabilities(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPCapabilities defines the capabilities supported by the MCP server",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"tools": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tools indicates whether the server supports MCP tools",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Resources indicates whether the server supports MCP resources",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"prompts": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Prompts indicates whether the server supports MCP prompts",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPProtocolSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPProtocolSpec defines the MCP protocol specification",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the protocol (always \"JSON-RPC\" for MCP)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Version of the JSON-RPC protocol (always \"2.0\" for MCP)",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPServer is the Schema for the mcpservers API",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nolint:revive",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPServerList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPServerList contains a list of MCPServer",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "nolint:revive",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServer"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServer", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPServerSpec defines the desired state of MCPServer",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type specifies whether this is a hosted or remote MCP server Hosted servers run as containers in the cluster, Remote servers are accessed via URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"image": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Image is the container image for the MCP server Required for Hosted servers, ignored for Remote servers. Must be a valid container image reference (e.g., \"registry/image:tag\")",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL is the external URL for remote MCP servers Required for Remote servers, ignored for Hosted servers",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"transport": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Transport specifies the transport method for MCP communication",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"protocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Protocol defines the MCP protocol specification",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolSpec"),
+						},
+					},
+					"capabilities": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Capabilities defines the MCP capabilities supported by this server",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities"),
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Version is the version of the MCP server software",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the number of desired replicas for hosted MCP servers Only applicable for Hosted servers with HTTP transport",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port is the port to expose the MCP server on",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"targetPort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetPort is the port that MCP server listens to",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"args": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Args are additional arguments to pass to the MCP server",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"env": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Env are environment variables to set in the MCP server container",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
+									},
+								},
+							},
+						},
+					},
+					"volumeMounts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Pod volumes to mount into the MCP server filesystem.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.VolumeMount"),
+									},
+								},
+							},
+						},
+					},
+					"secrets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Secrets are references to secrets to mount in the MCP server container",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SecretRef"),
+									},
+								},
+							},
+						},
+					},
+					"serviceAccount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceAccount is the name of an already existing service account to use by the MCP server. If not specified, a ServiceAccount will be created automatically and used by the MCP server.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"permissionProfile": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PermissionProfile defines the permission profile to use",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileRef"),
+						},
+					},
+					"podTemplateSpec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PodTemplateSpec defines the pod template to use for the MCP server This allows for customizing the pod configuration beyond what is provided by the other fields. Note that to modify the specific container the MCP server runs in, you must specify the `mcp` container name in the PodTemplateSpec.",
+							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
+						},
+					},
+					"oidcConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OIDCConfig defines OIDC authentication configuration for the MCP server",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigRef"),
+						},
+					},
+					"authzConfig": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AuthzConfig defines authorization policy configuration for the MCP server",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigRef"),
+						},
+					},
+					"toolsFilter": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ToolsFilter is the filter on tools applied to the MCP server",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Compute Resources required by this MCP server. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"tolerations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's tolerations.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+									},
+								},
+							},
+						},
+					},
+					"nodeSelector": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If specified, the pod's scheduling constraints",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
+					"volumes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type":       "atomic",
+								"x-kubernetes-patch-merge-key": "name",
+								"x-kubernetes-patch-strategy":  "merge,retainKeys",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/api/core/v1.Volume"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SecretRef", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.PodTemplateSpec", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume", "k8s.io/api/core/v1.VolumeMount"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPServerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPServerStatus defines the observed state of MCPServer",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represent the latest available observations of the MCPServer's state Standard condition types: Ready, Available, Progressing",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL is the URL where the MCP server can be accessed For Hosted servers, this is the cluster-internal or external service URL For Remote servers, this reflects the configured external URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the current phase of the MCPServer lifecycle",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Message provides additional information about the current phase",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration reflects the generation most recently observed by the controller",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the most recently observed number of replicas for hosted servers",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyReplicas is the number of ready replicas for hosted servers",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"lastUpdateTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastUpdateTime is the last time the status was updated",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 
@@ -5045,6 +5878,76 @@ func schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref common.ReferenceCallback) c
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_NetworkPermissions(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NetworkPermissions defines the network permissions for an MCP server",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"outbound": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Outbound defines the outbound network permissions",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OutboundNetworkPermissions"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OutboundNetworkPermissions"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OIDCConfigRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OIDCConfigRef defines a reference to OIDC configuration",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the type of OIDC configuration",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"resourceURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceURL is the explicit resource URL for OAuth discovery endpoint (RFC 9728) If not specified, defaults to the in-cluster Kubernetes service URL",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kubernetes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kubernetes configures OIDC for Kubernetes service account token validation Only used when Type is \"kubernetes\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig"),
+						},
+					},
+					"configMap": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configmap\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef"),
+						},
+					},
+					"inline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Inline contains direct OIDC configuration Only used when Type is \"inline\"",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig"),
+						},
+					},
+				},
+				Required: []string{"type"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -5069,6 +5972,164 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OutboundNetworkPermissions(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OutboundNetworkPermissions defines the outbound network permissions",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"insecureAllowAll": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InsecureAllowAll allows all outbound network connections (not recommended)",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"allowHost": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowHost is a list of hosts to allow connections to",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"allowPort": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowPort is a list of ports to allow connections to",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int32",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_PermissionProfileRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PermissionProfileRef defines a reference to a permission profile",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type is the type of permission profile reference",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" If Type is \"configmap\", Name is the name of the ConfigMap",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Key is the key in the ConfigMap that contains the permission profile Only used when Type is \"configmap\"",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"type", "name"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_PermissionProfileSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PermissionProfileSpec defines the permissions for an MCP server",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"read": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Read is a list of paths that the MCP server can read from",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"write": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Write is a list of paths that the MCP server can write to",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"network": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Network defines the network permissions for the MCP server",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermissions"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermissions"},
 	}
 }
 
@@ -7534,6 +8595,43 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.ContainerPort", "k8s.io/api/core/v1.ContainerResizePolicy", "k8s.io/api/core/v1.EnvFromSource", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.Lifecycle", "k8s.io/api/core/v1.Probe", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.SecurityContext", "k8s.io/api/core/v1.VolumeDevice", "k8s.io/api/core/v1.VolumeMount"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_SecretRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecretRef is a reference to a secret",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the secret",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Key is the key in the secret itself",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"targetEnvName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetEnvName is the environment variable to be used when setting up the secret in the MCP server If left unspecified, it defaults to the key",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "key"},
+			},
+		},
 	}
 }
 

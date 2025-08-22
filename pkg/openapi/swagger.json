@@ -865,6 +865,62 @@
         }
       }
     },
+    "v1beta1.ClusterMCPServer": {
+      "description": "ClusterMCPServer is the cluster-scoped Schema for the mcpservers API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "description": "nolint:revive",
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.MCPServerSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.MCPServerStatus"
+        }
+      }
+    },
+    "v1beta1.ClusterMCPServerList": {
+      "description": "ClusterMCPServerList contains a list of ClusterMCPServer",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.ClusterMCPServer"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "description": "nolint:revive",
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
     "v1beta1.ClusterServingRuntime": {
       "description": "ClusterServingRuntime is the Schema for the servingruntimes API",
       "type": "object",
@@ -1034,6 +1090,36 @@
         "url": {
           "description": "URL holds the primary url that will distribute traffic over the provided traffic targets. This will be one the REST or gRPC endpoints that are available. It generally has the form http[s]://{route-name}.{route-namespace}.{cluster-level-suffix}",
           "$ref": "#/definitions/knative.URL"
+        }
+      }
+    },
+    "v1beta1.ConfigMapAuthzRef": {
+      "description": "ConfigMapAuthzRef references a ConfigMap containing authorization configuration",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "Key is the key in the ConfigMap that contains the authorization configuration",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the name of the ConfigMap",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.ConfigMapOIDCRef": {
+      "description": "ConfigMapOIDCRef references a ConfigMap containing OIDC configuration",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "Key is the key in the ConfigMap that contains the OIDC configuration",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the name of the ConfigMap",
+          "type": "string",
+          "default": ""
         }
       }
     },
@@ -2100,6 +2186,75 @@
         }
       }
     },
+    "v1beta1.InlineAuthzConfig": {
+      "description": "InlineAuthzConfig contains direct authorization configuration",
+      "type": "object",
+      "required": [
+        "policies"
+      ],
+      "properties": {
+        "entitiesJSON": {
+          "description": "EntitiesJSON is a JSON string representing Cedar entities",
+          "type": "string"
+        },
+        "policies": {
+          "description": "Policies is a list of Cedar policy strings",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        }
+      }
+    },
+    "v1beta1.InlineOIDCConfig": {
+      "description": "InlineOIDCConfig contains direct OIDC configuration",
+      "type": "object",
+      "required": [
+        "issuer"
+      ],
+      "properties": {
+        "audience": {
+          "description": "Audience is the expected audience for the token",
+          "type": "string"
+        },
+        "clientID": {
+          "description": "ClientID is deprecated and will be removed in a future release.",
+          "type": "string"
+        },
+        "clientSecret": {
+          "description": "ClientSecret is the client secret for introspection (optional)",
+          "type": "string"
+        },
+        "introspectionURL": {
+          "description": "IntrospectionURL is the URL for token introspection endpoint",
+          "type": "string"
+        },
+        "issuer": {
+          "description": "Issuer is the OIDC issuer URL",
+          "type": "string",
+          "default": ""
+        },
+        "jwksAllowPrivateIP": {
+          "description": "JWKSAllowPrivateIP allows JWKS/OIDC endpoints on private IP addresses Use with caution - only enable for trusted internal IDPs",
+          "type": "boolean",
+          "default": false
+        },
+        "jwksAuthTokenPath": {
+          "description": "JWKSAuthTokenPath is the path to file containing bearer token for JWKS/OIDC requests The file must be mounted into the pod (e.g., via Secret volume)",
+          "type": "string"
+        },
+        "jwksURL": {
+          "description": "JWKSURL is the URL to fetch the JWKS from",
+          "type": "string"
+        },
+        "thvCABundlePath": {
+          "description": "ThvCABundlePath is the path to CA certificate bundle file for HTTPS requests The file must be mounted into the pod (e.g., via ConfigMap or Secret volume)",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.KedaConfig": {
       "description": "KedaConfig stores the configuration settings for KEDA autoscaling within the InferenceService. It includes fields like the Prometheus server address, custom query, scaling threshold, and operator.",
       "type": "object",
@@ -2123,6 +2278,40 @@
         "scalingThreshold": {
           "description": "ScalingThreshold sets the numerical threshold against which the result of the Prometheus query will be compared. Depending on the ScalingOperator, this threshold determines when to scale the number of replicas up or down.\n\nExample:\n  \"10\" - The Autoscaler will compare the metric value to 10.",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.KubernetesOIDCConfig": {
+      "description": "KubernetesOIDCConfig configures OIDC for Kubernetes service account token validation",
+      "type": "object",
+      "properties": {
+        "audience": {
+          "description": "Audience is the expected audience for the token",
+          "type": "string"
+        },
+        "introspectionURL": {
+          "description": "IntrospectionURL is the URL for token introspection endpoint If empty, OIDC discovery will be used to automatically determine the introspection URL",
+          "type": "string"
+        },
+        "issuer": {
+          "description": "Issuer is the OIDC issuer URL",
+          "type": "string"
+        },
+        "jwksURL": {
+          "description": "JWKSURL is the URL to fetch the JWKS from If empty, OIDC discovery will be used to automatically determine the JWKS URL",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace is the namespace of the service account If empty, uses the MCPServer's namespace",
+          "type": "string"
+        },
+        "serviceAccount": {
+          "description": "ServiceAccount is deprecated and will be removed in a future release.",
+          "type": "string"
+        },
+        "useClusterAuth": {
+          "description": "UseClusterAuth enables using the Kubernetes cluster's CA bundle and service account token When true, uses /var/run/secrets/kubernetes.io/serviceaccount/ca.crt for TLS verification and /var/run/secrets/kubernetes.io/serviceaccount/token for bearer token authentication Defaults to true if not specified",
+          "type": "boolean"
         }
       }
     },
@@ -2401,6 +2590,300 @@
           "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "name",
           "x-kubernetes-patch-strategy": "merge,retainKeys"
+        }
+      }
+    },
+    "v1beta1.MCPCapabilities": {
+      "description": "MCPCapabilities defines the capabilities supported by the MCP server",
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "description": "Prompts indicates whether the server supports MCP prompts",
+          "type": "boolean"
+        },
+        "resources": {
+          "description": "Resources indicates whether the server supports MCP resources",
+          "type": "boolean"
+        },
+        "tools": {
+          "description": "Tools indicates whether the server supports MCP tools",
+          "type": "boolean"
+        }
+      }
+    },
+    "v1beta1.MCPProtocolSpec": {
+      "description": "MCPProtocolSpec defines the MCP protocol specification",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the protocol (always \"JSON-RPC\" for MCP)",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version of the JSON-RPC protocol (always \"2.0\" for MCP)",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.MCPServer": {
+      "description": "MCPServer is the Schema for the mcpservers API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "description": "nolint:revive",
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.MCPServerSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.MCPServerStatus"
+        }
+      }
+    },
+    "v1beta1.MCPServerList": {
+      "description": "MCPServerList contains a list of MCPServer",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.MCPServer"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "description": "nolint:revive",
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.MCPServerSpec": {
+      "description": "MCPServerSpec defines the desired state of MCPServer",
+      "type": "object",
+      "properties": {
+        "affinity": {
+          "description": "If specified, the pod's scheduling constraints",
+          "$ref": "#/definitions/v1.Affinity"
+        },
+        "args": {
+          "description": "Args are additional arguments to pass to the MCP server",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "authzConfig": {
+          "description": "AuthzConfig defines authorization policy configuration for the MCP server",
+          "$ref": "#/definitions/v1beta1.AuthzConfigRef"
+        },
+        "capabilities": {
+          "description": "Capabilities defines the MCP capabilities supported by this server",
+          "$ref": "#/definitions/v1beta1.MCPCapabilities"
+        },
+        "env": {
+          "description": "Env are environment variables to set in the MCP server container",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.EnvVar"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "image": {
+          "description": "Image is the container image for the MCP server Required for Hosted servers, ignored for Remote servers. Must be a valid container image reference (e.g., \"registry/image:tag\")",
+          "type": "string"
+        },
+        "nodeSelector": {
+          "description": "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-map-type": "atomic"
+        },
+        "oidcConfig": {
+          "description": "OIDCConfig defines OIDC authentication configuration for the MCP server",
+          "$ref": "#/definitions/v1beta1.OIDCConfigRef"
+        },
+        "permissionProfile": {
+          "description": "PermissionProfile defines the permission profile to use",
+          "$ref": "#/definitions/v1beta1.PermissionProfileRef"
+        },
+        "podTemplateSpec": {
+          "description": "PodTemplateSpec defines the pod template to use for the MCP server This allows for customizing the pod configuration beyond what is provided by the other fields. Note that to modify the specific container the MCP server runs in, you must specify the `mcp` container name in the PodTemplateSpec.",
+          "$ref": "#/definitions/v1.PodTemplateSpec"
+        },
+        "port": {
+          "description": "Port is the port to expose the MCP server on",
+          "type": "integer",
+          "format": "int32"
+        },
+        "protocol": {
+          "description": "Protocol defines the MCP protocol specification",
+          "$ref": "#/definitions/v1beta1.MCPProtocolSpec"
+        },
+        "replicas": {
+          "description": "Replicas is the number of desired replicas for hosted MCP servers Only applicable for Hosted servers with HTTP transport",
+          "type": "integer",
+          "format": "int32"
+        },
+        "resources": {
+          "description": "Compute Resources required by this MCP server. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+          "$ref": "#/definitions/v1.ResourceRequirements"
+        },
+        "secrets": {
+          "description": "Secrets are references to secrets to mount in the MCP server container",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.SecretRef"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "serviceAccount": {
+          "description": "ServiceAccount is the name of an already existing service account to use by the MCP server. If not specified, a ServiceAccount will be created automatically and used by the MCP server.",
+          "type": "string"
+        },
+        "targetPort": {
+          "description": "TargetPort is the port that MCP server listens to",
+          "type": "integer",
+          "format": "int32"
+        },
+        "tolerations": {
+          "description": "If specified, the pod's tolerations.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Toleration"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "toolsFilter": {
+          "description": "ToolsFilter is the filter on tools applied to the MCP server",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "transport": {
+          "description": "Transport specifies the transport method for MCP communication",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type specifies whether this is a hosted or remote MCP server Hosted servers run as containers in the cluster, Remote servers are accessed via URL",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL is the external URL for remote MCP servers Required for Remote servers, ignored for Hosted servers",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version is the version of the MCP server software",
+          "type": "string"
+        },
+        "volumeMounts": {
+          "description": "Pod volumes to mount into the MCP server filesystem.",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.VolumeMount"
+          },
+          "x-kubernetes-list-map-keys": [
+            "name"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "volumes": {
+          "description": "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Volume"
+          },
+          "x-kubernetes-list-type": "atomic",
+          "x-kubernetes-patch-merge-key": "name",
+          "x-kubernetes-patch-strategy": "merge,retainKeys"
+        }
+      }
+    },
+    "v1beta1.MCPServerStatus": {
+      "description": "MCPServerStatus defines the observed state of MCPServer",
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "description": "Conditions represent the latest available observations of the MCPServer's state Standard condition types: Ready, Available, Progressing",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-map-keys": [
+            "type"
+          ],
+          "x-kubernetes-list-type": "map"
+        },
+        "lastUpdateTime": {
+          "description": "LastUpdateTime is the last time the status was updated",
+          "$ref": "#/definitions/v1.Time"
+        },
+        "message": {
+          "description": "Message provides additional information about the current phase",
+          "type": "string"
+        },
+        "observedGeneration": {
+          "description": "ObservedGeneration reflects the generation most recently observed by the controller",
+          "type": "integer",
+          "format": "int64"
+        },
+        "phase": {
+          "description": "Phase is the current phase of the MCPServer lifecycle",
+          "type": "string"
+        },
+        "readyReplicas": {
+          "description": "ReadyReplicas is the number of ready replicas for hosted servers",
+          "type": "integer",
+          "format": "int32"
+        },
+        "replicas": {
+          "description": "Replicas is the most recently observed number of replicas for hosted servers",
+          "type": "integer",
+          "format": "int32"
+        },
+        "url": {
+          "description": "URL is the URL where the MCP server can be accessed For Hosted servers, this is the cluster-internal or external service URL For Remote servers, this reflects the configured external URL",
+          "type": "string"
         }
       }
     },
@@ -2800,6 +3283,46 @@
         }
       }
     },
+    "v1beta1.NetworkPermissions": {
+      "description": "NetworkPermissions defines the network permissions for an MCP server",
+      "type": "object",
+      "properties": {
+        "outbound": {
+          "description": "Outbound defines the outbound network permissions",
+          "$ref": "#/definitions/v1beta1.OutboundNetworkPermissions"
+        }
+      }
+    },
+    "v1beta1.OIDCConfigRef": {
+      "description": "OIDCConfigRef defines a reference to OIDC configuration",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "configMap": {
+          "description": "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configmap\"",
+          "$ref": "#/definitions/v1beta1.ConfigMapOIDCRef"
+        },
+        "inline": {
+          "description": "Inline contains direct OIDC configuration Only used when Type is \"inline\"",
+          "$ref": "#/definitions/v1beta1.InlineOIDCConfig"
+        },
+        "kubernetes": {
+          "description": "Kubernetes configures OIDC for Kubernetes service account token validation Only used when Type is \"kubernetes\"",
+          "$ref": "#/definitions/v1beta1.KubernetesOIDCConfig"
+        },
+        "resourceURL": {
+          "description": "ResourceURL is the explicit resource URL for OAuth discovery endpoint (RFC 9728) If not specified, defaults to the in-cluster Kubernetes service URL",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type is the type of OIDC configuration",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "v1beta1.ObjectReference": {
       "description": "ObjectReference contains enough information to let you inspect or modify the referred object.",
       "type": "object",
@@ -2811,6 +3334,87 @@
         "namespace": {
           "description": "Namespace of the referenced object",
           "type": "string"
+        }
+      }
+    },
+    "v1beta1.OutboundNetworkPermissions": {
+      "description": "OutboundNetworkPermissions defines the outbound network permissions",
+      "type": "object",
+      "properties": {
+        "allowHost": {
+          "description": "AllowHost is a list of hosts to allow connections to",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "allowPort": {
+          "description": "AllowPort is a list of ports to allow connections to",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "insecureAllowAll": {
+          "description": "InsecureAllowAll allows all outbound network connections (not recommended)",
+          "type": "boolean"
+        }
+      }
+    },
+    "v1beta1.PermissionProfileRef": {
+      "description": "PermissionProfileRef defines a reference to a permission profile",
+      "type": "object",
+      "required": [
+        "type",
+        "name"
+      ],
+      "properties": {
+        "key": {
+          "description": "Key is the key in the ConfigMap that contains the permission profile Only used when Type is \"configmap\"",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the name of the permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" If Type is \"configmap\", Name is the name of the ConfigMap",
+          "type": "string",
+          "default": ""
+        },
+        "type": {
+          "description": "Type is the type of permission profile reference",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.PermissionProfileSpec": {
+      "description": "PermissionProfileSpec defines the permissions for an MCP server",
+      "type": "object",
+      "properties": {
+        "network": {
+          "description": "Network defines the network permissions for the MCP server",
+          "$ref": "#/definitions/v1beta1.NetworkPermissions"
+        },
+        "read": {
+          "description": "Read is a list of paths that the MCP server can read from",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
+        },
+        "write": {
+          "description": "Write is a list of paths that the MCP server can write to",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "set"
         }
       }
     },
@@ -4203,6 +4807,30 @@
         },
         "workingDir": {
           "description": "Container's working directory. If not specified, the container runtime's default will be used, which might be configured in the container image. Cannot be updated.",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.SecretRef": {
+      "description": "SecretRef is a reference to a secret",
+      "type": "object",
+      "required": [
+        "name",
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "description": "Key is the key in the secret itself",
+          "type": "string",
+          "default": ""
+        },
+        "name": {
+          "description": "Name is the name of the secret",
+          "type": "string",
+          "default": ""
+        },
+        "targetEnvName": {
+          "description": "TargetEnvName is the environment variable to be used when setting up the secret in the MCP server If left unspecified, it defaults to the key",
           "type": "string"
         }
       }
