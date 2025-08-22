@@ -113,14 +113,6 @@ The design follows a **standalone service principle** where MCPServers provide t
 
 Alice is a data scientist who wants to deploy an MCP server that provides database query tools and separately deploy an InferenceService for LLM capabilities.
 
-**Current Experience:**
-```bash
-# Alice has to manually set up database connections and write custom code
-# No standardized way to provide database access to LLMs
-# Security configuration is complex and error-prone
-```
-
-**New Experience:**
 ```yaml
 # Step 1: Deploy MCP server with database access
 apiVersion: ome.io/v1beta1
@@ -174,7 +166,6 @@ spec:
 
 Bob manages cloud infrastructure and wants to deploy an MCP server that provides infrastructure management tools and separately deploy an InferenceService for LLM capabilities.
 
-**New Experience:**
 ```yaml
 # Step 1: Deploy MCP server with oci and Kubernetes tools
 apiVersion: ome.io/v1beta1
@@ -258,7 +249,6 @@ data:
 
 Carol's platform team wants to provide shared MCP services that can be used by multiple teams across different namespaces.
 
-**New Experience:**
 ```yaml
 # Step 1: Cluster-wide MCP server for common tools
 apiVersion: ome.io/v1beta1
@@ -307,7 +297,7 @@ spec:
             "parents": []
           },
           {
-            "uid": {"type": "Group", "id": "admins"}, 
+            "uid": {"type": "Group", "id": "admins"},
             "attrs": {},
             "parents": []
           }
@@ -334,7 +324,6 @@ spec:
 
 Dave's organization has strict security requirements and needs fine-grained control over what MCP servers can access.
 
-**New Experience:**
 ```yaml
 # Step 1: Highly restricted MCP server
 apiVersion: ome.io/v1beta1
@@ -452,7 +441,6 @@ spec:
 
 Emma runs a SaaS platform and needs to provide isolated MCP services for different customer organizations.
 
-**New Experience:**
 ```yaml
 # Step 1: Customer-specific MCP server
 apiVersion: ome.io/v1beta1
