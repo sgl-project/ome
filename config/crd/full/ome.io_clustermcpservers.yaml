@@ -672,18 +672,59 @@ spec:
                 type: object
               permissionProfile:
                 properties:
-                  key:
-                    type: string
+                  configMap:
+                    properties:
+                      key:
+                        default: permissions.json
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  inline:
+                    properties:
+                      network:
+                        properties:
+                          outbound:
+                            properties:
+                              allowHost:
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: set
+                              allowPort:
+                                items:
+                                  format: int32
+                                  type: integer
+                                type: array
+                                x-kubernetes-list-type: set
+                              insecureAllowAll:
+                                default: false
+                                type: boolean
+                            type: object
+                        type: object
+                      read:
+                        items:
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                      write:
+                        items:
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                    type: object
                   name:
                     type: string
                   type:
                     default: builtin
                     enum:
                     - builtin
-                    - configmap
+                    - configMap
+                    - inline
                     type: string
                 required:
-                - name
                 - type
                 type: object
               podTemplateSpec:
