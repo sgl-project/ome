@@ -1,0 +1,31 @@
+title: Model Context Protocol (MCP) Support for LLM Tool Integration
+oep-number: 0005
+authors:
+  - "@YouNeedCryDear"
+status: provisional
+creation-date: 2025-08-22
+reviewers:
+  - "@slin1237"
+approvers:
+  - "@slin1237"
+
+see-also:
+
+# The target maturity stage in the current dev cycle for this OEP.
+stage: alpha
+
+# The following PRR answers are required at alpha release
+# List the feature gate name and the components for which it must be enabled
+feature-gates:
+  - name: MCPServerSupport
+disable-supported: true
+
+# The following PRR answers are required at beta release
+metrics:
+  - ome_mcp_server_total
+  - ome_mcp_server_status
+  - ome_mcp_connection_duration_seconds
+  - ome_mcp_tool_invocation_total
+  - ome_mcp_tool_invocation_duration_seconds
+  - ome_mcp_auth_failures_total
+  - ome_mcp_permission_violations_total
