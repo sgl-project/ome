@@ -4,6 +4,7 @@ global:
   # Example:
   # imagePullSecrets:
   #   - name: my-registry-secret
+  hub: "ghcr.io/moirai-internal"
   imagePullSecrets: []
 
 ome:
@@ -12,14 +13,14 @@ ome:
     enableMetricAggregation: "false"
     enablePrometheusScraping: "false"
   benchmarkJob:
-    image: ghcr.io/moirai-internal/genai-bench
+    image: genai-bench
     tag: 0.1.113
     cpuRequest: "2"
     memoryRequest: "2Gi"
     cpuLimit: "2"
     memoryLimit: "2Gi"
   multinodeProber:
-    image: ghcr.io/moirai-internal/multinode-prober
+    image: multinode-prober
     tag: v0.1
     memoryRequest: 100Mi
     cpuRequest: 100m
@@ -54,7 +55,7 @@ ome:
     tolerations: []
     topologySpreadConstraints: []
     affinity: {}
-    image: ghcr.io/moirai-internal/ome-manager
+    image: ome-manager
     tag: *defaultVersion
     resources:
       limits:
@@ -64,7 +65,7 @@ ome:
         cpu: 2
         memory: 4Gi
   omeAgent:
-    image: ghcr.io/moirai-internal/ome-agent
+    image: ome-agent
     tag: *defaultVersion
     authType: InstancePrincipal
     compartmentId: ocid1.compartment.oc1..dummy-compartment
@@ -91,7 +92,7 @@ modelAgent:
   priorityClassName: system-node-critical
   serviceAccountName: ome-model-agent
   image:
-    repository: ghcr.io/moirai-internal/model-agent
+    repository: model-agent
     pullPolicy: Always
     tag: *defaultVersion
 
