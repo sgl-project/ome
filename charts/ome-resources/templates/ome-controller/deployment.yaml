@@ -52,7 +52,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: "{{- if .Values.global.hub }}{{ .Values.global.hub }}/{{ end }}{{ .Values.ome.controller.image }}:{{ .Values.ome.controller.tag }}"
+        image: {{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.ome.controller.image "tag" .Values.ome.controller.tag) }}
         imagePullPolicy: IfNotPresent
         name: manager
         args:

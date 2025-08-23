@@ -37,7 +37,7 @@ spec:
             type: DirectoryOrCreate
       containers:
       - name: model-agent
-        image: "{{- if .Values.global.hub }}{{ .Values.global.hub }}/{{ end }}{{ .Values.modelAgent.image.repository }}:{{ .Values.modelAgent.image.tag }}"
+        image: {{ include "ome.imageWithHub" (dict "values" .Values "repository" .Values.modelAgent.image.repository "tag" .Values.modelAgent.image.tag) }}
         imagePullPolicy: {{ .Values.modelAgent.image.pullPolicy }}
         ports:
         - name: metrics
