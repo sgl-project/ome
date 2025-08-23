@@ -6,7 +6,7 @@ metadata:
 data:
   multinodeProber: |-
     {
-        "image" : "{{.Values.ome.multinodeProber.image}}:{{.Values.ome.multinodeProber.tag}}",
+        "image" : "{{- if .Values.global.hub }}{{ .Values.global.hub }}/{{ end }}{{ .Values.ome.multinodeProber.image }}:{{ .Values.ome.multinodeProber.tag }}"
         "memoryRequest": "{{.Values.ome.multinodeProber.memoryRequest}}",
         "memoryLimit": "{{.Values.ome.multinodeProber.memoryLimit}}",
         "cpuRequest": "{{.Values.ome.multinodeProber.cpuRequest}}",
@@ -47,7 +47,7 @@ data:
     }
   modelInit: |-
     {
-        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "image" : "{{- if .Values.global.hub }}{{ .Values.global.hub }}/{{ end }}{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}"
         "memoryRequest": "{{ .Values.ome.omeAgent.modelInit.memoryRequest }}",
         "memoryLimit": "{{ .Values.ome.omeAgent.modelInit.memoryLimit }}",
         "cpuRequest": "{{ .Values.ome.omeAgent.modelInit.cpuRequest }}",
@@ -59,7 +59,7 @@ data:
     }
   servingSidecar: |-
     {
-        "image" : "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "image" : "{{- if .Values.global.hub }}{{ .Values.global.hub }}/{{ end }}{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
         "memoryRequest": "2Gi",
         "memoryLimit": "4Gi",
         "cpuRequest": "1",
@@ -86,7 +86,7 @@ data:
   benchmarkjob: |
     {
       "podConfig": {
-        "image": "{{ .Values.ome.benchmarkJob.image }}:{{ .Values.ome.benchmarkJob.tag }}",
+        "image": "{{- if .Values.global.hub }}{{ .Values.global.hub }}/{{ end }}{{ .Values.ome.benchmarkJob.image }}:{{ .Values.ome.benchmarkJob.tag }}",
         "cpuRequest": "{{ .Values.ome.benchmarkJob.cpuRequest }}",
         "memoryRequest": "{{ .Values.ome.benchmarkJob.memoryRequest }}",
         "cpuLimit": "{{ .Values.ome.benchmarkJob.cpuLimit }}",
