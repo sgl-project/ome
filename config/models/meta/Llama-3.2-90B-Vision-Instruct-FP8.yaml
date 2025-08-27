@@ -1,0 +1,13 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llama-3-2-90b-vision-instruct
+spec:
+  displayName: meta.llama-3.2-90b-vision-instruct
+  vendor: meta
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://RedHatAI/Llama-3.2-90B-Vision-Instruct-FP8-dynamic
+    path: /raid/models/meta/Llama-3.2-90B-Vision-Instruct-FP8-dynamic
+    key: "hf-token"
