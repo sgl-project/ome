@@ -1,0 +1,566 @@
+name: Container Release Process Automation
+
+on:
+  pull_request: 
+  repository_dispatch:
+    types: [container-pushed]
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Comma-separated list of model names to deploy"
+        required: false
+        default: "llama-3-3-70b-instruct,llama-4-scout-17b-16e-instruct"
+        type: string
+
+env:
+  REGISTRY: fra.ocir.io
+  REGISTRY_NAMESPACE: idqj093njucb
+  K8S_NAMESPACE: github-actions
+  CONTAINER_NAME: official-sgl
+  # TODO: Add all supported models
+  ISVC_MODELS: llama-3-3-70b-instruct,llama-4-scout-17b-16e-instruct
+  BUCKET_NAME: ome-benchmark-results
+  BENCHMARK_CONTAINER: ghcr.io/moirai-internal/genai-bench:v0.0.2
+  # TODO: Switch to official sanity check image
+  SANITY_CHECK_CONTAINER: phx.ocir.io/idqj093njucb/sanity-check:dev
+
+jobs:
+  deploy:
+    runs-on: gh-arc-runner
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      IMAGE_NAME: ${{ github.event.client_payload.image_name }}
+      FULL_TAG: ${{ github.event.client_payload.full_tag }}
+      BRANCH_NAME: ${{ github.event.client_payload.branch_name }}
+      VERSION: ${{ github.event.client_payload.version }}
+      COMMIT_HASH: ${{ github.event.client_payload.commit_hash }}
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.1'
+
+      - name: Prepare model list and sanitize names
+        id: models
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            MODELS="${{ github.event.inputs.models }}"
+          else
+            # Default models for auto-deployment
+            MODELS=${ISVC_MODELS}
+          fi
+
+          # Helper functions for name sanitization
+          sanitize_model_name() {
+            echo "$1" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]'
+          }
+
+          sanitize_namespace() {
+            local namespace="$1"
+            namespace=$(echo "$namespace" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+            echo "$namespace" | cut -c1-63 | sed 's/-$//'
+          }
+
+          create_runtime_name() {
+            local model_name="$1"
+            local runtime_name="srt-$model_name"
+            runtime_name=$(echo "$runtime_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-zA-Z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+            echo "$runtime_name" | cut -c1-63 | sed 's/-$//'
+          }
+
+          # Process each model and create comprehensive JSON with all sanitized names
+          IFS=',' read -ra MODEL_ARRAY <<< "$MODELS"
+          MODELS_WITH_NAMES="[]"
+
+          for model in "${MODEL_ARRAY[@]}"; do
+            MODEL_NAME=$(sanitize_model_name "$model")
+            NAMESPACE=$(sanitize_namespace "${K8S_NAMESPACE}")
+            RUNTIME_NAME=$(create_runtime_name "$MODEL_NAME")
+
+            # Create JSON object for this model
+            MODEL_OBJECT=$(jq -n \
+              --arg model "$model" \
+              --arg model_name "$MODEL_NAME" \
+              --arg namespace "$NAMESPACE" \
+              --arg runtime_name "$RUNTIME_NAME" \
+              '{
+                original: $model,
+                model_name: $model_name,
+                namespace: $namespace,
+                runtime_name: $runtime_name
+              }')
+
+            # Add to array
+            MODELS_WITH_NAMES=$(echo "$MODELS_WITH_NAMES" | jq --argjson obj "$MODEL_OBJECT" '. += [$obj]')
+          done
+
+          # Output the comprehensive model metadata
+          echo "models_metadata=$(echo "$MODELS_WITH_NAMES" | tr -d '\n')" >> $GITHUB_OUTPUT
+
+          echo "Models to deploy: $MODELS"
+          echo "Models with sanitized names:"
+          echo "$MODELS_WITH_NAMES" | jq .
+
+      - name: Deploy to Kubernetes
+        id: deployment
+        # Change benchmark endpoint to use inference service
+        run: |
+          MODELS_METADATA='${{ steps.models.outputs.models_metadata }}'
+          IMAGE="${IMAGE_NAME}:${FULL_TAG}"
+
+          # Initialize status tracking
+          DEPLOYMENT_STATUS="[]"
+
+          # Deploy each model sequentially using pre-computed names
+          # Use process substitution to avoid subshell and preserve variables
+          while read -r model_info; do
+            # Extract all names from JSON
+            MODEL=$(echo "$model_info" | jq -r '.original')
+            MODEL_NAME=$(echo "$model_info" | jq -r '.model_name')
+            NAMESPACE=$(echo "$model_info" | jq -r '.namespace')
+            RUNTIME_NAME=$(echo "$model_info" | jq -r '.runtime_name')
+
+            echo "Deploying model: $MODEL"
+            echo "Namespace: $NAMESPACE"
+            echo "Runtime: $RUNTIME_NAME"
+
+            # Create InferenceService manifest
+            cat <<EOF > isvc-$MODEL_NAME.yaml
+          ---
+          apiVersion: ome.io/v1beta1
+          kind: InferenceService
+          metadata:
+            name: $MODEL_NAME
+            namespace: $NAMESPACE
+            labels:
+              sglang.version: "$VERSION"
+              sidecar.istio.io/inject	: "true"
+            annotations:
+              sglang.deployed-by: "github-actions"
+              sglang.deployment-time: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          spec:
+            engine:
+              minReplicas: 1
+              maxReplicas: 1
+              runner:
+                name: ome-container
+                image: $IMAGE
+            model:
+              name: $MODEL_NAME
+            runtime:
+              name: $RUNTIME_NAME
+          EOF
+
+            # create benchmark job manifest
+            cat <<EOF > benchmark-$MODEL_NAME.yaml
+          apiVersion: ome.io/v1beta1
+          kind: BenchmarkJob
+          metadata:
+            name: benchmark-$MODEL_NAME
+            namespace: $NAMESPACE
+          spec:
+            podOverride:
+              image: ${BENCHMARK_CONTAINER}
+            huggingFaceSecretReference:
+              name: huggingface-secret
+            endpoint:
+              inferenceService:
+                name: $MODEL_NAME
+                namespace: $NAMESPACE
+              # endpoint:
+              #   url: http://$MODEL_NAME-engine.$NAMESPACE.svc.cluster.local:8080
+              #   apiFormat: openai
+              #   modelName: $MODEL_NAME
+            task: text-to-text
+            # numConcurrency:
+            #   - 1
+            #   - 128
+            maxTimePerIteration: 10
+            maxRequestsPerIteration: 1000
+            outputLocation:
+              storageUri: "oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}"
+              parameters:
+                auth: "instance_principal"
+                region: "eu-frankfurt-1"
+          EOF
+
+            # create sanity-check job manifest
+            cat <<EOF > sanity-check-$MODEL_NAME.yaml
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: sanity-check-$MODEL_NAME
+            namespace: $NAMESPACE
+            labels:
+              sglang.version: "$VERSION"
+          spec:
+            template:
+              spec:
+                containers:
+                - name: sanity-check
+                  image: ${SANITY_CHECK_CONTAINER}
+                  imagePullPolicy: Always
+                  env:
+                  - name: BASE_URL
+                    value: "http://$MODEL_NAME-engine.$NAMESPACE.svc.cluster.local:8080"
+                  - name: VLLM_ENDPOINT
+                    value: "$MODEL_NAME-engine.$NAMESPACE.svc.cluster.local"
+                  - name: VLLM_PORT
+                    value: "8080"
+                restartPolicy: Never
+            backoffLimit: 3
+          EOF
+
+            # Apply the InferenceService
+            kubectl apply -f isvc-$MODEL_NAME.yaml
+
+            # Wait for InferenceService to be ready (with timeout)
+            echo "Waiting for InferenceService $MODEL_NAME to be ready in namespace $NAMESPACE..."
+
+            # Check if the InferenceService exists and wait for it to be ready
+            TIMEOUT=600
+            ELAPSED=0
+            READY=false
+
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              # Check if InferenceService exists and get its status
+              if kubectl get inferenceservice $MODEL_NAME -n $NAMESPACE >/dev/null 2>&1; then
+                STATUS=$(kubectl get inferenceservice $MODEL_NAME -n $NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+                if [ "$STATUS" = "True" ]; then
+                  READY=true
+                  break
+                fi
+                echo "InferenceService status: $STATUS (waiting...)"
+              else
+                echo "InferenceService not found yet (waiting...)"
+              fi
+
+              sleep 60
+              ELAPSED=$((ELAPSED + 10))
+            done
+
+            if [ "$READY" = "true" ]; then
+              echo "✅ Successfully deployed InferenceService for model: $MODEL"
+              echo "   Namespace: $NAMESPACE"
+              echo "   InferenceService: $MODEL_NAME"
+              echo "   Runtime: $RUNTIME_NAME"
+
+              # Track InferenceService success
+              ISVC_STATUS="SUCCESS"
+
+              # Deploy benchmark job now that InferenceService is ready
+              echo "🏃 Starting benchmark job for model: $MODEL"
+              kubectl apply -f benchmark-$MODEL_NAME.yaml
+
+              # Wait for benchmark job to complete (with timeout)
+              echo "Waiting for BenchmarkJob benchmark-$MODEL_NAME to complete in namespace $NAMESPACE..."
+
+              BENCHMARK_TIMEOUT=18000  # 5 hours
+              BENCHMARK_ELAPSED=0
+              BENCHMARK_SUCCESS=false
+
+              while [ $BENCHMARK_ELAPSED -lt $BENCHMARK_TIMEOUT ]; do
+                # Check if BenchmarkJob exists and get its status
+                if kubectl get benchmarkjob benchmark-$MODEL_NAME -n $NAMESPACE >/dev/null 2>&1; then
+                  # Get the overall status/state of the benchmark job
+                  BENCHMARK_STATUS=$(kubectl get benchmarkjob benchmark-$MODEL_NAME -n $NAMESPACE -o jsonpath='{.status.state}' 2>/dev/null || echo "Running")
+
+                  if [ "$BENCHMARK_STATUS" = "Succeeded" ] || [ "$BENCHMARK_STATUS" = "Completed" ]; then
+                    BENCHMARK_SUCCESS=true
+                    break
+                  elif [ "$BENCHMARK_STATUS" = "Failed" ]; then
+                    echo "❌ Benchmark job failed for model: $MODEL"
+                    break
+                  fi
+                  # echo "BenchmarkJob status: $BENCHMARK_STATUS (waiting...)"
+                else
+                  echo "BenchmarkJob not found yet (waiting...)"
+                fi
+
+                sleep 30
+                BENCHMARK_ELAPSED=$((BENCHMARK_ELAPSED + 30))
+              done
+
+              if [ "$BENCHMARK_SUCCESS" = "true" ]; then
+                echo "✅ Successfully completed benchmark for model: $MODEL"
+                echo "   Benchmark results should be available at: oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}"
+                BENCHMARK_STATUS="SUCCESS"
+              else
+                echo "❌ Failed to complete benchmark or timeout for model: $MODEL"
+                echo "Checking BenchmarkJob status..."
+                kubectl get benchmarkjob benchmark-$MODEL_NAME -n $NAMESPACE -o yaml || echo "BenchmarkJob not found"
+                echo "Checking benchmark job events..."
+                kubectl get events -n $NAMESPACE --sort-by=.metadata.creationTimestamp | grep -i benchmark | tail -10
+
+                # Get benchmark job pod logs for debugging
+                echo "Fetching benchmark job pod logs for debugging..."
+                BENCHMARK_POD=$(kubectl get pods -n $NAMESPACE -l job-name=benchmark-$MODEL_NAME -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                if [ -n "$BENCHMARK_POD" ]; then
+                  echo "--- Benchmark Pod Logs ---"
+                  kubectl logs $BENCHMARK_POD -n $NAMESPACE --tail=100 || echo "Failed to get pod logs"
+                  echo "--- End of Benchmark Pod Logs ---"
+                else
+                  echo "No benchmark pod found for job benchmark-$MODEL_NAME"
+                fi
+                BENCHMARK_STATUS="FAILED"
+              fi
+
+              # Deploy sanity-check job after benchmark
+              echo "🔍 Starting sanity-check job for model: $MODEL"
+              kubectl apply -f sanity-check-$MODEL_NAME.yaml
+
+              # Wait for sanity-check job to complete (with timeout)
+              echo "Waiting for Job sanity-check-$MODEL_NAME to complete in namespace $NAMESPACE..."
+
+              SANITY_TIMEOUT=7200  # 120 minutes
+              SANITY_ELAPSED=0
+              SANITY_SUCCESS=false
+
+              while [ $SANITY_ELAPSED -lt $SANITY_TIMEOUT ]; do
+                # Check if Job exists and get its status
+                if kubectl get job sanity-check-$MODEL_NAME -n $NAMESPACE >/dev/null 2>&1; then
+                  # Get the job completion status
+                  SANITY_CHECK_STATUS=$(kubectl get job sanity-check-$MODEL_NAME -n $NAMESPACE -o jsonpath='{.status.conditions[0].type}' 2>/dev/null || echo "Running")
+
+                  if [ "$SANITY_CHECK_STATUS" = "Complete" ]; then
+                    SANITY_SUCCESS=true
+                    break
+                  elif [ "$SANITY_CHECK_STATUS" = "Failed" ]; then
+                    echo "❌ Sanity-check job failed for model: $MODEL"
+                    break
+                  fi
+                  # echo "Sanity-check job still running (waiting...)"
+                else
+                  echo "Sanity-check job not found yet (waiting...)"
+                fi
+
+                sleep 30
+                SANITY_ELAPSED=$((SANITY_ELAPSED + 30))
+              done
+
+              if [ "$SANITY_SUCCESS" = "true" ]; then
+                echo "✅ Successfully completed sanity-check for model: $MODEL"
+                SANITY_STATUS="SUCCESS"
+              else
+                echo "❌ Failed to complete sanity-check or timeout for model: $MODEL"
+                echo "Checking sanity-check job status..."
+                kubectl get job sanity-check-$MODEL_NAME -n $NAMESPACE -o yaml || echo "Sanity-check job not found"
+                echo "Checking sanity-check job events..."
+                kubectl get events -n $NAMESPACE --sort-by=.metadata.creationTimestamp | grep -i sanity-check | tail -10
+
+                SANITY_STATUS="FAILED"
+              fi
+
+              # Get sanity-check job logs
+              echo "Fetching sanity-check job logs for debugging..."
+              kubectl logs -n $NAMESPACE jobs/sanity-check-$MODEL_NAME --tail=100 || echo "Failed to get sanity check job logs"
+
+              # Clean up benchmark job, sanity-check job and inference service
+              echo "🧹 Cleaning up resources for model: $MODEL"
+              kubectl delete -f benchmark-$MODEL_NAME.yaml || echo "Failed to delete benchmark job"
+              kubectl delete -f sanity-check-$MODEL_NAME.yaml || echo "Failed to delete sanity-check job"
+
+            else
+              echo "❌ Failed to deploy or timeout waiting for InferenceService: $MODEL"
+              echo "Checking InferenceService status..."
+              kubectl get inferenceservice $MODEL_NAME -n $NAMESPACE -o yaml || echo "InferenceService not found"
+              echo "Checking events in namespace..."
+              kubectl get events -n $NAMESPACE --sort-by=.metadata.creationTimestamp | tail -10
+              # Continue with next model instead of failing the entire workflow
+              ISVC_STATUS="FAILED"
+              BENCHMARK_STATUS="SKIPPED"
+              SANITY_STATUS="SKIPPED"
+            fi
+
+            # Clean up inference service
+            kubectl delete -f isvc-$MODEL_NAME.yaml || echo "Failed to delete inference service"
+
+            # Add status to tracking JSON
+            STATUS_ENTRY=$(jq -n \
+              --arg model "$MODEL" \
+              --arg model_name "$MODEL_NAME" \
+              --arg namespace "$NAMESPACE" \
+              --arg runtime_name "$RUNTIME_NAME" \
+              --arg isvc_status "${ISVC_STATUS:-UNKNOWN}" \
+              --arg benchmark_status "${BENCHMARK_STATUS:-UNKNOWN}" \
+              --arg sanity_status "${SANITY_STATUS:-UNKNOWN}" \
+              '{
+                model: $model,
+                model_name: $model_name,
+                namespace: $namespace,
+                runtime_name: $runtime_name,
+                isvc_status: $isvc_status,
+                benchmark_status: $benchmark_status,
+                sanity_status: $sanity_status
+              }')
+
+            # Update the deployment status JSON
+            DEPLOYMENT_STATUS=$(echo "$DEPLOYMENT_STATUS" | jq --argjson entry "$STATUS_ENTRY" '. += [$entry]')
+
+            # Clean up manifest files
+            rm -f isvc-$MODEL_NAME.yaml
+            rm -f benchmark-$MODEL_NAME.yaml
+            rm -f sanity-check-$MODEL_NAME.yaml
+
+            echo "---"
+          done < <(echo "$MODELS_METADATA" | jq -c '.[]')
+
+          # Output the deployment status for use in summary
+          echo "deployment_status=$(echo "$DEPLOYMENT_STATUS" | tr -d '\n')" >> $GITHUB_OUTPUT
+          echo "Deployment status saved:"
+          echo "$DEPLOYMENT_STATUS" | jq .
+
+      - name: Cleanup on failure or cancellation
+        if: failure() || cancelled()
+        run: |
+          echo "🧹 Cleaning up resources after workflow failure or cancellation..."
+
+          # Use the same model names that were prepared earlier
+          MODELS_METADATA='${{ steps.models.outputs.models_metadata }}'
+
+          # Clean up any remaining resources using pre-computed names
+          echo "$MODELS_METADATA" | jq -c '.[]' | while read -r model_info; do
+            # Extract all names from JSON
+            MODEL=$(echo "$model_info" | jq -r '.original')
+            MODEL_NAME=$(echo "$model_info" | jq -r '.model_name')
+            NAMESPACE=$(echo "$model_info" | jq -r '.namespace')
+
+            echo "Cleaning up resources for model: $MODEL"
+
+            # Try to delete InferenceService
+            kubectl delete inferenceservice $MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No InferenceService $MODEL_NAME to cleanup"
+
+            # Try to delete BenchmarkJob
+            kubectl delete benchmarkjob benchmark-$MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No BenchmarkJob benchmark-$MODEL_NAME to cleanup"
+
+            # Try to delete sanity-check Job
+            kubectl delete job sanity-check-$MODEL_NAME -n $NAMESPACE 2>/dev/null || echo "No sanity-check Job sanity-check-$MODEL_NAME to cleanup"
+
+            # Clean up any manifest files
+            rm -f isvc-$MODEL_NAME.yaml benchmark-$MODEL_NAME.yaml sanity-check-$MODEL_NAME.yaml
+          done
+
+          echo "Cleanup completed"
+
+      - name: Cleanup kubeconfig
+        if: always()
+        run: |
+          echo "🧹 Cleaning up kubeconfig credentials..."
+          rm -f $HOME/.kube/config
+          echo "Kubeconfig cleanup completed"
+
+      - name: Create deployment summary
+        run: |
+          DEPLOYMENT_STATUS='${{ steps.deployment.outputs.deployment_status }}'
+
+          echo "## 🚀 SGLang Deployment & Benchmark Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${BRANCH_NAME}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${COMMIT_HASH}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Image:** \`${IMAGE_NAME}:${FULL_TAG}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📋 Deployment Overview" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow deployed and tested each model sequentially:" >> $GITHUB_STEP_SUMMARY
+          echo "1. **InferenceService Deployment** - Deploy SGLang runtime with the model" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Benchmark Execution** - Run performance benchmarks against the deployed service" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Sanity Check** - Run sanity check validation against the deployed service" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Resource Cleanup** - Clean up InferenceService, BenchmarkJob, and sanity-check Job after completion" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Read deployment status from step output
+          if [ -n "$DEPLOYMENT_STATUS" ] && [ "$DEPLOYMENT_STATUS" != "[]" ]; then
+            echo "### 📊 Model Deployment Results" >> $GITHUB_STEP_SUMMARY
+
+            # Count overall statistics
+            TOTAL_MODELS=$(echo "$DEPLOYMENT_STATUS" | jq 'length')
+            SUCCESSFUL_ISVC=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.isvc_status == "SUCCESS")] | length')
+            SUCCESSFUL_BENCHMARKS=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.benchmark_status == "SUCCESS")] | length')
+            SUCCESSFUL_SANITY=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.sanity_status == "SUCCESS")] | length')
+            FAILED_ISVC=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.isvc_status == "FAILED")] | length')
+            FAILED_BENCHMARKS=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.benchmark_status == "FAILED")] | length')
+            FAILED_SANITY=$(echo "$DEPLOYMENT_STATUS" | jq '[.[] | select(.sanity_status == "FAILED")] | length')
+
+            echo "**Overall Status:**" >> $GITHUB_STEP_SUMMARY
+            echo "- 📈 Total Models: $TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ InferenceServices Deployed: $SUCCESSFUL_ISVC/$TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            echo "- 🏃 Benchmarks Completed: $SUCCESSFUL_BENCHMARKS/$TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔍 Sanity Checks Completed: $SUCCESSFUL_SANITY/$TOTAL_MODELS" >> $GITHUB_STEP_SUMMARY
+            if [ "$FAILED_ISVC" -gt 0 ]; then
+              echo "- ❌ InferenceService Failures: $FAILED_ISVC" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "$FAILED_BENCHMARKS" -gt 0 ]; then
+              echo "- ❌ Benchmark Failures: $FAILED_BENCHMARKS" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "$FAILED_SANITY" -gt 0 ]; then
+              echo "- ❌ Sanity Check Failures: $FAILED_SANITY" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Individual model status
+            echo "$DEPLOYMENT_STATUS" | jq -c '.[]' | while read -r status_info; do
+              MODEL=$(echo "$status_info" | jq -r '.model')
+              MODEL_NAME=$(echo "$status_info" | jq -r '.model_name')
+              NAMESPACE=$(echo "$status_info" | jq -r '.namespace')
+              RUNTIME_NAME=$(echo "$status_info" | jq -r '.runtime_name')
+              ISVC_STATUS=$(echo "$status_info" | jq -r '.isvc_status')
+              BENCHMARK_STATUS=$(echo "$status_info" | jq -r '.benchmark_status')
+              SANITY_STATUS=$(echo "$status_info" | jq -r '.sanity_status')
+
+              # Status emojis
+              case "$ISVC_STATUS" in
+                "SUCCESS") ISVC_EMOJI="✅" ;;
+                "FAILED") ISVC_EMOJI="❌" ;;
+                *) ISVC_EMOJI="❓" ;;
+              esac
+
+              case "$BENCHMARK_STATUS" in
+                "SUCCESS") BENCHMARK_EMOJI="✅" ;;
+                "FAILED") BENCHMARK_EMOJI="❌" ;;
+                "SKIPPED") BENCHMARK_EMOJI="⏭️" ;;
+                *) BENCHMARK_EMOJI="❓" ;;
+              esac
+
+              case "$SANITY_STATUS" in
+                "SUCCESS") SANITY_EMOJI="✅" ;;
+                "FAILED") SANITY_EMOJI="❌" ;;
+                "SKIPPED") SANITY_EMOJI="⏭️" ;;
+                *) SANITY_EMOJI="❓" ;;
+              esac
+
+              echo "#### 🤖 $MODEL" >> $GITHUB_STEP_SUMMARY
+              echo "- **Namespace:** \`$NAMESPACE\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **InferenceService:** \`$MODEL_NAME\` $ISVC_EMOJI \`$ISVC_STATUS\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Runtime:** \`$RUNTIME_NAME\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Benchmark:** $BENCHMARK_EMOJI \`$BENCHMARK_STATUS\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **Sanity Check:** $SANITY_EMOJI \`$SANITY_STATUS\`" >> $GITHUB_STEP_SUMMARY
+
+              if [ "$BENCHMARK_STATUS" = "SUCCESS" ]; then
+                echo "- **Results:** \`oci://n/${REGISTRY_NAMESPACE}/b/${BUCKET_NAME}/o/${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}\`" >> $GITHUB_STEP_SUMMARY
+              fi
+              echo "" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "### ❗ No deployment status available" >> $GITHUB_STEP_SUMMARY
+            echo "The deployment status was not found. This may indicate the workflow was interrupted before completion." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### ⚙️ Benchmark Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Engine:** SGLang" >> $GITHUB_STEP_SUMMARY
+          echo "- **GPU Type:** H100" >> $GITHUB_STEP_SUMMARY
+          echo "- **Task:** text-to-text" >> $GITHUB_STEP_SUMMARY
+          echo "- **Benchmark Image:** \`${BENCHMARK_CONTAINER}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📈 Results Location" >> $GITHUB_STEP_SUMMARY
+          echo "All benchmark results are stored in OCI Object Storage:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bucket:** \`${BUCKET_NAME}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Path Pattern:** \`${CONTAINER_NAME}/${FULL_TAG}/${MODEL_NAME}/\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Note: All resources (InferenceServices and BenchmarkJobs) were cleaned up after completion._" >> $GITHUB_STEP_SUMMARY
