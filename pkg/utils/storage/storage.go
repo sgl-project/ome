@@ -24,6 +24,8 @@ const (
 	GCSStoragePrefix = "gs://"
 	// GitHubStoragePrefix is the prefix for GitHub Releases storage URIs
 	GitHubStoragePrefix = "github://"
+	// LocalStoragePrefix is the prefix for local filesystem storage URIs
+	LocalStoragePrefix = "local://"
 )
 
 // StorageType is a string enum for storage type
@@ -46,6 +48,8 @@ const (
 	StorageTypeGCS StorageType = "GCS"
 	// StorageTypeGitHub is the value for GitHub Releases storage
 	StorageTypeGitHub StorageType = "GITHUB"
+	// StorageTypeLocal is the value for local filesystem storage
+	StorageTypeLocal StorageType = "LOCAL"
 )
 
 // OCIStorageComponents represents the components of an OCI storage URI
@@ -101,6 +105,11 @@ type GitHubStorageComponents struct {
 	Owner      string
 	Repository string
 	Tag        string // Optional tag/release name
+}
+
+// LocalStorageComponents represents the components of a local filesystem storage URI
+type LocalStorageComponents struct {
+	Path string // Absolute or relative path to the model files
 }
 
 // ParseOCIStorageURI parses an OCI storage URI and returns its components
@@ -496,6 +505,32 @@ func ValidateGitHubStorageURI(uri string) error {
 	return err
 }
 
+// ParseLocalStorageURI parses a local filesystem storage URI and returns its components
+// Format: local://{absolute-path} or local://./{relative-path}
+func ParseLocalStorageURI(uri string) (*LocalStorageComponents, error) {
+	if !strings.HasPrefix(uri, LocalStoragePrefix) {
+		return nil, fmt.Errorf("invalid local storage URI format: missing %s prefix", LocalStoragePrefix)
+	}
+
+	// Remove prefix
+	path := strings.TrimPrefix(uri, LocalStoragePrefix)
+	if path == "" {
+		return nil, fmt.Errorf("invalid local storage URI format: missing path")
+	}
+
+	// The path should be an absolute path or a relative path
+	// We don't validate if the path exists here, that's done at runtime
+	return &LocalStorageComponents{
+		Path: path,
+	}, nil
+}
+
+// ValidateLocalStorageURI validates if the given URI matches local storage format
+func ValidateLocalStorageURI(uri string) error {
+	_, err := ParseLocalStorageURI(uri)
+	return err
+}
+
 // GetStorageType determines the type of storage URI
 func GetStorageType(uri string) (StorageType, error) {
 	switch {
@@ -515,6 +550,8 @@ func GetStorageType(uri string) (StorageType, error) {
 		return StorageTypeGCS, nil
 	case strings.HasPrefix(uri, GitHubStoragePrefix):
 		return StorageTypeGitHub, nil
+	case strings.HasPrefix(uri, LocalStoragePrefix):
+		return StorageTypeLocal, nil
 	default:
 		return "", fmt.Errorf("unknown storage type for URI: %s", uri)
 	}
@@ -544,6 +581,8 @@ func ValidateStorageURI(uri string) error {
 		return ValidateGCSStorageURI(uri)
 	case StorageTypeGitHub:
 		return ValidateGitHubStorageURI(uri)
+	case StorageTypeLocal:
+		return ValidateLocalStorageURI(uri)
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)
 	}
@@ -568,6 +607,8 @@ func NewObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 		return parseHuggingFaceObjectURI(uriStr)
 	case StorageTypePVC:
 		return parsePVCStorageURI(uriStr)
+	case StorageTypeLocal:
+		return parseLocalStorageObjectURI(uriStr)
 	default:
 		return nil, fmt.Errorf("unsupported storage type for object URI: %s", storageType)
 	}
@@ -587,6 +628,23 @@ func parsePVCStorageURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
 		Namespace:  pvcComponents.Namespace,
 		BucketName: pvcComponents.PVCName,
 		Prefix:     pvcComponents.SubPath,
+	}, nil
+}
+
+// parseLocalStorageObjectURI parses a local storage URI into an ObjectURI
+func parseLocalStorageObjectURI(uriStr string) (*ociobjectstore.ObjectURI, error) {
+	localComponents, err := ParseLocalStorageURI(uriStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// For local storage:
+	// - Use Namespace field to identify this as local storage
+	// - Use Prefix field to store the path
+	// - BucketName is not used
+	return &ociobjectstore.ObjectURI{
+		Namespace: "local", // Identifies this as local storage
+		Prefix:    localComponents.Path,
 	}, nil
 }
 
