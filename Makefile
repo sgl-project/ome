@@ -527,7 +527,7 @@ artifacts: kustomize ## Generate artifacts for release.
 # Define test packages with proper exclusions
 TEST_PACKAGES := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
 CMD_PACKAGES := $(shell go list ./cmd/...)
-PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
+PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/testing|pkg/openapi|pkg/client)')
 INTERNAL_PACKAGES := $(shell go list ./internal/...)
 
 .PHONY: test
@@ -556,7 +556,7 @@ test: fmt vet manifests envtest ## 🧪 Run all tests with coverage (optimized -
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
 	@echo "🔍 Filtering PKG coverage report..."
-	@cat coverage-pkg.out.tmp | grep -v -E "(pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/|pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-pkg.out
+	@cat coverage-pkg.out.tmp | grep -v -E "(pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/|pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/openapi/|pkg/client/)" > coverage-pkg.out
 	@rm coverage-pkg.out.tmp
 	@echo "✅ Package tests passed"
 	
