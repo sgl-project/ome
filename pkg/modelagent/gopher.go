@@ -448,6 +448,12 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Skipping deletion for local storage model %s (local files should not be deleted)", modelInfo)
 			// For local storage, we should NOT delete the actual files
 			// Just update the node labels and ConfigMap to reflect removal
+		case storage.StorageTypePVC:
+			s.logger.Infof("Skipping deletion for PVC storage model %s (handled by BaseModel controller)", modelInfo)
+			// PVC storage is handled entirely by the BaseModel controller
+			// Model agent doesn't delete PVC volumes
+		default:
+			s.logger.Warnf("Unsupported storage type %s for deletion of model %s", storageType, modelInfo)
 		}
 
 		// Mark the model as deleted in the node labels and remove from ConfigMap
@@ -933,8 +939,11 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 }
 
 // processLocalStorageModel handles local filesystem models.
-// It validates that the path exists and parses the model configuration,
-// but does not download or copy any files.
+// For local storage:
+//   - Download: validates that the path exists and parses model configuration (no actual download)
+//   - Delete: no-op for files (they are preserved), only updates node labels and ConfigMap
+//
+// This allows users to reference pre-existing models without copying or removing them.
 func (s *Gopher) processLocalStorageModel(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
 	modelInfo, modelType, namespace, name string) error {
 	// Parse the local storage URI to get the path
