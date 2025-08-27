@@ -370,6 +370,12 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			// PVC storage is handled entirely by the BaseModel controller
 			// Model agent doesn't need to do anything for PVC storage
 			return nil
+		case storage.StorageTypeLocal:
+			s.logger.Infof("Processing local storage type for model %s", modelInfo)
+			// For local storage, we just need to validate the path exists and parse model config
+			if err := s.processLocalStorageModel(ctx, task, baseModelSpec, modelInfo, modelType, namespace, name); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unknown storage type %s", storageType)
 		}
@@ -438,6 +444,10 @@ func (s *Gopher) processTask(task *GopherTask) error {
 				return err
 			}
 			s.logger.Infof("Successfully deleted Hugging Face model %s", modelInfo)
+		case storage.StorageTypeLocal:
+			s.logger.Infof("Skipping deletion for local storage model %s (local files should not be deleted)", modelInfo)
+			// For local storage, we should NOT delete the actual files
+			// Just update the node labels and ConfigMap to reflect removal
 		}
 
 		// Mark the model as deleted in the node labels and remove from ConfigMap
@@ -919,5 +929,63 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel); err != nil {
 		s.logger.Errorf("Failed to parse and update model config: %v", err)
 	}
+	return nil
+}
+
+// processLocalStorageModel handles local filesystem models.
+// It validates that the path exists and parses the model configuration,
+// but does not download or copy any files.
+func (s *Gopher) processLocalStorageModel(ctx context.Context, task *GopherTask, baseModelSpec v1beta1.BaseModelSpec,
+	modelInfo, modelType, namespace, name string) error {
+	// Parse the local storage URI to get the path
+	localComponents, err := storage.ParseLocalStorageURI(*baseModelSpec.Storage.StorageUri)
+	if err != nil {
+		s.logger.Errorf("Failed to parse local storage URI for model %s: %v", modelInfo, err)
+		s.metrics.RecordFailedDownload(modelType, namespace, name, "invalid_local_uri")
+		s.markModelOnNodeFailed(task)
+		return err
+	}
+
+	// Determine the actual model path
+	// If Path is specified in the CRD, use it; otherwise use the path from the URI
+	var modelPath string
+	if baseModelSpec.Storage.Path != nil && *baseModelSpec.Storage.Path != "" {
+		// Use the explicit Path from the CRD
+		modelPath = *baseModelSpec.Storage.Path
+		s.logger.Infof("Using explicit path from CRD for local model %s: %s", modelInfo, modelPath)
+	} else {
+		// Use the path from the local:// URI
+		modelPath = localComponents.Path
+		s.logger.Infof("Using path from URI for local model %s: %s", modelInfo, modelPath)
+	}
+
+	// Check if the path exists
+	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
+		s.logger.Errorf("Local model path does not exist for model %s: %s", modelInfo, modelPath)
+		s.metrics.RecordFailedDownload(modelType, namespace, name, "local_path_not_found")
+		s.markModelOnNodeFailed(task)
+		return fmt.Errorf("local model path does not exist: %s", modelPath)
+	}
+
+	s.logger.Infof("Local model path exists for model %s: %s", modelInfo, modelPath)
+
+	// Parse model config and update ConfigMap
+	var baseModel *v1beta1.BaseModel
+	var clusterBaseModel *v1beta1.ClusterBaseModel
+
+	if task.BaseModel != nil {
+		baseModel = task.BaseModel
+		s.logger.Debugf("Using BaseModel %s/%s for config parsing", baseModel.Namespace, baseModel.Name)
+	} else if task.ClusterBaseModel != nil {
+		clusterBaseModel = task.ClusterBaseModel
+		s.logger.Debugf("Using ClusterBaseModel %s for config parsing", clusterBaseModel.Name)
+	}
+
+	if err := s.safeParseAndUpdateModelConfig(modelPath, baseModel, clusterBaseModel); err != nil {
+		s.logger.Errorf("Failed to parse and update model config for local model: %v", err)
+		// This is not necessarily a failure - the model might still be usable
+	}
+
+	s.logger.Infof("Successfully processed local model %s at path %s", modelInfo, modelPath)
 	return nil
 }
