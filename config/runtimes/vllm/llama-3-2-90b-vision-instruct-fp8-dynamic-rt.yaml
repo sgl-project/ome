@@ -28,8 +28,8 @@ spec:
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 10B
-    max: 12B
+    min: 85B
+    max: 95B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
