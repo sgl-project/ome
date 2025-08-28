@@ -55,7 +55,6 @@ spec:
             x-kubernetes-preserve-unknown-fields: true
         required:
         - spec
-        - status
         type: object
     served: true
     storage: true

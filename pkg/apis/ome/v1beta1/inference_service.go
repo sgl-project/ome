@@ -250,10 +250,10 @@ type InferenceService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec InferenceServiceSpec `json:"spec"`
+	Spec InferenceServiceSpec `json:"spec,omitempty"`
 
 	// +kubebuilder:pruning:PreserveUnknownFields
-	Status InferenceServiceStatus `json:"status"`
+	Status InferenceServiceStatus `json:"status,omitempty"`
 }
 
 // InferenceServiceList contains a list of Service

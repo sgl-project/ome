@@ -17,7 +17,7 @@ type BenchmarkJob struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BenchmarkJobSpec   `json:"spec"`
+	Spec   BenchmarkJobSpec   `json:"spec,omitempty"`
 	Status BenchmarkJobStatus `json:"status"`
 }
 
