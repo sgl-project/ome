@@ -1,9 +1,9 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: llama-3-2-90b-vision-instruct
+  name: llama-3-2-90b-vision-instruct-fp8
 spec:
-  displayName: meta.llama-3.2-90b-vision-instruct
+  displayName: meta.llama-3.2-90b-vision-instruct-fp8
   vendor: meta
   disabled: false
   version: "1.0.0"
