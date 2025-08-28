@@ -1,11 +1,8 @@
-# This runtime is for llama-3-3-70b-instruct, although all the parameters are the same as llama-3-1-70b-instruct
-# adding this for the sake of completeness and clarity \_(ツ)_/¯ \_(ツ)_/¯ \_(ツ)_/¯ \_(ツ)_/¯ \_(ツ)_/¯
-# five \_(ツ)_/¯ is too much? dont make me add more
-# so we don't hear complains about "WHERE IS THE Llama-3-3-70b-instruct"
+---
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-3-70b-instruct-fp8
+  name: vllm-llama-3-3-70b-instruct-fp8-dynamic
 spec:
   disabled: false
   supportedModelFormats:
