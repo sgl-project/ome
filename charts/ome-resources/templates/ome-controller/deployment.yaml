@@ -92,17 +92,21 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+{{- if .Values.google.enabled }}
         - mountPath: /tmp/secrets-store
           name: ome-vault-secrets
+{{- end }}
       terminationGracePeriodSeconds: 10
       volumes:
       - name: cert
         secret:
           defaultMode: 420
           secretName: ome-webhook-server-cert
+{{- if .Values.google.enabled }}
       - name: ome-vault-secrets
         csi:
           driver: secrets-store.csi.k8s.io
           readOnly: true
           volumeAttributes:
             secretProviderClass: ome-vault-secrets-csi
+{{- end }}
