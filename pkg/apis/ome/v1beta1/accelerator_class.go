@@ -172,7 +172,7 @@ type AcceleratorResource struct {
 
 	// Quantity per accelerator
 	// +kubebuilder:default="1"
-	Status AcceleratorClassStatus `json:"status,omitempty"`
+	Quantity resource.Quantity `json:"quantity,omitempty"`
 
 	// Divisible indicates if the resource can be subdivided
 	// +optional

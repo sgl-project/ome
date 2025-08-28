@@ -18,7 +18,7 @@ type BenchmarkJob struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   BenchmarkJobSpec   `json:"spec,omitempty"`
-	Status BenchmarkJobStatus `json:"status"`
+	Status BenchmarkJobStatus `json:"status,omitempty"`
 }
 
 // BenchmarkJobSpec defines the specification for a benchmark job.
