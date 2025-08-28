@@ -389,10 +389,9 @@
           "type": "string",
           "default": ""
         },
-        "status": {
+        "quantity": {
           "description": "Quantity per accelerator",
-          "default": {},
-          "$ref": "#/definitions/v1beta1.AcceleratorClassStatus"
+          "$ref": "#/definitions/resource.Quantity"
         }
       }
     },
@@ -543,9 +542,6 @@
     "v1beta1.BenchmarkJob": {
       "description": "BenchmarkJob is the schema for the BenchmarkJobs API",
       "type": "object",
-      "required": [
-        "status"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1686,9 +1682,6 @@
     "v1beta1.FineTunedWeight": {
       "description": "FineTunedWeight is the Schema for the finetunedweights API",
       "type": "object",
-      "required": [
-        "spec"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",

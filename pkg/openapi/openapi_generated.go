@@ -796,11 +796,10 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 							Format:      "",
 						},
 					},
-					"status": {
+					"quantity": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Quantity per accelerator",
-							Default:     map[string]interface{}{},
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus"),
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},
 					"divisible": {
@@ -814,7 +813,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus"},
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 
@@ -1118,7 +1117,6 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref common.ReferenceCallback) comm
 						},
 					},
 				},
-				Required: []string{"status"},
 			},
 		},
 		Dependencies: []string{
@@ -3093,7 +3091,6 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				Required: []string{"spec"},
 			},
 		},
 		Dependencies: []string{
