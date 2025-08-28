@@ -12,8 +12,8 @@ resources:
   - meta/Llama-3.2-11B-Vision-Instruct.yaml
   - meta/Llama-3.2-90B-Vision-Instruct.yaml
   - meta/Llama-3.2-90B-Vision-Instruct-FP8.yaml
-  - meta/Llama-3.3-70B-instruct.yaml
-  - meta/Llama-3.3-70B-instruct-fp8.yaml
+  - meta/Llama-3.3-70B-Instruct.yaml
+  - meta/Llama-3.3-70B-Instruct-FP8-dynamic.yaml
   - meta/Llama-4-Maverick-17B-128E-Instruct-FP8.yaml
   - meta/Llama-4-Scout-17B-16E-Instruct.yaml
   - openai/gpt-oss-20b.yaml
