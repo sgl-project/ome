@@ -13,7 +13,7 @@ on:
         type: string
 
 env:
-  REGISTRY: fra.ocir.io
+  REGISTRY: ord.ocir.io
   REGISTRY_NAMESPACE: idqj093njucb
   K8S_NAMESPACE: github-actions
   CONTAINER_NAME: official-sgl
