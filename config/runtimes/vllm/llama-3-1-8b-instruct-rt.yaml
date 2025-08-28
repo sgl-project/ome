@@ -66,7 +66,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-vllm:v0.6.4.post1.0c9082a1
+      image: fra.ocir.io/idqj093njucb/official-vllm:v0.9.2.881ad1a
       ports:
         - containerPort: 8080
           name: http1
@@ -91,7 +91,8 @@ spec:
           --max-log-len=0 \
           --served-model-name="$SERVED_MODEL_NAME" \
           --tensor-parallel-size=1 \
-          --gpu-memory-utilization=0.9
+          --gpu-memory-utilization=0.9 \
+          --cuda-graph-sizes=256
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

@@ -47,6 +47,9 @@ Tested with [# GPUs] x [GPU Model]
 
 ---
 
+### Performance comparison plots
+<!-- Speed vs throughput graphs against previous deployed. Please ensure no regression in performance -->
+
 ### Sanity & Eval Results
 <!-- Include pass/fail thresholds and evaluation scores -->
 

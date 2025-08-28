@@ -47,7 +47,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.5.5e34fb5-cu124
+      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.10.post2.6267d66-cu126
       ports:
         - containerPort: 8080
           name: http1
@@ -66,6 +66,8 @@ spec:
           --model-path="$MODEL_PATH" \
           --tp-size=4 \
           --mem-frac=0.9
+          --tool-call-parser=llama3 \
+          --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
