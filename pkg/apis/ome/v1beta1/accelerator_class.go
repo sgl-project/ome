@@ -20,8 +20,8 @@ type AcceleratorClass struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   AcceleratorClassSpec   `json:"spec"`
-	Status AcceleratorClassStatus `json:"status"`
+	Spec   AcceleratorClassSpec   `json:"spec,omitempty"`
+	Status AcceleratorClassStatus `json:"status,omitempty"`
 }
 
 // AcceleratorClassList contains a list of AcceleratorClass
@@ -172,7 +172,7 @@ type AcceleratorResource struct {
 
 	// Quantity per accelerator
 	// +kubebuilder:default="1"
-	Quantity resource.Quantity `json:"quantity"`
+	Status AcceleratorClassStatus `json:"status,omitempty"`
 
 	// Divisible indicates if the resource can be subdivided
 	// +optional
@@ -205,7 +205,7 @@ type AcceleratorClassStatus struct {
 
 	// Last update time
 	// +optional
-	LastUpdated metav1.Time `json:"lastUpdated"`
+	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
 
 	// Conditions represent the latest available observations
 	// +optional

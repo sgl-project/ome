@@ -39,7 +39,6 @@ spec:
             x-kubernetes-map-type: atomic
             x-kubernetes-preserve-unknown-fields: true
         required:
-        - spec
         - status
         type: object
     served: true

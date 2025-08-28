@@ -1808,7 +1808,6 @@ spec:
             - state
             type: object
         required:
-        - spec
         - status
         type: object
     served: true
