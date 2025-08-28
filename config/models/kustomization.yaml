@@ -17,4 +17,4 @@ resources:
   - meta/Llama-4-Maverick-17B-128E-Instruct-FP8.yaml
   - meta/Llama-4-Scout-17B-16E-Instruct.yaml
   - openai/gpt-oss-20b.yaml
-  - openai/apt-oss-120b.yaml
+  - openai/gpt-oss-120b.yaml
