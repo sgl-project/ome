@@ -387,7 +387,7 @@ type FineTunedWeight struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   FineTunedWeightSpec `json:"spec"`
+	Spec   FineTunedWeightSpec `json:"spec,omitempty"`
 	Status ModelStatusSpec     `json:"status,omitempty"`
 }
 
