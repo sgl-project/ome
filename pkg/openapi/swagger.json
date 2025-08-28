@@ -48,10 +48,6 @@
     },
     "v1beta1.AcceleratorClass": {
       "type": "object",
-      "required": [
-        "spec",
-        "status"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -383,10 +379,6 @@
     },
     "v1beta1.AcceleratorResource": {
       "type": "object",
-      "required": [
-        "name",
-        "quantity"
-      ],
       "properties": {
         "divisible": {
           "description": "Divisible indicates if the resource can be subdivided",
@@ -397,19 +389,16 @@
           "type": "string",
           "default": ""
         },
-        "quantity": {
+        "status": {
           "description": "Quantity per accelerator",
-          "$ref": "#/definitions/resource.Quantity"
+          "default": {},
+          "$ref": "#/definitions/v1beta1.AcceleratorClassStatus"
         }
       }
     },
     "v1beta1.BaseModel": {
       "description": "BaseModel is the Schema for the basemodels API",
       "type": "object",
-      "required": [
-        "spec",
-        "status"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -555,7 +544,6 @@
       "description": "BenchmarkJob is the schema for the BenchmarkJobs API",
       "type": "object",
       "required": [
-        "spec",
         "status"
       ],
       "properties": {
@@ -730,10 +718,6 @@
     "v1beta1.ClusterBaseModel": {
       "description": "ClusterBaseModel is the Schema for the basemodels API",
       "type": "object",
-      "required": [
-        "spec",
-        "status"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1703,8 +1687,7 @@
       "description": "FineTunedWeight is the Schema for the finetunedweights API",
       "type": "object",
       "required": [
-        "spec",
-        "status"
+        "spec"
       ],
       "properties": {
         "apiVersion": {
@@ -1828,10 +1811,6 @@
     "v1beta1.InferenceService": {
       "description": "InferenceService is the Schema for the InferenceServices API",
       "type": "object",
-      "required": [
-        "spec",
-        "status"
-      ],
       "properties": {
         "apiVersion": {
           "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",

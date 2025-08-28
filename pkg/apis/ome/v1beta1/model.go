@@ -320,8 +320,8 @@ type BaseModel struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BaseModelSpec   `json:"spec"`
-	Status ModelStatusSpec `json:"status"`
+	Spec   BaseModelSpec   `json:"spec,omitempty"`
+	Status ModelStatusSpec `json:"status,omitempty"`
 }
 
 // ClusterBaseModel is the Schema for the basemodels API
@@ -347,8 +347,8 @@ type ClusterBaseModel struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   BaseModelSpec   `json:"spec"`
-	Status ModelStatusSpec `json:"status"`
+	Spec   BaseModelSpec   `json:"spec,omitempty"`
+	Status ModelStatusSpec `json:"status,omitempty"`
 }
 
 // BaseModelList contains a list of BaseModel
@@ -388,7 +388,7 @@ type FineTunedWeight struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   FineTunedWeightSpec `json:"spec"`
-	Status ModelStatusSpec     `json:"status"`
+	Status ModelStatusSpec     `json:"status,omitempty"`
 }
 
 // FineTunedWeightList contains a list of FineTunedWeight

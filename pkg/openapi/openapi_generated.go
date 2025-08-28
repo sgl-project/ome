@@ -199,7 +199,6 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorClass(ref common.ReferenceCallback) 
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
 			},
 		},
 		Dependencies: []string{
@@ -797,10 +796,11 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 							Format:      "",
 						},
 					},
-					"quantity": {
+					"status": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Quantity per accelerator",
-							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus"),
 						},
 					},
 					"divisible": {
@@ -811,11 +811,10 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref common.ReferenceCallbac
 						},
 					},
 				},
-				Required: []string{"name", "quantity"},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus"},
 	}
 }
 
@@ -859,7 +858,6 @@ func schema_pkg_apis_ome_v1beta1_BaseModel(ref common.ReferenceCallback) common.
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
 			},
 		},
 		Dependencies: []string{
@@ -1120,7 +1118,7 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref common.ReferenceCallback) comm
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
+				Required: []string{"status"},
 			},
 		},
 		Dependencies: []string{
@@ -1411,7 +1409,6 @@ func schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref common.ReferenceCallback) 
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
 			},
 		},
 		Dependencies: []string{
@@ -3096,7 +3093,7 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
+				Required: []string{"spec"},
 			},
 		},
 		Dependencies: []string{
@@ -3303,7 +3300,6 @@ func schema_pkg_apis_ome_v1beta1_InferenceService(ref common.ReferenceCallback) 
 						},
 					},
 				},
-				Required: []string{"spec", "status"},
 			},
 		},
 		Dependencies: []string{
