@@ -51,13 +51,17 @@ spec:
           --host=0.0.0.0 \
           --port=8080 \
           --enable-metrics \
+          --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp-size 4 \
-          --mem-frac=0.95 \
-          --context-length=128000 \
-          --chat-template llama-4 \
-          --attention-backend fa3 \
-          --log-requests
+          --tp=4 \
+          --mem-frac=0.85 \
+          --context-length=196608 \
+          --enable-multimodal \
+          --tool-call-parser=pythonic \
+          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
+          --attention-backend=fa3 \
+          --mm-attention-backend=fa3 \
+          --disable-fast-image-processor
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

@@ -14,6 +14,7 @@ spec:
       modelArchitecture: Llama4ForConditionalGeneration
       autoSelect: true
       priority: 2
+      quantization: fp8
   protocolVersions:
     - openAI
   modelSizeRange:
@@ -51,12 +52,17 @@ spec:
           --host=0.0.0.0 \
           --port=8080 \
           --enable-metrics \
+          --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp-size 8 \
-          --context-length=430000 \
-          --chat-template llama-4 \
-          --attention-backend fa3 \
-          --log-requests
+          --tp=8 \
+          --mem-frac=0.82 \
+          --context-length=524288 \
+          --enable-multimodal \
+          --tool-call-parser=pythonic \
+          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
+          --attention-backend=fa3 \
+          --mm-attention-backend=fa3 \
+          --disable-fast-image-processor
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
