@@ -56,8 +56,82 @@ spec:
               type: object
             spec:
               properties:
+                acceleratorSelector:
+                  properties:
+                    acceleratorClass:
+                      type: string
+                    constraints:
+                      properties:
+                        architectureFamilies:
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        excludedClasses:
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        maxMemory:
+                          type: integer
+                        minComputeCapability:
+                          type: integer
+                        minMemory:
+                          type: integer
+                        requiredFeatures:
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      type: object
+                    policy:
+                      default: BestFit
+                      enum:
+                        - BestFit
+                        - Cheapest
+                        - MostCapable
+                        - FirstAvailable
+                      type: string
+                  type: object
                 decoder:
                   properties:
+                    acceleratorOverride:
+                      properties:
+                        acceleratorClass:
+                          type: string
+                        constraints:
+                          properties:
+                            architectureFamilies:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            excludedClasses:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            maxMemory:
+                              type: integer
+                            minComputeCapability:
+                              type: integer
+                            minMemory:
+                              type: integer
+                            requiredFeatures:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        policy:
+                          default: BestFit
+                          enum:
+                            - BestFit
+                            - Cheapest
+                            - MostCapable
+                            - FirstAvailable
+                          type: string
+                      type: object
                     activeDeadlineSeconds:
                       format: int64
                       type: integer
@@ -12240,6 +12314,43 @@ spec:
                   type: object
                 engine:
                   properties:
+                    acceleratorOverride:
+                      properties:
+                        acceleratorClass:
+                          type: string
+                        constraints:
+                          properties:
+                            architectureFamilies:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            excludedClasses:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            maxMemory:
+                              type: integer
+                            minComputeCapability:
+                              type: integer
+                            minMemory:
+                              type: integer
+                            requiredFeatures:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        policy:
+                          default: BestFit
+                          enum:
+                            - BestFit
+                            - Cheapest
+                            - MostCapable
+                            - FirstAvailable
+                          type: string
+                      type: object
                     activeDeadlineSeconds:
                       format: int64
                       type: integer
@@ -36065,6 +36176,23 @@ spec:
                         type: string
                       restURL:
                         type: string
+                      selectedAccelerator:
+                        properties:
+                          acceleratorClass:
+                            type: string
+                          nodeSelector:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          reason:
+                            type: string
+                          resourceRequests:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        required:
+                          - acceleratorClass
+                        type: object
                       traffic:
                         items:
                           properties:

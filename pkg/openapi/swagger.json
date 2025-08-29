@@ -189,6 +189,54 @@
         }
       }
     },
+    "v1beta1.AcceleratorConstraints": {
+      "description": "AcceleratorConstraints defines requirements for accelerator selection",
+      "type": "object",
+      "properties": {
+        "architectureFamilies": {
+          "description": "ArchitectureFamilies limits selection to specific families Examples: [\"nvidia-hopper\", \"nvidia-ampere\"]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "excludedClasses": {
+          "description": "ExcludedClasses lists AcceleratorClasses to avoid",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "maxMemory": {
+          "description": "MaxMemory in GB (useful for cost control)",
+          "type": "integer",
+          "format": "int32"
+        },
+        "minComputeCapability": {
+          "description": "MinComputeCapability in TFLOPS",
+          "type": "integer",
+          "format": "int32"
+        },
+        "minMemory": {
+          "description": "MinMemory in GB",
+          "type": "integer",
+          "format": "int32"
+        },
+        "requiredFeatures": {
+          "description": "RequiredFeatures that must be present",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        }
+      }
+    },
     "v1beta1.AcceleratorCost": {
       "type": "object",
       "properties": {
@@ -392,6 +440,58 @@
         "quantity": {
           "description": "Quantity per accelerator",
           "$ref": "#/definitions/resource.Quantity"
+        }
+      }
+    },
+    "v1beta1.AcceleratorSelection": {
+      "description": "AcceleratorSelection shows what accelerator was selected and why",
+      "type": "object",
+      "required": [
+        "acceleratorClass"
+      ],
+      "properties": {
+        "acceleratorClass": {
+          "description": "AcceleratorClass that was selected",
+          "type": "string",
+          "default": ""
+        },
+        "nodeSelector": {
+          "description": "NodeSelector that was applied to pods",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "reason": {
+          "description": "Reason explains why this accelerator was selected",
+          "type": "string"
+        },
+        "resourceRequests": {
+          "description": "ResourceRequests that were applied to pods",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "default": ""
+          }
+        }
+      }
+    },
+    "v1beta1.AcceleratorSelector": {
+      "description": "AcceleratorSelector defines how to select accelerators for the InferenceService",
+      "type": "object",
+      "properties": {
+        "acceleratorClass": {
+          "description": "AcceleratorClass explicitly selects a specific AcceleratorClass Takes precedence over other selectors",
+          "type": "string"
+        },
+        "constraints": {
+          "description": "Constraints defines requirements that accelerators must meet",
+          "$ref": "#/definitions/v1beta1.AcceleratorConstraints"
+        },
+        "policy": {
+          "description": "Policy defines the selection policy when multiple accelerators match",
+          "type": "string"
         }
       }
     },
@@ -910,6 +1010,10 @@
           "description": "REST endpoint of the component if available.",
           "$ref": "#/definitions/knative.URL"
         },
+        "selectedAccelerator": {
+          "description": "SelectedAccelerator shows which AcceleratorClass was selected",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelection"
+        },
         "traffic": {
           "description": "Traffic holds the configured traffic distribution for latest ready revision and previous rolled out revision.",
           "type": "array",
@@ -929,6 +1033,10 @@
       "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
       "type": "object",
       "properties": {
+        "acceleratorOverride": {
+          "description": "AcceleratorOverride allows overriding the global accelerator selection for this component",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelector"
+        },
         "activeDeadlineSeconds": {
           "description": "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
           "type": "integer",
@@ -1310,6 +1418,10 @@
       "description": "EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments) Provides a comprehensive specification for deploying model serving containers and pods. It allows for complete Kubernetes pod configuration including main containers, init containers, sidecars, volumes, and other pod-level settings. For distributed deployments, it supports leader-worker architecture configuration.",
       "type": "object",
       "properties": {
+        "acceleratorOverride": {
+          "description": "AcceleratorOverride allows overriding the global accelerator selection for this component",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelector"
+        },
         "activeDeadlineSeconds": {
           "description": "Optional duration in seconds the pod may be active on the node relative to StartTime before the system will actively try to mark it failed and kill associated containers. Value must be a positive integer.",
           "type": "integer",
@@ -1879,6 +1991,10 @@
       "description": "InferenceServiceSpec is the top level type for this resource",
       "type": "object",
       "properties": {
+        "acceleratorSelector": {
+          "description": "AcceleratorSelector specifies accelerator selection preferences",
+          "$ref": "#/definitions/v1beta1.AcceleratorSelector"
+        },
         "decoder": {
           "description": "Decoder defines the decoder spec This is specifically used for PD (Prefill-Decode) disaggregated serving deployments. Similar to Engine in structure, it allows for container and pod specifications, but is only utilized when implementing the disaggregated serving pattern to separate the prefill and decode phases of inference.",
           "$ref": "#/definitions/v1beta1.DecoderSpec"
