@@ -9,6 +9,7 @@ resources:
 - full/ome.io_clusterbasemodels.yaml
 - full/ome.io_finetunedweights.yaml
 - full/ome.io_benchmarkjobs.yaml
+- full/ome.io_acceleratorclasses.yaml
 
 patches:
 # Fix for https://github.com/kubernetes/kubernetes/issues/91395
