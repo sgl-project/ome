@@ -11,21 +11,12 @@ spec:
     - modelFormat:
         name: safetensors
         version: "1.0.0"
+        operator: GreaterThanOrEqual
       version: "1.0.0"
       modelFramework:
         name: transformers
         version: "4.46.3"
-      modelArchitecture: DeepseekV3ForCausalLM
-      quantization: "fp8"
-      autoSelect: false
-      priority: 1
-    - modelFormat:
-        name: safetensors
-        version: "1.0.0"
-      version: "1.0.0"
-      modelFramework:
-        name: transformers
-        version: "4.33.1"
+        operator: GreaterThanOrEqual
       modelArchitecture: DeepseekV3ForCausalLM
       quantization: "fp8"
       autoSelect: false
@@ -33,10 +24,6 @@ spec:
   protocolVersions:
     - openAI
   engineConfig:
-    annotations:
-      rdma.ome.io/auto-inject: "true"
-      rdma.ome.io/profile: "oci-roce"
-      rdma.ome.io/container-name: "ome-container"
     leader:
       tolerations:
         - key: "nvidia.com/gpu"
@@ -44,84 +31,98 @@ spec:
           effect: "NoSchedule"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+        image: docker.io/lmsysorg/sglang:dev
         env:
-          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
-            value: "1"
-          - name: SGLANG_SET_CPU_AFFINITY
+          - name: MC_TE_METRIC
             value: "true"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
+          - name: PYTHONUNBUFFERED
             value: "1"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            MC_TE_METRIC=true;
-            SGLANG_TBO_DEBUG=1;
-            python3 -m sglang.launch_server
-            --port 8080
-            --host 0.0.0.0
-            --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
-            --chunked-prefill-size 524288
-            --max-prefill-tokens 32768
-            --page-size 64
-            --ep-dispatch-algorithm dynamic
-            --eplb-algorithm deepseek
-            --enable-dp-lm-head
-            --enable-dp-attention
-            --dp-size ${PARALLELISM_SIZE}
-            --disable-radix-cache
-            --enable-deepep-moe
-            --deepep-mode normal
-            --disaggregation-mode prefill
-            --mem-fraction-static 0.849
-            --context-length 32768
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --trust-remote-code
-            --ep-num-redundant-experts 32
-            --moe-dense-tp-size 1
-            --decode-log-interval 1
-            --moe-dense-tp-size 1
-            --max-running-requests 1024
-            --max-total-tokens 131072
+          - python3
+          - -m
+          - sglang.launch_server
+          - --port
+          - "30000"
+          - --host
+          - "0.0.0.0"
+          - --model-path
+          - $(MODEL_PATH)
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --chunked-prefill-size
+          - "524288"
+          - --ep-dispatch-algorithm
+          - dynamic
+          - --eplb-algorithm
+          - deepseek
+          - --enable-dp-lm-head
+          - --disable-cuda-graph
+          - --enable-two-batch-overlap
+          - --enable-dp-attention
+          - --disable-shared-experts-fusion
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --enable-deepep-moe
+          - --deepep-mode
+          - normal
+          - --disaggregation-mode
+          - prefill
+          - --mem-fraction-static
+          - "0.849"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --decode-log-interval
+          - "1"
+          - --max-running-requests
+          - "1024"
+          - --max-total-tokens
+          - "131072"
+          - --enable-eplb
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        readinessProbe:
-          httpGet:
-            path: /health_generate
-            port: 8080
-          failureThreshold: 3
-          successThreshold: 1
-          periodSeconds: 60
-          timeoutSeconds: 200
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          failureThreshold: 5
-          successThreshold: 1
-          periodSeconds: 60
-          timeoutSeconds: 60
-        startupProbe:
-          httpGet:
-            path: /health_generate
-            port: 8080
-          failureThreshold: 300
-          successThreshold: 1
-          periodSeconds: 10
-          initialDelaySeconds: 600
-          timeoutSeconds: 30
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
     worker:
       size: 1
       tolerations:
@@ -130,144 +131,189 @@ spec:
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+        image: docker.io/lmsysorg/sglang:dev
+        env:
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --model-path ${MODEL_PATH}
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
-            --chunked-prefill-size 524288
-            --max-prefill-tokens 32768
-            --page-size 64
-            --ep-dispatch-algorithm dynamic
-            --eplb-algorithm deepseek
-            --enable-dp-lm-head
-            --enable-dp-attention
-            --dp-size ${PARALLELISM_SIZE}
-            --disable-radix-cache
-            --enable-deepep-moe
-            --deepep-mode normal
-            --disaggregation-mode prefill
-            --mem-fraction-static 0.849
-            --context-length 32768
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --port 8080
-            --trust-remote-code
-            --ep-num-redundant-experts 32
-            --moe-dense-tp-size 1
-            --decode-log-interval 1
-            --host 0.0.0.0
-            --max-running-requests 1024
+          - python3
+          - -m
+          - sglang.launch_server
+          - --model-path
+          - $(MODEL_PATH)
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --chunked-prefill-size
+          - "524288"
+          - --ep-dispatch-algorithm
+          - dynamic
+          - --eplb-algorithm
+          - deepseek
+          - --enable-dp-lm-head
+          - --disable-cuda-graph
+          - --enable-two-batch-overlap
+          - --enable-dp-attention
+          - --disable-shared-experts-fusion
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --enable-deepep-moe
+          - --deepep-mode
+          - normal
+          - --disaggregation-mode
+          - prefill
+          - --mem-fraction-static
+          - "0.849"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --decode-log-interval
+          - "1"
+          - --max-running-requests
+          - "1024"
+          - --max-total-tokens
+          - "131072"
+          - --enable-eplb
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
-        env:
-          - name: SGLANG_SET_CPU_AFFINITY
-            value: "true"
-          - name: SGLANG_HACK_DEEPEP_NUM_SMS
-            value: "8"
-          - name: SGLANG_HACK_DEEPEP_NEW_MODE
-            value: "0"
-          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
-            value: "1"
-          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
-            value: "8"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
-            value: "1"
-          - name: SGL_CHUNKED_PREFIX_CACHE_THRESHOLD
-            value: "0"
-          - name: GLOO_SOCKET_IFNAME
-            value: eth0
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
   decoderConfig:
-    annotations:
-      rdma.ome.io/auto-inject: "true"
-      rdma.ome.io/profile: "oci-roce"
-      rdma.ome.io/container-name: "ome-container"
     leader:
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
       tolerations:
         - key: "nvidia.com/gpu"
           operator: "Exists"
           effect: "NoSchedule"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+        image: docker.io/lmsysorg/sglang:dev
         env:
-          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
-            value: "16"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
             value: "1"
+          - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
+            value: "480"
           - name: GLOO_SOCKET_IFNAME
             value: eth0
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --port 8080
-            --host 0.0.0.0
-            --chunked-prefill-size 262144
-            --page-size 64
-            --model-path ${MODEL_PATH}
-            --enable-dp-attention
-            --enable-dp-lm-head
-            --dp-size ${PARALLELISM_SIZE}
-            --enable-deepep-moe
-            --deepep-mode low_latency
-            --disaggregation-mode decode
-            --mem-fraction-static 0.849
-            --context-length 32768
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
-            --cuda-graph-max-bs 64
-            --max-running-requests 2048
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --decode-log-interval 1
-            --trust-remote-code
-            --moe-dense-tp-size 1
-            --ep-num-redundant-experts 32
+          - python3
+          - -m
+          - sglang.launch_server
+          - --port
+          - "30000"
+          - --host
+          - "0.0.0.0"
+          - --model-path
+          - $(MODEL_PATH)
+          - --enable-dp-attention
+          - --enable-dp-lm-head
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --disable-shared-experts-fusion
+          - --enable-deepep-moe
+          - --deepep-mode
+          - low_latency
+          - --disaggregation-mode
+          - decode
+          - --enable-two-batch-overlap
+          - --mem-fraction-static
+          - "0.6"
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --cuda-graph-bs
+          - "480"
+          - --max-running-requests
+          - "46080"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --decode-log-interval
+          - "1"
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
+          - --enable-eplb
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
-        readinessProbe:
-          httpGet:
-            path: /health_generate
-            port: 8080
-          failureThreshold: 3
-          successThreshold: 1
-          periodSeconds: 60
-          timeoutSeconds: 200
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          failureThreshold: 5
-          successThreshold: 1
-          periodSeconds: 60
-          timeoutSeconds: 60
-        startupProbe:
-          httpGet:
-            path: /health_generate
-            port: 8080
-          failureThreshold: 300
-          successThreshold: 1
-          periodSeconds: 10
-          initialDelaySeconds: 600
-          timeoutSeconds: 30
     worker:
       size: 1
       tolerations:
@@ -276,56 +322,89 @@ spec:
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+        image: docker.io/lmsysorg/sglang:dev
+        env:
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK
+            value: "480"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server
-            --model-path ${MODEL_PATH}
-            --chunked-prefill-size 262144
-            --page-size 64
-            --enable-dp-attention
-            --enable-dp-lm-head
-            --dp-size ${PARALLELISM_SIZE}
-            --enable-deepep-moe
-            --deepep-mode low_latency
-            --disaggregation-mode decode
-            --mem-fraction-static 0.849
-            --context-length 32768
-            --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_3,mlx5_4
-            --cuda-graph-max-bs 64
-            --max-running-requests 2048
-            --tp-size ${PARALLELISM_SIZE}
-            --dist-init-addr $(LWS_LEADER_ADDRESS):5000
-            --nnodes ${LWS_GROUP_SIZE}
-            --node-rank ${LWS_WORKER_INDEX}
-            --port 8080
-            --decode-log-interval 1
-            --host 0.0.0.0
-            --trust-remote-code
-            --moe-dense-tp-size 1
-            --ep-num-redundant-experts 32
+          - python3
+          - -m
+          - sglang.launch_server
+          - --model-path
+          - $(MODEL_PATH)
+          - --enable-dp-attention
+          - --enable-dp-lm-head
+          - --dp-size
+          - $(PARALLELISM_SIZE)
+          - --disable-radix-cache
+          - --disable-shared-experts-fusion
+          - --enable-deepep-moe
+          - --deepep-mode
+          - low_latency
+          - --disaggregation-mode
+          - decode
+          - --enable-two-batch-overlap
+          - --mem-fraction-static
+          - "0.6"
+          - --disaggregation-ib-device
+          - mlx5_1
+          - --cuda-graph-bs
+          - "480"
+          - --max-running-requests
+          - "46080"
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --dist-init-addr
+          - $(LWS_LEADER_ADDRESS):5757
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --decode-log-interval
+          - "1"
+          - --trust-remote-code
+          - --moe-dense-tp-size
+          - "1"
+          - --ep-num-redundant-experts
+          - $(PARALLELISM_SIZE)
+          - --enable-eplb
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
-        env:
-          - name: SGLANG_HACK_DEEPEP_NUM_SMS
-            value: "24"
-          - name: SGLANG_HACK_DEEPEP_NEW_MODE
-            value: "0"
-          - name: NVSHMEM_IB_TRAFFIC_CLASS
-            value: "16"
-          - name: SGLANG_DISAGGREGATION_THREAD_POOL_SIZE
-            value: "16"
-          - name: SGL_ENABLE_JIT_DEEPGEMM
-            value: "1"
-          - name: GLOO_SOCKET_IFNAME
-            value: eth0
   routerConfig:
     runner:
       name: router
@@ -345,12 +424,14 @@ spec:
           --host 0.0.0.0
           --port 8080
           --pd-disaggregation
-          --policy power_of_two
+          --policy random
           --service-discovery
           --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
+          --service-discovery-port 30000
           --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
           --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+          --max-payload-size 2147483648
+          --worker-startup-timeout-secs 1200
       env:
         - name: NAMESPACE
           valueFrom:
