@@ -1210,6 +1210,43 @@ spec:
                   x-kubernetes-list-type: map
                 decoderConfig:
                   properties:
+                    acceleratorOverride:
+                      properties:
+                        acceleratorClass:
+                          type: string
+                        constraints:
+                          properties:
+                            architectureFamilies:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            excludedClasses:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            maxMemory:
+                              type: integer
+                            minComputeCapability:
+                              type: integer
+                            minMemory:
+                              type: integer
+                            requiredFeatures:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        policy:
+                          default: BestFit
+                          enum:
+                            - BestFit
+                            - Cheapest
+                            - MostCapable
+                            - FirstAvailable
+                          type: string
+                      type: object
                     activeDeadlineSeconds:
                       format: int64
                       type: integer
@@ -14099,6 +14136,43 @@ spec:
                   type: string
                 engineConfig:
                   properties:
+                    acceleratorOverride:
+                      properties:
+                        acceleratorClass:
+                          type: string
+                        constraints:
+                          properties:
+                            architectureFamilies:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            excludedClasses:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            maxMemory:
+                              type: integer
+                            minComputeCapability:
+                              type: integer
+                            minMemory:
+                              type: integer
+                            requiredFeatures:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        policy:
+                          default: BestFit
+                          enum:
+                            - BestFit
+                            - Cheapest
+                            - MostCapable
+                            - FirstAvailable
+                          type: string
+                      type: object
                     activeDeadlineSeconds:
                       format: int64
                       type: integer
