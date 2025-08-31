@@ -49,7 +49,77 @@ type InferenceServiceSpec struct {
 	// Provides settings for event-driven autoscaling using KEDA (Kubernetes Event-driven Autoscaling),
 	// allowing the service to scale based on custom metrics or event sources.
 	KedaConfig *KedaConfig `json:"kedaConfig,omitempty"`
+
+	// AcceleratorSelector specifies accelerator selection preferences
+	// +optional
+	AcceleratorSelector *AcceleratorSelector `json:"acceleratorSelector,omitempty"`
 }
+
+// AcceleratorSelector defines how to select accelerators for the InferenceService
+type AcceleratorSelector struct {
+	// AcceleratorClass explicitly selects a specific AcceleratorClass
+	// Takes precedence over other selectors
+	// +optional
+	AcceleratorClass *string `json:"acceleratorClass,omitempty"`
+
+	// Constraints defines requirements that accelerators must meet
+	// +optional
+	Constraints *AcceleratorConstraints `json:"constraints,omitempty"`
+
+	// Policy defines the selection policy when multiple accelerators match
+	// +kubebuilder:validation:Enum=BestFit;Cheapest;MostCapable;FirstAvailable
+	// +kubebuilder:default=BestFit
+	// +optional
+	Policy AcceleratorSelectionPolicy `json:"policy,omitempty"`
+}
+
+// AcceleratorConstraints defines requirements for accelerator selection
+type AcceleratorConstraints struct {
+	// MinMemory in GB
+	// +optional
+	MinMemory *int `json:"minMemory,omitempty"`
+
+	// MaxMemory in GB (useful for cost control)
+	// +optional
+	MaxMemory *int `json:"maxMemory,omitempty"`
+
+	// MinComputeCapability in TFLOPS
+	// +optional
+	MinComputeCapability *int `json:"minComputeCapability,omitempty"`
+
+	// RequiredFeatures that must be present
+	// +optional
+	// +listType=atomic
+	RequiredFeatures []string `json:"requiredFeatures,omitempty"`
+
+	// ExcludedClasses lists AcceleratorClasses to avoid
+	// +optional
+	// +listType=atomic
+	ExcludedClasses []string `json:"excludedClasses,omitempty"`
+
+	// ArchitectureFamilies limits selection to specific families
+	// Examples: ["nvidia-hopper", "nvidia-ampere"]
+	// +optional
+	// +listType=atomic
+	ArchitectureFamilies []string `json:"architectureFamilies,omitempty"`
+}
+
+// AcceleratorSelectionPolicy defines how to select among matching accelerators
+type AcceleratorSelectionPolicy string
+
+const (
+	// BestFit selects the accelerator that best matches model requirements
+	BestFitPolicy AcceleratorSelectionPolicy = "BestFit"
+
+	// Cheapest selects the lowest cost accelerator that meets requirements
+	CheapestPolicy AcceleratorSelectionPolicy = "Cheapest"
+
+	// MostCapable selects the most powerful accelerator available
+	MostCapablePolicy AcceleratorSelectionPolicy = "MostCapable"
+
+	// FirstAvailable selects the first matching accelerator (fastest scheduling)
+	FirstAvailablePolicy AcceleratorSelectionPolicy = "FirstAvailable"
+)
 
 // EngineSpec defines the configuration for the Engine component (can be used for both single-node and multi-node deployments)
 // Provides a comprehensive specification for deploying model serving containers and pods.
@@ -85,6 +155,10 @@ type EngineSpec struct {
 	// distributed processing tasks as directed by the leader.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
+
+	// AcceleratorOverride allows overriding the global accelerator selection for this component
+	// +optional
+	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
 
 // DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment)
@@ -120,6 +194,10 @@ type DecoderSpec struct {
 	// distributed token generation tasks as directed by the leader.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
+
+	// AcceleratorOverride allows overriding the global accelerator selection for this component
+	// +optional
+	AcceleratorOverride *AcceleratorSelector `json:"acceleratorOverride,omitempty"`
 }
 
 // LeaderSpec defines the configuration for a leader node in a multi-node component
