@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/sgl-project/ome/pkg/hfutil/hub"
 )
@@ -48,7 +49,19 @@ func main() {
 	fmt.Printf("Repository: %s\n", config.RepoID)
 	fmt.Printf("Target directory: %s\n", config.LocalDir)
 
-	ctx := context.Background()
+	// Create HubConfig to enable progress bars
+	hubConfig := &hub.HubConfig{
+		Token:          config.Token,
+		Endpoint:       hub.DefaultEndpoint,
+		CacheDir:       hub.GetCacheDir(),
+		MaxWorkers:     20,
+		EnableProgress: false, // Enable progress bars
+		MaxRetries:     3,
+		RetryInterval:  10 * time.Second,
+	}
+
+	// Add HubConfig to context for progress reporting
+	ctx := context.WithValue(context.Background(), hub.HubConfigKey, hubConfig)
 
 	// Example 1: Download a single file
 	fmt.Println("\n📄 Example 1: Single File Download")
