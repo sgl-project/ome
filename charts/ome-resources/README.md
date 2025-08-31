@@ -16,6 +16,8 @@ OME Resources and Controller
 | modelAgent.image.repository | string | `"model-agent"` |  |
 | modelAgent.image.tag | string | `"v0.1.2"` |  |
 | modelAgent.nodeSelector | object | `{}` |  |
+| modelAgent.extraVolumeMounts | list | `[]` |  |
+| modelAgent.extraVolumes | list | `[]` |  |
 | modelAgent.priorityClassName | string | `"system-node-critical"` |  |
 | modelAgent.resources.limits.cpu | string | `"10"` |  |
 | modelAgent.resources.limits.memory | string | `"100Gi"` |  |
@@ -88,4 +90,3 @@ OME Resources and Controller
 | ome.omeAgent.tag | string | `"v0.1.2"` |  |
 | ome.omeAgent.vaultId | string | `"ocid1.vault.oc1.ap-osaka-1.dummy.dummy-vault"` |  |
 | ome.version | string | `"v0.1.2"` |  |
-

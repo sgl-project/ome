@@ -98,6 +98,26 @@ modelAgent:
 
   nodeSelector: {}
 
+  # Additional volumes to mount into the model-agent DaemonSet pods
+  # Examples:
+  # extraVolumes:
+  #   - name: shared-tmp
+  #     emptyDir: {}
+  #   - name: config
+  #     configMap:
+  #       name: my-config
+  extraVolumes: []
+
+  # Additional volumeMounts for the model-agent container
+  # Examples:
+  # extraVolumeMounts:
+  #   - name: shared-tmp
+  #     mountPath: /tmp/shared
+  #   - name: config
+  #     mountPath: /etc/model-agent/config
+  #     readOnly: true
+  extraVolumeMounts: []
+
   tolerations:
     - key: nvidia.com/gpu
       operator: Exists
