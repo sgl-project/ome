@@ -394,7 +394,7 @@ func TestDownloadWorker(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			downloadWorker(ctx, 1, taskChan, resultChan, nil)
+			downloadWorker(ctx, 1, taskChan, resultChan)
 		}()
 
 		// Send task
@@ -441,7 +441,7 @@ func TestDownloadWorker(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			downloadWorker(ctx, 1, taskChan, resultChan, nil)
+			downloadWorker(ctx, 1, taskChan, resultChan)
 		}()
 
 		taskChan <- task
@@ -471,7 +471,7 @@ func TestDownloadWorker(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			downloadWorker(ctx, 1, taskChan, resultChan, nil)
+			downloadWorker(ctx, 1, taskChan, resultChan)
 		}()
 
 		// Cancel context immediately

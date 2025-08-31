@@ -51,20 +51,12 @@ func (c *HubClient) Download(ctx context.Context, repoID, filename string, opts 
 		}
 	}
 
-	// Create progress manager and log the operation
-	progressManager := c.config.CreateProgressManager()
-	if progressManager != nil {
-		progressManager.LogDownloadStart(repoID, filename, 0) // Size unknown at this point
-	}
+	// Progress will be handled by the download functions themselves
 
 	// Add hub config to context for progress reporting
 	ctx = context.WithValue(ctx, HubConfigKey, c.config)
 
 	result, err := HfHubDownload(ctx, config)
-
-	if err != nil && progressManager != nil {
-		progressManager.LogError("single_download", repoID, err)
-	}
 
 	return result, err
 }
@@ -87,13 +79,6 @@ func (c *HubClient) SnapshotDownload(ctx context.Context, repoID, localDir strin
 
 	result, err := SnapshotDownload(ctx, config)
 
-	if err != nil {
-		progressManager := c.config.CreateProgressManager()
-		if progressManager != nil {
-			progressManager.LogError("snapshot_download", repoID, err)
-		}
-	}
-
 	return result, err
 }
 
@@ -109,23 +94,9 @@ func (c *HubClient) ListFiles(ctx context.Context, repoID string, opts ...Downlo
 		}
 	}
 
-	// Create progress manager for logging
-	progressManager := c.config.CreateProgressManager()
-	if progressManager != nil && progressManager.enableDetailedLogs {
-		progressManager.logger.
-			WithField("repo_id", repoID).
-			WithField("operation", "list_files").
-			Info("Starting repository file listing")
-	}
+	// Progress will be handled by the listing functions themselves
 
 	files, err := ListRepoFiles(ctx, config)
-
-	if err != nil && progressManager != nil {
-		progressManager.LogError("list_files", repoID, err)
-	} else if progressManager != nil {
-		progressManager.LogRepoListing(repoID, len(files))
-	}
-
 	return files, err
 }
 

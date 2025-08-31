@@ -56,11 +56,9 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 	maxRetries := 3                   // default
 	retryInterval := 10 * time.Second // default
 
-	var progressManager *ProgressManager
 	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
 		maxRetries = hubConfig.MaxRetries
 		retryInterval = hubConfig.RetryInterval
-		progressManager = hubConfig.CreateProgressManager()
 	}
 
 	// Use exponential backoff with jitter for rate limiting
@@ -77,25 +75,14 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 			req.Header.Set(k, v)
 		}
 
-		// Perform request
-		client := &http.Client{
-			Timeout: DefaultRequestTimeout,
-		}
+		// Use pooled client with timeout
+		client := NewHTTPClientWithTimeout(DefaultRequestTimeout)
 
 		resp, err := client.Do(req)
 		if err != nil {
 			// Network errors are retryable
 			if attempt < maxRetries {
 				delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
-				if progressManager != nil && progressManager.logger != nil && progressManager.enableDetailedLogs {
-					progressManager.logger.
-						WithField("repo_id", config.RepoID).
-						WithField("attempt", attempt+1).
-						WithField("max_retries", maxRetries+1).
-						WithField("delay", delay.String()).
-						WithField("error", err.Error()).
-						Warn("ListRepoFiles request failed, retrying...")
-				}
 				select {
 				case <-time.After(delay):
 					continue
@@ -124,16 +111,6 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 				retryAfter = exponentialBackoffWithJitter(attempt+1, retryInterval, 300*time.Second) // Max 5 minutes
 			}
 
-			if progressManager != nil && progressManager.logger != nil {
-				progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("attempt", attempt+1).
-					WithField("max_retries", maxRetries+1).
-					WithField("retry_after", retryAfter.String()).
-					WithField("status_code", resp.StatusCode).
-					Warn("Rate limited by Hugging Face API, waiting before retry...")
-			}
-
 			// Only retry if we haven't exhausted attempts
 			if attempt < maxRetries {
 				select {
@@ -148,15 +125,6 @@ func ListRepoFiles(ctx context.Context, config *DownloadConfig) ([]RepoFile, err
 		// Handle other HTTP errors with retry for server errors
 		if resp.StatusCode >= 500 && attempt < maxRetries {
 			delay := exponentialBackoffWithJitter(attempt+1, retryInterval, 60*time.Second)
-			if progressManager != nil && progressManager.logger != nil && progressManager.enableDetailedLogs {
-				progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("attempt", attempt+1).
-					WithField("max_retries", maxRetries+1).
-					WithField("status_code", resp.StatusCode).
-					WithField("delay", delay.String()).
-					Warn("Server error, retrying...")
-			}
 			select {
 			case <-time.After(delay):
 				continue
@@ -205,18 +173,15 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 		maxWorkers = config.MaxWorkers
 	}
 
-	// Create progress manager if config supports it
-	var progressManager *ProgressManager
+	// Check if progress is enabled
+	enableProgress := true
 	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
-		progressManager = hubConfig.CreateProgressManager()
+		enableProgress = hubConfig.ShouldEnableProgress()
 	}
 
 	// List all files in the repository
 	files, err := ListRepoFiles(ctx, config)
 	if err != nil {
-		if progressManager != nil {
-			progressManager.LogError("list_files", config.RepoID, err)
-		}
 		return "", fmt.Errorf("failed to list repository files: %w", err)
 	}
 
@@ -235,18 +200,9 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 	}
 
 	fileCount := len(filesToDownload)
-	if progressManager != nil {
-		progressManager.LogRepoListing(config.RepoID, len(files))
-		progressManager.LogSnapshotStart(config.RepoID, fileCount, totalSize)
-	}
 
-	// Create overall progress bar for snapshot download
-	var snapshotBar ProgressBar
-	if progressManager != nil {
-		snapshotBar = progressManager.CreateSnapshotProgressBar(fileCount, totalSize)
-	}
-
-	fmt.Printf("Found %d files to download (%s) using %d workers\n", fileCount, formatSize(totalSize), maxWorkers)
+	// Create overall progress for snapshot download
+	snapshotProgress := NewProgress(fmt.Sprintf("Downloading %s", config.RepoID), totalSize, enableProgress)
 
 	// Track download timing
 	startTime := time.Now()
@@ -263,7 +219,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			downloadWorker(ctx, workerID, taskChan, resultChan, progressManager)
+			downloadWorker(ctx, workerID, taskChan, resultChan)
 		}(i)
 	}
 
@@ -290,6 +246,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 	results := make([]downloadResult, fileCount)
 	var completedFiles int
 	var totalErrors int
+	var downloadedBytes int64
 
 	// Start goroutine to collect results
 	go func() {
@@ -299,24 +256,10 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 
 			if result.err != nil {
 				totalErrors++
-				if progressManager != nil {
-					progressManager.LogError("file_download", config.RepoID, result.err)
-				}
-			}
-
-			// Update snapshot progress
-			if snapshotBar != nil {
-				_ = snapshotBar.Add(1) // Ignore error from progress bar update
-			}
-
-			// Log progress if detailed logging is enabled
-			if progressManager != nil && progressManager.enableDetailedLogs && progressManager.logger != nil {
-				progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("completed", completedFiles).
-					WithField("total", fileCount).
-					WithField("errors", totalErrors).
-					Info("Download progress update")
+			} else {
+				// Update overall progress
+				downloadedBytes += result.size
+				snapshotProgress.Update(result.size)
 			}
 		}
 	}()
@@ -331,30 +274,16 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 	}
 
 	// Finish progress tracking
-	if snapshotBar != nil {
-		if err := snapshotBar.Finish(); err != nil {
-			// Log error but don't fail the operation
-			if progressManager != nil && progressManager.logger != nil {
-				progressManager.logger.Debug("Failed to finish snapshot progress bar")
-			}
-		}
-	}
+	snapshotProgress.Finish()
 
 	// Check if context was cancelled
 	if ctx.Err() != nil {
 		return "", ctx.Err()
 	}
 
-	// Log completion
-	duration := time.Since(startTime)
-	if progressManager != nil {
-		progressManager.LogSnapshotComplete(config.RepoID, fileCount, duration, totalSize)
-		// Shutdown the progress manager to ensure multi-progress container is closed
-		progressManager.Shutdown()
-	}
-
 	// Report results
-	fmt.Printf("Download completed: %d files, %d errors\n", completedFiles, totalErrors)
+	duration := time.Since(startTime)
+	fmt.Printf("Download completed: %d files, %d errors in %v\n", completedFiles, totalErrors, duration.Round(time.Second))
 
 	if totalErrors > 0 {
 		// Collect error details
@@ -365,13 +294,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 			}
 		}
 
-		if progressManager != nil && progressManager.logger != nil {
-			progressManager.logger.
-				WithField("repo_id", config.RepoID).
-				WithField("failed_files", errorFiles).
-				WithField("error_count", totalErrors).
-				Error("Some files failed to download")
-		}
+		fmt.Printf("Failed files: %v\n", errorFiles)
 
 		// Return error with details but include the local directory
 		return config.LocalDir, fmt.Errorf("failed to download %d out of %d files", totalErrors, fileCount)
@@ -381,7 +304,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 }
 
 // downloadWorker is a worker goroutine that processes download tasks
-func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadTask, resultChan chan<- downloadResult, progressManager *ProgressManager) {
+func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadTask, resultChan chan<- downloadResult) {
 	for {
 		select {
 		case task, ok := <-taskChan:
@@ -391,25 +314,8 @@ func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadT
 
 			startTime := time.Now()
 
-			if progressManager != nil && progressManager.enableDetailedLogs && progressManager.logger != nil {
-				progressManager.logger.
-					WithField("worker_id", workerID).
-					WithField("repo_id", task.config.RepoID).
-					WithField("file_path", task.file.Path).
-					WithField("file_size", task.file.Size).
-					Debug("Worker starting file download")
-			}
-
-			// Add hub config and worker ID to context for progress reporting
-			fileCtx := ctx
-			if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
-				fileCtx = context.WithValue(ctx, HubConfigKey, hubConfig)
-			}
-			// Add worker ID to context for multi-progress tracking
-			fileCtx = context.WithValue(fileCtx, WorkerIDKey, workerID)
-
-			// Perform the download
-			filePath, err := HfHubDownload(fileCtx, task.config)
+			// Perform the download (HfHubDownload handles its own progress per file)
+			filePath, err := HfHubDownload(ctx, task.config)
 
 			duration := time.Since(startTime)
 
@@ -419,25 +325,6 @@ func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadT
 				err:      err,
 				duration: duration,
 				size:     task.file.Size,
-			}
-
-			if progressManager != nil && progressManager.enableDetailedLogs && progressManager.logger != nil {
-				if err != nil {
-					progressManager.logger.
-						WithField("worker_id", workerID).
-						WithField("repo_id", task.config.RepoID).
-						WithField("file_path", task.file.Path).
-						WithField("error", err.Error()).
-						WithField("duration", duration).
-						Error("Worker failed to download file")
-				} else {
-					progressManager.logger.
-						WithField("worker_id", workerID).
-						WithField("repo_id", task.config.RepoID).
-						WithField("file_path", task.file.Path).
-						WithField("duration", duration).
-						Debug("Worker completed file download")
-				}
 			}
 
 			// Send result
