@@ -155,6 +155,15 @@ func hfHubDownloadToCacheDir(ctx context.Context, config *DownloadConfig) (strin
 		return "", err
 	}
 
+	// If server returned 304 Not Modified, use cached version
+	if metadata.NotModified {
+		pointerPath, err := GetPointerPath(storageFolder, metadata.CommitHash, relativeFilename)
+		if err == nil && FileExists(pointerPath) {
+			return pointerPath, nil
+		}
+		// If pointer doesn't exist, continue to download (shouldn't happen normally)
+	}
+
 	// Create necessary directories
 	blobPath := filepath.Join(storageFolder, "blobs", metadata.Etag)
 	pointerPath, err := GetPointerPath(storageFolder, metadata.CommitHash, relativeFilename)
@@ -181,10 +190,26 @@ func hfHubDownloadToCacheDir(ctx context.Context, config *DownloadConfig) (strin
 
 	// If blob exists but pointer is missing, create the pointer
 	if !config.ForceDownload && FileExists(blobPath) {
-		if err := CreateSymlink(blobPath, pointerPath); err != nil {
-			return "", fmt.Errorf("failed to create symlink: %w", err)
+		// Validate cached blob if ETag is available
+		if metadata.Etag != "" && IsSHA256(metadata.Etag) {
+			if err := VerifyChecksum(blobPath, metadata.Etag); err != nil {
+				// Cached file is corrupted, remove it and re-download
+				os.Remove(blobPath)
+				// Continue to download section below
+			} else {
+				// Cached file is valid, create symlink and return
+				if err := CreateSymlink(blobPath, pointerPath); err != nil {
+					return "", fmt.Errorf("failed to create symlink: %w", err)
+				}
+				return pointerPath, nil
+			}
+		} else {
+			// No ETag validation possible, trust cached file
+			if err := CreateSymlink(blobPath, pointerPath); err != nil {
+				return "", fmt.Errorf("failed to create symlink: %w", err)
+			}
+			return pointerPath, nil
 		}
-		return pointerPath, nil
 	}
 
 	// Download the file
@@ -279,6 +304,15 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 		return err
 	}
 
+	// Validate ETag if available (SHA256 hash)
+	if metadata.Etag != "" && IsSHA256(metadata.Etag) {
+		if err := VerifyChecksum(incompletePath, metadata.Etag); err != nil {
+			// Remove the invalid file
+			os.Remove(incompletePath)
+			return fmt.Errorf("ETag validation failed: %w", err)
+		}
+	}
+
 	// Ensure the incomplete file exists before trying to rename
 	if _, err := os.Stat(incompletePath); err != nil {
 		// Check if the destination file already exists (might have been moved by another worker)
@@ -317,10 +351,10 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		retryInterval = hubConfig.RetryInterval
 	}
 
-	// Create progress manager if config supports it
-	var progressManager *ProgressManager
+	// Determine if progress should be shown
+	showProgress := true
 	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok {
-		progressManager = hubConfig.CreateProgressManager()
+		showProgress = hubConfig.ShouldEnableProgress()
 	}
 
 	// Create or open file for writing (append mode for resume)
@@ -339,9 +373,6 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 
 	// Skip download if file is already complete
 	if resumeSize > 0 && metadata.Size > 0 && resumeSize >= metadata.Size {
-		if progressManager != nil {
-			progressManager.LogDownloadComplete(config.RepoID, config.Filename, 0, metadata.Size)
-		}
 		return nil
 	}
 
@@ -351,36 +382,20 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		remainingSize = metadata.Size
 	}
 
-	// Start download logging and progress tracking
-	startTime := time.Now()
-	if progressManager != nil {
-		progressManager.LogDownloadStart(config.RepoID, config.Filename, remainingSize)
+	// Create simple progress reporter with resume support
+	filename := filepath.Base(config.Filename)
+	var progress Progress
+	if resumeSize > 0 && metadata.Size > 0 {
+		// Use progress with resume support
+		progress = NewProgressWithResume(filename, metadata.Size, resumeSize, showProgress)
+	} else {
+		// Normal progress for new downloads
+		progress = NewProgress(filename, remainingSize, showProgress)
 	}
+	defer progress.Finish()
 
-	// Create progress bar for this file
-	var progressBar ProgressBar
-	var progressWriter io.Writer = file
-
-	// Check if we have a worker ID in context for multi-progress tracking
-	workerID, hasWorkerID := ctx.Value(WorkerIDKey).(int)
-
-	if progressManager != nil {
-		filename := filepath.Base(config.Filename)
-
-		if hasWorkerID && progressManager.multiProgress != nil {
-			// Use worker-specific progress bar for concurrent downloads
-			progressBar = progressManager.CreateWorkerFileProgressBar(workerID, filename, remainingSize)
-			if progressBar != nil {
-				progressWriter = NewProgressWriter(progressBar, file)
-			}
-		} else {
-			// Use regular progress bar for single downloads
-			progressBar = progressManager.CreateFileProgressBar(filename, remainingSize)
-			if progressBar != nil {
-				progressWriter = NewProgressWriter(progressBar, file)
-			}
-		}
-	}
+	// Wrap the file writer with progress reporting
+	var progressWriter io.Writer = NewSimpleProgressWriter(file, progress)
 
 	// Retry loop for HTTP download
 	var lastErr error
@@ -395,9 +410,6 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		// Create HTTP request
 		req, err := http.NewRequestWithContext(ctx, "GET", metadata.Location, nil)
 		if err != nil {
-			if progressManager != nil {
-				progressManager.LogError("http_request_creation", config.RepoID, err)
-			}
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
@@ -410,41 +422,18 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		// Add range header for resume
 		if resumeSize > 0 {
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeSize))
-			if progressManager != nil && progressManager.enableDetailedLogs {
-				logger := progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("filename", config.Filename).
-					WithField("resume_size", resumeSize)
-				logger.Info("Resuming download from byte position")
-			}
 		}
 
-		// Perform request
-		client := &http.Client{
-			Timeout: DownloadTimeout,
-		}
+		// Use pooled client with download timeout
+		client := NewHTTPClientWithTimeout(DownloadTimeout)
 
 		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = err
-			if progressManager != nil {
-				progressManager.LogError("http_request", config.RepoID, err)
-			}
 
 			// Check if this is the last attempt
 			if attempt == maxRetries {
 				return fmt.Errorf("failed to perform request after %d attempts: %w", maxRetries+1, lastErr)
-			}
-
-			// Log retry attempt
-			if progressManager != nil && progressManager.enableDetailedLogs {
-				progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("filename", config.Filename).
-					WithField("attempt", attempt+1).
-					WithField("max_retries", maxRetries+1).
-					WithField("error", err.Error()).
-					Warn("HTTP request failed, retrying...")
 			}
 
 			// Wait with exponential backoff before retrying
@@ -468,9 +457,6 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 
 			// Check if this error is retryable
 			if !retryableHTTPError(nil, resp.StatusCode) || attempt == maxRetries {
-				if progressManager != nil {
-					progressManager.LogError("http_response", config.RepoID, lastErr)
-				}
 				return lastErr
 			}
 
@@ -480,39 +466,13 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 				// First check for Retry-After header
 				if retryAfterDelay := parseRetryAfter(resp); retryAfterDelay > 0 {
 					delay = retryAfterDelay
-					if progressManager != nil && progressManager.enableDetailedLogs {
-						progressManager.logger.
-							WithField("repo_id", config.RepoID).
-							WithField("filename", config.Filename).
-							WithField("retry_after", delay.String()).
-							Warn("Rate limited, waiting as suggested by server")
-					}
 				} else {
 					// Fall back to exponential backoff with jitter
 					delay = exponentialBackoffWithJitter(attempt+1, retryInterval, 5*time.Minute)
-					if progressManager != nil && progressManager.enableDetailedLogs {
-						progressManager.logger.
-							WithField("repo_id", config.RepoID).
-							WithField("filename", config.Filename).
-							WithField("delay", delay.String()).
-							Warn("Rate limited, using exponential backoff with jitter")
-					}
 				}
 			} else {
 				// For other errors, use regular exponential backoff
 				delay = exponentialBackoff(attempt+1, retryInterval)
-			}
-
-			// Log retry attempt for HTTP errors
-			if progressManager != nil && progressManager.enableDetailedLogs {
-				progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("filename", config.Filename).
-					WithField("attempt", attempt+1).
-					WithField("max_retries", maxRetries+1).
-					WithField("status_code", resp.StatusCode).
-					WithField("delay", delay.String()).
-					Warn("HTTP error response, retrying...")
 			}
 
 			// Wait before retrying
@@ -528,9 +488,6 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		_, err = copyWithContext(ctx, progressWriter, resp.Body)
 		if err != nil {
 			lastErr = err
-			if progressManager != nil {
-				progressManager.LogError("file_write", config.RepoID, err)
-			}
 
 			// Check if context was cancelled
 			if ctx.Err() != nil {
@@ -540,17 +497,6 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 			// Check if this is the last attempt
 			if attempt == maxRetries {
 				return fmt.Errorf("failed to write file after %d attempts: %w", maxRetries+1, lastErr)
-			}
-
-			// Log retry attempt for write errors
-			if progressManager != nil && progressManager.enableDetailedLogs {
-				progressManager.logger.
-					WithField("repo_id", config.RepoID).
-					WithField("filename", config.Filename).
-					WithField("attempt", attempt+1).
-					WithField("max_retries", maxRetries+1).
-					WithField("error", err.Error()).
-					Warn("File write failed, retrying...")
 			}
 
 			// Reset file position for retry
@@ -572,25 +518,17 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		break
 	}
 
-	// Complete download and clean up
-	if progressBar != nil {
-		if err := progressBar.Finish(); err != nil {
-			// Log but don't fail the operation
-			if progressManager != nil && progressManager.logger != nil {
-				progressManager.logger.Debug("Failed to finish progress bar")
-			}
-		}
+	// Validate checksum if this was a resumed download and we have an ETag
+	if resumeSize > 0 && metadata.Etag != "" && IsSHA256(metadata.Etag) {
+		// Close the file to flush all writes
+		file.Close()
 
-		// Clean up worker progress if this was a multi-progress download
-		if hasWorkerID && progressManager != nil {
-			progressManager.CompleteWorkerProgress(workerID)
+		// Verify the complete file
+		if err := VerifyChecksum(filePath, metadata.Etag); err != nil {
+			// File is corrupted, delete it
+			os.Remove(filePath)
+			return fmt.Errorf("checksum validation failed after resume: %w", err)
 		}
-	}
-
-	// Log completion
-	duration := time.Since(startTime)
-	if progressManager != nil {
-		progressManager.LogDownloadComplete(config.RepoID, config.Filename, duration, remainingSize)
 	}
 
 	return nil
@@ -598,10 +536,94 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 
 // FileMetadata contains metadata about a file from the Hub
 type FileMetadata struct {
-	CommitHash string
-	Etag       string
-	Location   string
-	Size       int64
+	CommitHash  string
+	Etag        string
+	Location    string
+	Size        int64
+	NotModified bool // True if server returned 304 Not Modified
+}
+
+// GetHfFileMetadata fetches metadata for a file from the Hugging Face Hub
+// This is a clean, standalone function for getting file metadata via HEAD request
+func GetHfFileMetadata(ctx context.Context, repoID, filename string, opts ...DownloadOption) (*FileMetadata, error) {
+	// Build config from options
+	config := &DownloadConfig{
+		RepoID:   repoID,
+		Filename: filename,
+		RepoType: "model",
+		Revision: "main",
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	// Construct URL
+	url, err := HfHubURL(config.RepoID, config.Filename, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct URL: %w", err)
+	}
+
+	// Create HEAD request
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HEAD request: %w", err)
+	}
+
+	// Add headers
+	headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("Accept-Encoding", "identity") // Prevent compression
+
+	// Use pooled client with custom timeout
+	client := NewHTTPClientWithTimeout(config.EtagTimeout)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform HEAD request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Extract metadata
+	metadata := &FileMetadata{
+		CommitHash: resp.Header.Get(HuggingfaceHeaderXRepoCommit),
+		Etag:       NormalizeEtag(resp.Header.Get(HuggingfaceHeaderXLinkedEtag)),
+		Location:   url,
+	}
+
+	// Fallback to standard ETag if X-Linked-Etag not available
+	if metadata.Etag == "" {
+		metadata.Etag = NormalizeEtag(resp.Header.Get("ETag"))
+	}
+
+	// Get file size
+	if contentLength := resp.Header.Get(HuggingfaceHeaderXLinkedSize); contentLength != "" {
+		if size, err := parseSize(contentLength); err == nil {
+			metadata.Size = size
+		}
+	}
+	if metadata.Size == 0 {
+		if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
+			if size, err := parseSize(contentLength); err == nil {
+				metadata.Size = size
+			}
+		}
+	}
+
+	// Use redirect location if available
+	if location := resp.Header.Get("Location"); location != "" {
+		metadata.Location = location
+	}
+
+	return metadata, nil
 }
 
 // getMetadataOrCatchError gets file metadata from the Hub API with retry logic
@@ -623,6 +645,29 @@ func getMetadataOrCatchError(ctx context.Context, config *DownloadConfig, storag
 	url, err := HfHubURL(config.RepoID, config.Filename, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct URL: %w", err)
+	}
+
+	// Try to get cached ETag for conditional request
+	var cachedEtag string
+	if storageFolder != "" && relativeFilename != "" {
+		// Try to resolve revision to commit hash if it's not already
+		commitHash := config.Revision
+		if !IsCommitHash(config.Revision) {
+			// Try to read from refs to get the actual commit hash
+			refPath := filepath.Join(storageFolder, "refs", config.Revision)
+			if data, err := os.ReadFile(refPath); err == nil {
+				commitHash = strings.TrimSpace(string(data))
+			}
+		}
+
+		// Now check if we have a cached pointer for this file
+		pointerPath, _ := GetPointerPath(storageFolder, commitHash, relativeFilename)
+		if FileExists(pointerPath) {
+			// Read the symlink to get the blob path and extract ETag
+			if target, err := os.Readlink(pointerPath); err == nil {
+				cachedEtag = filepath.Base(target)
+			}
+		}
 	}
 
 	// Retry loop for metadata fetching
@@ -648,10 +693,13 @@ func getMetadataOrCatchError(ctx context.Context, config *DownloadConfig, storag
 		}
 		req.Header.Set("Accept-Encoding", "identity") // Prevent compression
 
-		// Perform request
-		client := &http.Client{
-			Timeout: config.EtagTimeout,
+		// Add If-None-Match header for conditional request
+		if cachedEtag != "" {
+			req.Header.Set("If-None-Match", fmt.Sprintf(`"%s"`, cachedEtag))
 		}
+
+		// Use pooled client with custom timeout
+		client := NewHTTPClientWithTimeout(config.EtagTimeout)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -676,6 +724,27 @@ func getMetadataOrCatchError(ctx context.Context, config *DownloadConfig, storag
 				resp.Body.Close()
 			}
 		}()
+
+		// Handle 304 Not Modified response
+		if resp.StatusCode == http.StatusNotModified {
+			// Try to get size from cached file
+			var fileSize int64 = -1
+			if storageFolder != "" && relativeFilename != "" && cachedEtag != "" {
+				blobPath := filepath.Join(storageFolder, "blobs", cachedEtag)
+				if info, err := os.Stat(blobPath); err == nil {
+					fileSize = info.Size()
+				}
+			}
+
+			// File hasn't changed, return metadata indicating no modification needed
+			return &FileMetadata{
+				CommitHash:  config.Revision, // Use provided revision
+				Etag:        cachedEtag,
+				Location:    url,
+				Size:        fileSize, // Use actual file size if available
+				NotModified: true,
+			}, nil
+		}
 
 		// Handle error responses
 		if resp.StatusCode != http.StatusOK {
@@ -910,6 +979,8 @@ func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, 
 	// Wrap the source reader to respect context cancellation
 	contextSrc := &contextReader{ctx: ctx, r: src}
 
-	// Use io.Copy which will call Read on our context-aware reader
-	return io.Copy(dst, contextSrc)
+	// Use io.CopyBuffer with a smaller buffer for more frequent progress updates
+	// 32KB buffer provides good balance between performance and update frequency
+	buf := make([]byte, 32*1024)
+	return io.CopyBuffer(dst, contextSrc, buf)
 }

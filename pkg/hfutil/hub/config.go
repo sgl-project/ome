@@ -48,6 +48,7 @@ type HubConfig struct {
 	EnableDetailedLogs  bool                `mapstructure:"enable_detailed_logs"`
 	LogLevel            string              `mapstructure:"log_level"`
 	ProgressDisplayMode ProgressDisplayMode `mapstructure:"progress_display_mode"`
+	EnableProgress      bool                `mapstructure:"enable_progress"`
 }
 
 // defaultHubConfig returns a default configuration
@@ -72,6 +73,7 @@ func defaultHubConfig() *HubConfig {
 		LogLevel:            "info",
 		Token:               GetHfToken(),
 		ProgressDisplayMode: getProgressModeFromEnv(),
+		EnableProgress:      true,
 	}
 }
 
@@ -313,35 +315,24 @@ func (c *HubConfig) ValidateConfig() error {
 	return nil
 }
 
-// CreateProgressManager creates a progress manager from the configuration
-func (c *HubConfig) CreateProgressManager() *ProgressManager {
-	// Determine actual display mode
-	displayMode := c.ProgressDisplayMode
-
-	// For backward compatibility, DisableProgressBars always forces log mode
-	if c.DisableProgressBars {
-		displayMode = ProgressModeLog
-	} else if displayMode == ProgressModeAuto {
-		// Auto mode: use bars for interactive terminals, logs otherwise
-		if isInteractiveTerminal() {
-			displayMode = ProgressModeBars
-		} else {
-			displayMode = ProgressModeLog
-		}
+// ShouldEnableProgress determines if progress should be shown
+func (c *HubConfig) ShouldEnableProgress() bool {
+	// Check if explicitly disabled
+	if !c.EnableProgress {
+		return false
 	}
 
-	pm := NewProgressManagerWithMode(
-		c.Logger,
-		displayMode,
-		c.EnableDetailedLogs,
-	)
-
-	// Initialize multi-progress support for concurrent downloads only if using progress bars
-	if displayMode == ProgressModeBars && c.MaxWorkers > 1 {
-		pm.InitializeMultiProgress(c.MaxWorkers)
+	// Check environment variable
+	if val := os.Getenv("HF_HUB_DISABLE_PROGRESS"); val == "1" || val == "true" {
+		return false
 	}
 
-	return pm
+	// Disable in CI/CD environments
+	if os.Getenv("CI") == "true" || os.Getenv("GITHUB_ACTIONS") == "true" {
+		return false
+	}
+
+	return true
 }
 
 // ToDownloadConfig converts HubConfig to DownloadConfig for backward compatibility
