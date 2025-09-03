@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -127,20 +128,8 @@ func initializeS3Client(ctx context.Context, config storage.Config, logger loggi
 		configOpts = append(configOpts, awsconfig.WithRegion(config.Region))
 	}
 
-	// Handle custom endpoint for S3-compatible services
-	if config.Endpoint != "" {
-		configOpts = append(configOpts, awsconfig.WithEndpointResolverWithOptions(
-			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				if service == s3.ServiceID {
-					return aws.Endpoint{
-						URL:               config.Endpoint,
-						HostnameImmutable: true,
-					}, nil
-				}
-				return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-			}),
-		))
-	}
+	// Note: Custom endpoint handling is done in the S3 client options below
+	// to avoid using the deprecated WithEndpointResolverWithOptions
 
 	// Handle authentication if configured
 	if config.AuthConfig != nil {
@@ -164,7 +153,13 @@ func initializeS3Client(ctx context.Context, config storage.Config, logger loggi
 	// Create S3 client with options
 	clientOpts := []func(*s3.Options){
 		func(o *s3.Options) {
+			// Set path style for S3-compatible services
 			o.UsePathStyle = config.Endpoint != "" && !strings.Contains(config.Endpoint, "amazonaws.com")
+
+			// Handle custom endpoint for S3-compatible services (MinIO, Ceph, etc.)
+			if config.Endpoint != "" {
+				o.BaseEndpoint = aws.String(config.Endpoint)
+			}
 		},
 	}
 
@@ -243,6 +238,54 @@ func (p *S3Provider) Download(ctx context.Context, source string, target string,
 	// Build download options
 	options := storage.BuildDownloadOptions(opts...)
 
+	// Check if object should be excluded
+	if storage.ShouldExclude(key, options.ExcludePatterns) {
+		p.logger.WithField("key", key).Info("Skipping download, object matches exclude pattern")
+		if options.Progress != nil {
+			options.Progress.Done()
+		}
+		return nil
+	}
+
+	// Determine if target is a file or directory
+	actualTarget := target
+	if stat, err := os.Stat(target); err == nil && stat.IsDir() {
+		// Target is a directory, compute the file path within it
+		actualTarget = storage.ComputeTargetFilePath(key, target, options)
+	}
+	// If target doesn't exist, check if it ends with a separator (indicating directory)
+	// or if any path manipulation options are set
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		if strings.HasSuffix(target, string(os.PathSeparator)) ||
+			options.UseBaseNameOnly || options.StripPrefix || options.JoinWithTailOverlap {
+			// Treat as directory and compute path
+			actualTarget = storage.ComputeTargetFilePath(key, target, options)
+		}
+		// Otherwise, use target as-is (it's a file path)
+	}
+
+	// Ensure the parent directory exists
+	targetDir := filepath.Dir(actualTarget)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+
+	// Check if we should skip download for valid local copy
+	if options.SkipIfValid && !options.ForceRedownload {
+		if fileInfo, err := os.Stat(actualTarget); err == nil {
+			// Get object metadata to compare
+			metadata, err := p.Stat(ctx, key)
+			if err == nil && fileInfo.Size() == metadata.Size {
+				p.logger.WithField("target", actualTarget).Info("Skipping download, valid local copy exists")
+				if options.Progress != nil {
+					options.Progress.Update(metadata.Size, metadata.Size)
+					options.Progress.Done()
+				}
+				return nil
+			}
+		}
+	}
+
 	// Get object metadata first
 	metadata, err := p.Stat(ctx, key)
 	if err != nil {
@@ -250,12 +293,20 @@ func (p *S3Provider) Download(ctx context.Context, source string, target string,
 	}
 
 	// Check if we should use parallel download
-	if metadata.Size > defaultParallelDownloadThresholdMB*1024*1024 && options.Concurrency > 0 {
-		return p.downloadParallel(ctx, key, target, metadata.Size, options)
+	// Parallel download is used when:
+	// 1. File size exceeds threshold (100MB by default)
+	// 2. Parallel download is not explicitly disabled
+	// 3. Concurrency is set to > 1 (or 0 for default)
+	shouldUseParallel := metadata.Size > defaultParallelDownloadThresholdMB*1024*1024 &&
+		!options.DisableParallelDownload &&
+		(options.Concurrency == 0 || options.Concurrency > 1)
+
+	if shouldUseParallel {
+		return p.downloadParallel(ctx, key, actualTarget, metadata.Size, options)
 	}
 
 	// Simple download for small files
-	return p.downloadSimple(ctx, key, target)
+	return p.downloadSimple(ctx, key, actualTarget)
 }
 
 // downloadSimple performs a simple download
@@ -265,14 +316,22 @@ func (p *S3Provider) downloadSimple(ctx context.Context, key string, target stri
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			p.logger.WithError(closeErr).Warn("Failed to close reader")
+		}
+	}()
 
 	// Create the target file
 	file, err := os.Create(target)
 	if err != nil {
 		return fmt.Errorf("failed to create target file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			p.logger.WithError(closeErr).Warn("Failed to close file")
+		}
+	}()
 
 	// Copy the content
 	_, err = io.Copy(file, reader)
@@ -283,10 +342,9 @@ func (p *S3Provider) downloadSimple(ctx context.Context, key string, target stri
 	return nil
 }
 
-// downloadParallel performs parallel download (to be implemented)
+// downloadParallel performs parallel download
 func (p *S3Provider) downloadParallel(ctx context.Context, key string, target string, size int64, options storage.DownloadOptions) error {
-	// This will be implemented in parallel.go
-	return fmt.Errorf("parallel download not yet implemented")
+	return p.downloadParallelWithRetry(ctx, key, target, size, options)
 }
 
 // Upload uploads a file from local filesystem to S3
@@ -309,7 +367,11 @@ func (p *S3Provider) Upload(ctx context.Context, source string, target string, o
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			p.logger.WithError(closeErr).Warn("Failed to close source file")
+		}
+	}()
 
 	// Get file info
 	fileInfo, err := file.Stat()
@@ -372,6 +434,11 @@ func (p *S3Provider) List(ctx context.Context, prefix string, opts ...storage.Li
 			}
 
 			objects = append(objects, info)
+
+			// If we've reached the max results limit, stop processing
+			if options.MaxResults > 0 && len(objects) >= options.MaxResults {
+				return objects[:options.MaxResults], nil
+			}
 		}
 
 		// Handle common prefixes (directories)
@@ -381,7 +448,17 @@ func (p *S3Provider) List(ctx context.Context, prefix string, opts ...storage.Li
 					Name:  *prefix.Prefix,
 					IsDir: true,
 				})
+
+				// Check max results limit for directories too
+				if options.MaxResults > 0 && len(objects) >= options.MaxResults {
+					return objects[:options.MaxResults], nil
+				}
 			}
+		}
+
+		// If we have a max results limit and haven't filled more pages, stop paginating
+		if options.MaxResults > 0 && len(objects) >= options.MaxResults {
+			break
 		}
 	}
 
@@ -448,10 +525,20 @@ func (p *S3Provider) PutWithOptions(ctx context.Context, key string, reader io.R
 
 // putDirect uploads small objects directly using PutObject
 func (p *S3Provider) putDirect(ctx context.Context, key string, reader io.Reader, size int64, contentType string, metadata map[string]string) error {
+	// Validate size is appropriate for direct upload
+	if size > defaultParallelDownloadThresholdMB*1024*1024 {
+		return fmt.Errorf("file size %d exceeds threshold for direct upload", size)
+	}
+
 	// Read the content into memory for small files
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return fmt.Errorf("failed to read data: %w", err)
+	}
+
+	// Validate actual size matches expected
+	if size >= 0 && int64(len(data)) != size {
+		p.logger.WithField("expected", size).WithField("actual", len(data)).Warn("Size mismatch in putDirect")
 	}
 
 	input := &s3.PutObjectInput{

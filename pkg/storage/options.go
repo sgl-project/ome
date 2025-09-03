@@ -26,12 +26,22 @@ type UploadOptions struct {
 
 // DownloadOptions contains configuration for download operations
 type DownloadOptions struct {
-	Range           *Range // For partial downloads
-	Progress        ProgressReporter
-	Concurrency     int    // Number of parallel chunks
-	VerifyETag      string // Verify ETag after download
-	SkipIfValid     bool   // Skip download if valid local copy exists
-	ForceRedownload bool   // Force download even if local copy exists
+	Range                   *Range // For partial downloads
+	Progress                ProgressReporter
+	Concurrency             int    // Number of parallel chunks (>1 enables parallel download for large files)
+	VerifyETag              string // Verify ETag after download
+	SkipIfValid             bool   // Skip download if valid local copy exists (similar to DisableOverride)
+	ForceRedownload         bool   // Force download even if local copy exists
+	DisableParallelDownload bool   // Disable parallel download even for large files
+
+	// Path manipulation options
+	StripPrefix     bool   // If true, remove a specified prefix from the object path
+	PrefixToStrip   string // The prefix to strip when StripPrefix is true
+	UseBaseNameOnly bool   // If true, download using only the object's base name
+
+	// Advanced options
+	ExcludePatterns     []string // Object names to exclude (glob patterns)
+	JoinWithTailOverlap bool     // Join with tail overlap if true (for chunked downloads)
 }
 
 // ListOptions contains configuration for list operations
@@ -175,6 +185,42 @@ func WithSkipIfValid(skip bool) DownloadOption {
 func WithForceRedownload(force bool) DownloadOption {
 	return func(o *DownloadOptions) {
 		o.ForceRedownload = force
+	}
+}
+
+// WithStripPrefix enables prefix stripping from object paths
+func WithStripPrefix(prefix string) DownloadOption {
+	return func(o *DownloadOptions) {
+		o.StripPrefix = true
+		o.PrefixToStrip = prefix
+	}
+}
+
+// WithUseBaseNameOnly downloads using only the object's base name
+func WithUseBaseNameOnly(useBaseName bool) DownloadOption {
+	return func(o *DownloadOptions) {
+		o.UseBaseNameOnly = useBaseName
+	}
+}
+
+// WithExcludePatterns sets patterns for objects to exclude
+func WithExcludePatterns(patterns []string) DownloadOption {
+	return func(o *DownloadOptions) {
+		o.ExcludePatterns = patterns
+	}
+}
+
+// WithJoinWithTailOverlap enables joining with tail overlap for chunked downloads
+func WithJoinWithTailOverlap(join bool) DownloadOption {
+	return func(o *DownloadOptions) {
+		o.JoinWithTailOverlap = join
+	}
+}
+
+// WithDisableParallelDownload disables parallel download for large files
+func WithDisableParallelDownload(disable bool) DownloadOption {
+	return func(o *DownloadOptions) {
+		o.DisableParallelDownload = disable
 	}
 }
 
