@@ -566,3 +566,7 @@ grok-3-mini-fast:
 grok-4:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+grok-code-fast-1:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
