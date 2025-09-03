@@ -281,9 +281,12 @@ func TestFactory_ValidateConfig(t *testing.T) {
 func TestGlobalFactory(t *testing.T) {
 	logger := logging.Discard()
 
+	// Initialize with logger
+	InitGlobalFactory(logger)
+
 	// Get global factory multiple times
-	factory1 := GetGlobalFactory(logger)
-	factory2 := GetGlobalFactory(logger)
+	factory1 := GetGlobalFactory()
+	factory2 := GetGlobalFactory()
 
 	// Should be the same instance
 	assert.Same(t, factory1, factory2)
@@ -292,13 +295,13 @@ func TestGlobalFactory(t *testing.T) {
 	assert.NotPanics(t, func() {
 		MustRegister(ProviderGitHub, func(ctx context.Context, config Config, logger logging.Interface) (Storage, error) {
 			return &mockStorage{provider: ProviderGitHub}, nil
-		}, logger)
+		})
 	})
 
 	// Should panic on duplicate registration
 	assert.Panics(t, func() {
 		MustRegister(ProviderGitHub, func(ctx context.Context, config Config, logger logging.Interface) (Storage, error) {
 			return &mockStorage{provider: ProviderGitHub}, nil
-		}, logger)
+		})
 	})
 }
