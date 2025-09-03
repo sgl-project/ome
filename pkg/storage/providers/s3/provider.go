@@ -383,11 +383,6 @@ func (p *S3Provider) List(ctx context.Context, prefix string, opts ...storage.Li
 				})
 			}
 		}
-
-		// If not paginating, break after first page
-		if options.StartAfter == "" {
-			break
-		}
 	}
 
 	return objects, nil

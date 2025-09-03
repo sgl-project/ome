@@ -2,6 +2,7 @@ package s3
 
 import (
 	"fmt"
+	"mime"
 	"strings"
 
 	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
@@ -120,39 +121,11 @@ func getContentTypeFromKey(key string) string {
 		return "application/octet-stream"
 	}
 
-	ext := strings.ToLower(key[lastDot+1:])
-
-	// Common content types
-	switch ext {
-	case "json":
-		return "application/json"
-	case "xml":
-		return "application/xml"
-	case "txt":
-		return "text/plain"
-	case "html", "htm":
-		return "text/html"
-	case "css":
-		return "text/css"
-	case "js":
-		return "application/javascript"
-	case "png":
-		return "image/png"
-	case "jpg", "jpeg":
-		return "image/jpeg"
-	case "gif":
-		return "image/gif"
-	case "svg":
-		return "image/svg+xml"
-	case "pdf":
-		return "application/pdf"
-	case "zip":
-		return "application/zip"
-	case "tar":
-		return "application/x-tar"
-	case "gz":
-		return "application/gzip"
-	default:
-		return "application/octet-stream"
+	// mime.TypeByExtension expects the extension to start with a dot and be lowercase
+	ext := strings.ToLower(key[lastDot:])
+	if mimeType := mime.TypeByExtension(ext); mimeType != "" {
+		return mimeType
 	}
+
+	return "application/octet-stream"
 }
