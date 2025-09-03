@@ -118,13 +118,25 @@ func (p *OCIProvider) Download(ctx context.Context, source string, target string
 		return storage.NewError("download", source, "oci", err)
 	}
 
+	// Check if object should be excluded
+	if storage.ShouldExclude(sourceURI.Object, options.ExcludePatterns) {
+		p.logger.WithField("object", sourceURI.Object).Info("Skipping download, object matches exclude pattern")
+		if options.Progress != nil {
+			options.Progress.Done()
+		}
+		return nil
+	}
+
+	// Compute the actual target file path based on download options
+	actualTarget := storage.ComputeTargetFilePath(sourceURI.Object, target, options)
+
 	// Check if we should skip download for valid local copy
 	if options.SkipIfValid && !options.ForceRedownload {
-		valid, err := p.isLocalCopyValid(ctx, sourceURI, target)
+		valid, err := p.isLocalCopyValid(ctx, sourceURI, actualTarget)
 		if err != nil {
 			p.logger.WithField("error", err).Warn("Failed to validate local copy, proceeding with download")
 		} else if valid {
-			p.logger.WithField("target", target).Info("Skipping download, valid local copy exists")
+			p.logger.WithField("target", actualTarget).Info("Skipping download, valid local copy exists")
 			if options.Progress != nil {
 				// Report immediate completion
 				headResponse, _ := p.client.HeadObject(ctx, objectstorage.HeadObjectRequest{
@@ -166,10 +178,10 @@ func (p *OCIProvider) Download(ctx context.Context, source string, target string
 
 	// Determine download strategy
 	if shouldUseParallelDownload(*contentLength, options) {
-		return p.parallelDownload(ctx, sourceURI, target, *contentLength, options)
+		return p.parallelDownload(ctx, sourceURI, actualTarget, *contentLength, options)
 	}
 
-	return p.simpleDownload(ctx, sourceURI, target, *contentLength, options)
+	return p.simpleDownload(ctx, sourceURI, actualTarget, *contentLength, options)
 }
 
 // Upload sends a local file to OCI Object Storage
