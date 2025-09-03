@@ -382,9 +382,8 @@ func (p *OCIProvider) List(ctx context.Context, uri string, opts ...storage.List
 			if obj.Etag != nil {
 				info.ETag = *obj.Etag
 			}
-			if obj.Md5 != nil {
-				info.ContentType = *obj.Md5
-			}
+			// Note: OCI ListObjects doesn't return ContentType, leave it empty
+			// ContentType would need to be fetched via GetObjectMetadata if needed
 			objects = append(objects, info)
 		}
 
