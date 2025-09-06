@@ -6,38 +6,46 @@ import (
 	"io"
 	"sync"
 
+	"cloud.google.com/go/storage"
 	"github.com/sgl-project/ome/pkg/auth"
 	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/storage"
+	storageTypes "github.com/sgl-project/ome/pkg/storage"
 )
 
 const (
 	// Default thresholds and settings for GCS operations
 	defaultConcurrency                 = 16                // Higher than S3 due to GCS performance
-	defaultChunkSize                   = 8 * 1024 * 1024   // 8MB chunks
 	defaultParallelDownloadThresholdMB = 100               // 100MB threshold
 	parallelThreshold                  = 100 * 1024 * 1024 // 100MB in bytes
-	maxRetries                         = 5                 // More retries for reliability
 	bufferSize                         = 1024 * 1024       // 1MB buffer
 )
 
 // GCSProvider implements the Storage interface for Google Cloud Storage
 type GCSProvider struct {
+	client      *storage.Client // GCS client
 	bucket      string
 	projectID   string
 	location    string // GCS location (region)
+	region      string // Alias for location (for presigned URLs)
 	logger      logging.Interface
 	bufferPool  *sync.Pool
 	credentials auth.Credentials
+
+	// activeUploads tracks ongoing composite uploads for this provider instance
+	activeUploadsLock sync.RWMutex
+	activeUploads     map[string]*compositeUpload
 }
 
+// Provider is an alias for GCSProvider for consistency with Phase 2 files
+type Provider = GCSProvider
+
 // Ensure GCSProvider implements the Storage interface
-var _ storage.Storage = (*GCSProvider)(nil)
+var _ storageTypes.Storage = (*GCSProvider)(nil)
 
 // NewGCSProvider creates a new GCS storage provider
-func NewGCSProvider(ctx context.Context, config storage.Config, logger logging.Interface) (storage.Storage, error) {
-	if config.Provider != storage.ProviderGCS {
-		return nil, fmt.Errorf("invalid provider: expected %s, got %s", storage.ProviderGCS, config.Provider)
+func NewGCSProvider(ctx context.Context, config storageTypes.Config, logger logging.Interface) (storageTypes.Storage, error) {
+	if config.Provider != storageTypes.ProviderGCS {
+		return nil, fmt.Errorf("invalid provider: expected %s, got %s", storageTypes.ProviderGCS, config.Provider)
 	}
 
 	// Validate required configuration
@@ -81,26 +89,35 @@ func NewGCSProvider(ctx context.Context, config storage.Config, logger logging.I
 		},
 	}
 
+	// Create GCS client
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCS client: %w", err)
+	}
+
 	provider := &GCSProvider{
-		bucket:      config.Bucket,
-		projectID:   projectID,
-		location:    config.Region, // GCS uses region as location
-		logger:      logger,
-		bufferPool:  bufferPool,
-		credentials: credentials,
+		client:        client,
+		bucket:        config.Bucket,
+		projectID:     projectID,
+		location:      config.Region, // GCS uses region as location
+		region:        config.Region, // Alias for presigned URLs
+		logger:        logger,
+		bufferPool:    bufferPool,
+		credentials:   credentials,
+		activeUploads: make(map[string]*compositeUpload),
 	}
 
 	logger.WithField("provider", "gcs").
 		WithField("bucket", config.Bucket).
 		WithField("project", projectID).
 		WithField("location", config.Region).
-		Info("GCS storage provider initialized (stub implementation)")
+		Info("GCS storage provider initialized")
 
 	return provider, nil
 }
 
 // getAuthType determines the auth type from configuration
-func getAuthType(authConfig *storage.AuthConfig) auth.AuthType {
+func getAuthType(authConfig *storageTypes.AuthConfig) auth.AuthType {
 	if authConfig == nil || authConfig.Type == "" {
 		return auth.GCPApplicationDefault
 	}
@@ -116,17 +133,17 @@ func getAuthType(authConfig *storage.AuthConfig) auth.AuthType {
 }
 
 // Provider returns the storage provider type
-func (p *GCSProvider) Provider() storage.Provider {
-	return storage.ProviderGCS
+func (p *GCSProvider) Provider() storageTypes.Provider {
+	return storageTypes.ProviderGCS
 }
 
 // Download downloads an object from GCS to a local file
-func (p *GCSProvider) Download(ctx context.Context, source string, target string, opts ...storage.DownloadOption) error {
+func (p *GCSProvider) Download(ctx context.Context, source string, target string, opts ...storageTypes.DownloadOption) error {
 	return fmt.Errorf("GCS Download not implemented yet")
 }
 
 // Upload uploads a local file to GCS
-func (p *GCSProvider) Upload(ctx context.Context, source string, target string, opts ...storage.UploadOption) error {
+func (p *GCSProvider) Upload(ctx context.Context, source string, target string, opts ...storageTypes.UploadOption) error {
 	return fmt.Errorf("GCS Upload not implemented yet")
 }
 
@@ -136,7 +153,7 @@ func (p *GCSProvider) Get(ctx context.Context, uri string) (io.ReadCloser, error
 }
 
 // Put uploads data to GCS
-func (p *GCSProvider) Put(ctx context.Context, uri string, reader io.Reader, size int64, opts ...storage.UploadOption) error {
+func (p *GCSProvider) Put(ctx context.Context, uri string, reader io.Reader, size int64, opts ...storageTypes.UploadOption) error {
 	return fmt.Errorf("GCS Put not implemented yet")
 }
 
@@ -151,12 +168,12 @@ func (p *GCSProvider) Exists(ctx context.Context, uri string) (bool, error) {
 }
 
 // List lists objects in GCS with the given prefix
-func (p *GCSProvider) List(ctx context.Context, uri string, opts ...storage.ListOption) ([]storage.ObjectInfo, error) {
+func (p *GCSProvider) List(ctx context.Context, uri string, opts ...storageTypes.ListOption) ([]storageTypes.ObjectInfo, error) {
 	return nil, fmt.Errorf("GCS List not implemented yet")
 }
 
 // Stat retrieves metadata for an object
-func (p *GCSProvider) Stat(ctx context.Context, uri string) (*storage.Metadata, error) {
+func (p *GCSProvider) Stat(ctx context.Context, uri string) (*storageTypes.Metadata, error) {
 	return nil, fmt.Errorf("GCS Stat not implemented yet")
 }
 
