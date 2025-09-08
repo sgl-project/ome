@@ -1,0 +1,354 @@
+{{- if or .Values.global.enableAll .Values.runtimes.srt.enabled }}
+{{- if or .Values.global.enableAll .Values.runtimes.srt.e5_mistral_7b_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-e5-7b-mistral-instruct
+spec:
+  disabled: false
+  supportedModelFormats:
+    - modelFramework:
+        name: transformers
+        version: "4.34.0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: MistralModel
+      autoSelect: true
+      priority: 1
+  modelSizeRange:
+    min: 5B
+    max: 10B
+  protocolVersions:
+    - openAI
+  engineConfig:
+    runner:
+      name: ome-container
+      image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port=8080 \
+          --enable-metrics \
+          --model-path="$MODEL_PATH" \
+          --tp-size 1 \
+          --is-embedding
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 80Gi
+          nvidia.com/gpu: 1
+        limits:
+          cpu: 10
+          memory: 80Gi
+          nvidia.com/gpu: 1
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+{{- end }}
+{{- if or .Values.global.enableAll .Values.runtimes.srt.deepseek_rdma.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-deepseek-rdma
+spec:
+  disabled: false
+  modelSizeRange:
+    min: 650B
+    max: 700B
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.46.3"
+      modelArchitecture: DeepseekV3ForCausalLM
+      quantization: "fp8"
+      autoSelect: true
+      priority: 1
+    - modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.33.1"
+      modelArchitecture: DeepseekV3ForCausalLM
+      quantization: "fp8"
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - openAI
+  routerConfig:
+    runner:
+      name: router
+      image: ghcr.io/moirai-internal/sgl-router:0.1.4.30f2a44
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+      ports:
+        - containerPort: 8080
+          name: http
+      command:
+        - sh
+        - -c
+        - >
+          python3 -m sglang_router.launch_router
+          --host "0.0.0.0"
+          --port "8080"
+          --service-discovery
+          --service-discovery-namespace "${NAMESPACE}"
+          --service-discovery-port 8080
+          --selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
+  engineConfig:
+    annotations:
+      rdma.ome.io/auto-inject: "true"
+      rdma.ome.io/profile: "oci-roce"
+      rdma.ome.io/container-name: "ome-container"
+    leader:
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
+      runner:
+        name: ome-container
+        image: docker.io/lmsysorg/sglang:dev
+        ports:
+          - containerPort: 30000
+            protocol: TCP
+        command:
+          - /bin/bash
+          - '-lc'
+          - --
+        args:
+          - |
+            python3 -m sglang.launch_server \
+            --host=0.0.0.0 \
+            --port=30000 \
+            --model-path="$MODEL_PATH" \
+            --tp-size "$TP_SIZE" \
+            --dp-size "$DP_SIZE" \
+            --nccl-init-addr "$NCCL_INIT_ADDR" \
+            --nnodes "$NNODES" \
+            --node-rank "$NODE_RANK" \
+            --disable-disk-cache \
+            --enable-metrics \
+            --api-key sgl
+        volumeMounts:
+          - mountPath: /dev/shm  
+            name: dshm
+          - name: devinf
+            mountPath: /dev/infiniband
+        resources:
+          requests:
+            cpu: 100
+            memory: 500Gi
+            nvidia.com/gpu: 8
+          limits:
+            cpu: 100
+            memory: 500Gi
+            nvidia.com/gpu: 8
+        readinessProbe:
+          httpGet:
+            path: /health_generate
+            port: 30000
+            httpHeaders:
+              - name: Authorization
+                value: "Bearer sgl"
+          failureThreshold: 10
+          successThreshold: 1
+          periodSeconds: 60
+          timeoutSeconds: 200
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 30000
+            httpHeaders:
+              - name: Authorization
+                value: "Bearer sgl"
+          failureThreshold: 5
+          successThreshold: 1
+          periodSeconds: 60
+          timeoutSeconds: 60
+        startupProbe:
+          httpGet:
+            path: /health_generate
+            port: 30000
+            httpHeaders:
+              - name: Authorization
+                value: "Bearer sgl"
+          failureThreshold: 150
+          successThreshold: 1
+          periodSeconds: 6
+          initialDelaySeconds: 60
+          timeoutSeconds: 30
+{{- end }}
+{{- if or .Values.global.enableAll .Values.runtimes.srt.llama_3_3_70b_instruct.enabled }}
+---
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-llama-3-3-70b-instruct
+spec:
+  disabled: false
+  modelSizeRange:
+    min: 60B
+    max: 80B
+  supportedModelFormats:
+    - modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelFramework:
+        name: transformers
+        version: "4.48.3"
+      modelArchitecture: LlamaForCausalLM
+      autoSelect: true
+      priority: 1
+  protocolVersions:
+    - openAI
+  engineConfig:
+    runner:
+      name: ome-container  
+      image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+      ports:
+        - containerPort: 8080
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port=8080 \
+          --enable-metrics \
+          --model-path="$MODEL_PATH" \
+          --tp-size 4
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 40
+          memory: 320Gi
+          nvidia.com/gpu: 4
+        limits:
+          cpu: 40
+          memory: 320Gi
+          nvidia.com/gpu: 4
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    labels:
+      logging-forward: enabled
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+{{- end }}
+{{- end }} 
