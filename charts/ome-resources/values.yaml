@@ -195,3 +195,5 @@ google:
   billingAccount: "0182A9-39B631-7EDF64"
   projectFolder: "folders/542786757384"
   enableBudget: true
+  enableWif:    true
+  okeServiceAccount: ""

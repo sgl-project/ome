@@ -113,19 +113,28 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 			fmt.Errorf("project ID not available for project %s", project.Name))
 	}
 
-	if *sa.Resource.Spec.Name == "omcpminb2" {
-		// For testing, we already manually set up this secret user-geminitest
-		keyId := "user-testing-gemini"
+	googleConfig, err := controllerconfig.NewGoogleConfig(sa.Clientset)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
+	}
+	projectId := project.Status.ProjectId
+	serviceAccountId := strings.ToLower(GenerateId("user-", sa.Resource.UID))
+	if googleConfig.EnableWif {
+		// Assign vertex Ai access to the sa
+		if err := sa.AssignVertexAiRole(ctx, projectId, ""); err != nil {
+			return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusAPIError, err)
+		}
+
+		// Update status
 		creationTime := metav1.NewTime(time.Now())
+		serviceAccountId = "user-wif"
 		sa.Resource.Status = v1beta1.ServiceAccountStatus{
-			ServiceAccountId: &keyId,
+			ServiceAccountId: &serviceAccountId,
 			CreationTime:     &creationTime,
 		}
 		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusCreated)
 	}
 
-	serviceAccountId := strings.ToLower(GenerateId("user-", sa.Resource.UID))
-	projectId := project.Status.ProjectId
 	createReq := &adminpb.CreateServiceAccountRequest{
 		Name:      "projects/" + projectId,
 		AccountId: serviceAccountId,
@@ -139,6 +148,7 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError, err)
 	}
 	defer iamClient.Close()
+
 	svc, err := iamClient.CreateServiceAccount(ctx, createReq)
 	if err != nil {
 		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusInitError,
@@ -203,6 +213,11 @@ func (sa *GeminiServiceAccount) Create(ctx context.Context) error {
 }
 
 func (sa *GeminiServiceAccount) AssignVertexAiRole(ctx context.Context, projectId string, serviceAccountId string) error {
+	googleConfig, err := controllerconfig.NewGoogleConfig(sa.Clientset)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
+	}
+
 	gcpProjectClient, err := sa.GetGcpProjectClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create GCP project Client: %w", err)
@@ -220,10 +235,19 @@ func (sa *GeminiServiceAccount) AssignVertexAiRole(ctx context.Context, projectI
 	}
 
 	var bindings []*iampb.Binding
-	binding := &iampb.Binding{
-		Role:    "roles/aiplatform.user",
-		Members: []string{fmt.Sprintf("serviceAccount:%s", saEmail)},
+	var binding *iampb.Binding
+	if googleConfig.EnableWif {
+		binding = &iampb.Binding{
+			Role:    "roles/aiplatform.user",
+			Members: []string{fmt.Sprintf("principal:%s", googleConfig.OkeServiceAccount)},
+		}
+	} else {
+		binding = &iampb.Binding{
+			Role:    "roles/aiplatform.user",
+			Members: []string{fmt.Sprintf("serviceAccount:%s", saEmail)},
+		}
 	}
+
 	if policy != nil {
 		bindings = append(policy.Bindings, binding)
 	} else {
@@ -247,9 +271,13 @@ func (sa *GeminiServiceAccount) AssignVertexAiRole(ctx context.Context, projectI
 
 // Delete implements ResourceOperation
 func (sa *GeminiServiceAccount) Delete(ctx context.Context) error {
-	var testingSa bool
-	if *sa.Resource.Spec.Name == "omcpminb2" {
-		testingSa = true
+	googleConfig, err := controllerconfig.NewGoogleConfig(sa.Clientset)
+	if err != nil {
+		return sa.updateServiceAccountConditionWithError(ctx, sa.Resource, v1beta1.ServiceAccountStatusConfigError, err)
+	}
+
+	if googleConfig.EnableWif {
+		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
 	}
 
 	project, err := sa.GetProject(ctx, sa.Resource)
@@ -261,10 +289,8 @@ func (sa *GeminiServiceAccount) Delete(ctx context.Context) error {
 				"namespace", sa.Resource.Namespace,
 				"projectRef", sa.Resource.Spec.ProjectRef.Name)
 
-			if !testingSa {
-				// Even if the project is gone, we should still clean up the service account key from the common secret
-				_ = sa.deleteServiceAccountKey(ctx, sa.Resource, true)
-			}
+			// Even if the project is gone, we should still clean up the service account key from the common secret
+			_ = sa.deleteServiceAccountKey(ctx, sa.Resource, true)
 
 			// Update status and continue with deletion
 			return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
@@ -286,10 +312,6 @@ func (sa *GeminiServiceAccount) Delete(ctx context.Context) error {
 	_, err = projectClient.GetProject(ctx, &resourcemanagerpb.GetProjectRequest{Name: name})
 	if err != nil {
 		sa.Log.Info("failed get project from GCP", "projectId", projectId, "err", err)
-		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
-	}
-
-	if testingSa {
 		return sa.updateServiceAccountCondition(ctx, sa.Resource, v1beta1.ServiceAccountStatusDeleted)
 	}
 

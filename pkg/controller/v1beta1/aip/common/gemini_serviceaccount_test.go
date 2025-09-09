@@ -107,15 +107,26 @@ func setupTestGeminiServiceAccount(t *testing.T) (*GeminiServiceAccount, kuberne
 		Build()
 
 	// Create fake clientset for AIPlatformConfig
-	fakeClientset := fake.NewSimpleClientset(&v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "aiplatform-config",
-			Namespace: "ome",
+	fakeClientset := fake.NewSimpleClientset(
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "aiplatform-config",
+				Namespace: "ome",
+			},
+			Data: map[string]string{
+				"aiplatform-config": `{"secretConfig": {"secretName": "common-secret", "namespace": "ome"}}`,
+			},
 		},
-		Data: map[string]string{
-			"aiplatform-config": `{"secretConfig": {"secretName": "common-secret", "namespace": "ome"}}`,
+		&v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "google-config",
+				Namespace: "ome",
+			},
+			Data: map[string]string{
+				"google-config": `{"enableBudget": true, "enableWif": false, "billingAccount": "0182A9-xxxx-cccc", "projectFolder": "folders/542786757384"}`,
+			},
 		},
-	})
+	)
 
 	// Create service account handler
 	serviceAccount := NewGeminiServiceAccount(

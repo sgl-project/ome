@@ -199,6 +199,8 @@ data:
   google-config: |
     {
       "enableBudget": {{.Values.google.enableBudget}},
+      "enableWif": {{.Values.google.enableWif}},
+      "okeServiceAccount": "{{.Values.google.okeServiceAccount}}",
       "billingAccount": "{{.Values.google.billingAccount}}",
       "projectFolder": "{{.Values.google.projectFolder}}"
     }

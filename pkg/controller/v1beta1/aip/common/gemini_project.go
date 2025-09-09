@@ -48,14 +48,6 @@ func NewGeminiProject(c client.Client, cs kubernetes.Interface, log logr.Logger,
 
 // Create creates a new project
 func (p *GeminiProject) Create(ctx context.Context) error {
-	if p.Resource.Spec.Name == "omcpminb2" {
-		creationTime := v1.NewTime(time.Now())
-		p.Resource.Status.ProjectId = p.Resource.Spec.Name
-		p.Resource.Status.CreationTime = &creationTime
-		p.Resource.Status.LastUpdatedTime = &creationTime
-		return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusCreated)
-	}
-
 	gcpClient, err := p.GetGcpProjectClient(ctx)
 	if err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)
@@ -130,10 +122,6 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 
 // Update updates the existing project
 func (p *GeminiProject) Update(ctx context.Context) error {
-	if p.Resource.Spec.Name == "omcpminb2" {
-		return nil
-	}
-
 	existingProject, err := p.GetProject(ctx)
 	if err != nil {
 		return err
@@ -209,10 +197,6 @@ func (p *GeminiProject) GetProject(ctx context.Context) (*resourcemanagerpb.Proj
 
 // Delete deletes the existing project
 func (p *GeminiProject) Delete(ctx context.Context) error {
-	if p.Resource.Spec.Name == "omcpminb2" {
-		return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusArchived)
-	}
-
 	gcpClient, err := p.GetGcpProjectClient(ctx)
 	if err != nil {
 		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusInitError, err)

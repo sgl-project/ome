@@ -153,9 +153,11 @@ type DacReservationWorkloadConfig struct {
 }
 
 type GoogleConfig struct {
-	EnableBudget   bool   `json:"EnableBudget"`
-	ProjectFolder  string `json:"ProjectFolder"`
-	BillingAccount string `json:"BillingAccount"`
+	EnableBudget      bool   `json:"enableBudget"`
+	EnableWif         bool   `json:"enableWif"`
+	OkeServiceAccount string `json:"okeServiceAccount"`
+	ProjectFolder     string `json:"projectFolder"`
+	BillingAccount    string `json:"billingAccount"`
 }
 
 func NewInferenceServicesConfig(clientset kubernetes.Interface) (*InferenceServicesConfig, error) {

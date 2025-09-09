@@ -93,7 +93,7 @@ func setupTestGeminiProject(t *testing.T, projectName string, projectDisplayName
 			Namespace: "ome",
 		},
 		Data: map[string]string{
-			"google-config": `{"enableBudget": true, "billingAccount": "0182A9-xxxx-cccc", "projectFolder": "folders/542786757384"}`,
+			"google-config": `{"enableBudget": true, "enableWif": false, "billingAccount": "0182A9-xxxx-cccc", "projectFolder": "folders/542786757384"}`,
 		},
 	})
 
