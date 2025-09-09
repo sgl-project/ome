@@ -76,12 +76,6 @@ type MCPServerSpec struct {
 	// +optional
 	Type MCPServerType `json:"type,omitempty"`
 
-	// Image is the container image for the MCP server
-	// Required for Hosted servers, ignored for Remote servers.
-	// Must be a valid container image reference (e.g., "registry/image:tag")
-	// +optional
-	Image string `json:"image,omitempty"`
-
 	// URL is the external URL for remote MCP servers
 	// Required for Remote servers, ignored for Hosted servers
 	// +kubebuilder:validation:Pattern=`^https?://.*`
@@ -113,13 +107,6 @@ type MCPServerSpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Port is the port to expose the MCP server on
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	// +kubebuilder:default=8080
-	// +optional
-	Port int32 `json:"port,omitempty"`
-
 	// TargetPort is the port that MCP server listens to
 	// If not specified, defaults to the same value as Port (8080)
 	// +kubebuilder:validation:Minimum=1
@@ -128,41 +115,11 @@ type MCPServerSpec struct {
 	// +optional
 	TargetPort int32 `json:"targetPort,omitempty"`
 
-	// Args are additional arguments to pass to the MCP server
-	// +optional
-	// +listType=atomic
-	Args []string `json:"args,omitempty"`
-
-	// Env are environment variables to set in the MCP server container
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
-	// Pod volumes to mount into the MCP server filesystem.
-	// +listType=map
-	// +listMapKey=name
-	// +optional
-	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
-
-	// Secrets are references to secrets to mount in the MCP server container
-	// +optional
-	// +listType=atomic
-	Secrets []SecretRef `json:"secrets,omitempty"`
-
-	// ServiceAccount is the name of an already existing service account to use by the MCP server.
-	// If not specified, a ServiceAccount will be created automatically and used by the MCP server.
-	// +optional
-	ServiceAccount *string `json:"serviceAccount,omitempty"`
-
 	// PermissionProfile defines the permission profile to use
 	// +optional
 	PermissionProfile *PermissionProfileRef `json:"permissionProfile,omitempty"`
 
 	// PodTemplateSpec defines the pod template to use for the MCP server
-	// This allows for customizing the pod configuration beyond what is provided by the other fields.
-	// Note that to modify the specific container the MCP server runs in, you must specify
-	// the `mcp` container name in the PodTemplateSpec.
 	// +optional
 	PodTemplateSpec *corev1.PodTemplateSpec `json:"podTemplateSpec,omitempty"`
 
@@ -178,55 +135,6 @@ type MCPServerSpec struct {
 	// +optional
 	// +listType=set
 	ToolsFilter []string `json:"toolsFilter,omitempty"`
-
-	// Compute Resources required by this MCP server.
-	// Cannot be updated.
-	// More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty" protobuf:"bytes,8,opt,name=resources"`
-
-	// If specified, the pod's tolerations.
-	// +optional
-	// +listType=atomic
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty" protobuf:"bytes,22,opt,name=tolerations"`
-
-	// NodeSelector is a selector which must be true for the pod to fit on a node.
-	// Selector which must match a node's labels for the pod to be scheduled on that node.
-	// More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
-	// +optional
-	// +mapType=atomic
-	NodeSelector map[string]string `json:"nodeSelector,omitempty" protobuf:"bytes,7,rep,name=nodeSelector"`
-
-	// If specified, the pod's scheduling constraints
-	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty" protobuf:"bytes,18,opt,name=affinity"`
-
-	// List of volumes that can be mounted by containers belonging to the pod.
-	// More info: https://kubernetes.io/docs/concepts/storage/volumes
-	// +optional
-	// +patchMergeKey=name
-	// +patchStrategy=merge,retainKeys
-	// +listType=atomic
-	Volumes []corev1.Volume `json:"volumes,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name" protobuf:"bytes,1,rep,name=volumes"`
-}
-
-// SecretRef is a reference to a secret
-type SecretRef struct {
-	// Name is the name of the secret
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-
-	// Key is the key in the secret itself
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Key string `json:"key"`
-
-	// TargetEnvName is the environment variable to be used when setting up the secret in the MCP server
-	// If left unspecified, it defaults to the key
-	// +kubebuilder:validation:MinLength=1
-	// +optional
-	TargetEnvName string `json:"targetEnvName,omitempty"`
 }
 
 // Permission profile types
