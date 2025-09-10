@@ -27,8 +27,18 @@ ome:
     cpuLimit: "2"
     memoryLimit: "2Gi"
   replicationJob:
+    image: ""
+    tag: ""
+    source:
+      authType: InstancePrincipal
+      enableOboToken: true
+    target:
+      authType: InstancePrincipal
+      enableOboToken: false
     downloadSizeLimit: 3072
     enableSizeLimitCheck: true
+    enableChecksumUpload: true
+    checksumAlgorithm: md5
     resources:
       limits:
         cpu: 10

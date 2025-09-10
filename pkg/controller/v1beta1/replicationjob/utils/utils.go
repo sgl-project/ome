@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"strconv"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils"
 
@@ -16,6 +17,9 @@ import (
 const (
 	sourcePrefix      = "Source"
 	destinationPrefix = "Destination"
+
+	regionParamKey   = "region"
+	oboTokenParamKey = "obo_token"
 )
 
 var (
@@ -33,14 +37,15 @@ var (
 
 func BuildEnvVars(spec v1beta1.ReplicationJobSpec, config *controllerconfig.ReplicationJobConfig) ([]v1.EnvVar, error) {
 	envVars := buildGeneralEnvVars(spec, config)
+
 	// Handle source and destination storage separately, as they may have different storage types.
-	sourceEnvVars, err := buildEnvVarsFromStorage(spec.Source, sourcePrefix)
+	sourceEnvVars, err := buildEnvVarsFromStorage(spec.Source, config, sourcePrefix)
 	if err != nil {
 		return nil, err
 	}
 	envVars = append(envVars, sourceEnvVars...)
 
-	destEnvVars, err := buildEnvVarsFromStorage(spec.Destination, destinationPrefix)
+	destEnvVars, err := buildEnvVarsFromStorage(spec.Destination, config, destinationPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -56,29 +61,17 @@ func buildGeneralEnvVars(spec v1beta1.ReplicationJobSpec, config *controllerconf
 			Value: utils.DerefString(spec.Source.Path),
 		},
 		{
-			Name:  constants.AgentAuthTypeEnvVarKey,
-			Value: config.AuthType,
-		},
-		{
-			Name:  constants.AgentRegionEnvVarKey,
-			Value: config.Region,
-		},
-		{
-			Name:  constants.AgentCompartmentIDEnvVarKey,
-			Value: config.CompartmentId,
-		},
-		{
 			Name:  constants.AgentDownloadSizeLimitEnvVarKey,
 			Value: config.DownloadSizeLimit,
 		},
 		{
 			Name:  constants.AgentEnableSizeLimitCheckEnvVarKey,
-			Value: config.EnableSizeLimitCheck,
+			Value: strconv.FormatBool(config.EnableSizeLimitCheck),
 		},
 	}
 }
 
-func buildEnvVarsFromStorage(storageSpec *v1beta1.StorageSpec, storagePrefix string) ([]v1.EnvVar, error) {
+func buildEnvVarsFromStorage(storageSpec *v1beta1.StorageSpec, config *controllerconfig.ReplicationJobConfig, storagePrefix string) ([]v1.EnvVar, error) {
 	storageType, err := storage.GetStorageType(*storageSpec.StorageUri)
 	if err != nil {
 		return nil, err
@@ -86,7 +79,7 @@ func buildEnvVarsFromStorage(storageSpec *v1beta1.StorageSpec, storagePrefix str
 
 	switch storageType {
 	case storage.StorageTypeOCI:
-		return buildOsEnvVars(storageSpec, storagePrefix)
+		return buildOsEnvVars(storageSpec, config, storagePrefix)
 	case storage.StorageTypeHuggingFace:
 		return buildHfEnvVars(storageSpec)
 	default:
@@ -94,25 +87,28 @@ func buildEnvVarsFromStorage(storageSpec *v1beta1.StorageSpec, storagePrefix str
 	}
 }
 
-func buildOsEnvVars(storageSpec *v1beta1.StorageSpec, storagePrefix string) ([]v1.EnvVar, error) {
-	uri, err := storage.NewObjectURI(*storageSpec.StorageUri)
-	if err != nil {
-		return nil, err
-	}
+func buildOsEnvVars(storageSpec *v1beta1.StorageSpec, config *controllerconfig.ReplicationJobConfig, storagePrefix string) ([]v1.EnvVar, error) {
 	var envVars []v1.EnvVar
 
 	switch storagePrefix {
 	case sourcePrefix:
 		envVars = append(envVars,
-			v1.EnvVar{Name: constants.AgentSourceNamespaceEnvVarKey, Value: uri.Namespace},
-			v1.EnvVar{Name: constants.AgentSourceBucketNameEnvVarKey, Value: uri.BucketName},
-			v1.EnvVar{Name: constants.AgentSourcePrefixEnvVarKey, Value: uri.Prefix},
+			v1.EnvVar{Name: constants.AgentSourceStorageURIEnvVarKey, Value: *storageSpec.StorageUri},
+			v1.EnvVar{Name: constants.AgentSourceOCIEnabledEnvVarKey, Value: "true"},
+			v1.EnvVar{Name: constants.AgentSourcePVCEnabledEnvVarKey, Value: "false"},
+			v1.EnvVar{Name: constants.AgentSourceOCIAuthTypeEnvVarKey, Value: config.Source.AuthType},
+			v1.EnvVar{Name: constants.AgentSourceOCIEnableOboTokenEnvVarKey, Value: strconv.FormatBool(config.Source.EnableOboToken)},
 		)
+
 	case destinationPrefix:
 		envVars = append(envVars,
-			v1.EnvVar{Name: constants.AgentTargetNamespaceEnvVarKey, Value: uri.Namespace},
-			v1.EnvVar{Name: constants.AgentTargetBucketNameEnvVarKey, Value: uri.BucketName},
-			v1.EnvVar{Name: constants.AgentTargetPrefixEnvVarKey, Value: uri.Prefix},
+			v1.EnvVar{Name: constants.AgentTargetStorageURIEnvVarKey, Value: *storageSpec.StorageUri},
+			v1.EnvVar{Name: constants.AgentTargetOCIEnabledEnvVarKey, Value: "true"},
+			v1.EnvVar{Name: constants.AgentTargetPVCEnabledEnvVarKey, Value: "false"},
+			v1.EnvVar{Name: constants.AgentTargetOCIAuthTypeEnvVarKey, Value: config.Target.AuthType},
+			v1.EnvVar{Name: constants.AgentTargetOCIEnableOboTokenEnvVarKey, Value: strconv.FormatBool(config.Target.EnableOboToken)},
+			v1.EnvVar{Name: constants.AgentTargetOCIEnableChecksumUploadEnvVarKey, Value: strconv.FormatBool(config.EnableChecksumUpload)},
+			v1.EnvVar{Name: constants.AgentTargetOCIChecksumAlgorithmEnvVarKey, Value: config.ChecksumAlgorithm},
 		)
 	}
 
@@ -124,31 +120,28 @@ func buildOsEnvVars(storageSpec *v1beta1.StorageSpec, storagePrefix string) ([]v
 
 	switch storagePrefix {
 	case sourcePrefix:
-		if region, ok := params["region"]; ok {
+		if region, ok := params[regionParamKey]; ok && region != "" {
 			envVars = append(envVars, v1.EnvVar{
-				Name:  constants.AgentSourceRegionEnvVarKey,
+				Name:  constants.AgentSourceOCIRegionEnvVarKey,
 				Value: region,
 			})
 		}
-		if authType, ok := params["auth"]; ok {
-			// default auth type is consistent with ome agent auth type InstancePrincipal
-			envVars = append(envVars, v1.EnvVar{
-				Name:  constants.AgentAuthTypeEnvVarKey,
-				Value: authType,
-			})
-		}
-		if oboToken, ok := params[constants.OboTokenConfigKey]; ok {
+		if oboToken, ok := params[oboTokenParamKey]; ok && oboToken != "" {
 			envVars = append(envVars,
-				v1.EnvVar{Name: constants.AgentOboTokenEnvVarKey, Value: oboToken},
-				v1.EnvVar{Name: constants.AgentEnableOboTokenEnvVarKey, Value: "true"},
+				v1.EnvVar{Name: constants.AgentSourceOCIOboTokenEnvVarKey, Value: oboToken},
 			)
 		}
 	case destinationPrefix:
-		if region, ok := params["region"]; ok {
+		if region, ok := params[regionParamKey]; ok && region != "" {
 			envVars = append(envVars, v1.EnvVar{
-				Name:  constants.AgentTargetRegionEnvVarKey,
+				Name:  constants.AgentTargetOCIRegionEnvVarKey,
 				Value: region,
 			})
+		}
+		if oboToken, ok := params[oboTokenParamKey]; ok && oboToken != "" {
+			envVars = append(envVars,
+				v1.EnvVar{Name: constants.AgentTargetOCIOboTokenEnvVarKey, Value: oboToken},
+			)
 		}
 	}
 
@@ -156,16 +149,12 @@ func buildOsEnvVars(storageSpec *v1beta1.StorageSpec, storagePrefix string) ([]v
 }
 
 func buildHfEnvVars(storageSpec *v1beta1.StorageSpec) ([]v1.EnvVar, error) {
-	uri, err := storage.NewObjectURI(*storageSpec.StorageUri)
-	if err != nil {
-		return nil, err
-	}
 	var envVars []v1.EnvVar
 
 	envVars = append(envVars,
-		v1.EnvVar{Name: constants.AgentSourceNamespaceEnvVarKey, Value: uri.Namespace},
-		v1.EnvVar{Name: constants.AgentSourceBucketNameEnvVarKey, Value: uri.BucketName},
-		v1.EnvVar{Name: constants.AgentSourcePrefixEnvVarKey, Value: uri.Prefix},
+		v1.EnvVar{Name: constants.AgentSourceStorageURIEnvVarKey, Value: *storageSpec.StorageUri},
+		v1.EnvVar{Name: constants.AgentSourceOCIEnabledEnvVarKey, Value: "false"},
+		v1.EnvVar{Name: constants.AgentSourcePVCEnabledEnvVarKey, Value: "false"},
 	)
 
 	// Handle parameters override
@@ -174,16 +163,9 @@ func buildHfEnvVars(storageSpec *v1beta1.StorageSpec) ([]v1.EnvVar, error) {
 	}
 	params := *storageSpec.Parameters
 
-	if authType, ok := params["auth"]; ok {
-		// default auth type is consistent with ome agent auth type InstancePrincipal
-		envVars = append(envVars, v1.EnvVar{
-			Name:  constants.AgentAuthTypeEnvVarKey,
-			Value: authType,
-		})
-	}
 	if hfToken, ok := params["hf_token"]; ok {
 		envVars = append(envVars, v1.EnvVar{
-			Name:  constants.AgentHFTokenEnvVarKey,
+			Name:  constants.AgentSourceHFTokenEnvVarKey,
 			Value: hfToken,
 		})
 	}

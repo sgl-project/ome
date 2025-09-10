@@ -164,16 +164,24 @@ data:
   replicationjob: |
     {
       "podConfig": {
-        "image": "{{ .Values.ome.omeAgent.image }}:{{ .Values.ome.omeAgent.tag }}",
+        "image": "{{ default .Values.ome.omeAgent.image .Values.ome.replicationJob.image }}:{{ default .Values.ome.omeAgent.tag .Values.ome.replicationJob.tag }}",
         "resources": {{ .Values.ome.replicationJob.resources | toJson }}
       },
+      "source": {
+        "authType": "{{ .Values.ome.replicationJob.source.authType }}",
+        "enableOboToken": {{ .Values.ome.replicationJob.source.enableOboToken }},
+        "oboToken": "{{ .Values.ome.replicationJob.source.oboToken }}"
+      },
+      "target": {
+        "authType": "{{ .Values.ome.replicationJob.target.authType }}",
+        "enableOboToken": {{ .Values.ome.replicationJob.target.enableOboToken }},
+        "oboToken": "{{ .Values.ome.replicationJob.target.oboToken }}"
+      },
+      "enableChecksumUpload": {{ .Values.ome.replicationJob.enableChecksumUpload }},
+      "checksumAlgorithm": "{{ .Values.ome.replicationJob.checksumAlgorithm }}",
       "downloadSizeLimit": "{{ .Values.ome.replicationJob.downloadSizeLimit }}",
-      "enableSizeLimitCheck": "{{ .Values.ome.replicationJob.enableSizeLimitCheck }}",
-      "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
-      "authType" : "{{ .Values.ome.omeAgent.authType }}",
-      "region": "{{ .Values.ome.omeAgent.region }}"
+      "enableSizeLimitCheck": {{ .Values.ome.replicationJob.enableSizeLimitCheck }}
     }
-
 ---
 apiVersion: v1
 kind: ConfigMap

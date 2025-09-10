@@ -48,12 +48,14 @@ type BenchmarkJobConfig struct {
 }
 
 type ReplicationJobConfig struct {
-	PodConfig            PodConfig `json:"podConfig"`
-	DownloadSizeLimit    string    `json:"downloadSizeLimit"`
-	EnableSizeLimitCheck string    `json:"EnableSizeLimitCheck"`
-	CompartmentId        string    `json:"compartmentId"`
-	AuthType             string    `json:"authType"`
-	Region               string    `json:"region"`
+	PodConfig            PodConfig           `json:"podConfig"`
+	Source               StorageAccessConfig `json:"source"`
+	Target               StorageAccessConfig `json:"target"`
+	EnableSizeLimitCheck bool                `json:"enableSizeLimitCheck"`
+	DownloadSizeLimit    string              `json:"downloadSizeLimit"`
+	EnableChecksumUpload bool                `json:"enableChecksumUpload"`
+	ChecksumAlgorithm    string              `json:"checksumAlgorithm"`
+	CompartmentId        string              `json:"compartmentId"`
 }
 
 type PodConfig struct {
@@ -63,6 +65,12 @@ type PodConfig struct {
 	CPULimit      string                   `json:"cpuLimit,omitempty"`
 	MemoryLimit   string                   `json:"memoryLimit,omitempty"`
 	Resources     *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+type StorageAccessConfig struct {
+	AuthType       string `json:"authType"`
+	EnableOboToken bool   `json:"enableOboToken"`
+	OboToken       string `json:"oboToken"`
 }
 
 // +kubebuilder:object:generate=false

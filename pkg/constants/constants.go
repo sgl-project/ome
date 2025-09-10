@@ -91,7 +91,6 @@ var (
 
 	// General Configuration
 	AgentLocalPathEnvVarKey      = AgentAppName + "_" + "LOCAL_PATH"
-	AgentHFTokenEnvVarKey        = AgentAppName + "_" + "HF_TOKEN"
 	AgentSkipSHAEnvVarKey        = AgentAppName + "_" + "SKIP_SHA"
 	AgentMaxRetriesEnvVarKey     = AgentAppName + "_" + "MAX_RETRIES"
 	AgentRetryIntervalEnvVarKey  = AgentAppName + "_" + "RETRY_INTERVAL_IN_SECONDS"
@@ -102,16 +101,30 @@ var (
 	AgentEnableSizeLimitCheckEnvVarKey = AgentAppName + "_" + "ENABLE_SIZE_LIMIT_CHECK"
 
 	// Source Configuration
-	AgentSourceBucketNameEnvVarKey = AgentAppName + "_" + "SOURCE_BUCKET_NAME"
-	AgentSourcePrefixEnvVarKey     = AgentAppName + "_" + "SOURCE_PREFIX"
-	AgentSourceRegionEnvVarKey     = AgentAppName + "_" + "SOURCE_REGION"
-	AgentSourceNamespaceEnvVarKey  = AgentAppName + "_" + "SOURCE_NAMESPACE"
+	AgentSourceStorageURIEnvVarKey = AgentAppName + "_" + "SOURCE_STORAGE_URI"
+	// Source OCI related
+	AgentSourceOCIEnabledEnvVarKey        = AgentAppName + "_" + "SOURCE_OCI_ENABLED"
+	AgentSourceOCIAuthTypeEnvVarKey       = AgentAppName + "_" + "SOURCE_OCI_AUTH_TYPE"
+	AgentSourceOCIEnableOboTokenEnvVarKey = AgentAppName + "_" + "SOURCE_OCI_ENABLE_OBO_TOKEN"
+	AgentSourceOCIOboTokenEnvVarKey       = AgentAppName + "_" + "SOURCE_OCI_OBO_TOKEN"
+	AgentSourceOCIRegionEnvVarKey         = AgentAppName + "_" + "SOURCE_OCI_REGION"
+	// Source PVC related
+	AgentSourcePVCEnabledEnvVarKey = AgentAppName + "_" + "SOURCE_PVC_ENABLED"
+	// Source HuggingFace related
+	AgentSourceHFTokenEnvVarKey = AgentAppName + "_" + "HF_TOKEN"
 
 	// Target Configuration
-	AgentTargetBucketNameEnvVarKey = AgentAppName + "_" + "TARGET_BUCKET_NAME"
-	AgentTargetPrefixEnvVarKey     = AgentAppName + "_" + "TARGET_PREFIX"
-	AgentTargetRegionEnvVarKey     = AgentAppName + "_" + "TARGET_REGION"
-	AgentTargetNamespaceEnvVarKey  = AgentAppName + "_" + "TARGET_NAMESPACE"
+	AgentTargetStorageURIEnvVarKey = AgentAppName + "_" + "TARGET_STORAGE_URI"
+	// Target OCI related
+	AgentTargetOCIEnabledEnvVarKey              = AgentAppName + "_" + "TARGET_OCI_ENABLED"
+	AgentTargetOCIAuthTypeEnvVarKey             = AgentAppName + "_" + "TARGET_OCI_AUTH_TYPE"
+	AgentTargetOCIEnableOboTokenEnvVarKey       = AgentAppName + "_" + "TARGET_OCI_ENABLE_OBO_TOKEN"
+	AgentTargetOCIOboTokenEnvVarKey             = AgentAppName + "_" + "TARGET_OCI_OBO_TOKEN"
+	AgentTargetOCIRegionEnvVarKey               = AgentAppName + "_" + "TARGET_OCI_REGION"
+	AgentTargetOCIEnableChecksumUploadEnvVarKey = AgentAppName + "_" + "TARGET_CHECKSUM_UPLOAD_ENABLED"
+	AgentTargetOCIChecksumAlgorithmEnvVarKey    = AgentAppName + "_" + "TARGET_CHECKSUM_ALGORITHM"
+	// Target PVC related
+	AgentTargetPVCEnabledEnvVarKey = AgentAppName + "_" + "TARGET_PVC_ENABLED"
 
 	// Model Configuration
 	AgentNodeShapeAliasEnvVarKey         = AgentAppName + "_" + "NODE_SHAPE_ALIAS"
@@ -128,10 +141,6 @@ var (
 	AgentVaultIDEnvVarKey       = AgentAppName + "_" + "VAULT_ID"
 	AgentKeyNameEnvVarKey       = AgentAppName + "_" + "KEY_NAME"
 	AgentSecretNameEnvVarKey    = AgentAppName + "_" + "SECRET_NAME"
-
-	// OCI Object Storage
-	AgentEnableOboTokenEnvVarKey = AgentAppName + "_" + "ENABLE_OBO_TOKEN"
-	AgentOboTokenEnvVarKey       = AgentAppName + "_" + "OBO_TOKEN"
 
 	// Serving Sidecar Configuration
 	AgentFineTunedWeightInfoFilePath      = AgentAppName + "_" + "FINE_TUNED_WEIGHT_INFO_FILE_PATH"

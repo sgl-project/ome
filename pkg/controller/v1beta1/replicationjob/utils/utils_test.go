@@ -24,26 +24,33 @@ func TestBuildEnvVars_SuccessOCI(t *testing.T) {
 			StorageUri: utils.Ptr("oci://n/source_namespace/b/source_bucket/o/source_prefix"),
 			Path:       utils.Ptr("/source/path"),
 			Parameters: utils.Ptr(map[string]string{
-				"region":                    "us-ashburn-1",
-				"auth":                      "InstancePrincipal",
-				constants.OboTokenConfigKey: "oboToken",
+				regionParamKey:   "us-ashburn-1",
+				oboTokenParamKey: "oboToken",
 			}),
 		},
 		Destination: &v1beta1.StorageSpec{
 			StorageUri: utils.Ptr("oci://n/dest_namespace/b/dest_bucket/o/dest_prefix"),
 			Path:       utils.Ptr("/dest/path"),
 			Parameters: utils.Ptr(map[string]string{
-				"region": "us-phoenix-1",
+				regionParamKey: "us-phoenix-1",
 			}),
 		},
 	}
 
 	config := controllerconfig.ReplicationJobConfig{
-		AuthType:             "InstancePrincipal",
-		Region:               "us-ashburn-1",
 		CompartmentId:        "compartment123",
 		DownloadSizeLimit:    "100GB",
-		EnableSizeLimitCheck: "true",
+		EnableSizeLimitCheck: true,
+		EnableChecksumUpload: true,
+		ChecksumAlgorithm:    "sha256",
+		Source: controllerconfig.StorageAccessConfig{
+			AuthType:       "InstancePrincipal",
+			EnableOboToken: true,
+		},
+		Target: controllerconfig.StorageAccessConfig{
+			AuthType:       "InstancePrincipal",
+			EnableOboToken: false,
+		},
 	}
 
 	envVars, err := BuildEnvVars(spec, &config)
@@ -52,22 +59,25 @@ func TestBuildEnvVars_SuccessOCI(t *testing.T) {
 	}
 
 	expectedEnvVars := map[string]string{
-		constants.AgentLocalPathEnvVarKey:            "/source/path",
-		constants.AgentAuthTypeEnvVarKey:             "InstancePrincipal",
-		constants.AgentRegionEnvVarKey:               "us-ashburn-1",
-		constants.AgentCompartmentIDEnvVarKey:        "compartment123",
-		constants.AgentDownloadSizeLimitEnvVarKey:    "100GB",
-		constants.AgentEnableSizeLimitCheckEnvVarKey: "true",
-		constants.AgentSourceNamespaceEnvVarKey:      "source_namespace",
-		constants.AgentSourceBucketNameEnvVarKey:     "source_bucket",
-		constants.AgentSourcePrefixEnvVarKey:         "source_prefix",
-		constants.AgentSourceRegionEnvVarKey:         "us-ashburn-1",
-		constants.AgentTargetNamespaceEnvVarKey:      "dest_namespace",
-		constants.AgentTargetBucketNameEnvVarKey:     "dest_bucket",
-		constants.AgentTargetPrefixEnvVarKey:         "dest_prefix",
-		constants.AgentTargetRegionEnvVarKey:         "us-phoenix-1",
-		constants.AgentEnableOboTokenEnvVarKey:       "true",
-		constants.AgentOboTokenEnvVarKey:             "oboToken",
+		constants.AgentLocalPathEnvVarKey:                     "/source/path",
+		constants.AgentSourceStorageURIEnvVarKey:              "oci://n/source_namespace/b/source_bucket/o/source_prefix",
+		constants.AgentSourceOCIEnabledEnvVarKey:              "true",
+		constants.AgentSourcePVCEnabledEnvVarKey:              "false",
+		constants.AgentSourceOCIAuthTypeEnvVarKey:             "InstancePrincipal",
+		constants.AgentSourceOCIEnableOboTokenEnvVarKey:       "true",
+		constants.AgentSourceOCIOboTokenEnvVarKey:             "oboToken",
+		constants.AgentSourceOCIRegionEnvVarKey:               "us-ashburn-1",
+		constants.AgentTargetStorageURIEnvVarKey:              "oci://n/dest_namespace/b/dest_bucket/o/dest_prefix",
+		constants.AgentTargetOCIEnabledEnvVarKey:              "true",
+		constants.AgentTargetPVCEnabledEnvVarKey:              "false",
+		constants.AgentTargetOCIAuthTypeEnvVarKey:             "InstancePrincipal",
+		constants.AgentTargetOCIEnableOboTokenEnvVarKey:       "false",
+		constants.AgentTargetOCIRegionEnvVarKey:               "us-phoenix-1",
+		constants.AgentTargetOCIEnableChecksumUploadEnvVarKey: "true",
+		constants.AgentTargetOCIChecksumAlgorithmEnvVarKey:    "sha256",
+		constants.AgentCompartmentIDEnvVarKey:                 "compartment123",
+		constants.AgentDownloadSizeLimitEnvVarKey:             "100GB",
+		constants.AgentEnableSizeLimitCheckEnvVarKey:          "true",
 	}
 
 	for _, envVar := range envVars {
