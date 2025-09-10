@@ -64,8 +64,8 @@ type MCPServerSpec struct {
 
 // HostedMCPServer defines a server that runs as pods in the cluster.
 type HostedMCPServer struct {
-	// PodTemplateSpec defines the pod template to use for the MCP server.
-	PodTemplateSpec corev1.PodTemplateSpec `json:"podTemplateSpec"`
+	// PodSpec defines the pod template to use for the MCP server.
+	PodSpec corev1.PodTemplateSpec `json:"podSpec"`
 
 	// Replicas is the number of desired replicas for the server.
 	// Only applicable for servers with network-based transports (e.g., http, sse).
