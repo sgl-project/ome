@@ -107,7 +107,7 @@ GOIMPORTS = $(PROJECT_DIR)/bin/goimports
 .PHONY: install-goimports
 install-goimports: fix-tools-gomod ## 📦 Install goimports if not present
 	@echo "📦 Installing goimports..."
-	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install golang.org/x/tools/cmd/goimports@latest
+	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install golang.org/x/tools/cmd/goimports@v0.36.0
 	@echo "✅ Installation complete"
 
 GENREF = $(PROJECT_DIR)/bin/genref
