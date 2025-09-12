@@ -58,7 +58,7 @@ type AuthConfig struct {
 
 	// OAuth2 provides OAuth2 authentication configuration.
 	// +optional
-	OAuth2 *OAuth2Credentials `json:"oauth2,omitempty"`
+	OAuth2 *OAuth2Credentials `json:"oAuth2,omitempty"`
 
 	// Timeout defines the authentication request timeout.
 	// +kubebuilder:default="30s"
@@ -127,7 +127,7 @@ type ClientCertCredentials struct {
 type OAuth2Credentials struct {
 	// ClientID for OAuth2 authentication.
 	// +kubebuilder:validation:Required
-	ClientID string `json:"clientId"`
+	ClientID string `json:"clientID"`
 
 	// ClientSecret references the OAuth2 client secret.
 	// +kubebuilder:validation:Required
@@ -135,7 +135,7 @@ type OAuth2Credentials struct {
 
 	// TokenURL is the OAuth2 token endpoint.
 	// +kubebuilder:validation:Required
-	TokenURL string `json:"tokenUrl"`
+	TokenURL string `json:"tokenURL"`
 
 	// Scopes define the OAuth2 scopes to request.
 	// +optional

@@ -494,11 +494,10 @@ type CircuitBreakerConfig struct {
 	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
 
 	// ErrorRateThreshold defines the error rate percentage to open the circuit.
-	// +kubebuilder:validation:Minimum=0.0
-	// +kubebuilder:validation:Maximum=100.0
-	// +kubebuilder:default=50.0
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	// +kubebuilder:default="50.0"
 	// +optional
-	ErrorRateThreshold *float64 `json:"errorRateThreshold,omitempty"`
+	ErrorRateThreshold *string `json:"errorRateThreshold,omitempty"`
 
 	// MinRequestsThreshold is the minimum requests before error rate is calculated.
 	// +kubebuilder:validation:Minimum=1
@@ -526,11 +525,10 @@ type SamplingPolicyConfig struct {
 	MaxTokens *int32 `json:"maxTokens,omitempty"`
 
 	// Temperature controls the randomness of sampling responses.
-	// +kubebuilder:validation:Minimum=0.0
-	// +kubebuilder:validation:Maximum=2.0
-	// +kubebuilder:default=0.7
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	// +kubebuilder:default="0.7"
 	// +optional
-	Temperature *float64 `json:"temperature,omitempty"`
+	Temperature *string `json:"temperature,omitempty"`
 
 	// Timeout defines the maximum time to wait for sampling responses.
 	// +kubebuilder:default="30s"
@@ -590,10 +588,10 @@ type ElicitationPolicyConfig struct {
 type ElicitationType string
 
 const (
-	ElicitationTypeQuestion    ElicitationType = "question"
+	ElicitationTypeQuestion     ElicitationType = "question"
 	ElicitationTypeConfirmation ElicitationType = "confirmation"
-	ElicitationTypeInput       ElicitationType = "input"
-	ElicitationTypeChoice      ElicitationType = "choice"
+	ElicitationTypeInput        ElicitationType = "input"
+	ElicitationTypeChoice       ElicitationType = "choice"
 )
 
 // SessionIsolationConfig defines session isolation and context boundary policies.
