@@ -34,6 +34,18 @@ type MCPGatewayPolicyConfig struct {
 	// Compliance defines compliance-related policies.
 	// +optional
 	Compliance *ComplianceConfig `json:"compliance,omitempty"`
+
+	// Sampling defines server-to-client sampling request policy.
+	// +optional
+	Sampling *SamplingPolicyConfig `json:"sampling,omitempty"`
+
+	// Elicitation defines server-to-client elicitation request policy.
+	// +optional
+	Elicitation *ElicitationPolicyConfig `json:"elicitation,omitempty"`
+
+	// SessionIsolation defines session isolation and context boundary policies.
+	// +optional
+	SessionIsolation *SessionIsolationConfig `json:"sessionIsolation,omitempty"`
 }
 
 // MCPAuthenticationConfig defines simplified client authentication configuration.
@@ -494,3 +506,155 @@ type CircuitBreakerConfig struct {
 	// +optional
 	MinRequestsThreshold *int32 `json:"minRequestsThreshold,omitempty"`
 }
+
+// SamplingPolicyConfig defines server-to-client sampling request policy.
+type SamplingPolicyConfig struct {
+	// Enabled controls whether servers can request sampling from clients.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// ClientModel defines which AI model to use for sampling requests.
+	// +optional
+	ClientModel string `json:"clientModel,omitempty"`
+
+	// MaxTokens defines the maximum tokens for sampling requests.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100000
+	// +kubebuilder:default=1000
+	// +optional
+	MaxTokens *int32 `json:"maxTokens,omitempty"`
+
+	// Temperature controls the randomness of sampling responses.
+	// +kubebuilder:validation:Minimum=0.0
+	// +kubebuilder:validation:Maximum=2.0
+	// +kubebuilder:default=0.7
+	// +optional
+	Temperature *float64 `json:"temperature,omitempty"`
+
+	// Timeout defines the maximum time to wait for sampling responses.
+	// +kubebuilder:default="30s"
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// RateLimit defines rate limiting for sampling requests.
+	// +optional
+	RateLimit *SamplingRateLimit `json:"rateLimit,omitempty"`
+}
+
+// SamplingRateLimit defines rate limiting for sampling requests.
+type SamplingRateLimit struct {
+	// RequestsPerMinute is the maximum sampling requests per minute.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=10
+	// +optional
+	RequestsPerMinute *int32 `json:"requestsPerMinute,omitempty"`
+
+	// RequestsPerHour is the maximum sampling requests per hour.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=100
+	// +optional
+	RequestsPerHour *int32 `json:"requestsPerHour,omitempty"`
+}
+
+// ElicitationPolicyConfig defines server-to-client elicitation request policy.
+type ElicitationPolicyConfig struct {
+	// Enabled controls whether servers can request elicitation from clients.
+	// +kubebuilder:default=false
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// RequireConfirmation controls whether user confirmation is required for elicitation.
+	// +kubebuilder:default=true
+	// +optional
+	RequireConfirmation *bool `json:"requireConfirmation,omitempty"`
+
+	// AllowedTypes defines which types of elicitation are allowed.
+	// +optional
+	// +listType=set
+	AllowedTypes []ElicitationType `json:"allowedTypes,omitempty"`
+
+	// Timeout defines the maximum time to wait for elicitation responses.
+	// +kubebuilder:default="60s"
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// MaxConcurrentRequests is the maximum concurrent elicitation requests.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=5
+	// +optional
+	MaxConcurrentRequests *int32 `json:"maxConcurrentRequests,omitempty"`
+}
+
+// ElicitationType defines types of elicitation requests.
+type ElicitationType string
+
+const (
+	ElicitationTypeQuestion    ElicitationType = "question"
+	ElicitationTypeConfirmation ElicitationType = "confirmation"
+	ElicitationTypeInput       ElicitationType = "input"
+	ElicitationTypeChoice      ElicitationType = "choice"
+)
+
+// SessionIsolationConfig defines session isolation and context boundary policies.
+type SessionIsolationConfig struct {
+	// Mode defines the isolation level for MCP sessions.
+	// +kubebuilder:validation:Enum=strict;relaxed;custom
+	// +kubebuilder:default=strict
+	// +optional
+	Mode SessionIsolationMode `json:"mode,omitempty"`
+
+	// CrossSessionSharing controls whether data can be shared between sessions.
+	// +kubebuilder:default=false
+	// +optional
+	CrossSessionSharing *bool `json:"crossSessionSharing,omitempty"`
+
+	// ContextRetention defines how long session context is retained.
+	// +kubebuilder:default="1h"
+	// +optional
+	ContextRetention *metav1.Duration `json:"contextRetention,omitempty"`
+
+	// AuditLevel defines the audit logging level for session boundaries.
+	// +kubebuilder:validation:Enum=None;Basic;Full
+	// +kubebuilder:default=Basic
+	// +optional
+	AuditLevel SessionAuditLevel `json:"auditLevel,omitempty"`
+
+	// EnforceResourceBoundaries controls whether resource access is strictly bounded per session.
+	// +kubebuilder:default=true
+	// +optional
+	EnforceResourceBoundaries *bool `json:"enforceResourceBoundaries,omitempty"`
+
+	// AllowedCrossSessionData defines what data types can be shared across sessions when enabled.
+	// +optional
+	// +listType=set
+	AllowedCrossSessionData []CrossSessionDataType `json:"allowedCrossSessionData,omitempty"`
+}
+
+// SessionIsolationMode defines session isolation levels.
+type SessionIsolationMode string
+
+const (
+	SessionIsolationModeStrict  SessionIsolationMode = "strict"
+	SessionIsolationModeRelaxed SessionIsolationMode = "relaxed"
+	SessionIsolationModeCustom  SessionIsolationMode = "custom"
+)
+
+// SessionAuditLevel defines session audit logging levels.
+type SessionAuditLevel string
+
+const (
+	SessionAuditLevelNone  SessionAuditLevel = "None"
+	SessionAuditLevelBasic SessionAuditLevel = "Basic"
+	SessionAuditLevelFull  SessionAuditLevel = "Full"
+)
+
+// CrossSessionDataType defines types of data that can be shared across sessions.
+type CrossSessionDataType string
+
+const (
+	CrossSessionDataTypeTools     CrossSessionDataType = "tools"
+	CrossSessionDataTypeResources CrossSessionDataType = "resources"
+	CrossSessionDataTypePrompts   CrossSessionDataType = "prompts"
+	CrossSessionDataTypeMetrics   CrossSessionDataType = "metrics"
+)
