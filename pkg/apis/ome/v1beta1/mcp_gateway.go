@@ -7,10 +7,7 @@ import (
 )
 
 // MCPGatewaySpec defines the desired state of MCPGateway.
-// MCPGateway provides AI-aware routing, context management, and orchestration
-// capabilities for Model Context Protocol (MCP) servers with federation support.
 // +kubebuilder:validation:XValidation:rule="has(self.mcpServers.static) || has(self.mcpServers.selector)", message="either static MCP server references or dynamic selector must be specified"
-// +kubebuilder:validation:XValidation:rule="!has(self.federation.enabled) || !self.federation.enabled || size(self.federation.peers) > 0", message="federation peers required when federation is enabled"
 type MCPGatewaySpec struct {
 	// Replicas is the number of desired replicas for the gateway.
 	// +kubebuilder:validation:Minimum=1
@@ -63,7 +60,7 @@ type MCPServerDiscoveryConfig struct {
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 
-	// AutoDiscovery enables automatic discovery of MCP servers through federation.
+	// AutoDiscovery enables automatic discovery of MCP servers
 	// +kubebuilder:default=true
 	// +optional
 	AutoDiscovery *bool `json:"autoDiscovery,omitempty"`
@@ -361,7 +358,6 @@ type GatewayIngressTLS struct {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // MCPGateway is the Schema for the mcpgateways API.
-// MCPGateway provides AI-aware routing, context management, and federation
 // capabilities for Model Context Protocol (MCP) servers and tools.
 type MCPGateway struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -391,7 +387,6 @@ type MCPGatewayList struct {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API.
-// ClusterMCPGateway provides AI-aware routing, context management, and federation
 // capabilities for Model Context Protocol (MCP) servers across the entire cluster.
 type ClusterMCPGateway struct {
 	metav1.TypeMeta   `json:",inline"`
