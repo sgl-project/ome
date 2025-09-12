@@ -149,18 +149,6 @@ type MCPGatewayStatus struct {
 	// +optional
 	ResourceUsage *ResourceUsageStatus `json:"resourceUsage,omitempty"`
 
-	// FederationPeers provides status of federated peer gateways.
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	FederationPeers []FederationPeerStatus `json:"federationPeers,omitempty"`
-
-	// MemoryBuckets provides status of memory buckets.
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	MemoryBuckets []MemoryBucketStatus `json:"memoryBuckets,omitempty"`
-
 	// ToolRegistry provides status of the tool registry.
 	// +optional
 	ToolRegistry *ToolRegistryStatus `json:"toolRegistry,omitempty"`

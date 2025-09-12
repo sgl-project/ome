@@ -3,7 +3,7 @@ package v1beta1
 import "k8s.io/apimachinery/pkg/api/resource"
 
 // ObservabilityConfig defines monitoring, metrics, and tracing configuration.
-type ObservabilityConfig struct {
+type MCPGatewayObservabilityConfig struct {
 	// Metrics defines metrics collection and export configuration.
 	// +optional
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
