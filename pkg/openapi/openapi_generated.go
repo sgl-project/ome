@@ -12,101 +12,171 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorCapabilities":    schema_pkg_apis_ome_v1beta1_AcceleratorCapabilities(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClass":           schema_pkg_apis_ome_v1beta1_AcceleratorClass(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassList":       schema_pkg_apis_ome_v1beta1_AcceleratorClassList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassSpec":       schema_pkg_apis_ome_v1beta1_AcceleratorClassSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus":     schema_pkg_apis_ome_v1beta1_AcceleratorClassStatus(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorConstraints":     schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorCost":            schema_pkg_apis_ome_v1beta1_AcceleratorCost(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorDiscovery":       schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorIntegration":     schema_pkg_apis_ome_v1beta1_AcceleratorIntegration(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorLatency":         schema_pkg_apis_ome_v1beta1_AcceleratorLatency(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig":     schema_pkg_apis_ome_v1beta1_AcceleratorModelConfig(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorPerformance":     schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements":    schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorResource":        schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelection":       schema_pkg_apis_ome_v1beta1_AcceleratorSelection(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector":        schema_pkg_apis_ome_v1beta1_AcceleratorSelector(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModel":                  schema_pkg_apis_ome_v1beta1_BaseModel(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModelList":              schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModelSpec":              schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJob":               schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":           schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":           schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":         schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":           schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":       schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServer":           schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServerList":       schema_pkg_apis_ome_v1beta1_ClusterMCPServerList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":      schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":  schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":     schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":        schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapAuthzRef":          schema_pkg_apis_ome_v1beta1_ConfigMapAuthzRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef":           schema_pkg_apis_ome_v1beta1_ConfigMapOIDCRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapPermissionRef":     schema_pkg_apis_ome_v1beta1_ConfigMapPermissionRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec":                schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.Endpoint":                   schema_pkg_apis_ome_v1beta1_Endpoint(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EndpointSpec":               schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec":                 schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FailureInfo":                schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FineTunedWeight":            schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":        schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":        schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference": schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceService":           schema_pkg_apis_ome_v1beta1_InferenceService(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceList":       schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":  schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":       schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":     schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineAuthzConfig":          schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig":           schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig":                 schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig":       schema_pkg_apis_ome_v1beta1_KubernetesOIDCConfig(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec":                 schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities":            schema_pkg_apis_ome_v1beta1_MCPCapabilities(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolSpec":            schema_pkg_apis_ome_v1beta1_MCPProtocolSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServer":                  schema_pkg_apis_ome_v1beta1_MCPServer(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerList":              schema_pkg_apis_ome_v1beta1_MCPServerList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec":              schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus":            schema_pkg_apis_ome_v1beta1_MCPServerStatus(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelCopies":                schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":         schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat":                schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":         schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRef":                   schema_pkg_apis_ome_v1beta1_ModelRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":        schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":         schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSpec":                  schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelStatus":                schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":            schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermissions":         schema_pkg_apis_ome_v1beta1_NetworkPermissions(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigRef":              schema_pkg_apis_ome_v1beta1_OIDCConfigRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ObjectReference":            schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OutboundNetworkPermissions": schema_pkg_apis_ome_v1beta1_OutboundNetworkPermissions(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileRef":       schema_pkg_apis_ome_v1beta1_PermissionProfileRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec":      schema_pkg_apis_ome_v1beta1_PermissionProfileSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PodOverride":                schema_pkg_apis_ome_v1beta1_PodOverride(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PodSpec":                    schema_pkg_apis_ome_v1beta1_PodSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":     schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorSpec":              schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec":                 schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec":                 schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SecretRef":                  schema_pkg_apis_ome_v1beta1_SecretRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServiceMetadata":            schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntime":             schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":         schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":      schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":          schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":         schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":       schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec":                schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":       schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedRuntime":           schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":    schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":              schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
-		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec":                 schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorCapabilities":       schema_pkg_apis_ome_v1beta1_AcceleratorCapabilities(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClass":              schema_pkg_apis_ome_v1beta1_AcceleratorClass(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassList":          schema_pkg_apis_ome_v1beta1_AcceleratorClassList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassSpec":          schema_pkg_apis_ome_v1beta1_AcceleratorClassSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorClassStatus":        schema_pkg_apis_ome_v1beta1_AcceleratorClassStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorConstraints":        schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorCost":               schema_pkg_apis_ome_v1beta1_AcceleratorCost(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorDiscovery":          schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorIntegration":        schema_pkg_apis_ome_v1beta1_AcceleratorIntegration(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorLatency":            schema_pkg_apis_ome_v1beta1_AcceleratorLatency(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorModelConfig":        schema_pkg_apis_ome_v1beta1_AcceleratorModelConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorPerformance":        schema_pkg_apis_ome_v1beta1_AcceleratorPerformance(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorRequirements":       schema_pkg_apis_ome_v1beta1_AcceleratorRequirements(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorResource":           schema_pkg_apis_ome_v1beta1_AcceleratorResource(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelection":          schema_pkg_apis_ome_v1beta1_AcceleratorSelection(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector":           schema_pkg_apis_ome_v1beta1_AcceleratorSelector(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditConfig":                   schema_pkg_apis_ome_v1beta1_AuditConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditDestinationConfig":        schema_pkg_apis_ome_v1beta1_AuditDestinationConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditFileConfig":               schema_pkg_apis_ome_v1beta1_AuditFileConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditHTTPConfig":               schema_pkg_apis_ome_v1beta1_AuditHTTPConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditSyslogConfig":             schema_pkg_apis_ome_v1beta1_AuditSyslogConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthConfig":                    schema_pkg_apis_ome_v1beta1_AuthConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigSource":             schema_pkg_apis_ome_v1beta1_AuthzConfigSource(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModel":                     schema_pkg_apis_ome_v1beta1_BaseModel(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModelList":                 schema_pkg_apis_ome_v1beta1_BaseModelList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BaseModelSpec":                 schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BasicCredentials":              schema_pkg_apis_ome_v1beta1_BasicCredentials(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJob":                  schema_pkg_apis_ome_v1beta1_BenchmarkJob(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobList":              schema_pkg_apis_ome_v1beta1_BenchmarkJobList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobSpec":              schema_pkg_apis_ome_v1beta1_BenchmarkJobSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BenchmarkJobStatus":            schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BodyFilter":                    schema_pkg_apis_ome_v1beta1_BodyFilter(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BuiltinPermissionProfile":      schema_pkg_apis_ome_v1beta1_BuiltinPermissionProfile(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CircuitBreakerConfig":          schema_pkg_apis_ome_v1beta1_CircuitBreakerConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClientCertCredentials":         schema_pkg_apis_ome_v1beta1_ClientCertCredentials(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModel":              schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterBaseModelList":          schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPGateway":             schema_pkg_apis_ome_v1beta1_ClusterMCPGateway(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPGatewayList":         schema_pkg_apis_ome_v1beta1_ClusterMCPGatewayList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServer":              schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPServerList":          schema_pkg_apis_ome_v1beta1_ClusterMCPServerList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime":         schema_pkg_apis_ome_v1beta1_ClusterServingRuntime(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntimeList":     schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComplianceConfig":              schema_pkg_apis_ome_v1beta1_ComplianceConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComplianceEncryptionConfig":    schema_pkg_apis_ome_v1beta1_ComplianceEncryptionConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentExtensionSpec":        schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComponentStatusSpec":           schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigValidationError":         schema_pkg_apis_ome_v1beta1_ConfigValidationError(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigValidationStatus":        schema_pkg_apis_ome_v1beta1_ConfigValidationStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef":                 schema_pkg_apis_ome_v1beta1_CredentialRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CustomMetric":                  schema_pkg_apis_ome_v1beta1_CustomMetric(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DataRetentionConfig":           schema_pkg_apis_ome_v1beta1_DataRetentionConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DecoderSpec":                   schema_pkg_apis_ome_v1beta1_DecoderSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ElicitationPolicyConfig":       schema_pkg_apis_ome_v1beta1_ElicitationPolicyConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.Endpoint":                      schema_pkg_apis_ome_v1beta1_Endpoint(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EndpointSpec":                  schema_pkg_apis_ome_v1beta1_EndpointSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.EngineSpec":                    schema_pkg_apis_ome_v1beta1_EngineSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FailureInfo":                   schema_pkg_apis_ome_v1beta1_FailureInfo(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FineTunedWeight":               schema_pkg_apis_ome_v1beta1_FineTunedWeight(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FineTunedWeightList":           schema_pkg_apis_ome_v1beta1_FineTunedWeightList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.FineTunedWeightSpec":           schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GRPCTransportConfig":           schema_pkg_apis_ome_v1beta1_GRPCTransportConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressConfig":          schema_pkg_apis_ome_v1beta1_GatewayIngressConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressHost":            schema_pkg_apis_ome_v1beta1_GatewayIngressHost(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressPath":            schema_pkg_apis_ome_v1beta1_GatewayIngressPath(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressTLS":             schema_pkg_apis_ome_v1beta1_GatewayIngressTLS(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayMetrics":                schema_pkg_apis_ome_v1beta1_GatewayMetrics(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayServiceConfig":          schema_pkg_apis_ome_v1beta1_GatewayServiceConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayServicePort":            schema_pkg_apis_ome_v1beta1_GatewayServicePort(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayTransportConfig":        schema_pkg_apis_ome_v1beta1_GatewayTransportConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HTTPTransportConfig":           schema_pkg_apis_ome_v1beta1_HTTPTransportConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HeaderFilter":                  schema_pkg_apis_ome_v1beta1_HeaderFilter(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HealthCheckConfig":             schema_pkg_apis_ome_v1beta1_HealthCheckConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HealthEndpointConfig":          schema_pkg_apis_ome_v1beta1_HealthEndpointConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HostedMCPServer":               schema_pkg_apis_ome_v1beta1_HostedMCPServer(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HuggingFaceSecretReference":    schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceService":              schema_pkg_apis_ome_v1beta1_InferenceService(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceList":          schema_pkg_apis_ome_v1beta1_InferenceServiceList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceReference":     schema_pkg_apis_ome_v1beta1_InferenceServiceReference(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceSpec":          schema_pkg_apis_ome_v1beta1_InferenceServiceSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InferenceServiceStatus":        schema_pkg_apis_ome_v1beta1_InferenceServiceStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineAuthzConfig":             schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig":              schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.JWTCredentials":                schema_pkg_apis_ome_v1beta1_JWTCredentials(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig":                    schema_pkg_apis_ome_v1beta1_KedaConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubeResourcePermission":        schema_pkg_apis_ome_v1beta1_KubeResourcePermission(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig":          schema_pkg_apis_ome_v1beta1_KubernetesOIDCConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec":                    schema_pkg_apis_ome_v1beta1_LeaderSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LogFileConfig":                 schema_pkg_apis_ome_v1beta1_LogFileConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LoggingConfig":                 schema_pkg_apis_ome_v1beta1_LoggingConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPAuthenticationConfig":       schema_pkg_apis_ome_v1beta1_MCPAuthenticationConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities":               schema_pkg_apis_ome_v1beta1_MCPCapabilities(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGateway":                    schema_pkg_apis_ome_v1beta1_MCPGateway(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayList":                schema_pkg_apis_ome_v1beta1_MCPGatewayList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayNetworkConfig":       schema_pkg_apis_ome_v1beta1_MCPGatewayNetworkConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayObservabilityConfig": schema_pkg_apis_ome_v1beta1_MCPGatewayObservabilityConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayPolicyConfig":        schema_pkg_apis_ome_v1beta1_MCPGatewayPolicyConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayServerStatus":        schema_pkg_apis_ome_v1beta1_MCPGatewayServerStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewaySpec":                schema_pkg_apis_ome_v1beta1_MCPGatewaySpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayStatus":              schema_pkg_apis_ome_v1beta1_MCPGatewayStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolVersionConfig":      schema_pkg_apis_ome_v1beta1_MCPProtocolVersionConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServer":                     schema_pkg_apis_ome_v1beta1_MCPServer(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerDiscoveryConfig":      schema_pkg_apis_ome_v1beta1_MCPServerDiscoveryConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerList":                 schema_pkg_apis_ome_v1beta1_MCPServerList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerRef":                  schema_pkg_apis_ome_v1beta1_MCPServerRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec":                 schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus":               schema_pkg_apis_ome_v1beta1_MCPServerStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MetricsConfig":                 schema_pkg_apis_ome_v1beta1_MetricsConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelCopies":                   schema_pkg_apis_ome_v1beta1_ModelCopies(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelExtensionSpec":            schema_pkg_apis_ome_v1beta1_ModelExtensionSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat":                   schema_pkg_apis_ome_v1beta1_ModelFormat(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec":            schema_pkg_apis_ome_v1beta1_ModelFrameworkSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRef":                      schema_pkg_apis_ome_v1beta1_ModelRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelRevisionStates":           schema_pkg_apis_ome_v1beta1_ModelRevisionStates(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSizeRangeSpec":            schema_pkg_apis_ome_v1beta1_ModelSizeRangeSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSpec":                     schema_pkg_apis_ome_v1beta1_ModelSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelStatus":                   schema_pkg_apis_ome_v1beta1_ModelStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelStatusSpec":               schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermission":             schema_pkg_apis_ome_v1beta1_NetworkPermission(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkUsageInfo":              schema_pkg_apis_ome_v1beta1_NetworkUsageInfo(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OAuth2Credentials":             schema_pkg_apis_ome_v1beta1_OAuth2Credentials(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigSource":              schema_pkg_apis_ome_v1beta1_OIDCConfigSource(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ObjectReference":               schema_pkg_apis_ome_v1beta1_ObjectReference(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PIIDetectionConfig":            schema_pkg_apis_ome_v1beta1_PIIDetectionConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PIIPattern":                    schema_pkg_apis_ome_v1beta1_PIIPattern(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSource":       schema_pkg_apis_ome_v1beta1_PermissionProfileSource(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec":         schema_pkg_apis_ome_v1beta1_PermissionProfileSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionRule":                schema_pkg_apis_ome_v1beta1_PermissionRule(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PodOverride":                   schema_pkg_apis_ome_v1beta1_PodOverride(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PodSpec":                       schema_pkg_apis_ome_v1beta1_PodSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorExtensionSpec":        schema_pkg_apis_ome_v1beta1_PredictorExtensionSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PredictorSpec":                 schema_pkg_apis_ome_v1beta1_PredictorSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PromptRegistryStatus":          schema_pkg_apis_ome_v1beta1_PromptRegistryStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitConfig":               schema_pkg_apis_ome_v1beta1_RateLimitConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitPolicy":               schema_pkg_apis_ome_v1beta1_RateLimitPolicy(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RemoteMCPServer":               schema_pkg_apis_ome_v1beta1_RemoteMCPServer(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RequestFilteringConfig":        schema_pkg_apis_ome_v1beta1_RequestFilteringConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResourceRegistryStatus":        schema_pkg_apis_ome_v1beta1_ResourceRegistryStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResourceUsageStatus":           schema_pkg_apis_ome_v1beta1_ResourceUsageStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResponseFilteringConfig":       schema_pkg_apis_ome_v1beta1_ResponseFilteringConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RouterSpec":                    schema_pkg_apis_ome_v1beta1_RouterSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec":                    schema_pkg_apis_ome_v1beta1_RunnerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SamplingPolicyConfig":          schema_pkg_apis_ome_v1beta1_SamplingPolicyConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SamplingRateLimit":             schema_pkg_apis_ome_v1beta1_SamplingRateLimit(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServerStatusSummary":           schema_pkg_apis_ome_v1beta1_ServerStatusSummary(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServiceMetadata":               schema_pkg_apis_ome_v1beta1_ServiceMetadata(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntime":                schema_pkg_apis_ome_v1beta1_ServingRuntime(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeList":            schema_pkg_apis_ome_v1beta1_ServingRuntimeList(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimePodSpec":         schema_pkg_apis_ome_v1beta1_ServingRuntimePodSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeRef":             schema_pkg_apis_ome_v1beta1_ServingRuntimeRef(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeSpec":            schema_pkg_apis_ome_v1beta1_ServingRuntimeSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServingRuntimeStatus":          schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SessionIsolationConfig":        schema_pkg_apis_ome_v1beta1_SessionIsolationConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageMetrics":                schema_pkg_apis_ome_v1beta1_StorageMetrics(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec":                   schema_pkg_apis_ome_v1beta1_StorageSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageUsageInfo":              schema_pkg_apis_ome_v1beta1_StorageUsageInfo(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedModelFormat":          schema_pkg_apis_ome_v1beta1_SupportedModelFormat(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SupportedRuntime":              schema_pkg_apis_ome_v1beta1_SupportedRuntime(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TensorParallelismConfig":       schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ToolRegistryStatus":            schema_pkg_apis_ome_v1beta1_ToolRegistryStatus(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TracingConfig":                 schema_pkg_apis_ome_v1beta1_TracingConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WebSocketTransportConfig":      schema_pkg_apis_ome_v1beta1_WebSocketTransportConfig(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerPodSpec":                 schema_pkg_apis_ome_v1beta1_WorkerPodSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec":                    schema_pkg_apis_ome_v1beta1_WorkerSpec(ref),
+		"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkflowStatus":                schema_pkg_apis_ome_v1beta1_WorkflowStatus(ref),
 	}
 }
 
@@ -1030,6 +1100,311 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorSelector(ref common.ReferenceCallbac
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_AuditConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuditConfig defines audit logging configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether audit logging is active.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"level": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Level defines the audit logging level.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"destination": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Destination defines where audit logs are sent.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditDestinationConfig"),
+						},
+					},
+					"format": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Format defines the audit log format.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"includeMetadata": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IncludeMetadata controls whether to include request metadata in audit logs.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditDestinationConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AuditDestinationConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuditDestinationConfig defines audit log destinations.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type defines the destination type.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"file": {
+						SchemaProps: spec.SchemaProps{
+							Description: "File defines file-based audit logging.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditFileConfig"),
+						},
+					},
+					"http": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HTTP defines HTTP-based audit logging.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditHTTPConfig"),
+						},
+					},
+					"syslog": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Syslog defines syslog-based audit logging.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditSyslogConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditFileConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditHTTPConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditSyslogConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AuditFileConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuditFileConfig defines file-based audit logging.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path defines the audit log file path.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"maxSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxSize defines the maximum log file size before rotation.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"maxBackups": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxBackups defines the maximum number of backup files to keep.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AuditHTTPConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuditHTTPConfig defines HTTP-based audit logging.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Endpoint defines the HTTP endpoint for audit logs.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"method": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Method defines the HTTP method to use.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"headers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Headers define additional HTTP headers.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"timeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeout defines the HTTP request timeout.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+				Required: []string{"endpoint"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AuditSyslogConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuditSyslogConfig defines syslog-based audit logging.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"server": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Server defines the syslog server address.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"protocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Protocol defines the syslog protocol.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"facility": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Facility defines the syslog facility.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"server"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AuthConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuthConfig provides unified authentication configuration for all components.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"method": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Method defines the authentication method to use.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"token": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Token provides the authentication token (Bearer, API Key).",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
+						},
+					},
+					"basic": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Basic provides basic authentication credentials.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BasicCredentials"),
+						},
+					},
+					"jwt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "JWT provides JWT authentication configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.JWTCredentials"),
+						},
+					},
+					"clientCert": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClientCert provides client certificate authentication.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClientCertCredentials"),
+						},
+					},
+					"oAuth2": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OAuth2 provides OAuth2 authentication configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OAuth2Credentials"),
+						},
+					},
+					"timeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeout defines the authentication request timeout.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+				Required: []string{"method"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BasicCredentials", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClientCertCredentials", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.JWTCredentials", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OAuth2Credentials", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_AuthzConfigSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AuthzConfigSource defines the source of an authorization policy. Only one of the fields may be set.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"configMap": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConfigMap references a ConfigMap containing the authorization policy.",
+							Ref:         ref("k8s.io/api/core/v1.ConfigMapKeySelector"),
+						},
+					},
+					"inline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Inline contains an embedded authorization policy.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineAuthzConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineAuthzConfig", "k8s.io/api/core/v1.ConfigMapKeySelector"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_BaseModel(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1287,6 +1662,37 @@ func schema_pkg_apis_ome_v1beta1_BaseModelSpec(ref common.ReferenceCallback) com
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFormat", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelFrameworkSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageSpec", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_BasicCredentials(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BasicCredentials defines basic authentication credentials.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"username": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Username for basic authentication.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"password": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Password references the password secret.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
+						},
+					},
+				},
+				Required: []string{"username", "password"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"},
 	}
 }
 
@@ -1580,6 +1986,176 @@ func schema_pkg_apis_ome_v1beta1_BenchmarkJobStatus(ref common.ReferenceCallback
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_BodyFilter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BodyFilter defines body content filtering rules.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type defines the filter type.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pattern": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pattern defines the pattern to match.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"action": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Action defines the filtering action.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"replacement": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replacement defines the replacement value for redaction.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"type", "action"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_BuiltinPermissionProfile(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BuiltinPermissionProfile defines a built-in permission profile.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the built-in permission profile.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CircuitBreakerConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CircuitBreakerConfig defines circuit breaker configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"failureThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FailureThreshold is the number of consecutive failures to open the circuit.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"successThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SuccessThreshold is the number of consecutive successes to close the circuit.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"openStateTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OpenStateTimeout is the time to wait before transitioning to half-open.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"maxRequestsHalfOpen": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxRequestsHalfOpen is the maximum requests allowed in half-open state.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"requestTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestTimeout defines the timeout for requests in various states.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"errorRateThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ErrorRateThreshold defines the error rate percentage to open the circuit.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"minRequestsThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinRequestsThreshold is the minimum requests before error rate is calculated.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClientCertCredentials(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClientCertCredentials defines client certificate authentication.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"certificateRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CertificateRef references the client certificate secret.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
+						},
+					},
+					"privateKeyRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PrivateKeyRef references the private key secret.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
+						},
+					},
+					"caRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CARef references the CA certificate secret for verification.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
+						},
+					},
+					"verifyServerCert": {
+						SchemaProps: spec.SchemaProps{
+							Description: "VerifyServerCert controls whether to verify the server certificate.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"certificateRef", "privateKeyRef"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ClusterBaseModel(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1676,6 +2252,102 @@ func schema_pkg_apis_ome_v1beta1_ClusterBaseModelList(ref common.ReferenceCallba
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_ClusterMCPGateway(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API. ClusterMCPGateway provides AI-aware routing, context management, and federation capabilities for Model Context Protocol (MCP) servers across the entire cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewaySpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewaySpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ClusterMCPGatewayList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ClusterMCPGatewayList contains a list of ClusterMCPGateway.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPGateway"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterMCPGateway", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1699,9 +2371,8 @@ func schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref common.ReferenceCallback) 
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "nolint:revive",
-							Default:     map[string]interface{}{},
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
 					"spec": {
@@ -1717,6 +2388,7 @@ func schema_pkg_apis_ome_v1beta1_ClusterMCPServer(ref common.ReferenceCallback) 
 						},
 					},
 				},
+				Required: []string{"spec"},
 			},
 		},
 		Dependencies: []string{
@@ -1747,9 +2419,8 @@ func schema_pkg_apis_ome_v1beta1_ClusterMCPServerList(ref common.ReferenceCallba
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "nolint:revive",
-							Default:     map[string]interface{}{},
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
 						},
 					},
 					"items": {
@@ -1867,6 +2538,73 @@ func schema_pkg_apis_ome_v1beta1_ClusterServingRuntimeList(ref common.ReferenceC
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ClusterServingRuntime", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ComplianceConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComplianceConfig defines compliance-related policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"dataRetention": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DataRetention defines data retention policies.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DataRetentionConfig"),
+						},
+					},
+					"piiDetection": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PIIDetection defines PII detection and handling.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PIIDetectionConfig"),
+						},
+					},
+					"encryption": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Encryption defines encryption requirements.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComplianceEncryptionConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComplianceEncryptionConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.DataRetentionConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PIIDetectionConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ComplianceEncryptionConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ComplianceEncryptionConfig defines compliance encryption configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"requireEncryption": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequireEncryption controls whether encryption is required.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"encryptionAtRest": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EncryptionAtRest controls whether data must be encrypted at rest.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"encryptionInTransit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EncryptionInTransit controls whether data must be encrypted in transit.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -2075,24 +2813,136 @@ func schema_pkg_apis_ome_v1beta1_ComponentStatusSpec(ref common.ReferenceCallbac
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_ConfigMapPermissionRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_ConfigValidationError(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ConfigMapPermissionRef references a ConfigMap containing permission profile configuration",
+				Description: "ConfigValidationError represents a configuration validation error.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"name": {
+					"field": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name is the name of the ConfigMap",
+							Description: "Field is the configuration field that failed validation.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"key": {
+					"message": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Key is the key in the ConfigMap that contains the permission profile configuration",
+							Description: "Message describes the validation error.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"severity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Severity indicates the error severity.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"field", "message", "severity"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ConfigValidationStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ConfigValidationStatus provides configuration validation status.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"valid": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Valid indicates whether the current configuration is valid.",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"validationErrors": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ValidationErrors contains any configuration validation errors.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigValidationError"),
+									},
+								},
+							},
+						},
+					},
+					"warnings": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Warnings contains non-blocking configuration warnings.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"lastValidated": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastValidated is when the configuration was last validated.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+				Required: []string{"valid"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigValidationError", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CredentialRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CredentialRef provides a reference to a secret containing authentication credentials.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"secretRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecretRef references a Kubernetes secret containing the credential.",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+					"value": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Value contains the credential value directly (not recommended for sensitive data).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"headerName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HeaderName specifies the header name for API key authentication.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -2100,6 +2950,98 @@ func schema_pkg_apis_ome_v1beta1_ConfigMapPermissionRef(ref common.ReferenceCall
 				},
 			},
 		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.SecretKeySelector"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_CustomMetric(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CustomMetric defines a custom metric to collect.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the metric name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type defines the metric type.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"help": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Help provides a description of the metric.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"labels": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels define metric labels.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"name", "type"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_DataRetentionConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DataRetentionConfig defines data retention policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"auditLogRetention": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AuditLogRetention defines how long to keep audit logs.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"contextRetention": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContextRetention defines how long to keep context data.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"sessionRetention": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SessionRetention defines how long to keep session data.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
 	}
 }
 
@@ -2711,6 +3653,68 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ElicitationPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ElicitationPolicyConfig defines server-to-client elicitation request policy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether servers can request elicitation from clients.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"requireConfirmation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequireConfirmation controls whether user confirmation is required for elicitation.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"allowedTypes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowedTypes defines which types of elicitation are allowed.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"timeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeout defines the maximum time to wait for elicitation responses.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"maxConcurrentRequests": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxConcurrentRequests is the maximum concurrent elicitation requests.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
 	}
 }
 
@@ -3629,6 +4633,667 @@ func schema_pkg_apis_ome_v1beta1_FineTunedWeightSpec(ref common.ReferenceCallbac
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_GRPCTransportConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GRPCTransportConfig defines gRPC transport configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port defines the gRPC port.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxMessageSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxMessageSize defines the maximum message size.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"connectionTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConnectionTimeout defines the connection timeout.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayIngressConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayIngressConfig defines ingress configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether ingress is created.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"className": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClassName defines the ingress class name.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"hosts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Hosts define the ingress hosts.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressHost"),
+									},
+								},
+							},
+						},
+					},
+					"tls": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "TLS defines TLS configuration for ingress.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressTLS"),
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations define ingress annotations.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressHost", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressTLS"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayIngressHost(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayIngressHost defines an ingress host.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"host": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Host is the host name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"paths": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Paths define the host paths.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressPath"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"host"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressPath"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayIngressPath(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayIngressPath defines an ingress path.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path is the URL path.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pathType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PathType defines the path type.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"serviceName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceName is the backend service name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"servicePort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServicePort is the backend service port.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"path", "serviceName", "servicePort"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayIngressTLS(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayIngressTLS defines ingress TLS configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"hosts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Hosts define the TLS hosts.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"secretName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SecretName references the TLS secret.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayMetrics(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayMetrics provides real-time performance metrics for the gateway.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"requestsPerSecond": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestsPerSecond is the current requests per second rate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"p50Latency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "P50Latency is the 50th percentile latency in milliseconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"p90Latency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "P90Latency is the 99th percentile latency in milliseconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"errorRate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ErrorRate is the current error rate as a percentage.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"activeConnections": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveConnections is the number of currently active connections.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"cacheHitRate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CacheHitRate is the cache hit rate as a percentage.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"toolInvocations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ToolInvocations tracks tool invocation statistics.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: 0,
+										Type:    []string{"integer"},
+										Format:  "int64",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayServiceConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayServiceConfig defines service configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type defines the service type.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ports": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Ports define the service ports.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayServicePort"),
+									},
+								},
+							},
+						},
+					},
+					"annotations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Annotations define service annotations.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayServicePort"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayServicePort(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayServicePort defines a service port.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the port name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port is the service port.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"targetPort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TargetPort is the target port on pods.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"protocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Protocol is the port protocol.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "port"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_GatewayTransportConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayTransportConfig defines transport protocol configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"http": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HTTP defines HTTP transport configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HTTPTransportConfig"),
+						},
+					},
+					"grpc": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GRPC defines gRPC transport configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GRPCTransportConfig"),
+						},
+					},
+					"webSocket": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WebSocket defines WebSocket transport configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WebSocketTransportConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GRPCTransportConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HTTPTransportConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WebSocketTransportConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HTTPTransportConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HTTPTransportConfig defines HTTP transport configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port defines the HTTP port.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadTimeout defines the HTTP read timeout.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"writeTimeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WriteTimeout defines the HTTP write timeout.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"maxHeaderSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxHeaderSize defines the maximum header size.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HeaderFilter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HeaderFilter defines header filtering rules.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the header name to filter.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"action": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Action defines the filtering action.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pattern": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Pattern is a regex pattern to match header values.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "action"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HealthCheckConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HealthCheckConfig defines health checking configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether health checking is performed.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"interval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Interval is the time between health checks.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"timeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeout is the maximum time to wait for a health check response.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"unhealthyThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UnhealthyThreshold is the number of consecutive failures before marking unhealthy.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"healthyThreshold": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HealthyThreshold is the number of consecutive successes before marking healthy.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HealthEndpointConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HealthEndpointConfig defines health check endpoint configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether health endpoints are exposed.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port defines the health endpoint port.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"livenessPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LivenessPath defines the liveness probe path.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"readinessPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadinessPath defines the readiness probe path.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_HostedMCPServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HostedMCPServer defines a server that runs as pods in the cluster.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"podSpec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PodSpec defines the pod template to use for the MCP server.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the number of desired replicas for the server. Only applicable for servers with network-based transports (e.g., http, sse).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"podSpec"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.PodTemplateSpec"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_HuggingFaceSecretReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -3936,7 +5601,7 @@ func schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref common.ReferenceCallback)
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "InlineAuthzConfig contains direct authorization configuration",
+				Description: "InlineAuthzConfig contains an embedded authorization policy.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"policies": {
@@ -3946,7 +5611,7 @@ func schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref common.ReferenceCallback)
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Policies is a list of Cedar policy strings",
+							Description: "Policies is a list of Cedar policy strings.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -3961,7 +5626,7 @@ func schema_pkg_apis_ome_v1beta1_InlineAuthzConfig(ref common.ReferenceCallback)
 					},
 					"entitiesJSON": {
 						SchemaProps: spec.SchemaProps{
-							Description: "EntitiesJSON is a JSON string representing Cedar entities",
+							Description: "EntitiesJSON is a JSON string representing Cedar entities.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -3977,12 +5642,12 @@ func schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "InlineOIDCConfig contains direct OIDC configuration",
+				Description: "InlineOIDCConfig contains direct OIDC provider configuration.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"issuer": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Issuer is the OIDC issuer URL",
+							Description: "Issuer is the OIDC issuer URL.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -3990,58 +5655,15 @@ func schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref common.ReferenceCallback) 
 					},
 					"audience": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Audience is the expected audience for the token",
+							Description: "Audience is the expected audience for the token.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"jwksURL": {
 						SchemaProps: spec.SchemaProps{
-							Description: "JWKSURL is the URL to fetch the JWKS from",
+							Description: "JWKSURL is the URL to fetch the JSON Web Key Set from. If empty, OIDC discovery will be used.",
 							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"introspectionURL": {
-						SchemaProps: spec.SchemaProps{
-							Description: "IntrospectionURL is the URL for token introspection endpoint",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"clientID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ClientID is deprecated and will be removed in a future release.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"clientSecret": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ClientSecret is the client secret for introspection (optional)",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"thvCABundlePath": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ThvCABundlePath is the path to CA certificate bundle file for HTTPS requests The file must be mounted into the pod (e.g., via ConfigMap or Secret volume)",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"jwksAuthTokenPath": {
-						SchemaProps: spec.SchemaProps{
-							Description: "JWKSAuthTokenPath is the path to file containing bearer token for JWKS/OIDC requests The file must be mounted into the pod (e.g., via Secret volume)",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"jwksAllowPrivateIP": {
-						SchemaProps: spec.SchemaProps{
-							Description: "JWKSAllowPrivateIP allows JWKS/OIDC endpoints on private IP addresses Use with caution - only enable for trusted internal IDPs",
-							Default:     false,
-							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -4049,6 +5671,56 @@ func schema_pkg_apis_ome_v1beta1_InlineOIDCConfig(ref common.ReferenceCallback) 
 				Required: []string{"issuer"},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_JWTCredentials(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "JWTCredentials defines JWT authentication credentials.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"signingKey": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SigningKey references the JWT signing key secret.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
+						},
+					},
+					"algorithm": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Algorithm defines the JWT signing algorithm.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"issuer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Issuer defines the expected JWT issuer.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"audience": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Audience defines the expected JWT audience.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"expirationTolerance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExpirationTolerance defines tolerance for token expiration.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+				Required: []string{"signingKey"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
 	}
 }
 
@@ -4100,59 +5772,91 @@ func schema_pkg_apis_ome_v1beta1_KedaConfig(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_KubeResourcePermission(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "KubeResourcePermission defines permissions for a set of Kubernetes resources.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"apiGroups": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "APIGroups is the list of API groups. \"*\" means all.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"resources": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Resources is the list of resource names. \"*\" means all.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"verbs": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Verbs is the list of allowed verbs.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"apiGroups", "resources", "verbs"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_KubernetesOIDCConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "KubernetesOIDCConfig configures OIDC for Kubernetes service account token validation",
+				Description: "KubernetesOIDCConfig configures OIDC for Kubernetes service account token validation.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"serviceAccount": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ServiceAccount is deprecated and will be removed in a future release.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"namespace": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Namespace is the namespace of the service account If empty, uses the MCPServer's namespace",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"audience": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Audience is the expected audience for the token",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"issuer": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Issuer is the OIDC issuer URL",
+							Description: "Issuer is the OIDC issuer URL of the Kubernetes cluster. If not specified, it defaults to the cluster's issuer URL.",
 							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"jwksURL": {
-						SchemaProps: spec.SchemaProps{
-							Description: "JWKSURL is the URL to fetch the JWKS from If empty, OIDC discovery will be used to automatically determine the JWKS URL",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"introspectionURL": {
-						SchemaProps: spec.SchemaProps{
-							Description: "IntrospectionURL is the URL for token introspection endpoint If empty, OIDC discovery will be used to automatically determine the introspection URL",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"useClusterAuth": {
-						SchemaProps: spec.SchemaProps{
-							Description: "UseClusterAuth enables using the Kubernetes cluster's CA bundle and service account token When true, uses /var/run/secrets/kubernetes.io/serviceaccount/ca.crt for TLS verification and /var/run/secrets/kubernetes.io/serviceaccount/token for bearer token authentication Defaults to true if not specified",
-							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -4651,30 +6355,163 @@ func schema_pkg_apis_ome_v1beta1_LeaderSpec(ref common.ReferenceCallback) common
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_LogFileConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LogFileConfig defines file-based logging configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path defines the log file path.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"maxSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxSize defines the maximum log file size before rotation.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"maxFiles": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxFiles defines the maximum number of log files to keep.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"compress": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Compress controls whether rotated logs are compressed.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"path"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_LoggingConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LoggingConfig defines structured logging configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"level": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Level defines the logging level.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"format": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Format defines the log format.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"output": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Output defines where logs are sent.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"file": {
+						SchemaProps: spec.SchemaProps{
+							Description: "File defines file-based logging configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LogFileConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LogFileConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPAuthenticationConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPAuthenticationConfig defines simplified client authentication configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether authentication is required.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"methods": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Methods define the supported authentication methods in order of preference.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthConfig"),
+									},
+								},
+							},
+						},
+					},
+					"default": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Default provides the default authentication method when none is specified.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthConfig"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_MCPCapabilities(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MCPCapabilities defines the capabilities supported by the MCP server",
+				Description: "MCPCapabilities defines the features supported by the MCP server.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"tools": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Tools indicates whether the server supports MCP tools",
+							Description: "Tools indicates whether the server supports tool execution.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
 					"resources": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Resources indicates whether the server supports MCP resources",
+							Description: "Resources indicates whether the server supports exposing resources.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
 					"prompts": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Prompts indicates whether the server supports MCP prompts",
+							Description: "Prompts indicates whether the server supports prompt elicitation.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -4685,24 +6522,693 @@ func schema_pkg_apis_ome_v1beta1_MCPCapabilities(ref common.ReferenceCallback) c
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_MCPProtocolSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_MCPGateway(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MCPProtocolSpec defines the MCP protocol specification",
+				Description: "MCPGateway is the Schema for the mcpgateways API. MCPGateway provides AI-aware routing, context management, and federation capabilities for Model Context Protocol (MCP) servers and tools.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"name": {
+					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name of the protocol (always \"JSON-RPC\" for MCP)",
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"version": {
+					"apiVersion": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Version of the JSON-RPC protocol (always \"2.0\" for MCP)",
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
 							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewaySpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewaySpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewayList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPGatewayList contains a list of MCPGateway.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGateway"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGateway", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewayNetworkConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayNetworkConfig defines service exposure, transport protocols, and ingress settings.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"service": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Service defines the service configuration for the gateway.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayServiceConfig"),
+						},
+					},
+					"transport": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Transport defines the transport protocol configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayTransportConfig"),
+						},
+					},
+					"ingress": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ingress defines ingress configuration for external access.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayIngressConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayServiceConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayTransportConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewayObservabilityConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ObservabilityConfig defines monitoring, metrics, and tracing configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"metrics": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Metrics defines metrics collection and export configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MetricsConfig"),
+						},
+					},
+					"tracing": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tracing defines distributed tracing configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TracingConfig"),
+						},
+					},
+					"logging": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Logging defines structured logging configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LoggingConfig"),
+						},
+					},
+					"health": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Health defines health check endpoint configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HealthEndpointConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HealthEndpointConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LoggingConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MetricsConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.TracingConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewayPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GatewayPolicyConfig defines unified security, authentication, authorization, and traffic policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"authentication": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Authentication defines client authentication configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPAuthenticationConfig"),
+						},
+					},
+					"rateLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RateLimit defines rate limiting configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitConfig"),
+						},
+					},
+					"circuitBreaker": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CircuitBreaker defines the circuit breaking configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CircuitBreakerConfig"),
+						},
+					},
+					"audit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Audit defines audit logging configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditConfig"),
+						},
+					},
+					"requestFiltering": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestFiltering defines request filtering policies.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RequestFilteringConfig"),
+						},
+					},
+					"responseFiltering": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResponseFiltering defines response filtering policies.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResponseFilteringConfig"),
+						},
+					},
+					"compliance": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Compliance defines compliance-related policies.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComplianceConfig"),
+						},
+					},
+					"sampling": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Sampling defines server-to-client sampling request policy.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SamplingPolicyConfig"),
+						},
+					},
+					"elicitation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Elicitation defines server-to-client elicitation request policy.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ElicitationPolicyConfig"),
+						},
+					},
+					"sessionIsolation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SessionIsolation defines session isolation and context boundary policies.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SessionIsolationConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuditConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CircuitBreakerConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ComplianceConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ElicitationPolicyConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPAuthenticationConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RequestFilteringConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResponseFilteringConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SamplingPolicyConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SessionIsolationConfig"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewayServerStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPGatewayServerStatus defines the status of a connected MCP server.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the MCP server.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"namespace": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Namespace is the namespace of the MCP server.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State is the current connection state.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"lastConnected": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastConnected is the timestamp of the last successful connection.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"lastError": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastError contains the last error encountered.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"requestCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestCount is the total number of requests sent to this server.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"errorCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ErrorCount is the total number of errors from this server.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"averageResponseTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AverageResponseTime is the average response time in milliseconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"circuitBreakerState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CircuitBreakerState is the current circuit breaker state.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"weight": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Weight is the current effective weight for load balancing.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"tags": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Tags are the current tags associated with this server.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"capabilities": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Capabilities are the server's current capabilities.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities"),
+						},
+					},
+				},
+				Required: []string{"name", "state"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewaySpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPGatewaySpec defines the desired state of MCPGateway. MCPGateway provides AI-aware routing, context management, and orchestration capabilities for Model Context Protocol (MCP) servers with federation support.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the number of desired replicas for the gateway.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"podSpec": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PodSpec defines the pod template for the gateway deployment.",
+							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
+						},
+					},
+					"mcpServers": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MCPServers defines how the gateway discovers and connects to MCP servers.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerDiscoveryConfig"),
+						},
+					},
+					"transport": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Transport defines the supported transport protocols for MCP communication.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy defines unified security, authentication, authorization, and traffic policies.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayPolicyConfig"),
+						},
+					},
+					"observability": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Observability defines monitoring, metrics, and tracing configuration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayObservabilityConfig"),
+						},
+					},
+					"network": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Network defines service exposure and ingress settings.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayNetworkConfig"),
+						},
+					},
+					"protocolVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ProtocolVersion defines MCP protocol version constraints and negotiation settings.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolVersionConfig"),
+						},
+					},
+				},
+				Required: []string{"mcpServers"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayNetworkConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayObservabilityConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayPolicyConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolVersionConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerDiscoveryConfig", "k8s.io/api/core/v1.PodTemplateSpec"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPGatewayStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPGatewayStatus defines the observed state of MCPGateway.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"type",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represent the latest available observations of the MCPGateway's state.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Phase is the current phase of the MCPGateway lifecycle.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration reflects the generation most recently observed by the controller.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"replicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Replicas is the most recently observed number of replicas.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readyReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadyReplicas is the number of ready replicas.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"availableReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AvailableReplicas is the number of available replicas.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"activeSessions": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveSessions is the current number of active sessions.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"totalRequests": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TotalRequests is the total number of requests processed.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"totalErrors": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TotalErrors is the total number of errors encountered.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"averageLatency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AverageLatency is the average request latency in milliseconds.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"connectedServers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ConnectedServers is the list of currently connected servers.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayServerStatus"),
+									},
+								},
+							},
+						},
+					},
+					"serverStatusSummary": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServerStatusSummary provides an aggregated summary of server statuses.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServerStatusSummary"),
+						},
+					},
+					"unhealthyServers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "UnhealthyServers lists servers that are currently unhealthy.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayServerStatus"),
+									},
+								},
+							},
+						},
+					},
+					"serviceURL": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ServiceURL is the URL where the gateway service can be accessed.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"lastUpdateTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastUpdateTime is the last time the status was updated.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"metrics": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Metrics provides real-time performance metrics.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayMetrics"),
+						},
+					},
+					"configStatus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConfigStatus provides configuration validation status.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigValidationStatus"),
+						},
+					},
+					"resourceUsage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceUsage provides current resource utilization information.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResourceUsageStatus"),
+						},
+					},
+					"toolRegistry": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ToolRegistry provides status of the tool registry.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ToolRegistryStatus"),
+						},
+					},
+					"resourceRegistry": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourceRegistry provides status of the resource registry.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResourceRegistryStatus"),
+						},
+					},
+					"promptRegistry": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PromptRegistry provides status of the prompt registry.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PromptRegistryStatus"),
+						},
+					},
+					"workflowStatus": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WorkflowStatus provides status of workflow orchestration.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkflowStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigValidationStatus", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.GatewayMetrics", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPGatewayServerStatus", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PromptRegistryStatus", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResourceRegistryStatus", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ResourceUsageStatus", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ServerStatusSummary", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ToolRegistryStatus", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkflowStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPProtocolVersionConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPProtocolVersionConfig defines MCP protocol version constraints and negotiation settings.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"supported": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Supported defines the list of supported MCP protocol versions. If empty, the gateway will support all known versions.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"minVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinVersion defines the minimum acceptable MCP protocol version.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"maxVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxVersion defines the maximum acceptable MCP protocol version.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"preferredVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PreferredVersion defines the preferred protocol version for new connections.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"allowVersionNegotiation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowVersionNegotiation controls whether version negotiation is allowed.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"strictVersioning": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StrictVersioning controls whether to reject connections with unsupported versions.",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -4735,9 +7241,8 @@ func schema_pkg_apis_ome_v1beta1_MCPServer(ref common.ReferenceCallback) common.
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "nolint:revive",
-							Default:     map[string]interface{}{},
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
 					"spec": {
@@ -4753,10 +7258,70 @@ func schema_pkg_apis_ome_v1beta1_MCPServer(ref common.ReferenceCallback) common.
 						},
 					},
 				},
+				Required: []string{"spec"},
 			},
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPServerDiscoveryConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPServerDiscoveryConfig defines how the gateway discovers and connects to MCP servers.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"static": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Static provides a fixed list of MCP server references.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerRef"),
+									},
+								},
+							},
+						},
+					},
+					"selector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Selector allows dynamic discovery of MCPServer resources using a label selector.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"),
+						},
+					},
+					"namespaceSelector": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NamespaceSelector restricts server discovery to specific namespaces. Only applicable when using Selector. If empty, searches all accessible namespaces.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"),
+						},
+					},
+					"autoDiscovery": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AutoDiscovery enables automatic discovery of MCP servers through federation.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"healthCheck": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HealthCheck defines health checking configuration for discovered servers.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HealthCheckConfig"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HealthCheckConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPServerRef", "k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"},
 	}
 }
 
@@ -4783,9 +7348,8 @@ func schema_pkg_apis_ome_v1beta1_MCPServerList(ref common.ReferenceCallback) com
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "nolint:revive",
-							Default:     map[string]interface{}{},
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
 						},
 					},
 					"items": {
@@ -4810,89 +7374,43 @@ func schema_pkg_apis_ome_v1beta1_MCPServerList(ref common.ReferenceCallback) com
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_MCPServerRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MCPServerSpec defines the desired state of MCPServer",
+				Description: "MCPServerRef defines a reference to an upstream MCP server with routing parameters.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"type": {
+					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Type specifies whether this is a hosted or remote MCP server Hosted servers run as containers in the cluster, Remote servers are accessed via URL",
+							Description: "Name of the referenced MCPServer resource.",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"image": {
+					"namespace": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Image is the container image for the MCP server Required for Hosted servers, ignored for Remote servers. Must be a valid container image reference (e.g., \"registry/image:tag\")",
+							Description: "Namespace of the referenced MCPServer resource. If empty, assumes the gateway's namespace.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"url": {
+					"priority": {
 						SchemaProps: spec.SchemaProps{
-							Description: "URL is the external URL for remote MCP servers Required for Remote servers, ignored for Hosted servers",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"transport": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Transport specifies the transport method for MCP communication",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"protocol": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Protocol defines the MCP protocol specification",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolSpec"),
-						},
-					},
-					"capabilities": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Capabilities defines the MCP capabilities supported by this server",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities"),
-						},
-					},
-					"version": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Version is the version of the MCP server software",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"replicas": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Replicas is the number of desired replicas for hosted MCP servers Only applicable for Hosted servers with HTTP transport",
+							Description: "Priority for server selection (lower value is higher priority).",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
 					},
-					"port": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Port is the port to expose the MCP server on",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"targetPort": {
-						SchemaProps: spec.SchemaProps{
-							Description: "TargetPort is the port that MCP server listens to If not specified, defaults to the same value as Port (8080)",
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
-					"args": {
+					"tags": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
+								"x-kubernetes-list-type": "set",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Args are additional arguments to pass to the MCP server",
+							Description: "Tags define semantic tags for routing decisions.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -4905,98 +7423,88 @@ func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) com
 							},
 						},
 					},
-					"env": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-map-keys": []interface{}{
-									"name",
-								},
-								"x-kubernetes-list-type": "map",
-							},
-						},
+					"capabilities": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Env are environment variables to set in the MCP server container",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
-									},
-								},
-							},
+							Description: "Capabilities override the server's advertised capabilities for routing.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities"),
 						},
 					},
-					"volumeMounts": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-map-keys": []interface{}{
-									"name",
-								},
-								"x-kubernetes-list-type": "map",
-							},
-						},
+					"auth": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Pod volumes to mount into the MCP server filesystem.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.VolumeMount"),
-									},
-								},
-							},
+							Description: "Auth defines the credentials for this specific server.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthConfig"),
 						},
 					},
-					"secrets": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
+					"transport": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Secrets are references to secrets to mount in the MCP server container",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SecretRef"),
-									},
-								},
-							},
+							Description: "Transport override for this specific server.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
-					"serviceAccount": {
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MCPServerSpec defines the desired state of an MCPServer. An MCPServer can either be 'Hosted' within the cluster or a 'Remote' external service.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"hosted": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ServiceAccount is the name of an already existing service account to use by the MCP server. If not specified, a ServiceAccount will be created automatically and used by the MCP server.",
+							Description: "Hosted defines a server that runs as pods within the cluster.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HostedMCPServer"),
+						},
+					},
+					"remote": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Remote defines a server that is accessed via an external URL.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RemoteMCPServer"),
+						},
+					},
+					"transport": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Transport specifies the transport protocol for MCP communication.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"capabilities": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Capabilities defines the features supported by this server.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities"),
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Version of the MCP server software.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"permissionProfile": {
 						SchemaProps: spec.SchemaProps{
-							Description: "PermissionProfile defines the permission profile to use",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileRef"),
-						},
-					},
-					"podTemplateSpec": {
-						SchemaProps: spec.SchemaProps{
-							Description: "PodTemplateSpec defines the pod template to use for the MCP server This allows for customizing the pod configuration beyond what is provided by the other fields. Note that to modify the specific container the MCP server runs in, you must specify the `mcp` container name in the PodTemplateSpec.",
-							Ref:         ref("k8s.io/api/core/v1.PodTemplateSpec"),
+							Description: "PermissionProfile defines the operational permissions for the server.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSource"),
 						},
 					},
 					"oidcConfig": {
 						SchemaProps: spec.SchemaProps{
-							Description: "OIDCConfig defines OIDC authentication configuration for the MCP server",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigRef"),
+							Description: "OIDCConfig defines OIDC authentication for authenticating clients.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigSource"),
 						},
 					},
 					"authzConfig": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AuthzConfig defines authorization policy configuration for the MCP server",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigRef"),
+							Description: "AuthzConfig defines authorization policies for the server.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigSource"),
 						},
 					},
 					"toolsFilter": {
@@ -5006,7 +7514,7 @@ func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) com
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "ToolsFilter is the filter on tools applied to the MCP server",
+							Description: "ToolsFilter restricts the tools exposed by this server.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -5014,79 +7522,6 @@ func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) com
 										Default: "",
 										Type:    []string{"string"},
 										Format:  "",
-									},
-								},
-							},
-						},
-					},
-					"resources": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Compute Resources required by this MCP server. Cannot be updated. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
-							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
-						},
-					},
-					"tolerations": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "If specified, the pod's tolerations.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.Toleration"),
-									},
-								},
-							},
-						},
-					},
-					"nodeSelector": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-map-type": "atomic",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "NodeSelector is a selector which must be true for the pod to fit on a node. Selector which must match a node's labels for the pod to be scheduled on that node. More info: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
-						},
-					},
-					"affinity": {
-						SchemaProps: spec.SchemaProps{
-							Description: "If specified, the pod's scheduling constraints",
-							Ref:         ref("k8s.io/api/core/v1.Affinity"),
-						},
-					},
-					"volumes": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type":       "atomic",
-								"x-kubernetes-patch-merge-key": "name",
-								"x-kubernetes-patch-strategy":  "merge,retainKeys",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "List of volumes that can be mounted by containers belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.Volume"),
 									},
 								},
 							},
@@ -5096,7 +7531,7 @@ func schema_pkg_apis_ome_v1beta1_MCPServerSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPProtocolSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SecretRef", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.PodTemplateSpec", "k8s.io/api/core/v1.ResourceRequirements", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.Volume", "k8s.io/api/core/v1.VolumeMount"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AuthzConfigSource", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HostedMCPServer", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.MCPCapabilities", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OIDCConfigSource", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSource", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RemoteMCPServer"},
 	}
 }
 
@@ -5182,6 +7617,68 @@ func schema_pkg_apis_ome_v1beta1_MCPServerStatus(ref common.ReferenceCallback) c
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition", "k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_MetricsConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "MetricsConfig defines metrics collection and export configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether metrics collection is active.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port defines the metrics endpoint port.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path defines the metrics endpoint path.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"format": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Format defines the metrics format.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"customMetrics": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "CustomMetrics define additional custom metrics to collect.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CustomMetric"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CustomMetric"},
 	}
 }
 
@@ -5907,73 +8404,161 @@ func schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref common.ReferenceCallback) c
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_NetworkPermissions(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_NetworkPermission(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NetworkPermissions defines the network permissions for an MCP server",
+				Description: "NetworkPermission defines outbound network permissions.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"outbound": {
+					"allowHost": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Outbound defines the outbound network permissions",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OutboundNetworkPermissions"),
+							Description: "AllowHost is a list of glob patterns for hosts to allow connections to.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
 						},
 					},
 				},
+				Required: []string{"allowHost"},
 			},
 		},
-		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.OutboundNetworkPermissions"},
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_OIDCConfigRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_NetworkUsageInfo(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "OIDCConfigRef defines a reference to OIDC configuration",
+				Description: "NetworkUsageInfo provides network usage information.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"type": {
+					"bytesIn": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Type is the type of OIDC configuration",
+							Description: "BytesIn is the total bytes received.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"bytesOut": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BytesOut is the total bytes sent.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"connectionsPerSecond": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConnectionsPerSecond is the rate of new connections.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"resourceURL": {
+				},
+				Required: []string{"bytesIn", "bytesOut", "connectionsPerSecond"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OAuth2Credentials(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OAuth2Credentials defines OAuth2 authentication credentials.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"clientID": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ResourceURL is the explicit resource URL for OAuth discovery endpoint (RFC 9728) If not specified, defaults to the in-cluster Kubernetes service URL",
+							Description: "ClientID for OAuth2 authentication.",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"kubernetes": {
+					"clientSecret": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kubernetes configures OIDC for Kubernetes service account token validation Only used when Type is \"kubernetes\"",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig"),
+							Description: "ClientSecret references the OAuth2 client secret.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"),
 						},
 					},
-					"configMap": {
+					"tokenURL": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ConfigMap references a ConfigMap containing OIDC configuration Only used when Type is \"configMap\"",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef"),
+							Description: "TokenURL is the OAuth2 token endpoint.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"scopes": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Scopes define the OAuth2 scopes to request.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"clientID", "clientSecret", "tokenURL"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.CredentialRef"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_OIDCConfigSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OIDCConfigSource defines the source of OIDC configuration. Only one of the fields may be set.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kubernetes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kubernetes configures OIDC to validate Kubernetes service account tokens.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig"),
 						},
 					},
 					"inline": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Inline contains direct OIDC configuration Only used when Type is \"inline\"",
+							Description: "Inline contains a direct OIDC provider configuration.",
 							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig"),
 						},
 					},
 				},
-				Required: []string{"type"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapOIDCRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.InlineOIDCConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubernetesOIDCConfig"},
 	}
 }
 
@@ -6004,106 +8589,120 @@ func schema_pkg_apis_ome_v1beta1_ObjectReference(ref common.ReferenceCallback) c
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_OutboundNetworkPermissions(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_PIIDetectionConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "OutboundNetworkPermissions defines the outbound network permissions",
+				Description: "PIIDetectionConfig defines PII detection and handling.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"insecureAllowAll": {
+					"enabled": {
 						SchemaProps: spec.SchemaProps{
-							Description: "InsecureAllowAll allows all outbound network connections (not recommended)",
+							Description: "Enabled controls whether PII detection is active.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
-					"allowHost": {
+					"patterns": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
+								"x-kubernetes-list-type": "atomic",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "AllowHost is a list of hosts to allow connections to",
+							Description: "Patterns define PII detection patterns.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PIIPattern"),
 									},
 								},
 							},
 						},
 					},
-					"allowPort": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
-							},
-						},
+					"action": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AllowPort is a list of ports to allow connections to",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: 0,
-										Type:    []string{"integer"},
-										Format:  "int32",
-									},
-								},
-							},
+							Description: "Action defines the action to take when PII is detected.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
 			},
 		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PIIPattern"},
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_PermissionProfileRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_PIIPattern(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "PermissionProfileRef defines a reference to a permission profile",
+				Description: "PIIPattern defines a PII detection pattern.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Type is the type of permission profile reference",
+							Description: "Type defines the PII type.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"name": {
+					"pattern": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name is the name of the built-in permission profile If Type is \"builtin\", Name must be one of: \"none\", \"network\" Only used when Type is \"builtin\"",
+							Description: "Pattern is a regex pattern for custom PII detection.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"configMap": {
+					"description": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ConfigMap references a ConfigMap containing permission profile configuration Only used when Type is \"configMap\"",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapPermissionRef"),
-						},
-					},
-					"inline": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Inline contains direct permission profile configuration Only used when Type is \"inline\"",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec"),
+							Description: "Description provides a human-readable description.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
 				Required: []string{"type"},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_PermissionProfileSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PermissionProfileSource defines the source of a permission profile. Only one of the fields may be set.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"builtin": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Builtin selects a pre-defined, named permission profile.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BuiltinPermissionProfile"),
+						},
+					},
+					"configMap": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ConfigMap references a ConfigMap containing a permission profile specification.",
+							Ref:         ref("k8s.io/api/core/v1.ConfigMapKeySelector"),
+						},
+					},
+					"inline": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Inline contains an embedded permission profile specification.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec"),
+						},
+					},
+				},
+			},
+		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ConfigMapPermissionRef", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BuiltinPermissionProfile", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionProfileSpec", "k8s.io/api/core/v1.ConfigMapKeySelector"},
 	}
 }
 
@@ -6111,60 +8710,61 @@ func schema_pkg_apis_ome_v1beta1_PermissionProfileSpec(ref common.ReferenceCallb
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "PermissionProfileSpec defines the permissions for an MCP server",
+				Description: "PermissionProfileSpec defines the permissions for an MCP server.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"read": {
+					"allow": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
+								"x-kubernetes-list-type": "atomic",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Read is a list of paths that the MCP server can read from",
+							Description: "Allow specifies the permissions granted to the server.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionRule"),
 									},
 								},
 							},
 						},
 					},
-					"write": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
-							},
-						},
+				},
+				Required: []string{"allow"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.PermissionRule"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_PermissionRule(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PermissionRule defines a single permission grant.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kubeResources": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Write is a list of paths that the MCP server can write to",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
+							Description: "KubeResources defines permissions for accessing Kubernetes resources.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubeResourcePermission"),
 						},
 					},
 					"network": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Network defines the network permissions for the MCP server",
-							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermissions"),
+							Description: "Network defines permissions for making outbound network calls.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermission"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermissions"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KubeResourcePermission", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkPermission"},
 	}
 }
 
@@ -7726,6 +10326,357 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_PromptRegistryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PromptRegistryStatus provides status of the prompt registry.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"totalPrompts": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TotalPrompts is the total number of registered prompts.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"lastUpdated": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastUpdated is when the registry was last updated.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RateLimitConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RateLimitConfig defines rate limiting policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"global": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Global rate limit applied to all requests.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitPolicy"),
+						},
+					},
+					"perUser": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PerUser defines rate limits per authenticated user.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitPolicy"),
+						},
+					},
+					"perIP": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PerIP defines rate limits per client IP address.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitPolicy"),
+						},
+					},
+					"perServer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PerServer defines rate limits per upstream server.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitPolicy"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RateLimitPolicy"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RateLimitPolicy(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RateLimitPolicy defines a rate limiting policy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"requestsPerSecond": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestsPerSecond is the number of requests allowed per second.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"requestsPerMinute": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestsPerMinute is the number of requests allowed per minute.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"requestsPerHour": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestsPerHour is the number of requests allowed per hour.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"burst": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Burst is the burst capacity for rate limiting.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RemoteMCPServer(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RemoteMCPServer defines a server that is accessed via an external URL.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL is the external URL of the remote MCP server.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"url"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_RequestFilteringConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RequestFilteringConfig defines request filtering policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"sizeLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SizeLimit defines maximum request size.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"contentTypeFilter": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ContentTypeFilter defines allowed content types.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+					"headerFilters": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HeaderFilters define header filtering rules.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HeaderFilter"),
+									},
+								},
+							},
+						},
+					},
+					"bodyFilters": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "BodyFilters define body content filtering rules.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BodyFilter"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BodyFilter", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HeaderFilter", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ResourceRegistryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceRegistryStatus provides status of the resource registry.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"totalResources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TotalResources is the total number of registered resources.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"cacheHitRate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CacheHitRate is the resource cache hit rate as a percentage.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"lastUpdated": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastUpdated is when the registry was last updated.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ResourceUsageStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceUsageStatus provides current resource utilization information.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"cpuUsage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CPU usage as a percentage of allocated resources.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"memoryUsage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Memory usage as a percentage of allocated resources.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"storageUsage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Storage usage for context and cache storage.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageUsageInfo"),
+						},
+					},
+					"networkUsage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Network usage statistics.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkUsageInfo"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.NetworkUsageInfo", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageUsageInfo"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ResponseFilteringConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResponseFilteringConfig defines response filtering policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"sizeLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SizeLimit defines maximum response size.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"headerFilters": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "HeaderFilters define response header filtering rules.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HeaderFilter"),
+									},
+								},
+							},
+						},
+					},
+					"bodyFilters": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "BodyFilters define response body filtering rules.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BodyFilter"),
+									},
+								},
+							},
+						},
+					},
+					"removeInternalHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RemoveInternalHeaders controls whether to remove internal headers.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.BodyFilter", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.HeaderFilter", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -8633,38 +11584,137 @@ func schema_pkg_apis_ome_v1beta1_RunnerSpec(ref common.ReferenceCallback) common
 	}
 }
 
-func schema_pkg_apis_ome_v1beta1_SecretRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_ome_v1beta1_SamplingPolicyConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "SecretRef is a reference to a secret",
+				Description: "SamplingPolicyConfig defines server-to-client sampling request policy.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"name": {
+					"enabled": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name is the name of the secret",
-							Default:     "",
+							Description: "Enabled controls whether servers can request sampling from clients.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"clientModel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClientModel defines which AI model to use for sampling requests.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"key": {
+					"maxTokens": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Key is the key in the secret itself",
-							Default:     "",
+							Description: "MaxTokens defines the maximum tokens for sampling requests.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"temperature": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Temperature controls the randomness of sampling responses.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"targetEnvName": {
+					"timeout": {
 						SchemaProps: spec.SchemaProps{
-							Description: "TargetEnvName is the environment variable to be used when setting up the secret in the MCP server If left unspecified, it defaults to the key",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "Timeout defines the maximum time to wait for sampling responses.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"rateLimit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RateLimit defines rate limiting for sampling requests.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SamplingRateLimit"),
 						},
 					},
 				},
-				Required: []string{"name", "key"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.SamplingRateLimit", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_SamplingRateLimit(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SamplingRateLimit defines rate limiting for sampling requests.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"requestsPerMinute": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestsPerMinute is the maximum sampling requests per minute.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"requestsPerHour": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestsPerHour is the maximum sampling requests per hour.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ServerStatusSummary(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ServerStatusSummary provides an aggregated summary of server statuses.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"total": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Total number of configured servers.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"connected": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of servers that are connected and healthy.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"disconnected": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of servers that are disconnected.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"unhealthy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of servers that are unhealthy.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"circuitOpen": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number of servers with open circuit breakers.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"total", "connected", "disconnected", "unhealthy", "circuitOpen"},
 			},
 		},
 	}
@@ -9314,6 +12364,111 @@ func schema_pkg_apis_ome_v1beta1_ServingRuntimeStatus(ref common.ReferenceCallba
 	}
 }
 
+func schema_pkg_apis_ome_v1beta1_SessionIsolationConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SessionIsolationConfig defines session isolation and context boundary policies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mode defines the isolation level for MCP sessions.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"crossSessionSharing": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CrossSessionSharing controls whether data can be shared between sessions.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"contextRetention": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContextRetention defines how long session context is retained.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"auditLevel": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AuditLevel defines the audit logging level for session boundaries.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"enforceResourceBoundaries": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnforceResourceBoundaries controls whether resource access is strictly bounded per session.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"allowedCrossSessionData": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "AllowedCrossSessionData defines what data types can be shared across sessions when enabled.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_StorageMetrics(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "StorageMetrics provides storage metrics.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"used": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Used storage in bytes.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"available": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Available storage in bytes.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"usagePercent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Usage percentage.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"used", "available", "usagePercent"},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
 func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -9397,6 +12552,33 @@ func schema_pkg_apis_ome_v1beta1_StorageSpec(ref common.ReferenceCallback) commo
 		},
 		Dependencies: []string{
 			"k8s.io/api/core/v1.NodeAffinity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_StorageUsageInfo(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "StorageUsageInfo provides storage usage information.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"contextStorage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContextStorage usage information.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageMetrics"),
+						},
+					},
+					"cacheStorage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CacheStorage usage information.",
+							Ref:         ref("github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageMetrics"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.StorageMetrics"},
 	}
 }
 
@@ -9551,6 +12733,150 @@ func schema_pkg_apis_ome_v1beta1_TensorParallelismConfig(ref common.ReferenceCal
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_ToolRegistryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ToolRegistryStatus provides status of the tool registry.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"totalTools": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TotalTools is the total number of registered tools.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"mcpTools": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MCPTools is the number of native MCP tools.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"restTools": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RestTools is the number of virtualized REST API tools.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"lastUpdated": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastUpdated is when the registry was last updated.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_TracingConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TracingConfig defines distributed tracing configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether distributed tracing is active.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"provider": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Provider defines the tracing backend provider.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Endpoint defines the tracing collector endpoint.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"samplingRate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SamplingRate defines the sampling rate for traces (0.0-1.0).",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"headers": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-map-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Headers define additional headers to send with traces.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_WebSocketTransportConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "WebSocketTransportConfig defines WebSocket transport configuration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port defines the WebSocket port.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"readBufferSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadBufferSize defines the read buffer size.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"writeBufferSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "WriteBufferSize defines the write buffer size.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"pingInterval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PingInterval defines the ping interval for keep-alive.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
 	}
 }
 
@@ -10241,5 +13567,46 @@ func schema_pkg_apis_ome_v1beta1_WorkerSpec(ref common.ReferenceCallback) common
 		},
 		Dependencies: []string{
 			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_pkg_apis_ome_v1beta1_WorkflowStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "WorkflowStatus provides status of workflow orchestration.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"activeWorkflows": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ActiveWorkflows is the number of currently active workflows.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"completedWorkflows": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CompletedWorkflows is the total number of completed workflows.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"failedWorkflows": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FailedWorkflows is the total number of failed workflows.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"averageExecutionTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AverageExecutionTime is the average workflow execution time in seconds.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
