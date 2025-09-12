@@ -6,7 +6,7 @@ import (
 )
 
 // GatewayPolicyConfig defines unified security, authentication, authorization, and traffic policies.
-type GatewayPolicyConfig struct {
+type MCPGatewayPolicyConfig struct {
 	// Authentication defines client authentication configuration.
 	// +optional
 	Authentication *MCPAuthenticationConfig `json:"authentication,omitempty"`
@@ -14,6 +14,10 @@ type GatewayPolicyConfig struct {
 	// RateLimit defines rate limiting configuration.
 	// +optional
 	RateLimit *RateLimitConfig `json:"rateLimit,omitempty"`
+
+	// CircuitBreaker defines the circuit breaking configuration.
+	// +optional
+	CircuitBreaker *CircuitBreakerConfig `json:"circuitBreaker,omitempty"`
 
 	// Audit defines audit logging configuration.
 	// +optional
@@ -445,4 +449,48 @@ type ComplianceEncryptionConfig struct {
 	// +kubebuilder:default=true
 	// +optional
 	EncryptionInTransit *bool `json:"encryptionInTransit,omitempty"`
+}
+
+// CircuitBreakerConfig defines circuit breaker configuration.
+type CircuitBreakerConfig struct {
+	// FailureThreshold is the number of consecutive failures to open the circuit.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=5
+	// +optional
+	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
+
+	// SuccessThreshold is the number of consecutive successes to close the circuit.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
+	// +optional
+	SuccessThreshold *int32 `json:"successThreshold,omitempty"`
+
+	// OpenStateTimeout is the time to wait before transitioning to half-open.
+	// +kubebuilder:default="30s"
+	// +optional
+	OpenStateTimeout *metav1.Duration `json:"openStateTimeout,omitempty"`
+
+	// MaxRequestsHalfOpen is the maximum requests allowed in half-open state.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=10
+	// +optional
+	MaxRequestsHalfOpen *int32 `json:"maxRequestsHalfOpen,omitempty"`
+
+	// RequestTimeout defines the timeout for requests in various states.
+	// +kubebuilder:default="30s"
+	// +optional
+	RequestTimeout *metav1.Duration `json:"requestTimeout,omitempty"`
+
+	// ErrorRateThreshold defines the error rate percentage to open the circuit.
+	// +kubebuilder:validation:Minimum=0.0
+	// +kubebuilder:validation:Maximum=100.0
+	// +kubebuilder:default=50.0
+	// +optional
+	ErrorRateThreshold *float64 `json:"errorRateThreshold,omitempty"`
+
+	// MinRequestsThreshold is the minimum requests before error rate is calculated.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=20
+	// +optional
+	MinRequestsThreshold *int32 `json:"minRequestsThreshold,omitempty"`
 }
