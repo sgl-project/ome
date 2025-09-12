@@ -41,6 +41,10 @@ type MCPGatewaySpec struct {
 	// Network defines service exposure and ingress settings.
 	// +optional
 	Network *MCPGatewayNetworkConfig `json:"network,omitempty"`
+
+	// ProtocolVersion defines MCP protocol version constraints and negotiation settings.
+	// +optional
+	ProtocolVersion *MCPProtocolVersionConfig `json:"protocolVersion,omitempty"`
 }
 
 // MCPServerDiscoveryConfig defines how the gateway discovers and connects to MCP servers.
@@ -403,6 +407,39 @@ type ClusterMCPGatewayList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterMCPGateway `json:"items"`
+}
+
+// MCPProtocolVersionConfig defines MCP protocol version constraints and negotiation settings.
+type MCPProtocolVersionConfig struct {
+	// Supported defines the list of supported MCP protocol versions.
+	// If empty, the gateway will support all known versions.
+	// +optional
+	// +listType=set
+	Supported []string `json:"supported,omitempty"`
+
+	// MinVersion defines the minimum acceptable MCP protocol version.
+	// +kubebuilder:default="2025-06-18"
+	// +optional
+	MinVersion string `json:"minVersion,omitempty"`
+
+	// MaxVersion defines the maximum acceptable MCP protocol version.
+	// +optional
+	MaxVersion string `json:"maxVersion,omitempty"`
+
+	// PreferredVersion defines the preferred protocol version for new connections.
+	// +kubebuilder:default="2025-06-18"
+	// +optional
+	PreferredVersion string `json:"preferredVersion,omitempty"`
+
+	// AllowVersionNegotiation controls whether version negotiation is allowed.
+	// +kubebuilder:default=true
+	// +optional
+	AllowVersionNegotiation *bool `json:"allowVersionNegotiation,omitempty"`
+
+	// StrictVersioning controls whether to reject connections with unsupported versions.
+	// +kubebuilder:default=false
+	// +optional
+	StrictVersioning *bool `json:"strictVersioning,omitempty"`
 }
 
 func init() {
