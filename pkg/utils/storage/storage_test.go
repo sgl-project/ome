@@ -2,11 +2,28 @@ package storage
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
+)
+
+// Test constants for commonly used model paths
+const (
+	// Base model paths
+	TestModelPathLlama2        = "models/llama2"
+	TestModelPathLlama27B      = "models/llama2-7b"
+	TestModelPathLlama27BBin   = "models/llama2-7b.bin"
+	TestModelPathLlama27BChat  = "models/llama2-7b-chat-hf"
+	TestModelPathLlama2Special = "models/llama2@7b#chat$hf"
+
+	// Extended paths
+	TestModelPathLlama27BExtended = "path/to/models/llama2-7b"
+	TestModelPathLlama2Extended   = "path/to/models/llama2"
+	TestModelPathLlama27BEnv      = "env/prod/models/llama2-7b"
+	TestModelPathLlama2Unicode    = "测试/模型/llama2-7b"
 )
 
 func TestParseOCIStorageURI(t *testing.T) {
@@ -233,115 +250,234 @@ func TestParsePVCStorageURI(t *testing.T) {
 		},
 		{
 			name: "valid uri with ClusterBaseModel use case",
-			uri:  "pvc://model-storage:shared-pvc/path/to/models/llama2-7b",
+			uri:  "pvc://model-storage:shared-pvc/" + TestModelPathLlama27BExtended,
 			want: &PVCStorageComponents{
 				Namespace: "model-storage",
 				PVCName:   "shared-pvc",
-				SubPath:   "path/to/models/llama2-7b",
+				SubPath:   TestModelPathLlama27BExtended,
+			},
+			wantErr: false,
+		},
+		// Enhanced test cases for various subpath formats
+		{
+			name: "subpath with file extensions",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BBin,
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama27BBin,
 			},
 			wantErr: false,
 		},
 		{
-			name:    "invalid namespace with uppercase",
-			uri:     "pvc://MyNamespace:my-pvc/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with multiple file extensions",
+			uri:  "pvc://my-pvc/data/model.tar.gz",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "data/model.tar.gz",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "invalid namespace with underscore",
-			uri:     "pvc://my_namespace:my-pvc/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with unicode characters",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Unicode,
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama2Unicode,
+			},
+			wantErr: false,
 		},
 		{
-			name:    "namespace starting with hyphen",
-			uri:     "pvc://-namespace:my-pvc/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with spaces",
+			uri:  "pvc://my-pvc/my path with spaces",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "my path with spaces",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "namespace ending with hyphen",
-			uri:     "pvc://namespace-:my-pvc/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with special characters",
+			uri:  "pvc://my-pvc/path/with/special@#$%^&*()chars",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path/with/special@#$%^&*()chars",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "very long namespace (64 chars)",
-			uri:     "pvc://a123456789012345678901234567890123456789012345678901234567890123:my-pvc/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with query parameters (treated as part of path)",
+			uri:  "pvc://my-pvc/path?param=value",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path?param=value",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "empty namespace before colon",
-			uri:     "pvc://:my-pvc/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with fragments (treated as part of path)",
+			uri:  "pvc://my-pvc/path#fragment",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path#fragment",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "empty pvc name after colon",
-			uri:     "pvc://default:/models",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with percent encoding",
+			uri:  "pvc://my-pvc/path%20with%20spaces",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path%20with%20spaces",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "missing pvc prefix",
-			uri:     "my-pvc/results",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with backslashes (treated as regular characters)",
+			uri:  "pvc://my-pvc/path\\with\\backslashes",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path\\with\\backslashes",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "empty uri",
-			uri:     "",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with newlines (treated as regular characters)",
+			uri:  "pvc://my-pvc/path\nwith\nnewlines",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path\nwith\nnewlines",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "only prefix",
-			uri:     "pvc://",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with tabs (treated as regular characters)",
+			uri:  "pvc://my-pvc/path\twith\ttabs",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path\twith\ttabs",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "empty pvc name",
-			uri:     "pvc:///results",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with only dots",
+			uri:  "pvc://my-pvc/...",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "...",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "empty subpath",
-			uri:     "pvc://my-pvc/",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with only hyphens",
+			uri:  "pvc://my-pvc/---",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "---",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "empty subpath with namespace",
-			uri:     "pvc://default:my-pvc/",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with multiple consecutive slashes (normalized)",
+			uri:  "pvc://my-pvc/path//to//results",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path//to//results",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "only pvc name provided",
-			uri:     "pvc://my-pvc",
-			want:    nil,
-			wantErr: true,
+			name: "very long subpath",
+			uri:  "pvc://my-pvc/" + strings.Repeat("a", 1000),
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   strings.Repeat("a", 1000),
+			},
+			wantErr: false,
 		},
 		{
-			name:    "only namespace and pvc provided",
-			uri:     "pvc://default:my-pvc",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with leading and trailing slashes",
+			uri:  "pvc://my-pvc//path/to/results//",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "/path/to/results//",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "invalid uri - wrong scheme",
-			uri:     "oci://my-pvc/results",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with mixed case",
+			uri:  "pvc://my-pvc/Path/To/Results",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "Path/To/Results",
+			},
+			wantErr: false,
 		},
 		{
-			name:    "multiple colons in namespace:pvc part",
-			uri:     "pvc://ns:pvc:extra/path",
-			want:    nil,
-			wantErr: true,
+			name: "subpath with numbers",
+			uri:  "pvc://my-pvc/models/v1.0.0/checkpoint_123",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/v1.0.0/checkpoint_123",
+			},
+			wantErr: false,
+		},
+		{
+			name: "subpath with environment-like paths",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BEnv,
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama27BEnv,
+			},
+			wantErr: false,
+		},
+		{
+			name: "subpath with date-based paths",
+			uri:  "pvc://my-pvc/backups/2024-01-15/models",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "backups/2024-01-15/models",
+			},
+			wantErr: false,
+		},
+		{
+			name: "subpath with hash-based paths",
+			uri:  "pvc://my-pvc/models/abc123def456",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/abc123def456",
+			},
+			wantErr: false,
+		},
+		{
+			name: "subpath with versioned paths",
+			uri:  "pvc://my-pvc/models/v2.1.3-beta/weights",
+			want: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/v2.1.3-beta/weights",
+			},
+			wantErr: false,
 		},
 	}
 
@@ -461,6 +597,121 @@ func TestGetStorageType(t *testing.T) {
 		{
 			name: "pvc storage",
 			uri:  "pvc://my-pvc/mypath",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with namespace",
+			uri:  "pvc://default:my-pvc/mypath",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with complex subpath",
+			uri:  "pvc://my-pvc/path/to/" + TestModelPathLlama27BBin,
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with special characters in subpath",
+			uri:  "pvc://my-pvc/path/with/special@#$%^&*()chars",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with unicode characters",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Unicode,
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with spaces in subpath",
+			uri:  "pvc://my-pvc/my path with spaces",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with file extensions",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BBin,
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with query parameters",
+			uri:  "pvc://my-pvc/path?param=value",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with fragments",
+			uri:  "pvc://my-pvc/path#fragment",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with percent encoding",
+			uri:  "pvc://my-pvc/path%20with%20spaces",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with backslashes",
+			uri:  "pvc://my-pvc/path\\with\\backslashes",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with newlines",
+			uri:  "pvc://my-pvc/path\nwith\nnewlines",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with tabs",
+			uri:  "pvc://my-pvc/path\twith\ttabs",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with multiple consecutive slashes",
+			uri:  "pvc://my-pvc/path//to//results",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with leading and trailing slashes",
+			uri:  "pvc://my-pvc//path/to/results//",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with mixed case",
+			uri:  "pvc://my-pvc/Path/To/Results",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with numbers in subpath",
+			uri:  "pvc://my-pvc/models/v1.0.0/checkpoint_123",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with environment-like paths",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama27BEnv,
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with date-based paths",
+			uri:  "pvc://my-pvc/backups/2024-01-15/models",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with hash-based paths",
+			uri:  "pvc://my-pvc/models/abc123def456",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with versioned paths",
+			uri:  "pvc://my-pvc/models/v2.1.3-beta/weights",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with only dots in subpath",
+			uri:  "pvc://my-pvc/...",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with only hyphens in subpath",
+			uri:  "pvc://my-pvc/---",
+			want: StorageTypePVC,
+		},
+		{
+			name: "pvc storage with very long subpath",
+			uri:  "pvc://my-pvc/" + strings.Repeat("a", 1000),
 			want: StorageTypePVC,
 		},
 		{
@@ -1272,6 +1523,1205 @@ func TestParseGitHubStorageURI(t *testing.T) {
 			}
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidatePVCStorageURI(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "valid uri without namespace - simple path",
+			uri:     "pvc://my-pvc/results",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri without namespace - nested path",
+			uri:     "pvc://my-pvc/path/to/results",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri with namespace using colon separator",
+			uri:     "pvc://default:my-pvc/results",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri with namespace and nested path",
+			uri:     "pvc://my-namespace:my-pvc/path/to/results",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri with special characters in pvc name",
+			uri:     "pvc://my-pvc-123/path_with-special.chars",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri with namespace and special chars",
+			uri:     "pvc://default:my-pvc-123/path_with-special.chars",
+			wantErr: false,
+		},
+		{
+			name:    "namespace with numbers and hyphens",
+			uri:     "pvc://ns-123:pvc-456/model",
+			wantErr: false,
+		},
+		{
+			name:    "valid uri with ClusterBaseModel use case",
+			uri:     "pvc://model-storage:shared-pvc/" + TestModelPathLlama27BExtended,
+			wantErr: false,
+		},
+		{
+			name:    "multiple consecutive slashes in subpath",
+			uri:     "pvc://my-pvc/path//to//results",
+			wantErr: false, // This should be valid as it's normalized
+		},
+		{
+			name:    "subpath with only dots",
+			uri:     "pvc://my-pvc/...",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with only hyphens",
+			uri:     "pvc://my-pvc/---",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with unicode characters",
+			uri:     "pvc://my-pvc/测试/模型",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with spaces",
+			uri:     "pvc://my-pvc/my path with spaces",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with special characters",
+			uri:     "pvc://my-pvc/path/with/special@#$%^&*()chars",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with file extensions",
+			uri:     "pvc://my-pvc/" + TestModelPathLlama27BBin,
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with query parameters (should be treated as part of path)",
+			uri:     "pvc://my-pvc/path?param=value",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with fragments (should be treated as part of path)",
+			uri:     "pvc://my-pvc/path#fragment",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "very long subpath",
+			uri:     "pvc://my-pvc/" + strings.Repeat("a", 1000),
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with backslashes (should be treated as regular characters)",
+			uri:     "pvc://my-pvc/path\\with\\backslashes",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with percent encoding",
+			uri:     "pvc://my-pvc/path%20with%20spaces",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with newlines (should be treated as regular characters)",
+			uri:     "pvc://my-pvc/path\nwith\nnewlines",
+			wantErr: false, // This should be valid
+		},
+		{
+			name:    "subpath with tabs (should be treated as regular characters)",
+			uri:     "pvc://my-pvc/path\twith\ttabs",
+			wantErr: false, // This should be valid
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestPVCStorageEdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+		description string
+	}{
+		// Edge cases for empty or minimal URIs
+		{
+			name:        "completely empty URI",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "Empty URI should fail validation",
+		},
+		{
+			name:        "only pvc prefix",
+			uri:         "pvc://",
+			wantErr:     true,
+			errContains: "missing content after prefix",
+			description: "URI with only prefix should fail",
+		},
+		{
+			name:        "pvc prefix with whitespace",
+			uri:         "pvc:// ",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with prefix and whitespace should fail",
+		},
+		{
+			name:        "pvc prefix with single slash",
+			uri:         "pvc:///",
+			wantErr:     true,
+			errContains: "missing PVC name",
+			description: "URI with prefix and single slash should fail",
+		},
+		{
+			name:        "pvc prefix with double slash",
+			uri:         "pvc:////",
+			wantErr:     true,
+			errContains: "missing PVC name",
+			description: "URI with prefix and double slash should fail",
+		},
+
+		// Edge cases for PVC names
+		{
+			name:        "PVC name with only numbers",
+			uri:         "pvc://123456/path",
+			wantErr:     false,
+			description: "PVC name with only numbers should be valid",
+		},
+		{
+			name:        "PVC name with only hyphens",
+			uri:         "pvc://---/path",
+			wantErr:     false,
+			description: "PVC name with only hyphens should be valid",
+		},
+		{
+			name:        "PVC name with only underscores",
+			uri:         "pvc://___/path",
+			wantErr:     false,
+			description: "PVC name with only underscores should be valid",
+		},
+		{
+			name:        "PVC name with mixed valid characters",
+			uri:         "pvc://my-pvc_123/path",
+			wantErr:     false,
+			description: "PVC name with mixed valid characters should be valid",
+		},
+		{
+			name:        "PVC name with uppercase letters",
+			uri:         "pvc://MyPVC/path",
+			wantErr:     false,
+			description: "PVC name with uppercase letters should be valid",
+		},
+		{
+			name:        "PVC name with dots",
+			uri:         "pvc://my.pvc/path",
+			wantErr:     false,
+			description: "PVC name with dots should be valid",
+		},
+
+		// Edge cases for namespaces
+		{
+			name:        "namespace with only numbers",
+			uri:         "pvc://123:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with only numbers should be valid",
+		},
+		{
+			name:        "namespace with only hyphens",
+			uri:         "pvc://---:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with only hyphens should be valid",
+		},
+		{
+			name:        "namespace with mixed valid characters",
+			uri:         "pvc://my-ns-123:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with mixed valid characters should be valid",
+		},
+		{
+			name:        "namespace with dots",
+			uri:         "pvc://my.ns:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with dots should be valid",
+		},
+		{
+			name:        "namespace with maximum valid length (63 chars)",
+			uri:         "pvc://a12345678901234567890123456789012345678901234567890123456789012:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with maximum valid length should be valid",
+		},
+
+		// Edge cases for subpaths
+		{
+			name:        "subpath with only forward slashes",
+			uri:         "pvc://my-pvc/////",
+			wantErr:     false,
+			description: "Subpath with only forward slashes should be valid",
+		},
+		{
+			name:        "subpath with only backslashes",
+			uri:         "pvc://my-pvc/\\\\\\",
+			wantErr:     false,
+			description: "Subpath with only backslashes should be valid",
+		},
+		{
+			name:        "subpath with mixed slashes",
+			uri:         "pvc://my-pvc/path\\with/mixed\\slashes",
+			wantErr:     false,
+			description: "Subpath with mixed slashes should be valid",
+		},
+		{
+			name:        "subpath with control characters",
+			uri:         "pvc://my-pvc/path\x00with\x01control\x02chars",
+			wantErr:     false,
+			description: "Subpath with control characters should be valid",
+		},
+		{
+			name:        "subpath with null bytes",
+			uri:         "pvc://my-pvc/path\x00null\x00bytes",
+			wantErr:     false,
+			description: "Subpath with null bytes should be valid",
+		},
+		{
+			name:        "subpath with unicode control characters",
+			uri:         "pvc://my-pvc/path\u0000with\u0001unicode\u0002control",
+			wantErr:     false,
+			description: "Subpath with unicode control characters should be valid",
+		},
+
+		// Edge cases for URI format variations
+		{
+			name:        "URI with multiple consecutive colons in namespace",
+			uri:         "pvc://ns::pvc/path",
+			wantErr:     true,
+			errContains: "multiple colons not allowed",
+			description: "URI with multiple consecutive colons should fail",
+		},
+		{
+			name:        "URI with colon in PVC name",
+			uri:         "pvc://ns:pvc:name/path",
+			wantErr:     true,
+			errContains: "multiple colons not allowed",
+			description: "URI with colon in PVC name should fail",
+		},
+		{
+			name:        "URI with colon in subpath",
+			uri:         "pvc://ns:pvc/path:with:colons",
+			wantErr:     false,
+			description: "URI with colon in subpath should be valid",
+		},
+		{
+			name:        "URI with at symbol in namespace",
+			uri:         "pvc://ns@domain:pvc/path",
+			wantErr:     false,
+			description: "URI with at symbol in namespace should be valid",
+		},
+		{
+			name:        "URI with at symbol in PVC name",
+			uri:         "pvc://ns:pvc@name/path",
+			wantErr:     false,
+			description: "URI with at symbol in PVC name should be valid",
+		},
+		{
+			name:        "URI with at symbol in subpath",
+			uri:         "pvc://ns:pvc/path@with@symbols",
+			wantErr:     false,
+			description: "URI with at symbol in subpath should be valid",
+		},
+
+		// Edge cases for whitespace handling
+		{
+			name:        "URI with leading whitespace",
+			uri:         " pvc://my-pvc/path",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI with leading whitespace should fail",
+		},
+		{
+			name:        "URI with trailing whitespace",
+			uri:         "pvc://my-pvc/path ",
+			wantErr:     false,
+			description: "URI with trailing whitespace should be valid",
+		},
+		{
+			name:        "URI with whitespace in PVC name",
+			uri:         "pvc://my pvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with whitespace in PVC name should fail",
+		},
+		{
+			name:        "URI with whitespace in namespace",
+			uri:         "pvc://my namespace:my-pvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with whitespace in namespace should fail",
+		},
+
+		// Edge cases for special characters in different positions
+		{
+			name:        "URI with special characters in PVC name",
+			uri:         "pvc://my-pvc@#$%^&*()/path",
+			wantErr:     false,
+			description: "URI with special characters in PVC name should be valid",
+		},
+		{
+			name:        "URI with special characters in namespace",
+			uri:         "pvc://my-ns@#$%^&*():my-pvc/path",
+			wantErr:     false,
+			description: "URI with special characters in namespace should be valid",
+		},
+		{
+			name:        "URI with special characters in subpath",
+			uri:         "pvc://my-pvc/path@#$%^&*()",
+			wantErr:     false,
+			description: "URI with special characters in subpath should be valid",
+		},
+
+		// Edge cases for very long components
+		{
+			name:        "very long PVC name",
+			uri:         "pvc://" + strings.Repeat("a", 1000) + "/path",
+			wantErr:     false,
+			description: "Very long PVC name should be valid",
+		},
+		{
+			name:        "very long namespace",
+			uri:         "pvc://" + strings.Repeat("a", 63) + ":my-pvc/path",
+			wantErr:     false,
+			description: "Very long namespace (63 chars) should be valid",
+		},
+		{
+			name:        "very long namespace (64 chars)",
+			uri:         "pvc://" + strings.Repeat("a", 64) + ":my-pvc/path",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Very long namespace (64 chars) should fail",
+		},
+		{
+			name:        "very long subpath",
+			uri:         "pvc://my-pvc/" + strings.Repeat("a", 10000),
+			wantErr:     false,
+			description: "Very long subpath should be valid",
+		},
+
+		// Edge cases for case sensitivity
+		{
+			name:        "URI with mixed case prefix",
+			uri:         "PVC://my-pvc/path",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI with mixed case prefix should fail",
+		},
+		{
+			name:        "URI with uppercase prefix",
+			uri:         "PVC://my-pvc/path",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI with uppercase prefix should fail",
+		},
+
+		// Edge cases for malformed URIs
+		{
+			name:        "URI with missing slash after PVC name",
+			uri:         "pvc://my-pvcpath",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with missing slash after PVC name should fail",
+		},
+		{
+			name:        "URI with missing slash after namespace:pvc",
+			uri:         "pvc://default:my-pvcpath",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with missing slash after namespace:pvc should fail",
+		},
+		{
+			name:        "URI with extra slashes in namespace:pvc part",
+			uri:         "pvc://default//my-pvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with extra slashes in namespace:pvc part should fail",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test ParsePVCStorageURI
+			components, err := ParsePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, tt.description)
+				}
+				assert.Nil(t, components, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+				assert.NotNil(t, components, tt.description)
+			}
+
+			// Test ValidatePVCStorageURI
+			validateErr := ValidatePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, validateErr, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, validateErr.Error(), tt.errContains, tt.description)
+				}
+			} else {
+				assert.NoError(t, validateErr, tt.description)
+			}
+
+			// Test GetStorageType for valid PVC URIs
+			if !tt.wantErr {
+				storageType, typeErr := GetStorageType(tt.uri)
+				assert.NoError(t, typeErr, tt.description)
+				assert.Equal(t, StorageTypePVC, storageType, tt.description)
+			}
+		})
+	}
+}
+
+// TestPVCStorageComprehensiveEdgeCases tests additional edge cases for PVC storage URIs
+func TestPVCStorageComprehensiveEdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+		description string
+	}{
+		// Additional edge cases for empty or minimal URIs
+		{
+			name:        "URI with only whitespace after prefix",
+			uri:         "pvc://   ",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with only whitespace after prefix should fail",
+		},
+		{
+			name:        "URI with tab characters in PVC name",
+			uri:         "pvc://my\tpvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with tab characters in PVC name should fail",
+		},
+		{
+			name:        "URI with newline characters in PVC name",
+			uri:         "pvc://my\npvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with newline characters in PVC name should fail",
+		},
+
+		// Edge cases for namespace validation
+		{
+			name:        "namespace with consecutive hyphens",
+			uri:         "pvc://my--namespace:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with consecutive hyphens should be valid",
+		},
+		{
+			name:        "namespace with consecutive dots",
+			uri:         "pvc://my..namespace:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with consecutive dots should be valid",
+		},
+		{
+			name:        "namespace with mixed separators",
+			uri:         "pvc://my-ns.123:my-pvc/path",
+			wantErr:     false,
+			description: "Namespace with mixed separators should be valid",
+		},
+
+		// Edge cases for PVC name validation
+		{
+			name:        "PVC name with consecutive hyphens",
+			uri:         "pvc://my--pvc/path",
+			wantErr:     false,
+			description: "PVC name with consecutive hyphens should be valid",
+		},
+		{
+			name:        "PVC name with consecutive underscores",
+			uri:         "pvc://my__pvc/path",
+			wantErr:     false,
+			description: "PVC name with consecutive underscores should be valid",
+		},
+		{
+			name:        "PVC name with consecutive dots",
+			uri:         "pvc://my..pvc/path",
+			wantErr:     false,
+			description: "PVC name with consecutive dots should be valid",
+		},
+
+		// Edge cases for subpath validation
+		{
+			name:        "subpath with only dots",
+			uri:         "pvc://my-pvc/...",
+			wantErr:     false,
+			description: "Subpath with only dots should be valid",
+		},
+		{
+			name:        "subpath with only hyphens",
+			uri:         "pvc://my-pvc/---",
+			wantErr:     false,
+			description: "Subpath with only hyphens should be valid",
+		},
+		{
+			name:        "subpath with only underscores",
+			uri:         "pvc://my-pvc/___",
+			wantErr:     false,
+			description: "Subpath with only underscores should be valid",
+		},
+		{
+			name:        "subpath with mixed separators",
+			uri:         "pvc://my-pvc/path-with.mixed_separators",
+			wantErr:     false,
+			description: "Subpath with mixed separators should be valid",
+		},
+
+		// Edge cases for URI format variations
+		{
+			name:        "URI with multiple consecutive slashes in subpath",
+			uri:         "pvc://my-pvc/path///to///file",
+			wantErr:     false,
+			description: "URI with multiple consecutive slashes in subpath should be valid",
+		},
+		{
+			name:        "URI with backslashes in subpath",
+			uri:         "pvc://my-pvc/path\\with\\backslashes",
+			wantErr:     false,
+			description: "URI with backslashes in subpath should be valid",
+		},
+		{
+			name:        "URI with mixed forward and backslashes",
+			uri:         "pvc://my-pvc/path/with\\mixed/slashes",
+			wantErr:     false,
+			description: "URI with mixed slashes should be valid",
+		},
+
+		// Edge cases for special characters
+		{
+			name:        "URI with unicode characters in PVC name",
+			uri:         "pvc://my-pvc-测试/path",
+			wantErr:     false,
+			description: "URI with unicode characters in PVC name should be valid",
+		},
+		{
+			name:        "URI with unicode characters in namespace",
+			uri:         "pvc://my-ns-测试:my-pvc/path",
+			wantErr:     false,
+			description: "URI with unicode characters in namespace should be valid",
+		},
+		{
+			name:        "URI with unicode characters in subpath",
+			uri:         "pvc://my-pvc/path/with/测试/characters",
+			wantErr:     false,
+			description: "URI with unicode characters in subpath should be valid",
+		},
+
+		// Edge cases for very long components
+		{
+			name:        "very long PVC name (1000 chars)",
+			uri:         "pvc://" + strings.Repeat("a", 1000) + "/path",
+			wantErr:     false,
+			description: "Very long PVC name should be valid",
+		},
+		{
+			name:        "very long namespace (63 chars)",
+			uri:         "pvc://" + strings.Repeat("a", 63) + ":my-pvc/path",
+			wantErr:     false,
+			description: "Very long namespace (63 chars) should be valid",
+		},
+		{
+			name:        "very long subpath (10000 chars)",
+			uri:         "pvc://my-pvc/" + strings.Repeat("a", 10000),
+			wantErr:     false,
+			description: "Very long subpath should be valid",
+		},
+
+		// Edge cases for malformed URIs
+		{
+			name:        "URI with missing slash after PVC name",
+			uri:         "pvc://my-pvcpath",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with missing slash after PVC name should fail",
+		},
+		{
+			name:        "URI with missing slash after namespace:pvc",
+			uri:         "pvc://default:my-pvcpath",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with missing slash after namespace:pvc should fail",
+		},
+		{
+			name:        "URI with extra slashes in namespace:pvc part",
+			uri:         "pvc://default//my-pvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with extra slashes in namespace:pvc part should fail",
+		},
+		{
+			name:        "URI with colon in PVC name without namespace",
+			uri:         "pvc://my:pvc/path",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with colon in PVC name without namespace should fail",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test ParsePVCStorageURI
+			components, err := ParsePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, tt.description)
+				}
+				assert.Nil(t, components, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+				assert.NotNil(t, components, tt.description)
+			}
+
+			// Test ValidatePVCStorageURI
+			validateErr := ValidatePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, validateErr, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, validateErr.Error(), tt.errContains, tt.description)
+				}
+			} else {
+				assert.NoError(t, validateErr, tt.description)
+			}
+
+			// Test GetStorageType for valid PVC URIs
+			if !tt.wantErr {
+				storageType, typeErr := GetStorageType(tt.uri)
+				assert.NoError(t, typeErr, tt.description)
+				assert.Equal(t, StorageTypePVC, storageType, tt.description)
+			}
+		})
+	}
+}
+
+// TestPVCStorageTypeDetectionComprehensive tests comprehensive storage type detection for PVC URIs
+func TestPVCStorageTypeDetectionComprehensive(t *testing.T) {
+	tests := []struct {
+		name         string
+		uri          string
+		expectedType StorageType
+		wantErr      bool
+		errContains  string
+		description  string
+	}{
+		{
+			name:         "valid PVC URI without namespace",
+			uri:          "pvc://my-pvc/" + TestModelPathLlama2,
+			expectedType: StorageTypePVC,
+			wantErr:      false,
+			description:  "PVC URI without namespace should be detected as PVC type",
+		},
+		{
+			name:         "valid PVC URI with namespace",
+			uri:          "pvc://default:my-pvc/" + TestModelPathLlama2,
+			expectedType: StorageTypePVC,
+			wantErr:      false,
+			description:  "PVC URI with namespace should be detected as PVC type",
+		},
+		{
+			name:         "PVC URI with complex subpath",
+			uri:          "pvc://my-pvc/path/to/" + TestModelPathLlama27BChat,
+			expectedType: StorageTypePVC,
+			wantErr:      false,
+			description:  "PVC URI with complex subpath should be detected as PVC type",
+		},
+		{
+			name:         "PVC URI with special characters in subpath",
+			uri:          "pvc://my-pvc/" + TestModelPathLlama2Special,
+			expectedType: StorageTypePVC,
+			wantErr:      false,
+			description:  "PVC URI with special characters should be detected as PVC type",
+		},
+		{
+			name:         "PVC URI with unicode characters",
+			uri:          "pvc://my-pvc/models/测试模型",
+			expectedType: StorageTypePVC,
+			wantErr:      false,
+			description:  "PVC URI with unicode characters should be detected as PVC type",
+		},
+		{
+			name:        "invalid URI format",
+			uri:         "invalid://storage/uri",
+			wantErr:     true,
+			errContains: "unknown storage type",
+			description: "Invalid URI format should return error",
+		},
+		{
+			name:        "empty URI",
+			uri:         "",
+			wantErr:     true,
+			errContains: "empty URI",
+			description: "Empty URI should return error",
+		},
+		{
+			name:        "URI with only prefix",
+			uri:         "pvc://",
+			wantErr:     true,
+			errContains: "unknown storage type",
+			description: "URI with only prefix should return error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storageType, err := GetStorageType(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, tt.description)
+				}
+			} else {
+				assert.NoError(t, err, tt.description)
+				assert.Equal(t, tt.expectedType, storageType, tt.description)
+			}
+		})
+	}
+}
+
+// TestPVCStorageURIParsingWithVariousSubpaths tests PVC URI parsing with various subpath formats
+func TestPVCStorageURIParsingWithVariousSubpaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		expected    *PVCStorageComponents
+		wantErr     bool
+		errContains string
+		description string
+	}{
+		{
+			name: "simple subpath",
+			uri:  "pvc://my-pvc/models",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models",
+			},
+			wantErr:     false,
+			description: "Simple subpath should be parsed correctly",
+		},
+		{
+			name: "nested subpath",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Extended,
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama2Extended,
+			},
+			wantErr:     false,
+			description: "Nested subpath should be parsed correctly",
+		},
+		{
+			name: "subpath with file extension",
+			uri:  "pvc://my-pvc/models/config.json",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/config.json",
+			},
+			wantErr:     false,
+			description: "Subpath with file extension should be parsed correctly",
+		},
+		{
+			name: "subpath with special characters",
+			uri:  "pvc://my-pvc/" + TestModelPathLlama2Special,
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama2Special,
+			},
+			wantErr:     false,
+			description: "Subpath with special characters should be parsed correctly",
+		},
+		{
+			name: "subpath with unicode characters",
+			uri:  "pvc://my-pvc/models/测试模型",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/测试模型",
+			},
+			wantErr:     false,
+			description: "Subpath with unicode characters should be parsed correctly",
+		},
+		{
+			name: "subpath with spaces",
+			uri:  "pvc://my-pvc/models/my model with spaces",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/my model with spaces",
+			},
+			wantErr:     false,
+			description: "Subpath with spaces should be parsed correctly",
+		},
+		{
+			name: "subpath with query parameters",
+			uri:  "pvc://my-pvc/models/config.json?version=1.0",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/config.json?version=1.0",
+			},
+			wantErr:     false,
+			description: "Subpath with query parameters should be parsed correctly",
+		},
+		{
+			name: "subpath with fragments",
+			uri:  "pvc://my-pvc/models/config.json#section1",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "models/config.json#section1",
+			},
+			wantErr:     false,
+			description: "Subpath with fragments should be parsed correctly",
+		},
+		{
+			name: "subpath with mixed separators",
+			uri:  "pvc://my-pvc/path-with.mixed_separators",
+			expected: &PVCStorageComponents{
+				Namespace: "",
+				PVCName:   "my-pvc",
+				SubPath:   "path-with.mixed_separators",
+			},
+			wantErr:     false,
+			description: "Subpath with mixed separators should be parsed correctly",
+		},
+		{
+			name: "subpath with namespace",
+			uri:  "pvc://default:my-pvc/" + TestModelPathLlama2,
+			expected: &PVCStorageComponents{
+				Namespace: "default",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama2,
+			},
+			wantErr:     false,
+			description: "Subpath with namespace should be parsed correctly",
+		},
+		{
+			name: "subpath with complex namespace",
+			uri:  "pvc://my-namespace-123:my-pvc/" + TestModelPathLlama27BExtended,
+			expected: &PVCStorageComponents{
+				Namespace: "my-namespace-123",
+				PVCName:   "my-pvc",
+				SubPath:   TestModelPathLlama27BExtended,
+			},
+			wantErr:     false,
+			description: "Subpath with complex namespace should be parsed correctly",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			components, err := ParsePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, tt.description)
+				}
+				assert.Nil(t, components, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+				assert.Equal(t, tt.expected, components, tt.description)
+			}
+		})
+	}
+}
+
+// TestPVCStorageValidationComprehensive tests comprehensive PVC storage validation scenarios
+// extracted from controller tests to improve test organization
+func TestPVCStorageValidationComprehensive(t *testing.T) {
+	testCases := []struct {
+		name          string
+		storageUri    string
+		expectError   bool
+		errorContains string
+		description   string
+	}{
+		{
+			name:        "PVC storage with simple subpath",
+			storageUri:  "pvc://my-pvc/models",
+			expectError: false,
+			description: "PVC storage with simple subpath should be valid",
+		},
+		{
+			name:        "PVC storage with nested subpath",
+			storageUri:  "pvc://my-pvc/" + TestModelPathLlama2Extended,
+			expectError: false,
+			description: "PVC storage with nested subpath should be valid",
+		},
+		{
+			name:        "PVC storage with namespace",
+			storageUri:  "pvc://storage-ns:my-pvc/models",
+			expectError: false,
+			description: "PVC storage with namespace should be valid",
+		},
+		{
+			name:        "PVC storage with special characters in subpath",
+			storageUri:  "pvc://my-pvc/" + TestModelPathLlama2Special,
+			expectError: false,
+			description: "PVC storage with special characters should be valid",
+		},
+		{
+			name:          "invalid PVC URI format",
+			storageUri:    "pvc://",
+			expectError:   true,
+			errorContains: "invalid PVC storage URI",
+			description:   "Invalid PVC URI format should return error",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test PVC URI validation
+			err := ValidatePVCStorageURI(tc.storageUri)
+			if tc.expectError {
+				assert.Error(t, err, tc.description)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains, tc.description)
+				}
+				return
+			}
+			assert.NoError(t, err, tc.description)
+
+			// Test storage type detection
+			storageType, err := GetStorageType(tc.storageUri)
+			assert.NoError(t, err, tc.description)
+			assert.Equal(t, StorageTypePVC, storageType, tc.description)
+
+			// Test PVC URI parsing
+			components, err := ParsePVCStorageURI(tc.storageUri)
+			assert.NoError(t, err, tc.description)
+			assert.NotNil(t, components, tc.description)
+			assert.NotEmpty(t, components.PVCName, tc.description)
+			assert.NotEmpty(t, components.SubPath, tc.description)
+		})
+	}
+}
+
+// TestPVCStorageErrorHandlingComprehensive consolidates all PVC storage error cases
+// that were previously duplicated across multiple test functions
+func TestPVCStorageErrorHandlingComprehensive(t *testing.T) {
+	tests := []struct {
+		name        string
+		uri         string
+		wantErr     bool
+		errContains string
+		description string
+	}{
+		// Namespace validation errors
+		{
+			name:        "invalid namespace with uppercase",
+			uri:         "pvc://MyNamespace:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace with uppercase should fail validation",
+		},
+		{
+			name:        "invalid namespace with underscore",
+			uri:         "pvc://my_namespace:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace with underscore should fail validation",
+		},
+		{
+			name:        "namespace starting with hyphen",
+			uri:         "pvc://-namespace:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace starting with hyphen should fail validation",
+		},
+		{
+			name:        "namespace ending with hyphen",
+			uri:         "pvc://namespace-:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace ending with hyphen should fail validation",
+		},
+		{
+			name:        "very long namespace (64 chars)",
+			uri:         "pvc://a123456789012345678901234567890123456789012345678901234567890123:my-pvc/models",
+			wantErr:     true,
+			errContains: "invalid namespace",
+			description: "Namespace with 64 characters should fail validation",
+		},
+		{
+			name:        "empty namespace before colon",
+			uri:         "pvc://:my-pvc/models",
+			wantErr:     true,
+			errContains: "empty namespace before colon",
+			description: "Empty namespace before colon should fail validation",
+		},
+		{
+			name:        "empty pvc name after colon",
+			uri:         "pvc://default:/models",
+			wantErr:     true,
+			errContains: "empty PVC name after colon",
+			description: "Empty PVC name after colon should fail validation",
+		},
+		// URI format errors
+		{
+			name:        "missing pvc prefix",
+			uri:         "my-pvc/results",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI without pvc:// prefix should fail validation",
+		},
+		{
+			name:        "empty uri",
+			uri:         "",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "Empty URI should fail validation",
+		},
+		{
+			name:        "only prefix",
+			uri:         "pvc://",
+			wantErr:     true,
+			errContains: "missing content after prefix",
+			description: "URI with only prefix should fail validation",
+		},
+		{
+			name:        "empty pvc name",
+			uri:         "pvc:///results",
+			wantErr:     true,
+			errContains: "missing PVC name",
+			description: "URI with empty PVC name should fail validation",
+		},
+		{
+			name:        "empty subpath",
+			uri:         "pvc://my-pvc/",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with empty subpath should fail validation",
+		},
+		{
+			name:        "empty subpath with namespace",
+			uri:         "pvc://default:my-pvc/",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with namespace and empty subpath should fail validation",
+		},
+		{
+			name:        "only pvc name provided",
+			uri:         "pvc://my-pvc",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with only PVC name should fail validation",
+		},
+		{
+			name:        "only namespace and pvc provided",
+			uri:         "pvc://default:my-pvc",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with only namespace and PVC should fail validation",
+		},
+		{
+			name:        "invalid uri - wrong scheme",
+			uri:         "oci://my-pvc/results",
+			wantErr:     true,
+			errContains: "missing pvc:// prefix",
+			description: "URI with wrong scheme should fail validation",
+		},
+		{
+			name:        "multiple colons in namespace:pvc part",
+			uri:         "pvc://ns:pvc:extra/path",
+			wantErr:     true,
+			errContains: "multiple colons not allowed",
+			description: "URI with multiple colons should fail validation",
+		},
+		{
+			name:        "trailing slash in pvc name",
+			uri:         "pvc://my-pvc-/results",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with trailing slash in PVC name should fail validation",
+		},
+		{
+			name:        "leading slash in subpath",
+			uri:         "pvc://my-pvc//results",
+			wantErr:     true,
+			errContains: "missing subpath",
+			description: "URI with leading slash in subpath should fail validation",
+		},
+		{
+			name:        "pvc name with invalid characters (underscore)",
+			uri:         "pvc://my_pvc/results",
+			wantErr:     true,
+			errContains: "invalid PVC name",
+			description: "PVC name with underscore should fail validation",
+		},
+		{
+			name:        "pvc name with uppercase",
+			uri:         "pvc://MyPVC/results",
+			wantErr:     true,
+			errContains: "invalid PVC name",
+			description: "PVC name with uppercase should fail validation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test ParsePVCStorageURI
+			components, err := ParsePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains, tt.description)
+				}
+				assert.Nil(t, components, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+				assert.NotNil(t, components, tt.description)
+			}
+
+			// Test ValidatePVCStorageURI
+			validateErr := ValidatePVCStorageURI(tt.uri)
+			if tt.wantErr {
+				assert.Error(t, validateErr, tt.description)
+				if tt.errContains != "" {
+					assert.Contains(t, validateErr.Error(), tt.errContains, tt.description)
+				}
+			} else {
+				assert.NoError(t, validateErr, tt.description)
+			}
 		})
 	}
 }
