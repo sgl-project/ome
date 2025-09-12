@@ -3,23 +3,29 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: clustermcpservers.ome.io
+  name: mcpgateways.ome.io
 spec:
   group: ome.io
   names:
-    kind: ClusterMCPServer
-    listKind: ClusterMCPServerList
-    plural: clustermcpservers
-    singular: clustermcpserver
-  scope: Cluster
+    kind: MCPGateway
+    listKind: MCPGatewayList
+    plural: mcpgateways
+    singular: mcpgateway
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.phase
-      name: Status
+      name: Phase
       type: string
-    - jsonPath: .status.url
-      name: URL
+    - jsonPath: .status.readyReplicas/.status.replicas
+      name: Replicas
       type: string
+    - jsonPath: .status.serverStatusSummary.connected/.status.serverStatusSummary.total
+      name: Servers
+      type: string
+    - jsonPath: .status.toolRegistry.totalTools
+      name: Tools
+      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -41,10 +47,11 @@ spec:
             type: object
             x-kubernetes-map-type: atomic
             x-kubernetes-preserve-unknown-fields: true
-        required:
-        - spec
         type: object
     served: true
     storage: true
     subresources:
+      scale:
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
       status: {}
