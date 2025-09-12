@@ -1,4 +1,4 @@
-title: Model Context Protocol (MCP) Support for LLM Tool Integration
+title: Model Context Protocol (MCP) Support with Gateway Architecture
 oep-number: 0005
 authors:
   - "@YouNeedCryDear"
@@ -18,14 +18,27 @@ stage: alpha
 # List the feature gate name and the components for which it must be enabled
 feature-gates:
   - name: MCPServerSupport
-disable-supported: true
+    disable-supported: true
+  - name: MCPGatewaySupport
+    disable-supported: true
 
 # The following PRR answers are required at beta release
 metrics:
+  # MCPServer Metrics
   - ome_mcp_server_total
   - ome_mcp_server_status
+  - ome_mcp_server_permission_violations_total
+
+  # MCPGateway Metrics
+  - ome_mcp_gateway_total
+  - ome_mcp_gateway_status
+  - ome_mcp_gateway_requests_total
+  - ome_mcp_gateway_requests_duration_seconds
+  - ome_mcp_gateway_upstream_connections_total
+  - ome_mcp_gateway_upstream_health_status
+  - ome_mcp_gateway_auth_failures_total
+
+  # General MCP Metrics
   - ome_mcp_connection_duration_seconds
   - ome_mcp_tool_invocation_total
   - ome_mcp_tool_invocation_duration_seconds
-  - ome_mcp_auth_failures_total
-  - ome_mcp_permission_violations_total
