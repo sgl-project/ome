@@ -70,11 +70,10 @@ type TracingConfig struct {
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// SamplingRate defines the sampling rate for traces (0.0-1.0).
-	// +kubebuilder:validation:Minimum=0.0
-	// +kubebuilder:validation:Maximum=1.0
-	// +kubebuilder:default=0.1
+	// +kubebuilder:validation:Pattern=`^0(\.[0-9]+)?|1(\.0+)?$`
+	// +kubebuilder:default="0.1"
 	// +optional
-	SamplingRate *float64 `json:"samplingRate,omitempty"`
+	SamplingRate *string `json:"samplingRate,omitempty"`
 
 	// Headers define additional headers to send with traces.
 	// +optional

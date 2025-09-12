@@ -264,7 +264,7 @@ type ServerStatusSummary struct {
 type GatewayMetrics struct {
 	// RequestsPerSecond is the current requests per second rate.
 	// +optional
-	RequestsPerSecond float64 `json:"requestsPerSecond,omitempty"`
+	RequestsPerSecond string `json:"requestsPerSecond,omitempty"`
 
 	// P50Latency is the 50th percentile latency in milliseconds.
 	// +optional
@@ -276,7 +276,7 @@ type GatewayMetrics struct {
 
 	// ErrorRate is the current error rate as a percentage.
 	// +optional
-	ErrorRate float64 `json:"errorRate,omitempty"`
+	ErrorRate string `json:"errorRate,omitempty"`
 
 	// ActiveConnections is the number of currently active connections.
 	// +optional
@@ -284,7 +284,7 @@ type GatewayMetrics struct {
 
 	// CacheHitRate is the cache hit rate as a percentage.
 	// +optional
-	CacheHitRate float64 `json:"cacheHitRate,omitempty"`
+	CacheHitRate string `json:"cacheHitRate,omitempty"`
 
 	// ToolInvocations tracks tool invocation statistics.
 	// +optional
@@ -337,11 +337,11 @@ const (
 type ResourceUsageStatus struct {
 	// CPU usage as a percentage of allocated resources.
 	// +optional
-	CPUUsage float64 `json:"cpuUsage,omitempty"`
+	CPUUsage string `json:"cpuUsage,omitempty"`
 
 	// Memory usage as a percentage of allocated resources.
 	// +optional
-	MemoryUsage float64 `json:"memoryUsage,omitempty"`
+	MemoryUsage string `json:"memoryUsage,omitempty"`
 
 	// Storage usage for context and cache storage.
 	// +optional
@@ -372,7 +372,7 @@ type StorageMetrics struct {
 	Available resource.Quantity `json:"available"`
 
 	// Usage percentage.
-	UsagePercent float64 `json:"usagePercent"`
+	UsagePercent string `json:"usagePercent"`
 }
 
 // NetworkUsageInfo provides network usage information.
@@ -384,7 +384,7 @@ type NetworkUsageInfo struct {
 	BytesOut int64 `json:"bytesOut"`
 
 	// ConnectionsPerSecond is the rate of new connections.
-	ConnectionsPerSecond float64 `json:"connectionsPerSecond"`
+	ConnectionsPerSecond string `json:"connectionsPerSecond"`
 }
 
 // ToolRegistryStatus provides status of the tool registry.
@@ -414,7 +414,7 @@ type ResourceRegistryStatus struct {
 
 	// CacheHitRate is the resource cache hit rate as a percentage.
 	// +optional
-	CacheHitRate float64 `json:"cacheHitRate,omitempty"`
+	CacheHitRate string `json:"cacheHitRate,omitempty"`
 
 	// LastUpdated is when the registry was last updated.
 	// +optional
@@ -448,5 +448,5 @@ type WorkflowStatus struct {
 
 	// AverageExecutionTime is the average workflow execution time in seconds.
 	// +optional
-	AverageExecutionTime float64 `json:"averageExecutionTime,omitempty"`
+	AverageExecutionTime string `json:"averageExecutionTime,omitempty"`
 }

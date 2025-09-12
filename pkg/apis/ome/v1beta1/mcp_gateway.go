@@ -51,6 +51,7 @@ type MCPGatewaySpec struct {
 type MCPServerDiscoveryConfig struct {
 	// Static provides a fixed list of MCP server references.
 	// +optional
+	// +listType=atomic
 	Static []MCPServerRef `json:"static,omitempty"`
 
 	// Selector allows dynamic discovery of MCPServer resources using a label selector.
