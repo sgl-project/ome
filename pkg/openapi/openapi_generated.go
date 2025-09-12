@@ -2256,7 +2256,7 @@ func schema_pkg_apis_ome_v1beta1_ClusterMCPGateway(ref common.ReferenceCallback)
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API. ClusterMCPGateway provides AI-aware routing, context management, and federation capabilities for Model Context Protocol (MCP) servers across the entire cluster.",
+				Description: "ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API. capabilities for Model Context Protocol (MCP) servers across the entire cluster.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -6526,7 +6526,7 @@ func schema_pkg_apis_ome_v1beta1_MCPGateway(ref common.ReferenceCallback) common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MCPGateway is the Schema for the mcpgateways API. MCPGateway provides AI-aware routing, context management, and federation capabilities for Model Context Protocol (MCP) servers and tools.",
+				Description: "MCPGateway is the Schema for the mcpgateways API. capabilities for Model Context Protocol (MCP) servers and tools.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -6882,7 +6882,7 @@ func schema_pkg_apis_ome_v1beta1_MCPGatewaySpec(ref common.ReferenceCallback) co
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "MCPGatewaySpec defines the desired state of MCPGateway. MCPGateway provides AI-aware routing, context management, and orchestration capabilities for Model Context Protocol (MCP) servers with federation support.",
+				Description: "MCPGatewaySpec defines the desired state of MCPGateway.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"replicas": {
@@ -7306,7 +7306,7 @@ func schema_pkg_apis_ome_v1beta1_MCPServerDiscoveryConfig(ref common.ReferenceCa
 					},
 					"autoDiscovery": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AutoDiscovery enables automatic discovery of MCP servers through federation.",
+							Description: "AutoDiscovery enables automatic discovery of MCP servers",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},

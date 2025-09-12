@@ -5277,9 +5277,6 @@ spec:
             - message: either static MCP server references or dynamic selector must
                 be specified
               rule: has(self.mcpServers.static) || has(self.mcpServers.selector)
-            - message: federation peers required when federation is enabled
-              rule: '!has(self.federation.enabled) || !self.federation.enabled ||
-                size(self.federation.peers) > 0'
           status:
             properties:
               activeSessions:

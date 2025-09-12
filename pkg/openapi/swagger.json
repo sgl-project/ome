@@ -1164,7 +1164,7 @@
       }
     },
     "v1beta1.ClusterMCPGateway": {
-      "description": "ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API. ClusterMCPGateway provides AI-aware routing, context management, and federation capabilities for Model Context Protocol (MCP) servers across the entire cluster.",
+      "description": "ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API. capabilities for Model Context Protocol (MCP) servers across the entire cluster.",
       "type": "object",
       "properties": {
         "apiVersion": {
@@ -3594,7 +3594,7 @@
       }
     },
     "v1beta1.MCPGateway": {
-      "description": "MCPGateway is the Schema for the mcpgateways API. MCPGateway provides AI-aware routing, context management, and federation capabilities for Model Context Protocol (MCP) servers and tools.",
+      "description": "MCPGateway is the Schema for the mcpgateways API. capabilities for Model Context Protocol (MCP) servers and tools.",
       "type": "object",
       "properties": {
         "apiVersion": {
@@ -3803,7 +3803,7 @@
       }
     },
     "v1beta1.MCPGatewaySpec": {
-      "description": "MCPGatewaySpec defines the desired state of MCPGateway. MCPGateway provides AI-aware routing, context management, and orchestration capabilities for Model Context Protocol (MCP) servers with federation support.",
+      "description": "MCPGatewaySpec defines the desired state of MCPGateway.",
       "type": "object",
       "required": [
         "mcpServers"
@@ -4040,7 +4040,7 @@
       "type": "object",
       "properties": {
         "autoDiscovery": {
-          "description": "AutoDiscovery enables automatic discovery of MCP servers through federation.",
+          "description": "AutoDiscovery enables automatic discovery of MCP servers",
           "type": "boolean"
         },
         "healthCheck": {
