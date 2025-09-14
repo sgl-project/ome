@@ -73,10 +73,13 @@ spec:
                           type: array
                           x-kubernetes-list-type: atomic
                         maxMemory:
+                          format: int64
                           type: integer
                         minComputeCapability:
+                          format: int64
                           type: integer
                         minMemory:
+                          format: int64
                           type: integer
                         requiredFeatures:
                           items:
@@ -112,10 +115,13 @@ spec:
                               type: array
                               x-kubernetes-list-type: atomic
                             maxMemory:
+                              format: int64
                               type: integer
                             minComputeCapability:
+                              format: int64
                               type: integer
                             minMemory:
+                              format: int64
                               type: integer
                             requiredFeatures:
                               items:
@@ -12331,10 +12337,13 @@ spec:
                               type: array
                               x-kubernetes-list-type: atomic
                             maxMemory:
+                              format: int64
                               type: integer
                             minComputeCapability:
+                              format: int64
                               type: integer
                             minMemory:
+                              format: int64
                               type: integer
                             requiredFeatures:
                               items:

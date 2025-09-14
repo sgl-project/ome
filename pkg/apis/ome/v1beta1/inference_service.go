@@ -77,15 +77,15 @@ type AcceleratorSelector struct {
 type AcceleratorConstraints struct {
 	// MinMemory in GB
 	// +optional
-	MinMemory *int `json:"minMemory,omitempty"`
+	MinMemory *int64 `json:"minMemory,omitempty"`
 
 	// MaxMemory in GB (useful for cost control)
 	// +optional
-	MaxMemory *int `json:"maxMemory,omitempty"`
+	MaxMemory *int64 `json:"maxMemory,omitempty"`
 
 	// MinComputeCapability in TFLOPS
 	// +optional
-	MinComputeCapability *int `json:"minComputeCapability,omitempty"`
+	MinComputeCapability *int64 `json:"minComputeCapability,omitempty"`
 
 	// RequiredFeatures that must be present
 	// +optional

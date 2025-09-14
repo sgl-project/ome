@@ -181,17 +181,17 @@ func (in *AcceleratorConstraints) DeepCopyInto(out *AcceleratorConstraints) {
 	*out = *in
 	if in.MinMemory != nil {
 		in, out := &in.MinMemory, &out.MinMemory
-		*out = new(int)
+		*out = new(int64)
 		**out = **in
 	}
 	if in.MaxMemory != nil {
 		in, out := &in.MaxMemory, &out.MaxMemory
-		*out = new(int)
+		*out = new(int64)
 		**out = **in
 	}
 	if in.MinComputeCapability != nil {
 		in, out := &in.MinComputeCapability, &out.MinComputeCapability
-		*out = new(int)
+		*out = new(int64)
 		**out = **in
 	}
 	if in.RequiredFeatures != nil {
