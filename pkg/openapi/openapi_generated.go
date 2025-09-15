@@ -430,21 +430,21 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorConstraints(ref common.ReferenceCall
 						SchemaProps: spec.SchemaProps{
 							Description: "MinMemory in GB",
 							Type:        []string{"integer"},
-							Format:      "int32",
+							Format:      "int64",
 						},
 					},
 					"maxMemory": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MaxMemory in GB (useful for cost control)",
 							Type:        []string{"integer"},
-							Format:      "int32",
+							Format:      "int64",
 						},
 					},
 					"minComputeCapability": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MinComputeCapability in TFLOPS",
 							Type:        []string{"integer"},
-							Format:      "int32",
+							Format:      "int64",
 						},
 					},
 					"requiredFeatures": {

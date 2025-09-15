@@ -214,17 +214,17 @@
         "maxMemory": {
           "description": "MaxMemory in GB (useful for cost control)",
           "type": "integer",
-          "format": "int32"
+          "format": "int64"
         },
         "minComputeCapability": {
           "description": "MinComputeCapability in TFLOPS",
           "type": "integer",
-          "format": "int32"
+          "format": "int64"
         },
         "minMemory": {
           "description": "MinMemory in GB",
           "type": "integer",
-          "format": "int32"
+          "format": "int64"
         },
         "requiredFeatures": {
           "description": "RequiredFeatures that must be present",

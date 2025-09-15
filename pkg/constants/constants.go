@@ -38,6 +38,7 @@ var (
 	InferenceServiceConfigMapName = "inferenceservice-config"
 	BaseModelFinalizer            = "basemodels.ome.io/finalizer"
 	ClusterBaseModelFinalizer     = "clusterbasemodels.ome.io/finalizer"
+	AcceleratorClassFinalizer     = "acceleratorclasses.ome.io/finalizer"
 )
 
 // OME Agent Constants
