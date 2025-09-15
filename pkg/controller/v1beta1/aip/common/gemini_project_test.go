@@ -136,6 +136,11 @@ func addMockedGcpBudgetClient(mockedGcpBudgetClient *testingpkg.MockGcpBudgetCli
 		mockedGcpBudgetClient.EXPECT().Close().Return(nil).Times(1)
 	}
 }
+func addMockedGcpRestfulClient(mockedGcpRestfulClient *testingpkg.MockGcpRestfulClient, projectId string) {
+	mockedGcpRestfulClient.EXPECT().SetCacheConfig(
+		gomock.Any(), projectId, true).Return(nil).Times(1)
+}
+
 func addMockedGcpBillingClient(mockedGcpBillingClient *testingpkg.MockGcpBillingClient,
 	projectId string, mockClose bool) {
 	mockedProjectBillingInfo := &billingpb.ProjectBillingInfo{
@@ -278,10 +283,13 @@ func TestGeminiProject_Create(t *testing.T) {
 	project.SetGcpProjectClient(mockGcpClient)
 	mockedGcpBillingClient := testingpkg.NewMockGcpBillingClient(ctrl)
 	mockedGcpBudgetClient := testingpkg.NewMockGcpBudgetClient(ctrl)
+	mockedGcpRestfulClient := testingpkg.NewMockGcpRestfulClient(ctrl)
 	addMockedGcpBillingClient(mockedGcpBillingClient, projectId, true)
 	addMockedGcpBudgetClient(mockedGcpBudgetClient, projectId, true)
+	addMockedGcpRestfulClient(mockedGcpRestfulClient, projectId)
 	project.SetGcpBillingClient(mockedGcpBillingClient)
 	project.SetGcpBudgetClient(mockedGcpBudgetClient)
+	project.SetGcpRestfulClient(mockedGcpRestfulClient)
 	mockedGcpServiceClient := testingpkg.NewMockGcpServiceUsageClient(ctrl)
 	addMockedGcpServiceClient(mockedGcpServiceClient)
 	project.SetGcpServiceUsageClient(mockedGcpServiceClient)

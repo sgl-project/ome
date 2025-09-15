@@ -415,3 +415,40 @@ func (mr *MockGcpBudgetClientMockRecorder) CreateBudget(ctx, req interface{}) *g
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBudget", reflect.TypeOf((*MockGcpBudgetClient)(nil).CreateBudget), ctx, req)
 }
+
+// MockGcpRestfulClient is a mock of GcpRestfulClient interface.
+type MockGcpRestfulClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockGcpRestfulClientMockRecorder
+}
+
+// MockGcpRestfulClientMockRecorder is the mock recorder for MockGcpRestfulClient.
+type MockGcpRestfulClientMockRecorder struct {
+	mock *MockGcpRestfulClient
+}
+
+// NewMockGcpRestfulClient creates a new mock instance.
+func NewMockGcpRestfulClient(ctrl *gomock.Controller) *MockGcpRestfulClient {
+	mock := &MockGcpRestfulClient{ctrl: ctrl}
+	mock.recorder = &MockGcpRestfulClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGcpRestfulClient) EXPECT() *MockGcpRestfulClientMockRecorder {
+	return m.recorder
+}
+
+// SetCacheConfig mocks base method.
+func (m *MockGcpRestfulClient) SetCacheConfig(ctx context.Context, projectId string, disableCache bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetCacheConfig", ctx, projectId, disableCache)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetCacheConfig indicates an expected call of SetCacheConfig.
+func (mr *MockGcpRestfulClientMockRecorder) SetCacheConfig(ctx, projectId, disableCache interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCacheConfig", reflect.TypeOf((*MockGcpRestfulClient)(nil).SetCacheConfig), ctx, projectId, disableCache)
+}

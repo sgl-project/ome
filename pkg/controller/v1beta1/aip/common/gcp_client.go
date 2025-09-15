@@ -1,9 +1,15 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
+
+	"golang.org/x/oauth2/google"
+
+	"net/http"
 
 	billing "cloud.google.com/go/billing/apiv1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
@@ -143,6 +149,47 @@ func (c *RealGcpServiceUsageClient) Enable(projectId string, apiName string) err
 			break
 		}
 		time.Sleep(10 * time.Second)
+	}
+
+	return nil
+}
+
+type RealGcpRestfulClient struct {
+	adminSecret []byte
+}
+
+func (c *RealGcpRestfulClient) SetCacheConfig(ctx context.Context, projectId string, disableCache bool) error {
+	creds, err := google.CredentialsFromJSON(ctx, c.adminSecret, "https://www.googleapis.com/auth/cloud-platform")
+	if err != nil {
+		return fmt.Errorf("failed to get credentials: %w", err)
+	}
+	tokenSource := creds.TokenSource
+
+	url := fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/cacheConfig", projectId)
+	body := []byte(fmt.Sprintf("{\"disableCache\": %v}", disableCache))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request to set cache config: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	token, err := tokenSource.Token()
+	if err != nil {
+		return fmt.Errorf("failed to acquire token: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("non-OK response: %d body: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil

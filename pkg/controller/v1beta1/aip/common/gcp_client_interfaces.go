@@ -41,3 +41,7 @@ type GcpBudgetClient interface {
 	CreateBudget(ctx context.Context, req *budgetspb.CreateBudgetRequest) (*budgetspb.Budget, error)
 	Close() error
 }
+
+type GcpRestfulClient interface {
+	SetCacheConfig(ctx context.Context, projectId string, disableCache bool) error
+}

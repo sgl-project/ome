@@ -168,6 +168,15 @@ func (r *ResourceBase) InitializeGcpBudgetClient(ctx context.Context, org *v1bet
 	return &RealGcpBudgetClient{client: budgetClient}, nil
 }
 
+// InitializeGcpRestfulClient initializes a GCP Restful client using organization credentials
+func (r *ResourceBase) InitializeGcpRestfulClient(ctx context.Context, org *v1beta1.Organization) (GcpRestfulClient, error) {
+	adminSecret, err := r.GetGcpAdminSecret(org)
+	if err != nil {
+		return nil, err
+	}
+	return &RealGcpRestfulClient{adminSecret: adminSecret}, nil
+}
+
 // InitializeGcpServiceUsage initializes a GCP Service usage client using organization credentials
 func (r *ResourceBase) InitializeGcpServiceUsage(ctx context.Context, org *v1beta1.Organization) (GcpServiceUsageClient, error) {
 	adminSecret, err := r.GetGcpAdminSecret(org)

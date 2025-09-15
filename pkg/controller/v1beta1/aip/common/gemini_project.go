@@ -31,6 +31,7 @@ type GeminiProject struct {
 	gcpService       GcpServiceUsageClient
 	billingClient    GcpBillingClient
 	budgetClient     GcpBudgetClient
+	restfulClient    GcpRestfulClient
 }
 
 // NewGeminiProject creates a new Project resource handler
@@ -117,7 +118,36 @@ func (p *GeminiProject) Create(ctx context.Context) error {
 		}
 	}
 
+	err = p.DisableCacheConfig(ctx, createdProject.ProjectId)
+	if err != nil {
+		return p.updateConditionWithError(ctx, p.Resource, v1beta1.ProjectStatusAPIError, err)
+	}
+
 	return p.updateCondition(ctx, p.Resource, v1beta1.ProjectStatusCreated)
+}
+
+func (p *GeminiProject) DisableCacheConfig(ctx context.Context, projectId string) error {
+	restfulClient, err := p.GetGcpRestfulClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create GCP restful Client: %w", err)
+	}
+
+	retry := 30
+	for retry > 0 {
+		err := restfulClient.SetCacheConfig(ctx, projectId, true)
+		if err != nil {
+			retry--
+			fmt.Println(fmt.Errorf("failed to update cache config for project:%s, retry remaining: %d, err: %v", projectId, retry, err))
+			if retry > 0 {
+				time.Sleep(20 * time.Second)
+			}
+		} else {
+			p.Log.Info("Cache config disabled for project %s", projectId)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("Failed to disable cache config for project %s", projectId)
 }
 
 // Update updates the existing project
@@ -286,6 +316,25 @@ func (p *GeminiProject) GetGcpBudgetClient(ctx context.Context) (GcpBudgetClient
 	return budgetClient, nil
 }
 
+func (p *GeminiProject) GetGcpRestfulClient(ctx context.Context) (GcpRestfulClient, error) {
+	if p.restfulClient != nil {
+		// For unit testing
+		return p.restfulClient, nil
+	}
+
+	org, err := p.GetOrganizationFromProject(ctx, p.Resource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization when creating gcp restful client: %w", err)
+	}
+
+	restfulClient, err := p.InitializeGcpRestfulClient(ctx, org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize GCP restful client: %w", err)
+	}
+
+	return restfulClient, nil
+}
+
 func (p *GeminiProject) GetGcpServiceUsage(ctx context.Context) (GcpServiceUsageClient, error) {
 	if p.gcpService != nil {
 		// For unit testing
@@ -415,4 +464,9 @@ func (p *GeminiProject) SetGcpBudgetClient(client GcpBudgetClient) {
 // SetGcpServiceUsageClient sets a custom gcp service usage client for testing purposes
 func (p *GeminiProject) SetGcpServiceUsageClient(client GcpServiceUsageClient) {
 	p.gcpService = client
+}
+
+// SetGcpRestfulClient sets a custom gcp restful client for testing purposes
+func (p *GeminiProject) SetGcpRestfulClient(client GcpRestfulClient) {
+	p.restfulClient = client
 }
