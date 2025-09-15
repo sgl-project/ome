@@ -29,3 +29,30 @@ var Module = fx.Provide(
 		}
 		return NewKmsCrypto(config)
 	})
+
+type kmsCryptoParamsWithListOfConfigs struct {
+	fx.In
+
+	AnotherLogger logging.Interface `name:"another_log"`
+
+	/*
+	 * Use Value Groups feature from fx to inject a list of Configs
+	 * https://pkg.go.dev/go.uber.org/fx#hdr-Value_Groups
+	 */
+	Configs []*Config `group:"kmsCryptoConfigs"`
+}
+
+func ProvideListOfKmsCryptoWithAppParams(params kmsCryptoParamsWithListOfConfigs) ([]*KmsCrypto, error) {
+	kmsCryptoList := make([]*KmsCrypto, 0)
+	for _, config := range params.Configs {
+		if config == nil {
+			continue
+		}
+		kmsCrypto, err := NewKmsCrypto(config)
+		if err != nil {
+			return kmsCryptoList, fmt.Errorf("error initializing KmsCrypto using config: %+v: %+v", config, err)
+		}
+		kmsCryptoList = append(kmsCryptoList, kmsCrypto)
+	}
+	return kmsCryptoList, nil
+}

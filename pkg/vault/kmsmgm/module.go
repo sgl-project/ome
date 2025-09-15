@@ -29,3 +29,30 @@ var Module = fx.Provide(
 		}
 		return NewKmsMgm(config)
 	})
+
+type kmsMgmParamsWithListOfConfigs struct {
+	fx.In
+
+	AnotherLogger logging.Interface `name:"another_log"`
+
+	/*
+	 * Use Value Groups feature from fx to inject a list of Configs
+	 * https://pkg.go.dev/go.uber.org/fx#hdr-Value_Groups
+	 */
+	Configs []*Config `group:"kmsMgmConfigs"`
+}
+
+func ProvideListOfKmsMgmWithAppParams(params kmsMgmParamsWithListOfConfigs) ([]*KmsMgm, error) {
+	kmsManagementList := make([]*KmsMgm, 0)
+	for _, config := range params.Configs {
+		if config == nil {
+			continue
+		}
+		kmsManagement, err := NewKmsMgm(config)
+		if err != nil {
+			return kmsManagementList, fmt.Errorf("error initializing KmsManagement using config: %+v: %+v", config, err)
+		}
+		kmsManagementList = append(kmsManagementList, kmsManagement)
+	}
+	return kmsManagementList, nil
+}

@@ -2,7 +2,6 @@ package replica
 
 import (
 	"fmt"
-
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
