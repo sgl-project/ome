@@ -39,6 +39,7 @@ import (
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
+	v1beta1acceleratorclasscontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/acceleratorclass"
 	v1beta1basemodelcontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/basemodel"
 	v1beta1benchmarkjobcontroller "github.com/sgl-project/ome/pkg/controller/v1beta1/benchmark"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
@@ -294,6 +295,20 @@ func main() {
 		Recorder:  benchmarkJobEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create Benchmark Job controller")
+		os.Exit(1)
+	}
+
+	// Setup AcceleratorClass controller
+	acceleratorClassEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up AcceleratorClass controller")
+	acceleratorClassEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1acceleratorclasscontroller.AcceleratorClassReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("AcceleratorClass"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: acceleratorClassEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create AcceleratorClass controller")
 		os.Exit(1)
 	}
 
