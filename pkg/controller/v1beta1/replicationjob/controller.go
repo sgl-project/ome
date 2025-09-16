@@ -3,14 +3,12 @@ package replicationjob
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	jobutils "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/benchmark/reconcilers/job"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/replicationjob/utils"
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
@@ -185,10 +183,7 @@ func (r *ReplicationJobReconciler) createPodSpec(
 	config *controllerconfig.ReplicationJobConfig,
 ) (*v1.PodSpec, error) {
 
-	args, err := r.buildJobArgs(replicationJob.Spec.Source)
-	if err != nil {
-		return nil, err
-	}
+	args := r.buildJobArgs()
 
 	env, err := utils.BuildEnvVars(replicationJob.Spec, config)
 	if err != nil {
@@ -256,27 +251,12 @@ func (r *ReplicationJobReconciler) patchContainer(base, override v1.Container) (
 	return mergedContainer, nil
 }
 
-// buildBenchmarkCommand constructs the command line arguments for the benchmark container.
-func (r *ReplicationJobReconciler) buildJobArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
+// buildJobArgs constructs the command line arguments for the ome-agent replica container.
+func (r *ReplicationJobReconciler) buildJobArgs() []string {
 	var args []string
-	storageType, err := storage.GetStorageType(*storageSpec.StorageUri)
-	if err != nil {
-		return nil, fmt.Errorf("error determining storage type: %v", err)
-	}
-	switch storageType {
-	// TODO: Handle the case when src and dest are different storage types, e.g. download from HF and upload to OS
-	// TODO: Handle storage type PVC
-	case storage.StorageTypeOCI:
-		args = append(args, objectStorageReplicaCommand)
-	case storage.StorageTypeHuggingFace:
-		args = append(args, huggingFaceReplicaCommand)
-	default:
-		return nil, fmt.Errorf("storageType %v is not supported for replication", storageType)
-	}
-
+	args = append(args, objectStorageReplicaCommand)
 	args = append(args, "--config", omeAgentConfigFilePath, "--debug")
-
-	return args, nil
+	return args
 }
 
 // updateStatus updates the status of the ReplicationJob. Currently, no additional logic.

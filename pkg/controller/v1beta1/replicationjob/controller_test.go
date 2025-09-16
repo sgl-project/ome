@@ -453,7 +453,6 @@ func TestReplicationJobReconciler_buildArgs(t *testing.T) {
 	tests := []struct {
 		name           string
 		replicationJob *v1beta1.ReplicationJob
-		wantErr        bool
 	}{
 		{
 			name:           "successfully build args",
@@ -477,16 +476,24 @@ func TestReplicationJobReconciler_buildArgs(t *testing.T) {
 				Client: client,
 			}
 
-			args, err := r.buildJobArgs(tt.replicationJob.Spec.Source)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("buildJobArgs() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			args := r.buildJobArgs()
 
-			if !tt.wantErr {
-				if len(args) == 0 {
-					t.Error("buildJobArgs() args is empty")
+			if len(args) == 0 {
+				t.Error("buildJobArgs() args is empty")
+			}
+			// Verify that "replica" is the first argument
+			if len(args) > 0 && args[0] != "replica" {
+				t.Errorf("buildJobArgs() first argument = %v, want 'replica'", args[0])
+			}
+			// Verify that "--config" is present
+			hasConfig := false
+			for _, arg := range args {
+				if arg == "--config" {
+					hasConfig = true
 				}
+			}
+			if !hasConfig {
+				t.Error("buildJobArgs() missing '--config' argument")
 			}
 		},
 		)
