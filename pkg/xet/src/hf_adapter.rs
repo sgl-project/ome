@@ -5,11 +5,13 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use futures::stream::{self, StreamExt};
-// For xet-core integration
-use utils::auth::TokenRefresher;
-use utils::errors::AuthError;
-use progress_tracking::{TrackingProgressUpdater, ProgressUpdate, ItemProgressUpdate};
-use async_trait::async_trait;
+use crate::xet_integration::{XetFileData, XetTokenManager, parse_xet_file_data_from_headers};
+use std::io::Write;
+// For xet-core integration (commented out for now)
+// use utils::auth::TokenRefresher;
+// use utils::errors::AuthError;
+// use progress_tracking::{TrackingProgressUpdater, ProgressUpdate, ItemProgressUpdate};
+// use async_trait::async_trait;
 
 #[derive(Clone)]
 pub struct HfAdapter {
@@ -19,6 +21,7 @@ pub struct HfAdapter {
     max_concurrent: usize,
     enable_dedup: bool,
     client: reqwest::Client,
+    xet_token_manager: Arc<tokio::sync::Mutex<XetTokenManager>>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +29,7 @@ pub struct HfFileInfo {
     pub path: String,
     pub hash: String,
     pub size: u64,
+    pub xet_hash: Option<String>,  // XET hash if available
 }
 
 // HF API response structures
@@ -51,7 +55,7 @@ struct LfsInfo {
     pointer_size: u64,
 }
 
-// Token refresher implementation for xet-core
+/* Token refresher implementation for xet-core (not used yet)
 struct HfTokenRefresher {
     token: String,
 }
@@ -64,6 +68,7 @@ impl TokenRefresher for HfTokenRefresher {
         Ok((self.token.clone(), 3600))
     }
 }
+*/
 
 // Progress updater wrapper for FFI callback
 struct HfProgressUpdater {
@@ -72,6 +77,7 @@ struct HfProgressUpdater {
     total_size: u64,
 }
 
+/* Not used yet - requires xet-core traits
 #[async_trait]
 impl TrackingProgressUpdater for HfProgressUpdater {
     async fn register_updates(&self, updates: ProgressUpdate) {
@@ -92,6 +98,7 @@ impl TrackingProgressUpdater for HfProgressUpdater {
         (self.callback)(&self.current_file, self.total_size, self.total_size);
     }
 }
+*/
 
 impl HfAdapter {
     pub fn new(
@@ -115,6 +122,10 @@ impl HfAdapter {
             .default_headers(headers)
             .build()?;
         
+        let xet_token_manager = Arc::new(tokio::sync::Mutex::new(
+            XetTokenManager::new(token.clone())
+        ));
+        
         Ok(HfAdapter {
             endpoint,
             token,
@@ -122,6 +133,7 @@ impl HfAdapter {
             max_concurrent,
             enable_dedup,
             client,
+            xet_token_manager,
         })
     }
 
@@ -151,12 +163,11 @@ impl HfAdapter {
             .into_iter()
             .filter(|item| item.item_type == "file")
             .map(|item| {
-                // Use xet_hash if available (for LFS files), otherwise use oid
-                let hash = item.xet_hash.unwrap_or(item.oid);
                 HfFileInfo {
                     path: item.path,
-                    hash,
+                    hash: item.oid.clone(),  // Git OID
                     size: item.size,
+                    xet_hash: item.xet_hash,  // XET hash if available
                 }
             })
             .collect();
@@ -174,6 +185,13 @@ impl HfAdapter {
         progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
+        // Debug log at very start
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/xet-debug.log") {
+            writeln!(f, "\n=== download_file_with_cancel called ===").ok();
+            writeln!(f, "repo_id: {}, filename: {}", repo_id, filename).ok();
+            writeln!(f, "enable_dedup: {}", self.enable_dedup).ok();
+        }
+        
         // Check for cancellation
         if let Some(ref cancel) = cancel_check {
             if cancel() {
@@ -238,16 +256,91 @@ impl HfAdapter {
             filename
         );
 
-        // Create progress updater if callback provided
-        let progress_updater = progress_callback.as_ref().map(|cb| {
-            Arc::new(HfProgressUpdater {
-                callback: cb.clone(),
-                current_file: filename.to_string(),
-                total_size: file_info.size,
-            }) as Arc<dyn TrackingProgressUpdater>
-        });
+        // First, make a HEAD request to check for XET support
+        // Debug logging to file since stderr doesn't work through FFI
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/xet-debug.log") {
+            writeln!(f, "[DEBUG] Making HEAD request to: {}", download_url).ok();
+        }
+        
+        // Make a HEAD request without following redirects to capture XET headers
+        // XET headers are only present on the initial HF response, not after CDN redirect
+        let no_redirect_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())  // Don't follow redirects
+            .build()?;
+            
+        let head_response = no_redirect_client.head(&download_url)
+            .header(reqwest::header::AUTHORIZATION, 
+                    self.token.as_ref().map(|t| format!("Bearer {}", t)).unwrap_or_default())
+            .send().await?;
+        
+        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/xet-debug.log") {
+            writeln!(f, "[DEBUG] HEAD response status: {}", head_response.status()).ok();
+        }
+        
+        // Check for both success (200) and redirect (302) responses
+        // HuggingFace returns 302 with XET headers
+        let xet_file_data = if head_response.status().is_success() || head_response.status().is_redirection() {
+            let headers = head_response.headers();
+            
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/xet-debug.log") {
+                writeln!(f, "[DEBUG] Looking for XET headers...").ok();
+                writeln!(f, "[DEBUG] All headers:").ok();
+                for (key, value) in headers.iter() {
+                    writeln!(f, "  {}: {:?}", key, value).ok();
+                }
+                if let Some(xet_hash) = headers.get("x-xet-hash") {
+                    writeln!(f, "[DEBUG] Found X-Xet-Hash: {:?}", xet_hash).ok();
+                }
+                if let Some(link) = headers.get("link") {
+                    writeln!(f, "[DEBUG] Found Link header: {:?}", link).ok();
+                }
+            }
+            
+            parse_xet_file_data_from_headers(headers)
+        } else {
+            None
+        };
+        
+        // Try XET download if available and enabled
+        if let Some(xet_data) = xet_file_data {
+            if self.enable_dedup {
+                eprintln!("  [XET] File has XET support - hash: {}", xet_data.file_hash);
+                eprintln!("  [XET] Refresh route: {}", xet_data.refresh_route);
+                
+                // Try to download using XET
+                match self.download_with_xet(
+                    &xet_data,
+                    &dest_path,
+                    file_info.size,
+                    progress_callback.clone(),
+                    cancel_check.clone(),
+                ).await {
+                    Ok(path) => {
+                        eprintln!("  [XET] Download successful via CAS");
+                        return Ok(path);
+                    }
+                    Err(e) => {
+                        eprintln!("  [XET] Failed to download via CAS: {}", e);
+                        eprintln!("  [XET] Falling back to regular HTTP download");
+                    }
+                }
+            } else {
+                eprintln!("  [XET] File has XET support but dedup is disabled");
+            }
+        } else {
+            eprintln!("  [XET] No XET metadata found for file");
+        }
 
-        // Download with streaming and progress reporting
+        // Create progress updater if callback provided (commented out - needs xet-core traits)
+        // let progress_updater = progress_callback.as_ref().map(|cb| {
+        //     Arc::new(HfProgressUpdater {
+        //         callback: cb.clone(),
+        //         current_file: filename.to_string(),
+        //         total_size: file_info.size,
+        //     }) as Arc<dyn TrackingProgressUpdater>
+        // });
+
+        // Regular HTTP download (fallback or primary)
         let response = self.client.get(&download_url).send().await?;
         
         if !response.status().is_success() {
@@ -277,28 +370,33 @@ impl HfAdapter {
         let content = response.bytes().await?;
         downloaded = content.len() as u64;
         
-        // Report progress
-        if let Some(updater) = progress_updater {
-            let update = ProgressUpdate {
-                item_updates: vec![ItemProgressUpdate {
-                    item_name: Arc::from(filename),
-                    total_bytes: total_size,
-                    bytes_completed: downloaded,
-                    bytes_completion_increment: downloaded,
-                }],
-                total_bytes: total_size,
-                total_bytes_increment: 0,
-                total_bytes_completed: downloaded,
-                total_bytes_completion_increment: downloaded,
-                total_bytes_completion_rate: None,
-                total_transfer_bytes: total_size,
-                total_transfer_bytes_increment: 0,
-                total_transfer_bytes_completed: downloaded,
-                total_transfer_bytes_completion_increment: downloaded,
-                total_transfer_bytes_completion_rate: None,
-            };
-            updater.register_updates(update).await;
-            updater.flush().await;
+        // Report progress (commented out until we have xet-core traits)
+        // if let Some(updater) = progress_updater {
+        //     let update = ProgressUpdate {
+        //         item_updates: vec![ItemProgressUpdate {
+        //             item_name: Arc::from(filename),
+        //             total_bytes: total_size,
+        //             bytes_completed: downloaded,
+        //             bytes_completion_increment: downloaded,
+        //         }],
+        //         total_bytes: total_size,
+        //         total_bytes_increment: 0,
+        //         total_bytes_completed: downloaded,
+        //         total_bytes_completion_increment: downloaded,
+        //         total_bytes_completion_rate: None,
+        //         total_transfer_bytes: total_size,
+        //         total_transfer_bytes_increment: 0,
+        //         total_transfer_bytes_completed: downloaded,
+        //         total_transfer_bytes_completion_increment: downloaded,
+        //         total_transfer_bytes_completion_rate: None,
+        //     };
+        //     updater.register_updates(update).await;
+        //     updater.flush().await;
+        // }
+        
+        // Report via direct callback
+        if let Some(cb) = progress_callback {
+            cb(filename, downloaded, total_size);
         }
         
         // Write to destination
@@ -402,5 +500,57 @@ impl HfAdapter {
         }
 
         Ok(local_dir.to_string())
+    }
+    
+    /// Download a file using XET/CAS
+    async fn download_with_xet(
+        &self,
+        xet_file_data: &XetFileData,
+        dest_path: &Path,
+        expected_size: u64,
+        progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
+        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+    ) -> Result<String> {
+        use crate::xet_downloader::XetDownloader;
+        
+        // Get XET connection info
+        let mut token_manager = self.xet_token_manager.lock().await;
+        let connection_info = token_manager.refresh_xet_connection_info(xet_file_data).await?;
+        drop(token_manager);  // Release the lock early
+        
+        eprintln!("  [XET] Using xet-core FileDownloader for hash: {}", xet_file_data.file_hash);
+        eprintln!("  [XET] Endpoint: {}", connection_info.endpoint);
+        
+        // Create XET downloader with connection info
+        let xet_downloader = XetDownloader::new(&connection_info, self.token.clone()).await?;
+        
+        // Check for cancellation before starting
+        if let Some(ref cancel) = cancel_check {
+            if cancel() {
+                return Err(anyhow!("Download cancelled"));
+            }
+        }
+        
+        // Download using xet-core's FileDownloader
+        let bytes_downloaded = xet_downloader.download_file(
+            &xet_file_data.file_hash,
+            dest_path,
+            progress_callback,
+        ).await?;
+        
+        // Verify the size matches
+        if bytes_downloaded != expected_size {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/xet-debug.log") {
+                use std::io::Write;
+                writeln!(f, "[XET] Downloaded size mismatch: expected {}, got {}", expected_size, bytes_downloaded).ok();
+            }
+            
+            // Don't fail, just log the mismatch
+            eprintln!("  [XET] Warning: Downloaded {} bytes, expected {}", bytes_downloaded, expected_size);
+        }
+        
+        eprintln!("  [XET] Successfully downloaded {} bytes using xet-core", bytes_downloaded);
+        
+        Ok(dest_path.to_string_lossy().to_string())
     }
 }

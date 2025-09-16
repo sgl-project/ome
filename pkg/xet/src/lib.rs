@@ -1,6 +1,8 @@
 mod ffi;
 mod error;
 mod hf_adapter;
+mod xet_integration;
+mod xet_downloader;
 
 pub use ffi::*;
 pub use error::*;
