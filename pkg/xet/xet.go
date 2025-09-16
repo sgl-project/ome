@@ -9,6 +9,21 @@ package xet
 // Link-time version check
 extern void xet_version_1_0_0(void);
 void (*xet_version_check)(void) = &xet_version_1_0_0;
+
+// Declare the snapshot download function
+extern XetError* xet_download_snapshot(
+    XetClient* client,
+    const char* repo_id,
+    const char* repo_type,
+    const char* revision,
+    const char* local_dir,
+    XetProgressCallback progress,
+    void* user_data,
+    char** out_path
+);
+
+// Progress callback wrapper
+void progressCallback(const char* file_path, uint64_t downloaded, uint64_t total, void* user_data);
 */
 import "C"
 import (
@@ -202,6 +217,63 @@ func (c *Client) DownloadFileWithContext(ctx context.Context, req *DownloadReque
 	// TODO: Implement context cancellation
 	// This requires passing cancellation token to Rust side
 	return c.DownloadFile(req)
+}
+
+// DownloadSnapshot downloads all files from a repository in parallel
+func (c *Client) DownloadSnapshot(req *SnapshotRequest) (string, error) {
+	return c.DownloadSnapshotWithProgress(req, nil)
+}
+
+// DownloadSnapshotWithProgress downloads all files with progress callback
+func (c *Client) DownloadSnapshotWithProgress(req *SnapshotRequest, progressFn func(string, uint64, uint64)) (string, error) {
+	var outPath *C.char
+	
+	var cRepoID *C.char
+	if req.RepoID != "" {
+		cRepoID = C.CString(req.RepoID)
+		defer C.free(unsafe.Pointer(cRepoID))
+	}
+	
+	var cRepoType *C.char
+	if req.RepoType != "" {
+		cRepoType = C.CString(req.RepoType)
+		defer C.free(unsafe.Pointer(cRepoType))
+	}
+	
+	var cRevision *C.char
+	if req.Revision != "" {
+		cRevision = C.CString(req.Revision)
+		defer C.free(unsafe.Pointer(cRevision))
+	}
+	
+	var cLocalDir *C.char
+	if req.LocalDir != "" {
+		cLocalDir = C.CString(req.LocalDir)
+		defer C.free(unsafe.Pointer(cLocalDir))
+	}
+
+	// For now, we'll call without progress callback
+	// TODO: Implement proper callback marshalling
+	cErr := C.xet_download_snapshot(
+		c.client,
+		cRepoID,
+		cRepoType,
+		cRevision,
+		cLocalDir,
+		nil, // No progress callback for now
+		nil,
+		&outPath,
+	)
+	
+	if cErr != nil {
+		defer C.xet_free_error(cErr)
+		return "", fmt.Errorf("xet error %d: %s", cErr.code, C.GoString(cErr.message))
+	}
+	
+	path := C.GoString(outPath)
+	C.xet_free_string(outPath)
+	
+	return path, nil
 }
 
 // Helper functions

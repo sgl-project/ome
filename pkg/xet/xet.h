@@ -96,7 +96,10 @@ XetError* xet_download_file(
 
 XetError* xet_download_snapshot(
     XetClient* client,
-    const XetSnapshotRequest* request,
+    const char* repo_id,
+    const char* repo_type,
+    const char* revision,
+    const char* local_dir,
     XetProgressCallback progress,
     void* user_data,
     char** out_path

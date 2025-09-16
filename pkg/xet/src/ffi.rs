@@ -53,6 +53,9 @@ pub type XetProgressCallback = extern "C" fn(
     user_data: *mut c_void,
 );
 
+// Cancellation check callback
+pub type XetCancelCallback = extern "C" fn(user_data: *mut c_void) -> bool;
+
 // Helper to convert C string to Rust String
 unsafe fn c_str_to_string(s: *const c_char) -> Option<String> {
     if s.is_null() {
@@ -212,13 +215,13 @@ pub extern "C" fn xet_download_file(
         let local_dir = c_str_to_string(request.local_dir);
 
         // Create progress callback wrapper if provided
-        // We don't capture user_data directly in the closure to avoid Send/Sync issues
-        // Instead, we'll use a simpler approach for the PoC
-        let progress_callback = progress.map(|_cb| {
+        let progress_callback = progress.map(|cb| {
             Arc::new(move |path: &str, downloaded: u64, total: u64| {
-                // For PoC, we'll just print progress
-                // In production, this would properly marshal the callback
-                println!("Progress: {} - {}/{} bytes", path, downloaded, total);
+                // Marshal the callback to C
+                let c_path = CString::new(path).unwrap_or_else(|_| CString::new("").unwrap());
+                // Note: user_data is not used in this implementation
+                // In production, you'd need a different approach to handle user_data safely
+                cb(c_path.as_ptr(), downloaded, total, ptr::null_mut());
             }) as Arc<dyn Fn(&str, u64, u64) + Send + Sync>
         });
 
@@ -230,6 +233,83 @@ pub extern "C" fn xet_download_file(
                 repo_type.as_deref(),
                 revision.as_deref(),
                 local_dir.as_deref(),
+                progress_callback,
+            ).await
+        });
+
+        match result {
+            Ok(path) => {
+                *out_path = CString::new(path).unwrap().into_raw();
+                ptr::null_mut()
+            }
+            Err(e) => XetError::from_anyhow(e),
+        }
+    }
+}
+
+// Download snapshot (all files) with parallel downloads
+#[no_mangle]
+pub extern "C" fn xet_download_snapshot(
+    client: *mut XetClient,
+    repo_id: *const c_char,
+    repo_type: *const c_char,
+    revision: *const c_char,
+    local_dir: *const c_char,
+    progress: Option<XetProgressCallback>,
+    user_data: *mut c_void,
+    out_path: *mut *mut c_char,
+) -> *mut XetError {
+    if client.is_null() || repo_id.is_null() || local_dir.is_null() || out_path.is_null() {
+        return XetError::new(
+            XetErrorCode::InvalidConfig,
+            "Invalid parameters".to_string(),
+            None,
+        );
+    }
+
+    unsafe {
+        let client = &*client;
+        let repo_id = match c_str_to_string(repo_id) {
+            Some(s) => s,
+            None => {
+                return XetError::new(
+                    XetErrorCode::InvalidConfig,
+                    "Invalid repo_id".to_string(),
+                    None,
+                );
+            }
+        };
+        
+        let repo_type = c_str_to_string(repo_type);
+        let revision = c_str_to_string(revision);
+        let local_dir = match c_str_to_string(local_dir) {
+            Some(s) => s,
+            None => {
+                return XetError::new(
+                    XetErrorCode::InvalidConfig,
+                    "Invalid local_dir".to_string(),
+                    None,
+                );
+            }
+        };
+
+        // Create progress callback wrapper if provided
+        let progress_callback = progress.map(|cb| {
+            Arc::new(move |path: &str, downloaded: u64, total: u64| {
+                let c_path = CString::new(path).unwrap_or_else(|_| CString::new("").unwrap());
+                cb(c_path.as_ptr(), downloaded, total, ptr::null_mut());
+            }) as Arc<dyn Fn(&str, u64, u64) + Send + Sync>
+        });
+
+        let runtime = get_runtime();
+        let result = runtime.block_on(async {
+            client.adapter.download_snapshot(
+                &repo_id,
+                repo_type.as_deref(),
+                revision.as_deref(),
+                &local_dir,
+                None, // allow_patterns
+                None, // ignore_patterns
                 progress_callback,
             ).await
         });
