@@ -33,10 +33,12 @@ func main() {
 			log.Fatalf("Failed to create temp directory: %v", err)
 		}
 		*localDir = tempDir
-		defer func() {
-			fmt.Printf("Downloads saved to: %s\n", *localDir)
-		}()
 	}
+	
+	// Always print where downloads will be saved
+	defer func() {
+		fmt.Printf("Downloads saved to: %s\n", *localDir)
+	}()
 
 	// Get token from environment if not provided
 	if *token == "" {
@@ -91,33 +93,37 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 	// Download file or snapshot
 	if snapshot {
 		fmt.Printf("\nDownloading entire repository to: %s\n", localDir)
-		// For PoC, we'll download files one by one
-		// In production, this would be parallelized
-		files, err := client.ListFiles(repoID, "main")
-		if err != nil {
-			log.Fatalf("Failed to list files for snapshot: %v", err)
+		fmt.Println("Using PARALLEL downloads with caching...")
+		
+		// Use the new parallel snapshot download
+		req := &xet.SnapshotRequest{
+			RepoID:   repoID,
+			RepoType: "models",
+			Revision: "main",
+			LocalDir: localDir,
 		}
 
-		successCount := 0
-		for _, file := range files {
-			req := &xet.DownloadRequest{
-				RepoID:   repoID,
-				RepoType: "models",
-				Revision: "main",
-				Filename: file.Path,
-				LocalDir: localDir,
+		// Progress tracking
+		var lastFile string
+		path, err := client.DownloadSnapshotWithProgress(req, func(filepath string, downloaded, total uint64) {
+			if filepath != lastFile {
+				fmt.Printf("\n[Downloading] %s", filepath)
+				lastFile = filepath
 			}
-
-			path, err := client.DownloadFile(req)
-			if err != nil {
-				log.Printf("Failed to download %s: %v", file.Path, err)
-			} else {
-				fmt.Printf("Downloaded: %s\n", path)
-				successCount++
+			if total > 0 {
+				percent := float64(downloaded) * 100.0 / float64(total)
+				fmt.Printf("\r[Downloading] %s: %.2f%% (%d/%d bytes)", filepath, percent, downloaded, total)
+				if downloaded == total {
+					fmt.Printf("\r[Completed] %s: ✓                                             \n", filepath)
+				}
 			}
+		})
+		
+		if err != nil {
+			log.Fatalf("Failed to download snapshot: %v", err)
 		}
 		
-		fmt.Printf("\nSnapshot download complete: %d/%d files downloaded\n", successCount, len(files))
+		fmt.Printf("\nSnapshot download complete! All files saved to: %s\n", path)
 	} else {
 		// Download single file
 		fmt.Printf("\nDownloading file: %s/%s\n", repoID, filename)
