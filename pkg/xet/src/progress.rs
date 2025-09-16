@@ -1,7 +1,7 @@
 // Progress tracking module - similar to hf_xet/progress_update.rs
-use std::sync::Arc;
 use async_trait::async_trait;
-use progress_tracking::{TrackingProgressUpdater, ProgressUpdate};
+use progress_tracking::{ProgressUpdate, TrackingProgressUpdater};
+use std::sync::Arc;
 
 /// Wrapper for progress callbacks that implements TrackingProgressUpdater
 pub struct ProgressReporter {
@@ -19,14 +19,10 @@ impl TrackingProgressUpdater for ProgressReporter {
     async fn register_updates(&self, updates: ProgressUpdate) {
         // Convert item progress to our callback format
         for item in &updates.item_updates {
-            (self.callback)(
-                &item.item_name,
-                item.bytes_completed,
-                item.total_bytes,
-            );
+            (self.callback)(&item.item_name, item.bytes_completed, item.total_bytes);
         }
     }
-    
+
     async fn flush(&self) {
         // Nothing to do on flush for our use case
     }
@@ -51,7 +47,7 @@ pub fn wrap_c_progress_callback(
     user_data: *mut libc::c_void,
 ) -> Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>> {
     callback.map(|cb| {
-        let wrapper = Arc::new(CCallbackWrapper { 
+        let wrapper = Arc::new(CCallbackWrapper {
             callback: cb,
             user_data,
         });

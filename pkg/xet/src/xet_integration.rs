@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, Context};
+use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,10 +37,11 @@ impl std::fmt::Display for XetTokenType {
 /// Parse XET file metadata from HTTP response headers
 pub fn parse_xet_file_data_from_headers(headers: &HeaderMap) -> Option<XetFileData> {
     // Check for X-Xet-Hash header
-    let file_hash = headers.get("x-xet-hash")
+    let file_hash = headers
+        .get("x-xet-hash")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())?;
-    
+
     // Check for Link header with xet-auth relation
     let refresh_route = if let Some(link_header) = headers.get("link") {
         if let Ok(link_str) = link_header.to_str() {
@@ -48,16 +49,18 @@ pub fn parse_xet_file_data_from_headers(headers: &HeaderMap) -> Option<XetFileDa
             parse_link_header_for_xet_auth(link_str)
         } else {
             // Fallback to X-Xet-Refresh-Route header
-            headers.get("x-xet-refresh-route")
+            headers
+                .get("x-xet-refresh-route")
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string())
         }
     } else {
-        headers.get("x-xet-refresh-route")
+        headers
+            .get("x-xet-refresh-route")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string())
     }?;
-    
+
     Some(XetFileData {
         file_hash,
         refresh_route,
@@ -83,18 +86,21 @@ fn parse_link_header_for_xet_auth(link_str: &str) -> Option<String> {
 
 /// Parse XET connection info from HTTP response headers
 pub fn parse_xet_connection_info_from_headers(headers: &HeaderMap) -> Option<XetConnectionInfo> {
-    let endpoint = headers.get("x-xet-cas-url")
+    let endpoint = headers
+        .get("x-xet-cas-url")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())?;
-    
-    let access_token = headers.get("x-xet-access-token")
+
+    let access_token = headers
+        .get("x-xet-access-token")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())?;
-    
-    let expiration_unix_epoch = headers.get("x-xet-token-expiration")
+
+    let expiration_unix_epoch = headers
+        .get("x-xet-token-expiration")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse::<u64>().ok())?;
-    
+
     Some(XetConnectionInfo {
         endpoint,
         access_token,
@@ -117,19 +123,19 @@ impl XetTokenManager {
                 headers.insert(reqwest::header::AUTHORIZATION, header_value);
             }
         }
-        
+
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()
             .unwrap_or_default();
-        
+
         Self {
             client,
             hf_token,
             cached_connection_info: None,
         }
     }
-    
+
     /// Check if the cached token is still valid
     fn is_token_valid(&self) -> bool {
         if let Some((ref info, _)) = self.cached_connection_info {
@@ -137,14 +143,14 @@ impl XetTokenManager {
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            
+
             // Consider token valid if it has at least 60 seconds remaining
             info.expiration_unix_epoch > now + 60
         } else {
             false
         }
     }
-    
+
     /// Refresh XET connection info using the refresh route
     pub async fn refresh_xet_connection_info(
         &mut self,
@@ -158,32 +164,32 @@ impl XetTokenManager {
                 }
             }
         }
-        
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&file_data.refresh_route)
             .send()
             .await
             .context("Failed to fetch XET connection info")?;
-        
+
         if !response.status().is_success() {
             return Err(anyhow!(
                 "Failed to get XET token: HTTP {}",
                 response.status()
             ));
         }
-        
+
         let headers = response.headers();
         let connection_info = parse_xet_connection_info_from_headers(headers)
             .ok_or_else(|| anyhow!("XET headers not found in response"))?;
-        
+
         // Cache the connection info
-        self.cached_connection_info = Some((connection_info.clone(), file_data.refresh_route.clone()));
-        
-        
+        self.cached_connection_info =
+            Some((connection_info.clone(), file_data.refresh_route.clone()));
+
         Ok(connection_info)
     }
-    
+
     /// Fetch XET connection info directly from repo info
     pub async fn fetch_xet_connection_info_from_repo(
         &mut self,
@@ -196,32 +202,27 @@ impl XetTokenManager {
         let revision = revision.unwrap_or("main");
         let url = format!(
             "{}/api/{}s/{}/xet-{}-token/{}",
-            endpoint,
-            repo_type,
-            repo_id,
-            token_type,
-            revision
+            endpoint, repo_type, repo_id, token_type, revision
         );
-        
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
             .context("Failed to fetch XET token")?;
-        
+
         if !response.status().is_success() {
             return Err(anyhow!(
                 "Failed to get XET token: HTTP {}",
                 response.status()
             ));
         }
-        
+
         let headers = response.headers();
         let connection_info = parse_xet_connection_info_from_headers(headers)
             .ok_or_else(|| anyhow!("XET headers not found in response"))?;
-        
-        
+
         Ok(connection_info)
     }
 }
@@ -229,28 +230,34 @@ impl XetTokenManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parse_link_header() {
         let link = r#"<https://huggingface.co/api/models/test/xet-read-token/abc123>; rel="xet-auth", <https://cas-server.xethub.hf.co/reconstruction/hash>; rel="xet-reconstruction-info""#;
-        
+
         let result = parse_link_header_for_xet_auth(link);
         assert_eq!(
             result,
             Some("https://huggingface.co/api/models/test/xet-read-token/abc123".to_string())
         );
     }
-    
+
     #[test]
     fn test_parse_xet_connection_info() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-xet-cas-url", HeaderValue::from_static("https://cas-server.xethub.hf.co"));
+        headers.insert(
+            "x-xet-cas-url",
+            HeaderValue::from_static("https://cas-server.xethub.hf.co"),
+        );
         headers.insert("x-xet-access-token", HeaderValue::from_static("test-token"));
-        headers.insert("x-xet-token-expiration", HeaderValue::from_static("1758055996"));
-        
+        headers.insert(
+            "x-xet-token-expiration",
+            HeaderValue::from_static("1758055996"),
+        );
+
         let result = parse_xet_connection_info_from_headers(&headers);
         assert!(result.is_some());
-        
+
         let info = result.unwrap();
         assert_eq!(info.endpoint, "https://cas-server.xethub.hf.co");
         assert_eq!(info.access_token, "test-token");

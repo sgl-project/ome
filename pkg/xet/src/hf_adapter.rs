@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use anyhow::{Result, anyhow};
+use crate::xet_integration::{parse_xet_file_data_from_headers, XetFileData, XetTokenManager};
+use anyhow::{anyhow, Result};
+use futures::stream::{self, StreamExt};
 use reqwest;
 use serde::Deserialize;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::fs;
-use futures::stream::{self, StreamExt};
-use tracing::{info, debug, warn};
-use crate::xet_integration::{XetFileData, XetTokenManager, parse_xet_file_data_from_headers};
+use tracing::{debug, info, warn};
 // For xet-core integration (commented out for now)
 // use utils::auth::TokenRefresher;
 // use utils::errors::AuthError;
@@ -29,7 +29,7 @@ pub struct HfFileInfo {
     pub path: String,
     pub hash: String,
     pub size: u64,
-    pub xet_hash: Option<String>,  // XET hash if available
+    pub xet_hash: Option<String>, // XET hash if available
 }
 
 // HF API response structures
@@ -55,9 +55,6 @@ struct LfsInfo {
     pointer_size: u64,
 }
 
-
-
-
 impl HfAdapter {
     pub fn new(
         endpoint: String,
@@ -67,7 +64,7 @@ impl HfAdapter {
         enable_dedup: bool,
     ) -> Result<Self> {
         let cache_dir = cache_dir.map(PathBuf::from);
-        
+
         let mut headers = reqwest::header::HeaderMap::new();
         if let Some(ref token) = token {
             headers.insert(
@@ -75,15 +72,14 @@ impl HfAdapter {
                 reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))?,
             );
         }
-        
+
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()?;
-        
-        let xet_token_manager = Arc::new(tokio::sync::Mutex::new(
-            XetTokenManager::new(token.clone())
-        ));
-        
+
+        let xet_token_manager =
+            Arc::new(tokio::sync::Mutex::new(XetTokenManager::new(token.clone())));
+
         Ok(HfAdapter {
             endpoint,
             token,
@@ -102,20 +98,17 @@ impl HfAdapter {
     ) -> Result<Vec<HfFileInfo>> {
         let revision = revision.unwrap_or("main");
         let url = format!("{}/api/models/{}/tree/{}", self.endpoint, repo_id, revision);
-        
+
         // Make HTTP request to HF API
         let response = self.client.get(&url).send().await?;
-        
+
         if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to list files: HTTP {}",
-                response.status()
-            ));
+            return Err(anyhow!("Failed to list files: HTTP {}", response.status()));
         }
-        
+
         // Parse the HF API response
         let tree_items: Vec<HfTreeItem> = response.json().await?;
-        
+
         // Convert to HfFileInfo, filtering out directories
         let files: Vec<HfFileInfo> = tree_items
             .into_iter()
@@ -123,13 +116,13 @@ impl HfAdapter {
             .map(|item| {
                 HfFileInfo {
                     path: item.path,
-                    hash: item.oid.clone(),  // Git OID
+                    hash: item.oid.clone(), // Git OID
                     size: item.size,
-                    xet_hash: item.xet_hash,  // XET hash if available
+                    xet_hash: item.xet_hash, // XET hash if available
                 }
             })
             .collect();
-        
+
         Ok(files)
     }
 
@@ -151,7 +144,7 @@ impl HfAdapter {
         }
         let repo_type = repo_type.unwrap_or("models");
         let revision = revision.unwrap_or("main");
-        
+
         // First, get the file info to get the metadata
         let files = self.list_files(repo_id, Some(revision)).await?;
         let file_info = files
@@ -159,7 +152,7 @@ impl HfAdapter {
             .find(|f| f.path == filename)
             .ok_or_else(|| anyhow!("File {} not found in repository", filename))?
             .clone();
-        
+
         // Determine destination path
         let dest_path = if let Some(local_dir) = local_dir {
             let mut path = PathBuf::from(local_dir);
@@ -185,15 +178,23 @@ impl HfAdapter {
             if let Ok(metadata) = fs::metadata(&dest_path).await {
                 if metadata.len() == file_info.size {
                     // File already cached - report it
-                    debug!("[CACHE HIT] {} ({}MB)", filename, file_info.size / 1_048_576);
+                    debug!(
+                        "[CACHE HIT] {} ({}MB)",
+                        filename,
+                        file_info.size / 1_048_576
+                    );
                     if let Some(cb) = progress_callback {
                         cb(filename, file_info.size, file_info.size);
                     }
                     return Ok(dest_path.to_string_lossy().to_string());
                 } else {
                     // Size mismatch, re-download
-                    debug!("[CACHE MISS] {} - size mismatch (cached: {}, expected: {})", 
-                        filename, metadata.len(), file_info.size);
+                    debug!(
+                        "[CACHE MISS] {} - size mismatch (cached: {}, expected: {})",
+                        filename,
+                        metadata.len(),
+                        file_info.size
+                    );
                 }
             }
         }
@@ -201,46 +202,54 @@ impl HfAdapter {
         // Construct the HF download URL
         let download_url = format!(
             "{}/{}/resolve/{}/{}",
-            self.endpoint,
-            repo_id,
-            revision,
-            filename
+            self.endpoint, repo_id, revision, filename
         );
 
         // Make a HEAD request without following redirects to capture XET headers
         // XET headers are only present on the initial HF response, not after CDN redirect
         let no_redirect_client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())  // Don't follow redirects
+            .redirect(reqwest::redirect::Policy::none()) // Don't follow redirects
             .build()?;
-            
-        let head_response = no_redirect_client.head(&download_url)
-            .header(reqwest::header::AUTHORIZATION, 
-                    self.token.as_ref().map(|t| format!("Bearer {}", t)).unwrap_or_default())
-            .send().await?;
-        
+
+        let head_response = no_redirect_client
+            .head(&download_url)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                self.token
+                    .as_ref()
+                    .map(|t| format!("Bearer {}", t))
+                    .unwrap_or_default(),
+            )
+            .send()
+            .await?;
+
         // Check for both success (200) and redirect (302) responses
         // HuggingFace returns 302 with XET headers
-        let xet_file_data = if head_response.status().is_success() || head_response.status().is_redirection() {
-            let headers = head_response.headers();
-            parse_xet_file_data_from_headers(headers)
-        } else {
-            None
-        };
-        
+        let xet_file_data =
+            if head_response.status().is_success() || head_response.status().is_redirection() {
+                let headers = head_response.headers();
+                parse_xet_file_data_from_headers(headers)
+            } else {
+                None
+            };
+
         // Try XET download if available and enabled
         if let Some(xet_data) = xet_file_data {
             if self.enable_dedup {
                 info!("[XET] File has XET support - hash: {}", xet_data.file_hash);
                 debug!("[XET] Refresh route: {}", xet_data.refresh_route);
-                
+
                 // Try to download using XET
-                match self.download_with_xet(
-                    &xet_data,
-                    &dest_path,
-                    file_info.size,
-                    progress_callback.clone(),
-                    cancel_check.clone(),
-                ).await {
+                match self
+                    .download_with_xet(
+                        &xet_data,
+                        &dest_path,
+                        file_info.size,
+                        progress_callback.clone(),
+                        cancel_check.clone(),
+                    )
+                    .await
+                {
                     Ok(path) => {
                         return Ok(path);
                     }
@@ -266,21 +275,21 @@ impl HfAdapter {
 
         // Regular HTTP download (fallback or primary)
         let response = self.client.get(&download_url).send().await?;
-        
+
         if !response.status().is_success() {
             return Err(anyhow!(
                 "Failed to download file: HTTP {}",
                 response.status()
             ));
         }
-        
+
         // Check for cancellation before downloading content
         if let Some(ref cancel) = cancel_check {
             if cancel() {
                 return Err(anyhow!("Download cancelled"));
             }
         }
-        
+
         // Get content length for progress reporting
         let total_size = response
             .headers()
@@ -288,12 +297,12 @@ impl HfAdapter {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(file_info.size);
-        
+
         // Download with progress reporting
         let mut downloaded = 0u64;
         let content = response.bytes().await?;
         downloaded = content.len() as u64;
-        
+
         // Report progress (commented out until we have xet-core traits)
         // if let Some(updater) = progress_updater {
         //     let update = ProgressUpdate {
@@ -317,15 +326,15 @@ impl HfAdapter {
         //     updater.register_updates(update).await;
         //     updater.flush().await;
         // }
-        
+
         // Report via direct callback
         if let Some(cb) = progress_callback {
             cb(filename, downloaded, total_size);
         }
-        
+
         // Write to destination
         fs::write(&dest_path, &content).await?;
-        
+
         Ok(dest_path.to_string_lossy().to_string())
     }
 
@@ -347,7 +356,8 @@ impl HfAdapter {
             local_dir,
             progress_callback,
             None,
-        ).await
+        )
+        .await
     }
 
     pub async fn download_snapshot(
@@ -362,9 +372,10 @@ impl HfAdapter {
     ) -> Result<String> {
         // List all files in the repository
         let files = self.list_files(repo_id, revision).await?;
-        
+
         // Apply pattern filtering
-        let filtered_files: Vec<_> = files.into_iter()
+        let filtered_files: Vec<_> = files
+            .into_iter()
             .filter(|f| {
                 // Simple pattern matching - in production would use glob patterns
                 if let Some(ref allow) = allow_patterns {
@@ -387,7 +398,7 @@ impl HfAdapter {
         // Download files in parallel with controlled concurrency
         let max_concurrent = self.max_concurrent.min(filtered_files.len());
         let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrent));
-        
+
         let download_futures = filtered_files.iter().map(|file| {
             let semaphore = semaphore.clone();
             let repo_id = repo_id.to_string();
@@ -397,18 +408,20 @@ impl HfAdapter {
             let local_dir = local_dir.to_string();
             let progress_callback = progress_callback.clone();
             let adapter = self.clone();
-            
+
             async move {
                 let _permit = semaphore.acquire().await?;
-                
-                adapter.download_file(
-                    &repo_id,
-                    &file_path,
-                    repo_type.as_deref(),
-                    revision.as_deref(),
-                    Some(&local_dir),
-                    progress_callback,
-                ).await
+
+                adapter
+                    .download_file(
+                        &repo_id,
+                        &file_path,
+                        repo_type.as_deref(),
+                        revision.as_deref(),
+                        Some(&local_dir),
+                        progress_callback,
+                    )
+                    .await
             }
         });
 
@@ -425,7 +438,7 @@ impl HfAdapter {
 
         Ok(local_dir.to_string())
     }
-    
+
     /// Download a file using XET/CAS
     async fn download_with_xet(
         &self,
@@ -436,34 +449,37 @@ impl HfAdapter {
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
         use crate::xet_downloader::XetDownloader;
-        
+
         // Get XET connection info
         let mut token_manager = self.xet_token_manager.lock().await;
-        let connection_info = token_manager.refresh_xet_connection_info(xet_file_data).await?;
-        drop(token_manager);  // Release the lock early
-        
-        info!("[XET] Using xet-core FileDownloader for hash: {}", xet_file_data.file_hash);
+        let connection_info = token_manager
+            .refresh_xet_connection_info(xet_file_data)
+            .await?;
+        drop(token_manager); // Release the lock early
+
+        info!(
+            "[XET] Using xet-core FileDownloader for hash: {}",
+            xet_file_data.file_hash
+        );
         debug!("[XET] Endpoint: {}", connection_info.endpoint);
-        
+
         // Create XET downloader with connection info
         let xet_downloader = XetDownloader::new(&connection_info, self.token.clone()).await?;
-        
+
         // Check for cancellation before starting
         if let Some(ref cancel) = cancel_check {
             if cancel() {
                 return Err(anyhow!("Download cancelled"));
             }
         }
-        
+
         // Download using xet-core's FileDownloader
-        let bytes_downloaded = xet_downloader.download_file(
-            &xet_file_data.file_hash,
-            dest_path,
-            progress_callback,
-        ).await?;
-        
+        let bytes_downloaded = xet_downloader
+            .download_file(&xet_file_data.file_hash, dest_path, progress_callback)
+            .await?;
+
         // Size verification is not critical - CAS may return slightly different sizes
-        
+
         Ok(dest_path.to_string_lossy().to_string())
     }
 }

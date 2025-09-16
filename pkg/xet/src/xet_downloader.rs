@@ -1,21 +1,23 @@
 // XET Core integration using FileDownloader for CAS operations
-use std::sync::Arc;
-use std::path::Path;
-use anyhow::{Result, Context};
-use xet_core_data::FileDownloader;
-use xet_core_data::configurations::{TranslatorConfig, DataConfig, ShardConfig, RepoInfo, ProgressConfig, Endpoint};
+use anyhow::{Context, Result};
+use cas_client::remote_client::PREFIX_DEFAULT;
 use cas_client::{CacheConfig, FileProvider, OutputProvider, CHUNK_CACHE_SIZE_BYTES};
 use cas_object::CompressionScheme;
-use cas_client::remote_client::PREFIX_DEFAULT;
-use progress_tracking::TrackingProgressUpdater;
+use dirs::home_dir;
+use merklehash::MerkleHash;
 use progress_tracking::item_tracking::ItemProgressUpdater;
+use progress_tracking::TrackingProgressUpdater;
+use std::path::Path;
+use std::sync::Arc;
+use tracing::{debug, info};
+use ulid::Ulid;
 use utils::auth::{AuthConfig, TokenRefresher};
 use utils::normalized_path_from_user_string;
-use xet_runtime::{XetRuntime, global_semaphore_handle, GlobalSemaphoreHandle};
-use ulid::Ulid;
-use dirs::home_dir;
-use tracing::{info, debug};
-use merklehash::MerkleHash;
+use xet_core_data::configurations::{
+    DataConfig, Endpoint, ProgressConfig, RepoInfo, ShardConfig, TranslatorConfig,
+};
+use xet_core_data::FileDownloader;
+use xet_runtime::{global_semaphore_handle, GlobalSemaphoreHandle, XetRuntime};
 
 use crate::xet_integration::XetConnectionInfo;
 
@@ -33,17 +35,17 @@ impl XetDownloader {
     ) -> Result<Self> {
         let config = create_xet_config(
             connection_info.endpoint.clone(),
-            Some((connection_info.access_token.clone(), connection_info.expiration_unix_epoch)),
+            Some((
+                connection_info.access_token.clone(),
+                connection_info.expiration_unix_epoch,
+            )),
             None, // No token refresher for now
         )?;
-        
+
         let config = Arc::new(config);
         let downloader = Arc::new(FileDownloader::new(config.clone()).await?);
-        
-        Ok(Self {
-            config,
-            downloader,
-        })
+
+        Ok(Self { config, downloader })
     }
 
     /// Download a file from XET CAS using its hash
@@ -58,37 +60,44 @@ impl XetDownloader {
         let hash = MerkleHash::from_hex(file_hash)
             .or_else(|_| MerkleHash::from_base64(file_hash))
             .context("Failed to parse file hash")?;
-        
+
         // Create parent directory if needed
         if let Some(parent) = destination_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // Create output provider for the file
         let output = OutputProvider::File(FileProvider::new(destination_path.to_path_buf()));
-        
+
         // Create progress updater if callback provided
         let progress_updater = progress_callback.map(|callback| {
             Arc::new(XetProgressUpdater::new(callback)) as Arc<dyn TrackingProgressUpdater>
         });
-        
-        let file_name = destination_path.file_name()
+
+        let file_name = destination_path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("file");
-        
+
         let progress_tracker = progress_updater.map(ItemProgressUpdater::new);
-        
+
         // Use FileDownloader to get the file from CAS
-        let bytes_downloaded = self.downloader.smudge_file_from_hash(
-            &hash,
-            Arc::from(file_name),
-            &output,
-            None, // No range
-            progress_tracker,
-        ).await?;
-        
-        info!("Downloaded {} bytes from XET CAS to {:?}", bytes_downloaded, destination_path);
-        
+        let bytes_downloaded = self
+            .downloader
+            .smudge_file_from_hash(
+                &hash,
+                Arc::from(file_name),
+                &output,
+                None, // No range
+                progress_tracker,
+            )
+            .await?;
+
+        info!(
+            "Downloaded {} bytes from XET CAS to {:?}",
+            bytes_downloaded, destination_path
+        );
+
         Ok(bytes_downloaded)
     }
 }
@@ -106,7 +115,9 @@ fn create_xet_config(
         } else if let Ok(hf_home) = std::env::var("HF_HOME") {
             normalized_path_from_user_string(hf_home).join("xet")
         } else if let Ok(xdg_cache_home) = std::env::var("XDG_CACHE_HOME") {
-            normalized_path_from_user_string(xdg_cache_home).join("huggingface").join("xet")
+            normalized_path_from_user_string(xdg_cache_home)
+                .join("huggingface")
+                .join("xet")
         } else {
             home_dir()
                 .unwrap_or_else(|| std::env::current_dir().unwrap())
@@ -181,14 +192,10 @@ impl TrackingProgressUpdater for XetProgressUpdater {
     async fn register_updates(&self, updates: progress_tracking::ProgressUpdate) {
         // Convert item progress to our callback format
         for item in &updates.item_updates {
-            (self.callback)(
-                &item.item_name,
-                item.bytes_completed,
-                item.total_bytes,
-            );
+            (self.callback)(&item.item_name, item.bytes_completed, item.total_bytes);
         }
     }
-    
+
     async fn flush(&self) {
         // Nothing to do on flush
     }

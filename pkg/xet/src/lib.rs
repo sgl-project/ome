@@ -1,22 +1,22 @@
 // Module declarations - following hf_xet structure
-mod runtime;
-mod progress;
-mod logging;
 mod error;
-mod hf_adapter;
-mod xet_integration;
-mod xet_downloader;
 mod ffi;
+mod hf_adapter;
+mod logging;
+mod progress;
+mod runtime;
+mod xet_downloader;
+mod xet_integration;
 
 // Public exports
 pub use error::*;
 pub use ffi::*;
 
 // Re-export runtime utilities
-pub use runtime::{get_runtime, block_on};
+pub use runtime::{block_on, get_runtime};
 
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 
 // Main client structure
 pub struct XetClient {
@@ -34,7 +34,7 @@ impl XetClient {
     ) -> Result<Self> {
         // Initialize logging on first client creation
         crate::logging::init_logging();
-        
+
         let endpoint = endpoint.unwrap_or_else(|| "https://huggingface.co".to_string());
         let adapter = hf_adapter::HfAdapter::new(
             endpoint,
@@ -45,12 +45,16 @@ impl XetClient {
         )?;
         Ok(Self { adapter })
     }
-    
+
     /// List files in a repository
-    pub async fn list_files(&self, repo_id: &str, revision: Option<&str>) -> Result<Vec<hf_adapter::HfFileInfo>> {
+    pub async fn list_files(
+        &self,
+        repo_id: &str,
+        revision: Option<&str>,
+    ) -> Result<Vec<hf_adapter::HfFileInfo>> {
         self.adapter.list_files(repo_id, revision).await
     }
-    
+
     /// Download a single file
     pub async fn download_file(
         &self,
@@ -61,16 +65,11 @@ impl XetClient {
         local_dir: Option<&str>,
         progress: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
     ) -> Result<String> {
-        self.adapter.download_file(
-            repo_id,
-            filename,
-            repo_type,
-            revision,
-            local_dir,
-            progress,
-        ).await
+        self.adapter
+            .download_file(repo_id, filename, repo_type, revision, local_dir, progress)
+            .await
     }
-    
+
     /// Download entire repository
     pub async fn download_snapshot(
         &self,
@@ -82,15 +81,17 @@ impl XetClient {
         ignore_patterns: Option<Vec<String>>,
         progress: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
     ) -> Result<String> {
-        self.adapter.download_snapshot(
-            repo_id,
-            repo_type,
-            revision,
-            local_dir,
-            allow_patterns,
-            ignore_patterns,
-            progress,
-        ).await
+        self.adapter
+            .download_snapshot(
+                repo_id,
+                repo_type,
+                revision,
+                local_dir,
+                allow_patterns,
+                ignore_patterns,
+                progress,
+            )
+            .await
     }
 }
 

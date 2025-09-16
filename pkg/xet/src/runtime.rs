@@ -31,7 +31,7 @@ mod tests {
         let runtime = get_runtime();
         assert!(runtime.handle().metrics().num_workers() > 0);
     }
-    
+
     #[test]
     fn test_block_on() {
         let result = block_on(async {

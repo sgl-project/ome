@@ -4,9 +4,9 @@ use std::ptr;
 use std::sync::Arc;
 
 use crate::error::{XetError, XetErrorCode};
-use crate::{XetClient, block_on};
 use crate::hf_adapter::HfFileInfo;
 use crate::progress::{wrap_c_progress_callback, ProgressCallback};
+use crate::{block_on, XetClient};
 
 #[repr(C)]
 pub struct XetConfig {
@@ -40,12 +40,8 @@ pub struct XetFileList {
 }
 
 // Progress callback type
-pub type XetProgressCallback = extern "C" fn(
-    file_path: *const c_char,
-    downloaded: u64,
-    total: u64,
-    user_data: *mut c_void,
-);
+pub type XetProgressCallback =
+    extern "C" fn(file_path: *const c_char, downloaded: u64, total: u64, user_data: *mut c_void);
 
 // Cancellation check callback
 pub type XetCancelCallback = extern "C" fn(user_data: *mut c_void) -> bool;
@@ -68,7 +64,7 @@ pub extern "C" fn xet_client_new(config: *const XetConfig) -> *mut XetClient {
 
     unsafe {
         let config = &*config;
-        
+
         let endpoint = c_str_to_string(config.endpoint);
         let token = c_str_to_string(config.token);
         let cache_dir = c_str_to_string(config.cache_dir);
@@ -78,7 +74,13 @@ pub extern "C" fn xet_client_new(config: *const XetConfig) -> *mut XetClient {
             4
         };
 
-        match XetClient::new(endpoint, token, cache_dir, max_concurrent, config.enable_dedup) {
+        match XetClient::new(
+            endpoint,
+            token,
+            cache_dir,
+            max_concurrent,
+            config.enable_dedup,
+        ) {
             Ok(client) => Box::into_raw(Box::new(client)),
             Err(_) => ptr::null_mut(),
         }
@@ -124,15 +126,13 @@ pub extern "C" fn xet_list_files(
         };
         let revision = c_str_to_string(revision);
 
-        let result = block_on(async {
-            client.list_files(&repo_id, revision.as_deref()).await
-        });
+        let result = block_on(async { client.list_files(&repo_id, revision.as_deref()).await });
 
         match result {
             Ok(files) => {
                 let count = files.len();
                 let mut c_files = Vec::with_capacity(count);
-                
+
                 for file in files {
                     let c_file = XetFileInfoC {
                         path: CString::new(file.path).unwrap().into_raw(),
@@ -147,7 +147,7 @@ pub extern "C" fn xet_list_files(
                     count,
                 });
                 std::mem::forget(c_files); // Prevent deallocation
-                
+
                 *out_files = Box::into_raw(file_list);
                 ptr::null_mut()
             }
@@ -176,7 +176,7 @@ pub extern "C" fn xet_download_file(
     unsafe {
         let client = &*client;
         let request = &*request;
-        
+
         let repo_id = match c_str_to_string(request.repo_id) {
             Some(s) => s,
             None => {
@@ -187,7 +187,7 @@ pub extern "C" fn xet_download_file(
                 );
             }
         };
-        
+
         let filename = match c_str_to_string(request.filename) {
             Some(s) => s,
             None => {
@@ -215,14 +215,16 @@ pub extern "C" fn xet_download_file(
         });
 
         let result = block_on(async {
-            client.download_file(
-                &repo_id,
-                &filename,
-                repo_type.as_deref(),
-                revision.as_deref(),
-                local_dir.as_deref(),
-                progress_callback,
-            ).await
+            client
+                .download_file(
+                    &repo_id,
+                    &filename,
+                    repo_type.as_deref(),
+                    revision.as_deref(),
+                    local_dir.as_deref(),
+                    progress_callback,
+                )
+                .await
         });
 
         match result {
@@ -267,7 +269,7 @@ pub extern "C" fn xet_download_snapshot(
                 );
             }
         };
-        
+
         let repo_type = c_str_to_string(repo_type);
         let revision = c_str_to_string(revision);
         let local_dir = match c_str_to_string(local_dir) {
@@ -282,21 +284,21 @@ pub extern "C" fn xet_download_snapshot(
         };
 
         // Create progress callback wrapper if provided
-        let progress_callback = wrap_c_progress_callback(
-            progress.map(|cb| cb as ProgressCallback),
-            user_data,
-        );
+        let progress_callback =
+            wrap_c_progress_callback(progress.map(|cb| cb as ProgressCallback), user_data);
 
         let result = block_on(async {
-            client.download_snapshot(
-                &repo_id,
-                repo_type.as_deref(),
-                revision.as_deref(),
-                &local_dir,
-                None, // allow_patterns
-                None, // ignore_patterns
-                progress_callback,
-            ).await
+            client
+                .download_snapshot(
+                    &repo_id,
+                    repo_type.as_deref(),
+                    revision.as_deref(),
+                    &local_dir,
+                    None, // allow_patterns
+                    None, // ignore_patterns
+                    progress_callback,
+                )
+                .await
         });
 
         match result {
