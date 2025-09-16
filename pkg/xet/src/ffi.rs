@@ -3,16 +3,10 @@ use std::os::raw::{c_char, c_void};
 use std::ptr;
 use std::sync::Arc;
 
-use anyhow::Result;
-
 use crate::error::{XetError, XetErrorCode};
-use crate::hf_adapter::HfAdapter;
-use crate::get_runtime;
-
-// Opaque client handle
-pub struct XetClient {
-    adapter: HfAdapter,
-}
+use crate::{XetClient, block_on};
+use crate::hf_adapter::HfFileInfo;
+use crate::progress::{wrap_c_progress_callback, ProgressCallback};
 
 #[repr(C)]
 pub struct XetConfig {
@@ -75,21 +69,17 @@ pub extern "C" fn xet_client_new(config: *const XetConfig) -> *mut XetClient {
     unsafe {
         let config = &*config;
         
-        let endpoint = c_str_to_string(config.endpoint)
-            .unwrap_or_else(|| "https://huggingface.co".to_string());
+        let endpoint = c_str_to_string(config.endpoint);
         let token = c_str_to_string(config.token);
         let cache_dir = c_str_to_string(config.cache_dir);
         let max_concurrent = if config.max_concurrent_downloads > 0 {
-            config.max_concurrent_downloads as usize
+            config.max_concurrent_downloads
         } else {
             4
         };
 
-        match HfAdapter::new(endpoint, token, cache_dir, max_concurrent, config.enable_dedup) {
-            Ok(adapter) => {
-                let client = Box::new(XetClient { adapter });
-                Box::into_raw(client)
-            }
+        match XetClient::new(endpoint, token, cache_dir, max_concurrent, config.enable_dedup) {
+            Ok(client) => Box::into_raw(Box::new(client)),
             Err(_) => ptr::null_mut(),
         }
     }
@@ -134,9 +124,8 @@ pub extern "C" fn xet_list_files(
         };
         let revision = c_str_to_string(revision);
 
-        let runtime = get_runtime();
-        let result = runtime.block_on(async {
-            client.adapter.list_files(&repo_id, revision.as_deref()).await
+        let result = block_on(async {
+            client.list_files(&repo_id, revision.as_deref()).await
         });
 
         match result {
@@ -225,9 +214,8 @@ pub extern "C" fn xet_download_file(
             }) as Arc<dyn Fn(&str, u64, u64) + Send + Sync>
         });
 
-        let runtime = get_runtime();
-        let result = runtime.block_on(async {
-            client.adapter.download_file(
+        let result = block_on(async {
+            client.download_file(
                 &repo_id,
                 &filename,
                 repo_type.as_deref(),
@@ -294,16 +282,13 @@ pub extern "C" fn xet_download_snapshot(
         };
 
         // Create progress callback wrapper if provided
-        let progress_callback = progress.map(|cb| {
-            Arc::new(move |path: &str, downloaded: u64, total: u64| {
-                let c_path = CString::new(path).unwrap_or_else(|_| CString::new("").unwrap());
-                cb(c_path.as_ptr(), downloaded, total, ptr::null_mut());
-            }) as Arc<dyn Fn(&str, u64, u64) + Send + Sync>
-        });
+        let progress_callback = wrap_c_progress_callback(
+            progress.map(|cb| cb as ProgressCallback),
+            user_data,
+        );
 
-        let runtime = get_runtime();
-        let result = runtime.block_on(async {
-            client.adapter.download_snapshot(
+        let result = block_on(async {
+            client.download_snapshot(
                 &repo_id,
                 repo_type.as_deref(),
                 revision.as_deref(),
