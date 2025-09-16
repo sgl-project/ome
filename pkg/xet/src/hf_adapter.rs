@@ -5,6 +5,7 @@ use reqwest;
 use serde::Deserialize;
 use tokio::fs;
 use futures::stream::{self, StreamExt};
+use tracing::{info, debug, warn};
 use crate::xet_integration::{XetFileData, XetTokenManager, parse_xet_file_data_from_headers};
 // For xet-core integration (commented out for now)
 // use utils::auth::TokenRefresher;
@@ -54,50 +55,8 @@ struct LfsInfo {
     pointer_size: u64,
 }
 
-/* Token refresher implementation for xet-core (not used yet)
-struct HfTokenRefresher {
-    token: String,
-}
 
-#[async_trait]
-impl TokenRefresher for HfTokenRefresher {
-    async fn refresh(&self) -> Result<(String, u64), AuthError> {
-        // For now, return the same token with 1 hour expiration
-        // In production, this would refresh the token from HF API
-        Ok((self.token.clone(), 3600))
-    }
-}
-*/
 
-// Progress updater wrapper for FFI callback
-struct HfProgressUpdater {
-    callback: Arc<dyn Fn(&str, u64, u64) + Send + Sync>,
-    current_file: String,
-    total_size: u64,
-}
-
-/* Not used yet - requires xet-core traits
-#[async_trait]
-impl TrackingProgressUpdater for HfProgressUpdater {
-    async fn register_updates(&self, updates: ProgressUpdate) {
-        // Convert progress updates to our callback format
-        for item in updates.item_updates {
-            if item.item_name.as_ref() == self.current_file {
-                (self.callback)(
-                    &self.current_file,
-                    item.bytes_completed,
-                    item.total_bytes,
-                );
-            }
-        }
-    }
-
-    async fn flush(&self) {
-        // Notify completion
-        (self.callback)(&self.current_file, self.total_size, self.total_size);
-    }
-}
-*/
 
 impl HfAdapter {
     pub fn new(
@@ -226,14 +185,14 @@ impl HfAdapter {
             if let Ok(metadata) = fs::metadata(&dest_path).await {
                 if metadata.len() == file_info.size {
                     // File already cached - report it
-                    eprintln!("  [CACHE HIT] {} ({}MB)", filename, file_info.size / 1_048_576);
+                    debug!("[CACHE HIT] {} ({}MB)", filename, file_info.size / 1_048_576);
                     if let Some(cb) = progress_callback {
                         cb(filename, file_info.size, file_info.size);
                     }
                     return Ok(dest_path.to_string_lossy().to_string());
                 } else {
                     // Size mismatch, re-download
-                    eprintln!("  [CACHE MISS] {} - size mismatch (cached: {}, expected: {})", 
+                    debug!("[CACHE MISS] {} - size mismatch (cached: {}, expected: {})", 
                         filename, metadata.len(), file_info.size);
                 }
             }
@@ -271,8 +230,8 @@ impl HfAdapter {
         // Try XET download if available and enabled
         if let Some(xet_data) = xet_file_data {
             if self.enable_dedup {
-                eprintln!("  [XET] File has XET support - hash: {}", xet_data.file_hash);
-                eprintln!("  [XET] Refresh route: {}", xet_data.refresh_route);
+                info!("[XET] File has XET support - hash: {}", xet_data.file_hash);
+                debug!("[XET] Refresh route: {}", xet_data.refresh_route);
                 
                 // Try to download using XET
                 match self.download_with_xet(
@@ -290,10 +249,10 @@ impl HfAdapter {
                     }
                 }
             } else {
-                eprintln!("  [XET] File has XET support but dedup is disabled");
+                debug!("[XET] File has XET support but dedup is disabled");
             }
         } else {
-            eprintln!("  [XET] No XET metadata found for file");
+            debug!("[XET] No XET metadata found for file");
         }
 
         // Create progress updater if callback provided (commented out - needs xet-core traits)
@@ -483,8 +442,8 @@ impl HfAdapter {
         let connection_info = token_manager.refresh_xet_connection_info(xet_file_data).await?;
         drop(token_manager);  // Release the lock early
         
-        eprintln!("  [XET] Using xet-core FileDownloader for hash: {}", xet_file_data.file_hash);
-        eprintln!("  [XET] Endpoint: {}", connection_info.endpoint);
+        info!("[XET] Using xet-core FileDownloader for hash: {}", xet_file_data.file_hash);
+        debug!("[XET] Endpoint: {}", connection_info.endpoint);
         
         // Create XET downloader with connection info
         let xet_downloader = XetDownloader::new(&connection_info, self.token.clone()).await?;

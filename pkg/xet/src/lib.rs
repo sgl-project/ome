@@ -1,7 +1,7 @@
 // Module declarations - following hf_xet structure
 mod runtime;
 mod progress;
-mod token_refresh;
+mod logging;
 mod error;
 mod hf_adapter;
 mod xet_integration;
@@ -32,6 +32,9 @@ impl XetClient {
         max_concurrent: u32,
         enable_dedup: bool,
     ) -> Result<Self> {
+        // Initialize logging on first client creation
+        crate::logging::init_logging();
+        
         let endpoint = endpoint.unwrap_or_else(|| "https://huggingface.co".to_string());
         let adapter = hf_adapter::HfAdapter::new(
             endpoint,

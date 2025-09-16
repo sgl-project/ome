@@ -27,6 +27,7 @@ type DownloadConfig struct {
 	ForceFilename  string
 	ProxiesAuth    map[string]string
 	LocalFilesOnly bool
+	LogLevel       string // Optional: error, warn, info, debug, trace
 }
 
 // Global client for compatibility
@@ -54,12 +55,15 @@ func init() {
 		}
 	}
 
+	logLevel := os.Getenv("XET_LOG_LEVEL")
+
 	config := &Config{
 		Endpoint:               endpoint,
 		Token:                  token,
 		CacheDir:               cacheDir,
 		MaxConcurrentDownloads: 4,
 		EnableDedup:            true,
+		LogLevel:               logLevel,
 	}
 
 	globalClient, _ = NewClient(config)
@@ -86,7 +90,7 @@ func HfHubDownload(ctx context.Context, config *DownloadConfig) (string, error) 
 			MaxConcurrentDownloads: uint32(config.MaxWorkers),
 			EnableDedup:            true,
 		}
-		
+
 		if xetConfig.Endpoint == "" {
 			xetConfig.Endpoint = "https://huggingface.co"
 		}
@@ -127,7 +131,7 @@ func HfHubDownload(ctx context.Context, config *DownloadConfig) (string, error) 
 	if ctx != nil {
 		return client.DownloadFileWithContext(ctx, req)
 	}
-	
+
 	return client.DownloadFile(req)
 }
 
@@ -147,7 +151,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 			MaxConcurrentDownloads: uint32(config.MaxWorkers),
 			EnableDedup:            true,
 		}
-		
+
 		if xetConfig.Endpoint == "" {
 			xetConfig.Endpoint = "https://huggingface.co"
 		}
@@ -172,7 +176,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 	if revision == "" {
 		revision = "main"
 	}
-	
+
 	files, err := client.ListFiles(config.RepoID, revision)
 	if err != nil {
 		return "", fmt.Errorf("failed to list repository files: %w", err)

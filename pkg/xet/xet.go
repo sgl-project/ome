@@ -30,8 +30,23 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"unsafe"
 )
+
+func init() {
+	// Set default logging level if not already set
+	if os.Getenv("RUST_LOG") == "" {
+		// Default to info level to show what's happening with XET operations
+		os.Setenv("RUST_LOG", "info")
+	}
+}
+
+// SetLogLevel sets the logging level for the underlying Rust library
+// Valid levels are: error, warn, info, debug, trace
+func SetLogLevel(level string) {
+	os.Setenv("RUST_LOG", level)
+}
 
 // Client represents an xet-core client for HF Hub operations
 type Client struct {
@@ -45,6 +60,7 @@ type Config struct {
 	CacheDir              string
 	MaxConcurrentDownloads uint32
 	EnableDedup           bool
+	LogLevel              string // Optional: error, warn, info, debug, trace
 }
 
 // DownloadRequest represents a file download request
@@ -97,7 +113,13 @@ func NewClient(config *Config) (*Client, error) {
 			Endpoint:               "https://huggingface.co",
 			MaxConcurrentDownloads: 4,
 			EnableDedup:            true,
+			LogLevel:              "", // Use default from init()
 		}
+	}
+
+	// Set log level if specified
+	if config.LogLevel != "" {
+		SetLogLevel(config.LogLevel)
 	}
 
 	cConfig := C.XetConfig{
