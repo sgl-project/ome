@@ -1,8 +1,8 @@
 // XET Core integration using FileDownloader for CAS operations
 use std::sync::Arc;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use anyhow::{Result, Context};
-use xet_core_data::{FileDownloader, XetFileInfo, data_client};
+use xet_core_data::FileDownloader;
 use xet_core_data::configurations::{TranslatorConfig, DataConfig, ShardConfig, RepoInfo, ProgressConfig, Endpoint};
 use cas_client::{CacheConfig, FileProvider, OutputProvider, CHUNK_CACHE_SIZE_BYTES};
 use cas_object::CompressionScheme;
@@ -17,7 +17,7 @@ use dirs::home_dir;
 use tracing::{info, debug};
 use merklehash::MerkleHash;
 
-use crate::xet_integration::{XetConnectionInfo, XetFileData};
+use crate::xet_integration::XetConnectionInfo;
 
 /// XET Downloader that uses xet-core's FileDownloader for CAS operations
 pub struct XetDownloader {

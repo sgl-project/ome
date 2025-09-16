@@ -76,6 +76,7 @@ java-client/crd
 coverage-*.out
 coverage-*.html
 *target
+*Cargo.lock
 
 
 hack/python-sdk/openapi-generator-cli-*.jar

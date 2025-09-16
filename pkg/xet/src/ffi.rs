@@ -3,10 +3,10 @@ use std::os::raw::{c_char, c_void};
 use std::ptr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::error::{XetError, XetErrorCode};
-use crate::hf_adapter::{HfAdapter, HfFileInfo};
+use crate::hf_adapter::HfAdapter;
 use crate::get_runtime;
 
 // Opaque client handle
@@ -185,12 +185,6 @@ pub extern "C" fn xet_download_file(
     }
 
     unsafe {
-        // Debug log
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/xet-debug.log") {
-            use std::io::Write;
-            writeln!(f, "\n=== FFI xet_download_file called ===").ok();
-        }
-        
         let client = &*client;
         let request = &*request;
         

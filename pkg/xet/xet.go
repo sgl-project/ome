@@ -30,7 +30,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"unsafe"
 )
 
@@ -188,8 +187,6 @@ func (c *Client) DownloadFile(req *DownloadRequest) (string, error) {
 	if c.client == nil {
 		return "", fmt.Errorf("client is closed")
 	}
-	
-	fmt.Fprintf(os.Stderr, "[GO DEBUG] DownloadFile called: %s/%s\n", req.RepoID, req.Filename)
 
 	cReq := convertDownloadRequest(req)
 	defer freeDownloadRequest(&cReq)

@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow, Context};
 use reqwest::header::{HeaderMap, HeaderValue};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// XET file metadata extracted from HuggingFace API responses
@@ -159,7 +159,6 @@ impl XetTokenManager {
             }
         }
         
-        eprintln!("  [XET] Refreshing token from: {}", file_data.refresh_route);
         
         let response = self.client
             .get(&file_data.refresh_route)
@@ -181,8 +180,6 @@ impl XetTokenManager {
         // Cache the connection info
         self.cached_connection_info = Some((connection_info.clone(), file_data.refresh_route.clone()));
         
-        eprintln!("  [XET] Got token valid until: {}", connection_info.expiration_unix_epoch);
-        eprintln!("  [XET] CAS server: {}", connection_info.endpoint);
         
         Ok(connection_info)
     }
@@ -206,7 +203,6 @@ impl XetTokenManager {
             revision
         );
         
-        eprintln!("  [XET] Fetching token from: {}", url);
         
         let response = self.client
             .get(&url)
@@ -225,8 +221,6 @@ impl XetTokenManager {
         let connection_info = parse_xet_connection_info_from_headers(headers)
             .ok_or_else(|| anyhow!("XET headers not found in response"))?;
         
-        eprintln!("  [XET] Got token valid until: {}", connection_info.expiration_unix_epoch);
-        eprintln!("  [XET] CAS server: {}", connection_info.endpoint);
         
         Ok(connection_info)
     }

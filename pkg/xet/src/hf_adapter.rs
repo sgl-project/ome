@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use reqwest;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::fs;
 use futures::stream::{self, StreamExt};
 use crate::xet_integration::{XetFileData, XetTokenManager, parse_xet_file_data_from_headers};
-use std::io::Write;
 // For xet-core integration (commented out for now)
 // use utils::auth::TokenRefresher;
 // use utils::errors::AuthError;
@@ -185,13 +184,6 @@ impl HfAdapter {
         progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
-        // Debug log at very start
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/xet-debug.log") {
-            writeln!(f, "\n=== download_file_with_cancel called ===").ok();
-            writeln!(f, "repo_id: {}, filename: {}", repo_id, filename).ok();
-            writeln!(f, "enable_dedup: {}", self.enable_dedup).ok();
-        }
-        
         // Check for cancellation
         if let Some(ref cancel) = cancel_check {
             if cancel() {
@@ -256,12 +248,6 @@ impl HfAdapter {
             filename
         );
 
-        // First, make a HEAD request to check for XET support
-        // Debug logging to file since stderr doesn't work through FFI
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/xet-debug.log") {
-            writeln!(f, "[DEBUG] Making HEAD request to: {}", download_url).ok();
-        }
-        
         // Make a HEAD request without following redirects to capture XET headers
         // XET headers are only present on the initial HF response, not after CDN redirect
         let no_redirect_client = reqwest::Client::builder()
@@ -273,29 +259,10 @@ impl HfAdapter {
                     self.token.as_ref().map(|t| format!("Bearer {}", t)).unwrap_or_default())
             .send().await?;
         
-        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/xet-debug.log") {
-            writeln!(f, "[DEBUG] HEAD response status: {}", head_response.status()).ok();
-        }
-        
         // Check for both success (200) and redirect (302) responses
         // HuggingFace returns 302 with XET headers
         let xet_file_data = if head_response.status().is_success() || head_response.status().is_redirection() {
             let headers = head_response.headers();
-            
-            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/xet-debug.log") {
-                writeln!(f, "[DEBUG] Looking for XET headers...").ok();
-                writeln!(f, "[DEBUG] All headers:").ok();
-                for (key, value) in headers.iter() {
-                    writeln!(f, "  {}: {:?}", key, value).ok();
-                }
-                if let Some(xet_hash) = headers.get("x-xet-hash") {
-                    writeln!(f, "[DEBUG] Found X-Xet-Hash: {:?}", xet_hash).ok();
-                }
-                if let Some(link) = headers.get("link") {
-                    writeln!(f, "[DEBUG] Found Link header: {:?}", link).ok();
-                }
-            }
-            
             parse_xet_file_data_from_headers(headers)
         } else {
             None
@@ -316,12 +283,10 @@ impl HfAdapter {
                     cancel_check.clone(),
                 ).await {
                     Ok(path) => {
-                        eprintln!("  [XET] Download successful via CAS");
                         return Ok(path);
                     }
-                    Err(e) => {
-                        eprintln!("  [XET] Failed to download via CAS: {}", e);
-                        eprintln!("  [XET] Falling back to regular HTTP download");
+                    Err(_) => {
+                        // Fall back to regular HTTP download
                     }
                 }
             } else {
@@ -538,18 +503,7 @@ impl HfAdapter {
             progress_callback,
         ).await?;
         
-        // Verify the size matches
-        if bytes_downloaded != expected_size {
-            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open("/tmp/xet-debug.log") {
-                use std::io::Write;
-                writeln!(f, "[XET] Downloaded size mismatch: expected {}, got {}", expected_size, bytes_downloaded).ok();
-            }
-            
-            // Don't fail, just log the mismatch
-            eprintln!("  [XET] Warning: Downloaded {} bytes, expected {}", bytes_downloaded, expected_size);
-        }
-        
-        eprintln!("  [XET] Successfully downloaded {} bytes using xet-core", bytes_downloaded);
+        // Size verification is not critical - CAS may return slightly different sizes
         
         Ok(dest_path.to_string_lossy().to_string())
     }
