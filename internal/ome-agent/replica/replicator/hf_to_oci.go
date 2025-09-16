@@ -72,10 +72,10 @@ func downloadFromHF(input common.ReplicationInput, hubClient *hub.HubClient, dow
 	// Set repository type (always model for HuggingFace)
 	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
-	if hubClient.GetConfig().Token != "" {
-		logger.Infof("Using provided HuggingFace token %s to download model %s", hubClient.GetConfig().Token, input.Source.BucketName)
-		downloadOptions = append(downloadOptions, hub.WithDownloadToken(hubClient.GetConfig().Token))
-	}
+	//if hubClient.GetConfig().Token != "" {
+	//	logger.Infof("Using provided HuggingFace token %s to download model %s", hubClient.GetConfig().Token, input.Source.BucketName)
+	//	downloadOptions = append(downloadOptions, hub.WithDownloadToken(hubClient.GetConfig().Token))
+	//}
 
 	downloadPath, err := hubClient.SnapshotDownload(
 		context.Background(),

@@ -43,14 +43,14 @@ const (
 	DefaultCacheDir = ".cache/huggingface/hub"
 
 	// Request timeouts
-	DefaultRequestTimeout = 10 * time.Second
+	DefaultRequestTimeout = 2 * time.Minute
 	DefaultEtagTimeout    = 10 * time.Second
 	DownloadTimeout       = 2 * time.Hour // Increased from 10 minutes to 2 hours for large model files
 
 	// Download configuration
 	DefaultMaxWorkers    = 4                // Reduced to minimize concurrent API calls
-	DefaultChunkSize     = 10 * 1024 * 1024 // 10MB
-	DefaultMaxRetries    = 10               // Increased for better 429 handling
+	DefaultChunkSize     = 50 * 1024 * 1024 // 10MB
+	DefaultMaxRetries    = 20               // Increased for better 429 handling
 	DefaultRetryInterval = 15 * time.Second // Increased base interval
 
 	// File size thresholds
