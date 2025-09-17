@@ -20,7 +20,6 @@ func main() {
 		localDir  = flag.String("dir", "", "Local directory for download (default: temp dir)")
 		token     = flag.String("token", "", "Hugging Face API token")
 		endpoint  = flag.String("endpoint", "https://huggingface.co", "API endpoint")
-		listOnly  = flag.Bool("list", false, "Only list files, don't download")
 		snapshot  = flag.Bool("snapshot", false, "Download entire repository")
 		useCompat = flag.Bool("compat", false, "Use HF compatibility layer")
 	)
@@ -51,11 +50,11 @@ func main() {
 		testCompatibilityLayer(*repoID, *filename, *localDir, *token, *endpoint, *snapshot)
 	} else {
 		// Test direct xet client
-		testDirectClient(*repoID, *filename, *localDir, *token, *endpoint, *listOnly, *snapshot)
+		testDirectClient(*repoID, *filename, *localDir, *token, *endpoint, *snapshot)
 	}
 }
 
-func testDirectClient(repoID, filename, localDir, token, endpoint string, listOnly, snapshot bool) {
+func testDirectClient(repoID, filename, localDir, token, endpoint string, snapshot bool) {
 	// Create xet client
 	config := &xet.Config{
 		Endpoint:               endpoint,
@@ -76,24 +75,6 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 	}
 
 	fmt.Printf("Created xet client with endpoint: %s\n", endpoint)
-
-	// List files if requested
-	if listOnly || snapshot {
-		fmt.Printf("\nListing files in repository: %s\n", repoID)
-		files, err := client.ListFiles(repoID, "main")
-		if err != nil {
-			log.Printf("Warning: Failed to list files: %v", err)
-		} else {
-			fmt.Printf("Found %d files:\n", len(files))
-			for i, file := range files {
-				fmt.Printf("  [%d] %s (size: %d, hash: %s)\n", i+1, file.Path, file.Size, file.Hash)
-			}
-		}
-
-		if listOnly {
-			return
-		}
-	}
 
 	// Download file or snapshot
 	if snapshot {

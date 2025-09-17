@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::error::{XetError, XetErrorCode};
 use crate::progress::XetProgressCallback;
-use crate::{block_on, XetClient};
+use crate::{block_on, DownloadOptions, OperationContext, SnapshotOptions, XetClient};
 
 #[repr(C)]
 pub struct XetConfig {
@@ -271,18 +271,16 @@ pub unsafe extern "C" fn xet_download_file(
 
     let cancel_check = unsafe { make_cancel_check(cancel_token) };
     let progress = client_ref.new_progress_operation();
+    let options = DownloadOptions {
+        repo_type: repo_type.as_deref(),
+        revision: revision.as_deref(),
+        local_dir: local_dir.as_deref(),
+    };
+    let context = OperationContext::new(cancel_check, progress);
 
     let result = block_on(async {
         client_ref
-            .download_file_with_options(
-                &repo_id,
-                &filename,
-                repo_type.as_deref(),
-                revision.as_deref(),
-                local_dir.as_deref(),
-                cancel_check,
-                progress.clone(),
-            )
+            .download_file_with_options(&repo_id, &filename, options, context)
             .await
     });
 
@@ -350,19 +348,18 @@ pub unsafe extern "C" fn xet_download_snapshot(
 
     let cancel_check = unsafe { make_cancel_check(cancel_token) };
     let progress = client_ref.new_progress_operation();
+    let options = SnapshotOptions {
+        repo_type: repo_type.as_deref(),
+        revision: revision.as_deref(),
+        local_dir: &local_dir,
+        allow_patterns: None,
+        ignore_patterns: None,
+    };
+    let context = OperationContext::new(cancel_check, progress);
 
     let result = block_on(async {
         client_ref
-            .download_snapshot_with_options(
-                &repo_id,
-                repo_type.as_deref(),
-                revision.as_deref(),
-                &local_dir,
-                None,
-                None,
-                cancel_check,
-                progress.clone(),
-            )
+            .download_snapshot_with_options(&repo_id, options, context)
             .await
     });
 

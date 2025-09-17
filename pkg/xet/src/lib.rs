@@ -21,6 +21,38 @@ use progress::{OperationProgress, ProgressHandler};
 use std::os::raw::c_void;
 use std::sync::Arc;
 
+pub(crate) struct DownloadOptions<'a> {
+    pub repo_type: Option<&'a str>,
+    pub revision: Option<&'a str>,
+    pub local_dir: Option<&'a str>,
+}
+
+pub(crate) struct SnapshotOptions<'a> {
+    pub repo_type: Option<&'a str>,
+    pub revision: Option<&'a str>,
+    pub local_dir: &'a str,
+    pub allow_patterns: Option<Vec<String>>,
+    pub ignore_patterns: Option<Vec<String>>,
+}
+
+#[derive(Default)]
+pub(crate) struct OperationContext {
+    pub cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+    pub progress: Option<OperationProgress>,
+}
+
+impl OperationContext {
+    pub fn new(
+        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
+    ) -> Self {
+        Self {
+            cancel_check,
+            progress,
+        }
+    }
+}
+
 // Main client structure
 pub struct XetClient {
     adapter: hf_adapter::HfAdapter,
@@ -85,29 +117,37 @@ impl XetClient {
         local_dir: Option<&str>,
     ) -> Result<String> {
         self.download_file_with_options(
-            repo_id, filename, repo_type, revision, local_dir, None, None,
+            repo_id,
+            filename,
+            DownloadOptions {
+                repo_type,
+                revision,
+                local_dir,
+            },
+            OperationContext::default(),
         )
         .await
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn download_file_with_options(
         &self,
         repo_id: &str,
         filename: &str,
-        repo_type: Option<&str>,
-        revision: Option<&str>,
-        local_dir: Option<&str>,
-        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
-        progress: Option<OperationProgress>,
+        options: DownloadOptions<'_>,
+        context: OperationContext,
     ) -> Result<String> {
+        let OperationContext {
+            cancel_check,
+            progress,
+        } = context;
+
         self.adapter
             .download_file_with_cancel(
                 repo_id,
                 filename,
-                repo_type,
-                revision,
-                local_dir,
+                options.repo_type,
+                options.revision,
+                options.local_dir,
                 cancel_check,
                 progress,
             )
@@ -126,37 +166,37 @@ impl XetClient {
     ) -> Result<String> {
         self.download_snapshot_with_options(
             repo_id,
-            repo_type,
-            revision,
-            local_dir,
-            allow_patterns,
-            ignore_patterns,
-            None,
-            None,
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn download_snapshot_with_options(
-        &self,
-        repo_id: &str,
-        repo_type: Option<&str>,
-        revision: Option<&str>,
-        local_dir: &str,
-        allow_patterns: Option<Vec<String>>,
-        ignore_patterns: Option<Vec<String>>,
-        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
-        progress: Option<OperationProgress>,
-    ) -> Result<String> {
-        self.adapter
-            .download_snapshot(
-                repo_id,
+            SnapshotOptions {
                 repo_type,
                 revision,
                 local_dir,
                 allow_patterns,
                 ignore_patterns,
+            },
+            OperationContext::default(),
+        )
+        .await
+    }
+
+    pub(crate) async fn download_snapshot_with_options(
+        &self,
+        repo_id: &str,
+        options: SnapshotOptions<'_>,
+        context: OperationContext,
+    ) -> Result<String> {
+        let OperationContext {
+            cancel_check,
+            progress,
+        } = context;
+
+        self.adapter
+            .download_snapshot(
+                repo_id,
+                options.repo_type,
+                options.revision,
+                options.local_dir,
+                options.allow_patterns,
+                options.ignore_patterns,
                 cancel_check,
                 progress,
             )
