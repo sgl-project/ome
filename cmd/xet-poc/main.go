@@ -103,21 +103,7 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 			LocalDir: localDir,
 		}
 
-		// Progress tracking
-		var lastFile string
-		path, err := client.DownloadSnapshotWithProgress(req, func(filepath string, downloaded, total uint64) {
-			if filepath != lastFile {
-				fmt.Printf("\n[Downloading] %s", filepath)
-				lastFile = filepath
-			}
-			if total > 0 {
-				percent := float64(downloaded) * 100.0 / float64(total)
-				fmt.Printf("\r[Downloading] %s: %.2f%% (%d/%d bytes)", filepath, percent, downloaded, total)
-				if downloaded == total {
-					fmt.Printf("\r[Completed] %s: ✓                                             \n", filepath)
-				}
-			}
-		})
+		path, err := client.DownloadSnapshot(req)
 		
 		if err != nil {
 			log.Fatalf("Failed to download snapshot: %v", err)
@@ -136,13 +122,7 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 			LocalDir: localDir,
 		}
 
-		// Test with progress callback
-		path, err := client.DownloadFileWithProgress(req, func(filepath string, downloaded, total uint64) {
-			if total > 0 {
-				percent := float64(downloaded) * 100.0 / float64(total)
-				fmt.Printf("\rProgress: %.2f%% (%d/%d bytes)", percent, downloaded, total)
-			}
-		})
+		path, err := client.DownloadFile(req)
 
 		if err != nil {
 			log.Fatalf("Failed to download file: %v", err)
