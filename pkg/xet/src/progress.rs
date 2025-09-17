@@ -4,12 +4,14 @@ use progress_tracking::{ProgressUpdate, TrackingProgressUpdater};
 use std::sync::Arc;
 
 /// Wrapper for progress callbacks that implements TrackingProgressUpdater
+#[allow(dead_code)]
 pub struct ProgressReporter {
-    callback: Arc<dyn Fn(&str, u64, u64) + Send + Sync>,
+    callback: crate::ProgressCallback,
 }
 
+#[allow(dead_code)]
 impl ProgressReporter {
-    pub fn new(callback: Arc<dyn Fn(&str, u64, u64) + Send + Sync>) -> Self {
+    pub fn new(callback: crate::ProgressCallback) -> Self {
         Self { callback }
     }
 }
@@ -28,12 +30,12 @@ impl TrackingProgressUpdater for ProgressReporter {
     }
 }
 
-/// C-compatible progress callback type
-pub type ProgressCallback = extern "C" fn(*const libc::c_char, u64, u64, *mut libc::c_void);
+/// C-compatible progress callback type for FFI
+pub type CProgressCallback = extern "C" fn(*const libc::c_char, u64, u64, *mut libc::c_void);
 
 /// Wrapper struct to make C callback thread-safe
 struct CCallbackWrapper {
-    callback: ProgressCallback,
+    callback: CProgressCallback,
     user_data: *mut libc::c_void,
 }
 
@@ -43,9 +45,9 @@ unsafe impl Sync for CCallbackWrapper {}
 
 /// Wrapper to convert C progress callback to Rust closure
 pub fn wrap_c_progress_callback(
-    callback: Option<ProgressCallback>,
+    callback: Option<CProgressCallback>,
     user_data: *mut libc::c_void,
-) -> Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>> {
+) -> Option<crate::ProgressCallback> {
     callback.map(|cb| {
         let wrapper = Arc::new(CCallbackWrapper {
             callback: cb,
@@ -56,6 +58,6 @@ pub fn wrap_c_progress_callback(
             if let Ok(c_path) = CString::new(path) {
                 (wrapper.callback)(c_path.as_ptr(), downloaded, total, wrapper.user_data);
             }
-        }) as Arc<dyn Fn(&str, u64, u64) + Send + Sync>
+        }) as crate::ProgressCallback
     })
 }

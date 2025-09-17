@@ -1,12 +1,12 @@
 use crate::xet_integration::{parse_xet_file_data_from_headers, XetFileData, XetTokenManager};
+use crate::ProgressCallback;
 use anyhow::{anyhow, Result};
 use futures::stream::{self, StreamExt};
-use reqwest;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 // For xet-core integration (commented out for now)
 // use utils::auth::TokenRefresher;
 // use utils::errors::AuthError;
@@ -43,16 +43,6 @@ struct HfTreeItem {
     path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     xet_hash: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    lfs: Option<LfsInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LfsInfo {
-    oid: String,
-    size: u64,
-    #[serde(rename = "pointerSize")]
-    pointer_size: u64,
 }
 
 impl HfAdapter {
@@ -126,6 +116,7 @@ impl HfAdapter {
         Ok(files)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn download_file_with_cancel(
         &self,
         repo_id: &str,
@@ -133,7 +124,7 @@ impl HfAdapter {
         repo_type: Option<&str>,
         revision: Option<&str>,
         local_dir: Option<&str>,
-        progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
+        progress_callback: Option<ProgressCallback>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
         // Check for cancellation
@@ -142,7 +133,7 @@ impl HfAdapter {
                 return Err(anyhow!("Download cancelled"));
             }
         }
-        let repo_type = repo_type.unwrap_or("models");
+        let _repo_type = repo_type.unwrap_or("models");
         let revision = revision.unwrap_or("main");
 
         // First, get the file info to get the metadata
@@ -299,9 +290,8 @@ impl HfAdapter {
             .unwrap_or(file_info.size);
 
         // Download with progress reporting
-        let mut downloaded = 0u64;
         let content = response.bytes().await?;
-        downloaded = content.len() as u64;
+        let downloaded = content.len() as u64;
 
         // Report progress (commented out until we have xet-core traits)
         // if let Some(updater) = progress_updater {
@@ -346,7 +336,7 @@ impl HfAdapter {
         repo_type: Option<&str>,
         revision: Option<&str>,
         local_dir: Option<&str>,
-        progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
+        progress_callback: Option<ProgressCallback>,
     ) -> Result<String> {
         self.download_file_with_cancel(
             repo_id,
@@ -360,6 +350,7 @@ impl HfAdapter {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn download_snapshot(
         &self,
         repo_id: &str,
@@ -368,7 +359,7 @@ impl HfAdapter {
         local_dir: &str,
         allow_patterns: Option<Vec<String>>,
         ignore_patterns: Option<Vec<String>>,
-        progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
+        progress_callback: Option<ProgressCallback>,
     ) -> Result<String> {
         // List all files in the repository
         let files = self.list_files(repo_id, revision).await?;
@@ -444,8 +435,8 @@ impl HfAdapter {
         &self,
         xet_file_data: &XetFileData,
         dest_path: &Path,
-        expected_size: u64,
-        progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
+        _expected_size: u64,
+        progress_callback: Option<ProgressCallback>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
         use crate::xet_downloader::XetDownloader;
@@ -474,7 +465,7 @@ impl HfAdapter {
         }
 
         // Download using xet-core's FileDownloader
-        let bytes_downloaded = xet_downloader
+        let _bytes_downloaded = xet_downloader
             .download_file(&xet_file_data.file_hash, dest_path, progress_callback)
             .await?;
 

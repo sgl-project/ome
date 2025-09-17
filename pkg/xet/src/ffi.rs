@@ -4,8 +4,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use crate::error::{XetError, XetErrorCode};
-use crate::hf_adapter::HfFileInfo;
-use crate::progress::{wrap_c_progress_callback, ProgressCallback};
+use crate::progress::{wrap_c_progress_callback, CProgressCallback};
 use crate::{block_on, XetClient};
 
 #[repr(C)]
@@ -39,7 +38,7 @@ pub struct XetFileList {
     pub count: usize,
 }
 
-// Progress callback type
+// Progress callback type (alias for clarity)
 pub type XetProgressCallback =
     extern "C" fn(file_path: *const c_char, downloaded: u64, total: u64, user_data: *mut c_void);
 
@@ -55,9 +54,15 @@ unsafe fn c_str_to_string(s: *const c_char) -> Option<String> {
     }
 }
 
-// Client creation and destruction
+/// Create a new XET client.
+///
+/// # Safety
+///
+/// Caller must ensure that:
+/// - `config` is either null or a valid pointer to XetConfig
+/// - Returned pointer must be freed with `xet_client_free`
 #[no_mangle]
-pub extern "C" fn xet_client_new(config: *const XetConfig) -> *mut XetClient {
+pub unsafe extern "C" fn xet_client_new(config: *const XetConfig) -> *mut XetClient {
     if config.is_null() {
         return ptr::null_mut();
     }
@@ -87,8 +92,15 @@ pub extern "C" fn xet_client_new(config: *const XetConfig) -> *mut XetClient {
     }
 }
 
+/// Free an XET client.
+///
+/// # Safety
+///
+/// Caller must ensure that:
+/// - `client` is either null or a valid pointer returned by `xet_client_new`
+/// - `client` is not used after calling this function
 #[no_mangle]
-pub extern "C" fn xet_client_free(client: *mut XetClient) {
+pub unsafe extern "C" fn xet_client_free(client: *mut XetClient) {
     if !client.is_null() {
         unsafe {
             let _ = Box::from_raw(client);
@@ -96,9 +108,16 @@ pub extern "C" fn xet_client_free(client: *mut XetClient) {
     }
 }
 
-// List files in a repository
+/// List files in a repository.
+///
+/// # Safety
+///
+/// Caller must ensure that:
+/// - All pointers are valid or null
+/// - Strings are valid UTF-8
+/// - `out_files` must be freed with `xet_free_file_list`
 #[no_mangle]
-pub extern "C" fn xet_list_files(
+pub unsafe extern "C" fn xet_list_files(
     client: *mut XetClient,
     repo_id: *const c_char,
     revision: *const c_char,
@@ -156,9 +175,16 @@ pub extern "C" fn xet_list_files(
     }
 }
 
-// Download a file
+/// Download a file from a repository.
+///
+/// # Safety
+///
+/// Caller must ensure that:
+/// - All pointers are valid or null
+/// - Strings are valid UTF-8
+/// - `out_path` must be freed with `xet_free_string`
 #[no_mangle]
-pub extern "C" fn xet_download_file(
+pub unsafe extern "C" fn xet_download_file(
     client: *mut XetClient,
     request: *const XetDownloadRequest,
     progress: Option<XetProgressCallback>,
@@ -237,9 +263,16 @@ pub extern "C" fn xet_download_file(
     }
 }
 
-// Download snapshot (all files) with parallel downloads
+/// Download all files from a repository.
+///
+/// # Safety
+///
+/// Caller must ensure that:
+/// - All pointers are valid or null
+/// - Strings are valid UTF-8
+/// - `out_path` must be freed with `xet_free_string`
 #[no_mangle]
-pub extern "C" fn xet_download_snapshot(
+pub unsafe extern "C" fn xet_download_snapshot(
     client: *mut XetClient,
     repo_id: *const c_char,
     repo_type: *const c_char,
@@ -285,7 +318,7 @@ pub extern "C" fn xet_download_snapshot(
 
         // Create progress callback wrapper if provided
         let progress_callback =
-            wrap_c_progress_callback(progress.map(|cb| cb as ProgressCallback), user_data);
+            wrap_c_progress_callback(progress.map(|cb| cb as CProgressCallback), user_data);
 
         let result = block_on(async {
             client
@@ -311,9 +344,15 @@ pub extern "C" fn xet_download_snapshot(
     }
 }
 
-// Free file list
+/// Free a file list returned by `xet_list_files`.
+///
+/// # Safety
+///
+/// Caller must ensure that:
+/// - `list` is either null or a valid pointer returned by `xet_list_files`
+/// - `list` is not used after calling this function
 #[no_mangle]
-pub extern "C" fn xet_free_file_list(list: *mut XetFileList) {
+pub unsafe extern "C" fn xet_free_file_list(list: *mut XetFileList) {
     if !list.is_null() {
         unsafe {
             let list = Box::from_raw(list);

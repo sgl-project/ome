@@ -1,7 +1,7 @@
 // Logging module for XET bindings
 use std::env;
 use std::sync::Once;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;

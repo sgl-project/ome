@@ -1,15 +1,15 @@
 // XET Core integration using FileDownloader for CAS operations
 use anyhow::{Context, Result};
+use crate::ProgressCallback;
 use cas_client::remote_client::PREFIX_DEFAULT;
 use cas_client::{CacheConfig, FileProvider, OutputProvider, CHUNK_CACHE_SIZE_BYTES};
-use cas_object::CompressionScheme;
 use dirs::home_dir;
 use merklehash::MerkleHash;
 use progress_tracking::item_tracking::ItemProgressUpdater;
 use progress_tracking::TrackingProgressUpdater;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 use ulid::Ulid;
 use utils::auth::{AuthConfig, TokenRefresher};
 use utils::normalized_path_from_user_string;
@@ -17,12 +17,12 @@ use xet_core_data::configurations::{
     DataConfig, Endpoint, ProgressConfig, RepoInfo, ShardConfig, TranslatorConfig,
 };
 use xet_core_data::FileDownloader;
-use xet_runtime::{global_semaphore_handle, GlobalSemaphoreHandle, XetRuntime};
 
 use crate::xet_integration::XetConnectionInfo;
 
 /// XET Downloader that uses xet-core's FileDownloader for CAS operations
 pub struct XetDownloader {
+    #[allow(dead_code)]
     config: Arc<TranslatorConfig>,
     downloader: Arc<FileDownloader>,
 }
@@ -53,7 +53,7 @@ impl XetDownloader {
         &self,
         file_hash: &str,
         destination_path: &Path,
-        progress_callback: Option<Arc<dyn Fn(&str, u64, u64) + Send + Sync>>,
+        progress_callback: Option<ProgressCallback>,
     ) -> Result<u64> {
         // Parse the hash string to MerkleHash
         // Try hex first (HuggingFace format), then base64 as fallback
@@ -178,11 +178,11 @@ fn create_xet_config(
 
 /// Progress updater wrapper for xet-core
 struct XetProgressUpdater {
-    callback: Arc<dyn Fn(&str, u64, u64) + Send + Sync>,
+    callback: ProgressCallback,
 }
 
 impl XetProgressUpdater {
-    fn new(callback: Arc<dyn Fn(&str, u64, u64) + Send + Sync>) -> Self {
+    fn new(callback: ProgressCallback) -> Self {
         Self { callback }
     }
 }

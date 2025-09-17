@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue};
-use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// XET file metadata extracted from HuggingFace API responses
@@ -20,11 +19,13 @@ pub struct XetConnectionInfo {
 
 /// Token type for XET operations
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum XetTokenType {
     Read,
     Write,
 }
 
+#[allow(dead_code)]
 impl std::fmt::Display for XetTokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -111,6 +112,7 @@ pub fn parse_xet_connection_info_from_headers(headers: &HeaderMap) -> Option<Xet
 /// XET token manager with automatic refresh
 pub struct XetTokenManager {
     client: reqwest::Client,
+    #[allow(dead_code)]
     hf_token: Option<String>,
     cached_connection_info: Option<(XetConnectionInfo, String)>, // (info, refresh_route)
 }
@@ -191,6 +193,7 @@ impl XetTokenManager {
     }
 
     /// Fetch XET connection info directly from repo info
+    #[allow(dead_code)]
     pub async fn fetch_xet_connection_info_from_repo(
         &mut self,
         token_type: XetTokenType,
