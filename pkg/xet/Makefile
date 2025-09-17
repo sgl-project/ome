@@ -1,4 +1,4 @@
-.PHONY: build test clean release-darwin-% release
+.PHONY: build test clean release-darwin-% release-linux-% release
 
 RUST_TARGET ?=
 
@@ -29,9 +29,18 @@ release-darwin-%: test
 	cp libxet.a artifacts/darwin-$*/ 2>/dev/null || cp libxet.dylib artifacts/darwin-$*/ 2>/dev/null || true
 	cd artifacts/darwin-$* && tar -czf libxet.darwin-$*.tar.gz libxet.*
 
-# Build Darwin release targets
-release: release-darwin-aarch64 release-darwin-x86_64
-	@echo "Darwin release artifacts created in ./artifacts/"
+# Build for Linux using Docker
+release-linux-%:
+	@echo "Building for linux-$*..."
+	docker build --platform linux/$* \
+		--build-arg DOCKER_TARGETPLATFORM=linux/$* \
+		-f build/Dockerfile . \
+		-t xet-build:linux-$*
+	docker run --rm -v $(PWD)/artifacts:/artifacts xet-build:linux-$*
+
+# Build all release targets
+release: release-darwin-aarch64 release-darwin-x86_64 release-linux-amd64 release-linux-arm64
+	@echo "Release artifacts created in ./artifacts/"
 
 # Clean build artifacts
 clean:
@@ -62,7 +71,7 @@ help:
 	@echo "  make build    - Build the Rust library"
 	@echo "  make test     - Run Rust tests"
 	@echo "  make clean    - Clean build artifacts"
-	@echo "  make release  - Build release artifacts"
+	@echo "  make release  - Build release artifacts for all platforms"
 	@echo "  make deps     - Install dependencies"
 	@echo "  make fmt      - Format code"
 	@echo "  make lint     - Run linters"
