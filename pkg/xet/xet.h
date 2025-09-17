@@ -12,6 +12,33 @@ extern "C" {
 // Opaque client handle
 typedef struct XetClient XetClient;
 
+// Progress reporting
+typedef enum {
+    XET_PROGRESS_PHASE_SCANNING = 0,
+    XET_PROGRESS_PHASE_DOWNLOADING = 1,
+    XET_PROGRESS_PHASE_FINALIZING = 2,
+} XetProgressPhase;
+
+typedef struct {
+    XetProgressPhase phase;
+    uint64_t total_bytes;
+    uint64_t completed_bytes;
+    uint32_t total_files;
+    uint32_t completed_files;
+    const char* current_file;
+    uint64_t current_file_completed_bytes;
+    uint64_t current_file_total_bytes;
+} XetProgressUpdate;
+
+typedef void (*XetProgressCallback)(const XetProgressUpdate* update, void* user_data);
+
+typedef bool (*XetCancellationCallback)(void* user_data);
+
+typedef struct {
+    XetCancellationCallback callback;
+    void* user_data;
+} XetCancellationToken;
+
 // Configuration structure
 typedef struct {
     const char* endpoint;
@@ -69,6 +96,12 @@ extern void xet_version_1_0_0(void);
 // Client lifecycle
 XetClient* xet_client_new(const XetConfig* config);
 void xet_client_free(XetClient* client);
+XetError* xet_client_set_progress_callback(
+    XetClient* client,
+    XetProgressCallback callback,
+    void* user_data,
+    uint32_t throttle_ms
+);
 
 // Repository operations
 XetError* xet_list_files(
@@ -82,6 +115,7 @@ XetError* xet_list_files(
 XetError* xet_download_file(
     XetClient* client,
     const XetDownloadRequest* request,
+    const XetCancellationToken* cancel_token,
     char** out_path
 );
 
@@ -91,6 +125,7 @@ XetError* xet_download_snapshot(
     const char* repo_type,
     const char* revision,
     const char* local_dir,
+    const XetCancellationToken* cancel_token,
     char** out_path
 );
 

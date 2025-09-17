@@ -35,6 +35,9 @@ var globalClient *Client
 
 // Initialize global client with default config
 func init() {
+	if os.Getenv("XET_DISABLE_GLOBAL_CLIENT") == "1" {
+		return
+	}
 	// Try to get token from environment
 	token := os.Getenv("HF_TOKEN")
 	if token == "" {
@@ -171,41 +174,23 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 		return "", fmt.Errorf("failed to create xet client")
 	}
 
-	// List all files in the repository
 	revision := config.Revision
 	if revision == "" {
 		revision = "main"
 	}
 
-	files, err := client.ListFiles(config.RepoID, revision)
-	if err != nil {
-		return "", fmt.Errorf("failed to list repository files: %w", err)
+	snapshotReq := &SnapshotRequest{
+		RepoID:   config.RepoID,
+		RepoType: config.RepoType,
+		Revision: revision,
+		LocalDir: config.LocalDir,
 	}
 
-	// Download each file
-	// TODO: Apply pattern filtering
-	// TODO: Implement parallel downloads with worker pool
-	for _, file := range files {
-		req := &DownloadRequest{
-			RepoID:   config.RepoID,
-			RepoType: config.RepoType,
-			Revision: revision,
-			Filename: file.Path,
-			LocalDir: config.LocalDir,
-		}
-
-		if req.RepoType == "" {
-			req.RepoType = "models"
-		}
-
-		_, err := client.DownloadFile(req)
-		if err != nil {
-			// Continue on error for now (PoC)
-			fmt.Printf("Warning: failed to download %s: %v\n", file.Path, err)
-		}
+	if snapshotReq.RepoType == "" {
+		snapshotReq.RepoType = "models"
 	}
 
-	return config.LocalDir, nil
+	return client.DownloadSnapshotWithContext(ctx, snapshotReq)
 }
 
 // ListRepoFiles lists files in a repository (compatibility function)

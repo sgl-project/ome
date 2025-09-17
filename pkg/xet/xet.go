@@ -8,17 +8,11 @@ package xet
 
 // Link-time version check
 extern void xet_version_1_0_0(void);
-void (*xet_version_check)(void) = &xet_version_1_0_0;
+static void (*xet_version_check)(void) = &xet_version_1_0_0;
 
-// Declare the snapshot download function
-extern XetError* xet_download_snapshot(
-    XetClient* client,
-    const char* repo_id,
-    const char* repo_type,
-    const char* revision,
-    const char* local_dir,
-    char** out_path
-);
+// Go callback bridges
+extern void goXetProgressCallback(XetProgressUpdate* update, void* user_data);
+extern bool goXetShouldCancel(void* user_data);
 */
 import "C"
 import (
@@ -26,6 +20,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/cgo"
+	"time"
 	"unsafe"
 )
 
@@ -37,15 +33,167 @@ func init() {
 	}
 }
 
+//export goXetProgressCallback
+func goXetProgressCallback(update *C.XetProgressUpdate, userData unsafe.Pointer) {
+	if update == nil || userData == nil {
+		return
+	}
+
+	handle := cgo.Handle(userData)
+	value := handle.Value()
+	handler, ok := value.(ProgressHandler)
+	if !ok {
+		return
+	}
+
+	progress := ProgressUpdate{
+		Phase:                     ProgressPhase(int(update.phase)),
+		TotalBytes:                uint64(update.total_bytes),
+		CompletedBytes:            uint64(update.completed_bytes),
+		TotalFiles:                uint32(update.total_files),
+		CompletedFiles:            uint32(update.completed_files),
+		CurrentFileCompletedBytes: uint64(update.current_file_completed_bytes),
+		CurrentFileTotalBytes:     uint64(update.current_file_total_bytes),
+	}
+
+	if update.current_file != nil {
+		progress.CurrentFile = C.GoString((*C.char)(update.current_file))
+	}
+
+	handler(progress)
+}
+
+//export goXetShouldCancel
+func goXetShouldCancel(userData unsafe.Pointer) C.bool {
+	if userData == nil {
+		return C.bool(false)
+	}
+
+	handle := cgo.Handle(userData)
+	value := handle.Value()
+	bridge, ok := value.(*cancellationBridge)
+	if !ok {
+		return C.bool(false)
+	}
+
+	if bridge.ctx.Err() != nil {
+		return C.bool(true)
+	}
+
+	return C.bool(false)
+}
+
 // SetLogLevel sets the logging level for the underlying Rust library
 // Valid levels are: error, warn, info, debug, trace
 func SetLogLevel(level string) {
 	os.Setenv("RUST_LOG", level)
 }
 
+func (c *Client) SetProgressHandler(handler ProgressHandler, throttle time.Duration) error {
+	if c == nil || c.client == nil {
+		return fmt.Errorf("client is not initialized")
+	}
+
+	if c.hasProgressCallback {
+		C.xet_client_set_progress_callback(c.client, nil, nil, 0)
+		c.progressHandle.Delete()
+		c.hasProgressCallback = false
+	}
+
+	if handler == nil {
+		return nil
+	}
+
+	if throttle <= 0 {
+		throttle = 200 * time.Millisecond
+	}
+
+	handle := cgo.NewHandle(handler)
+	throttleMs := C.uint32_t(throttle / time.Millisecond)
+	errPtr := C.xet_client_set_progress_callback(
+		c.client,
+		(C.XetProgressCallback)(C.goXetProgressCallback),
+		unsafe.Pointer(handle),
+		throttleMs,
+	)
+	if errPtr != nil {
+		handle.Delete()
+		return convertError(errPtr)
+	}
+
+	c.progressHandle = handle
+	c.hasProgressCallback = true
+	return nil
+}
+
+func (c *Client) EnableConsoleProgress(label string, throttle time.Duration) error {
+	return c.SetProgressHandler(func(update ProgressUpdate) {
+		current := update.CurrentFile
+		if current == "" {
+			current = "-"
+		}
+
+		var pct float64
+		if update.TotalBytes > 0 {
+			pct = float64(update.CompletedBytes) * 100 / float64(update.TotalBytes)
+		}
+
+		fmt.Printf("\r[%s] %-11s %6.2f%% (%d/%d files) %s", label, update.Phase.String(), pct, update.CompletedFiles, update.TotalFiles, current)
+		if update.Phase == ProgressPhaseFinalizing {
+			fmt.Println()
+		}
+	}, throttle)
+}
+
+func (c *Client) DisableProgress() error {
+	return c.SetProgressHandler(nil, 0)
+}
+
 // Client represents an xet-core client for HF Hub operations
 type Client struct {
-	client *C.XetClient
+	client              *C.XetClient
+	progressHandle      cgo.Handle
+	hasProgressCallback bool
+}
+
+type ProgressPhase int
+
+const (
+	ProgressPhaseScanning ProgressPhase = iota
+	ProgressPhaseDownloading
+	ProgressPhaseFinalizing
+)
+
+func (p ProgressPhase) String() string {
+	switch p {
+	case ProgressPhaseScanning:
+		return "scanning"
+	case ProgressPhaseDownloading:
+		return "downloading"
+	case ProgressPhaseFinalizing:
+		return "finalizing"
+	default:
+		return "unknown"
+	}
+}
+
+// ProgressUpdate mirrors XetProgressUpdate in Rust.
+type ProgressUpdate struct {
+	Phase                     ProgressPhase
+	TotalBytes                uint64
+	CompletedBytes            uint64
+	TotalFiles                uint32
+	CompletedFiles            uint32
+	CurrentFile               string
+	CurrentFileCompletedBytes uint64
+	CurrentFileTotalBytes     uint64
+}
+
+// ProgressHandler receives throttled progress updates from Rust.
+type ProgressHandler func(ProgressUpdate)
+
+type cancellationBridge struct {
+	ctx context.Context
 }
 
 // Config holds configuration for the xet client
@@ -148,6 +296,16 @@ func NewClient(config *Config) (*Client, error) {
 
 // Close releases the client resources
 func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	if c.hasProgressCallback {
+		C.xet_client_set_progress_callback(c.client, nil, nil, 0)
+		c.progressHandle.Delete()
+		c.hasProgressCallback = false
+	}
+
 	if c.client != nil {
 		C.xet_client_free(c.client)
 		c.client = nil
@@ -198,32 +356,63 @@ func (c *Client) ListFiles(repoID string, revision string) ([]FileInfo, error) {
 
 // DownloadFile downloads a single file from a repository
 func (c *Client) DownloadFile(req *DownloadRequest) (string, error) {
-	if c.client == nil {
+	return c.DownloadFileWithContext(context.Background(), req)
+}
+
+// DownloadFileWithContext downloads a file with context support
+func (c *Client) DownloadFileWithContext(ctx context.Context, req *DownloadRequest) (string, error) {
+	if c == nil || c.client == nil {
 		return "", fmt.Errorf("client is closed")
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	cReq := convertDownloadRequest(req)
 	defer freeDownloadRequest(&cReq)
 
 	var outPath *C.char
-	err := C.xet_download_file(c.client, &cReq, &outPath)
-	if err != nil {
-		return "", convertError(err)
+
+	var cancelToken *C.XetCancellationToken
+	var cancelHandle cgo.Handle
+	if ctx != nil && ctx.Done() != nil {
+		bridge := &cancellationBridge{ctx: ctx}
+		cancelHandle = cgo.NewHandle(bridge)
+		cancelToken = &C.XetCancellationToken{
+			callback:  (C.XetCancellationCallback)(C.goXetShouldCancel),
+			user_data: unsafe.Pointer(cancelHandle),
+		}
+	}
+
+	errPtr := C.xet_download_file(c.client, &cReq, cancelToken, &outPath)
+	if cancelHandle != 0 {
+		cancelHandle.Delete()
+	}
+	if errPtr != nil {
+		return "", convertError(errPtr)
 	}
 	defer C.xet_free_string(outPath)
-
 	return C.GoString(outPath), nil
-}
-
-// DownloadFileWithContext downloads a file with context support
-func (c *Client) DownloadFileWithContext(ctx context.Context, req *DownloadRequest) (string, error) {
-	// TODO: Implement context cancellation
-	// This requires passing cancellation token to Rust side
-	return c.DownloadFile(req)
 }
 
 // DownloadSnapshot downloads all files from a repository in parallel
 func (c *Client) DownloadSnapshot(req *SnapshotRequest) (string, error) {
+	return c.DownloadSnapshotWithContext(context.Background(), req)
+}
+
+// DownloadSnapshotWithContext downloads a snapshot with cancellation support
+func (c *Client) DownloadSnapshotWithContext(ctx context.Context, req *SnapshotRequest) (string, error) {
+	if c == nil || c.client == nil {
+		return "", fmt.Errorf("client is closed")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if req == nil {
+		return "", fmt.Errorf("snapshot request cannot be nil")
+	}
+
 	var outPath *C.char
 
 	var cRepoID *C.char
@@ -250,24 +439,37 @@ func (c *Client) DownloadSnapshot(req *SnapshotRequest) (string, error) {
 		defer C.free(unsafe.Pointer(cLocalDir))
 	}
 
-	cErr := C.xet_download_snapshot(
+	var cancelToken *C.XetCancellationToken
+	var cancelHandle cgo.Handle
+	if ctx != nil && ctx.Done() != nil {
+		bridge := &cancellationBridge{ctx: ctx}
+		cancelHandle = cgo.NewHandle(bridge)
+		cancelToken = &C.XetCancellationToken{
+			callback:  (C.XetCancellationCallback)(C.goXetShouldCancel),
+			user_data: unsafe.Pointer(cancelHandle),
+		}
+	}
+
+	errPtr := C.xet_download_snapshot(
 		c.client,
 		cRepoID,
 		cRepoType,
 		cRevision,
 		cLocalDir,
+		cancelToken,
 		&outPath,
 	)
 
-	if cErr != nil {
-		defer C.xet_free_error(cErr)
-		return "", fmt.Errorf("xet error %d: %s", cErr.code, C.GoString(cErr.message))
+	if cancelHandle != 0 {
+		cancelHandle.Delete()
 	}
 
-	path := C.GoString(outPath)
-	C.xet_free_string(outPath)
+	if errPtr != nil {
+		return "", convertError(errPtr)
+	}
 
-	return path, nil
+	defer C.xet_free_string(outPath)
+	return C.GoString(outPath), nil
 }
 
 // Helper functions

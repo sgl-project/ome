@@ -3,6 +3,7 @@ mod error;
 mod ffi;
 mod hf_adapter;
 mod logging;
+mod progress;
 mod runtime;
 mod xet_downloader;
 mod xet_integration;
@@ -10,15 +11,20 @@ mod xet_integration;
 // Public exports
 pub use error::*;
 pub use ffi::*;
+pub use progress::{XetProgressCallback, XetProgressPhase, XetProgressUpdate};
 
 // Re-export runtime utilities
 pub use runtime::{block_on, get_runtime};
 
 use anyhow::Result;
+use progress::{OperationProgress, ProgressHandler};
+use std::os::raw::c_void;
+use std::sync::Arc;
 
 // Main client structure
 pub struct XetClient {
     adapter: hf_adapter::HfAdapter,
+    progress: ProgressHandler,
 }
 
 impl XetClient {
@@ -41,7 +47,23 @@ impl XetClient {
             max_concurrent as usize,
             enable_dedup,
         )?;
-        Ok(Self { adapter })
+        Ok(Self {
+            adapter,
+            progress: ProgressHandler::default(),
+        })
+    }
+
+    pub(crate) fn configure_progress_callback(
+        &self,
+        callback: Option<XetProgressCallback>,
+        user_data: *mut c_void,
+        throttle_ms: u32,
+    ) {
+        self.progress.configure(callback, user_data, throttle_ms);
+    }
+
+    pub(crate) fn new_progress_operation(&self) -> Option<OperationProgress> {
+        self.progress.new_operation()
     }
 
     /// List files in a repository
@@ -62,8 +84,33 @@ impl XetClient {
         revision: Option<&str>,
         local_dir: Option<&str>,
     ) -> Result<String> {
+        self.download_file_with_options(
+            repo_id, filename, repo_type, revision, local_dir, None, None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn download_file_with_options(
+        &self,
+        repo_id: &str,
+        filename: &str,
+        repo_type: Option<&str>,
+        revision: Option<&str>,
+        local_dir: Option<&str>,
+        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
+    ) -> Result<String> {
         self.adapter
-            .download_file(repo_id, filename, repo_type, revision, local_dir)
+            .download_file_with_cancel(
+                repo_id,
+                filename,
+                repo_type,
+                revision,
+                local_dir,
+                cancel_check,
+                progress,
+            )
             .await
     }
 
@@ -77,6 +124,31 @@ impl XetClient {
         allow_patterns: Option<Vec<String>>,
         ignore_patterns: Option<Vec<String>>,
     ) -> Result<String> {
+        self.download_snapshot_with_options(
+            repo_id,
+            repo_type,
+            revision,
+            local_dir,
+            allow_patterns,
+            ignore_patterns,
+            None,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn download_snapshot_with_options(
+        &self,
+        repo_id: &str,
+        repo_type: Option<&str>,
+        revision: Option<&str>,
+        local_dir: &str,
+        allow_patterns: Option<Vec<String>>,
+        ignore_patterns: Option<Vec<String>>,
+        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
+    ) -> Result<String> {
         self.adapter
             .download_snapshot(
                 repo_id,
@@ -85,6 +157,8 @@ impl XetClient {
                 local_dir,
                 allow_patterns,
                 ignore_patterns,
+                cancel_check,
+                progress,
             )
             .await
     }

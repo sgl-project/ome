@@ -1,8 +1,10 @@
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
 use std::ptr;
+use std::sync::Arc;
 
 use crate::error::{XetError, XetErrorCode};
+use crate::progress::XetProgressCallback;
 use crate::{block_on, XetClient};
 
 #[repr(C)]
@@ -34,6 +36,28 @@ pub struct XetFileInfoC {
 pub struct XetFileList {
     pub files: *mut XetFileInfoC,
     pub count: usize,
+}
+
+#[repr(C)]
+pub struct XetCancellationToken {
+    pub callback: Option<unsafe extern "C" fn(*mut c_void) -> bool>,
+    pub user_data: *mut c_void,
+}
+
+// Helper to construct a cancellation checker closure
+unsafe fn make_cancel_check(
+    token: *const XetCancellationToken,
+) -> Option<Arc<dyn Fn() -> bool + Send + Sync>> {
+    if token.is_null() {
+        return None;
+    }
+
+    let token = &*token;
+    let callback = token.callback?;
+    let user_data = token.user_data as usize;
+    Some(Arc::new(move || unsafe {
+        callback(user_data as *mut c_void)
+    }))
 }
 
 // Helper to convert C string to Rust String
@@ -97,6 +121,33 @@ pub unsafe extern "C" fn xet_client_free(client: *mut XetClient) {
             let _ = Box::from_raw(client);
         }
     }
+}
+
+/// Register (or clear) the FFI progress callback.
+///
+/// # Safety
+///
+/// * `client` must be a valid pointer returned by `xet_client_new`.
+/// * `callback` and `user_data` must remain valid for the duration of the registration.
+/// * Callers must eventually unregister (pass NULL) before freeing the client.
+#[no_mangle]
+pub unsafe extern "C" fn xet_client_set_progress_callback(
+    client: *mut XetClient,
+    callback: Option<XetProgressCallback>,
+    user_data: *mut c_void,
+    throttle_ms: u32,
+) -> *mut XetError {
+    if client.is_null() {
+        return XetError::new(
+            XetErrorCode::InvalidConfig,
+            "Invalid client".to_string(),
+            None,
+        );
+    }
+
+    let client_ref = &*client;
+    client_ref.configure_progress_callback(callback, user_data, throttle_ms);
+    ptr::null_mut()
 }
 
 /// List files in a repository.
@@ -178,6 +229,7 @@ pub unsafe extern "C" fn xet_list_files(
 pub unsafe extern "C" fn xet_download_file(
     client: *mut XetClient,
     request: *const XetDownloadRequest,
+    cancel_token: *const XetCancellationToken,
     out_path: *mut *mut c_char,
 ) -> *mut XetError {
     if client.is_null() || request.is_null() || out_path.is_null() {
@@ -188,55 +240,60 @@ pub unsafe extern "C" fn xet_download_file(
         );
     }
 
-    unsafe {
-        let client = &*client;
-        let request = &*request;
+    let client_ref = unsafe { &*client };
+    let request_ref = unsafe { &*request };
 
-        let repo_id = match c_str_to_string(request.repo_id) {
-            Some(s) => s,
-            None => {
-                return XetError::new(
-                    XetErrorCode::InvalidConfig,
-                    "Invalid repo_id".to_string(),
-                    None,
-                );
-            }
-        };
-
-        let filename = match c_str_to_string(request.filename) {
-            Some(s) => s,
-            None => {
-                return XetError::new(
-                    XetErrorCode::InvalidConfig,
-                    "Invalid filename".to_string(),
-                    None,
-                );
-            }
-        };
-
-        let repo_type = c_str_to_string(request.repo_type);
-        let revision = c_str_to_string(request.revision);
-        let local_dir = c_str_to_string(request.local_dir);
-
-        let result = block_on(async {
-            client
-                .download_file(
-                    &repo_id,
-                    &filename,
-                    repo_type.as_deref(),
-                    revision.as_deref(),
-                    local_dir.as_deref(),
-                )
-                .await
-        });
-
-        match result {
-            Ok(path) => {
-                *out_path = CString::new(path).unwrap().into_raw();
-                ptr::null_mut()
-            }
-            Err(e) => XetError::from_anyhow(e),
+    let repo_id = match unsafe { c_str_to_string(request_ref.repo_id) } {
+        Some(s) => s,
+        None => {
+            return XetError::new(
+                XetErrorCode::InvalidConfig,
+                "Invalid repo_id".to_string(),
+                None,
+            );
         }
+    };
+
+    let filename = match unsafe { c_str_to_string(request_ref.filename) } {
+        Some(s) => s,
+        None => {
+            return XetError::new(
+                XetErrorCode::InvalidConfig,
+                "Invalid filename".to_string(),
+                None,
+            );
+        }
+    };
+
+    let repo_type = unsafe { c_str_to_string(request_ref.repo_type) };
+    let revision = unsafe { c_str_to_string(request_ref.revision) };
+    let local_dir = unsafe { c_str_to_string(request_ref.local_dir) };
+
+    let cancel_check = unsafe { make_cancel_check(cancel_token) };
+    let progress = client_ref.new_progress_operation();
+
+    let result = block_on(async {
+        client_ref
+            .download_file_with_options(
+                &repo_id,
+                &filename,
+                repo_type.as_deref(),
+                revision.as_deref(),
+                local_dir.as_deref(),
+                cancel_check,
+                progress.clone(),
+            )
+            .await
+    });
+
+    match result {
+        Ok(path) => {
+            unsafe {
+                *out_path = CString::new(path).unwrap().into_raw();
+            }
+            ptr::null_mut()
+        }
+        Err(e) => XetError::from_anyhow(e),
     }
 }
 
@@ -255,6 +312,7 @@ pub unsafe extern "C" fn xet_download_snapshot(
     repo_type: *const c_char,
     revision: *const c_char,
     local_dir: *const c_char,
+    cancel_token: *const XetCancellationToken,
     out_path: *mut *mut c_char,
 ) -> *mut XetError {
     if client.is_null() || repo_id.is_null() || local_dir.is_null() || out_path.is_null() {
@@ -265,52 +323,57 @@ pub unsafe extern "C" fn xet_download_snapshot(
         );
     }
 
-    unsafe {
-        let client = &*client;
-        let repo_id = match c_str_to_string(repo_id) {
-            Some(s) => s,
-            None => {
-                return XetError::new(
-                    XetErrorCode::InvalidConfig,
-                    "Invalid repo_id".to_string(),
-                    None,
-                );
-            }
-        };
-
-        let repo_type = c_str_to_string(repo_type);
-        let revision = c_str_to_string(revision);
-        let local_dir = match c_str_to_string(local_dir) {
-            Some(s) => s,
-            None => {
-                return XetError::new(
-                    XetErrorCode::InvalidConfig,
-                    "Invalid local_dir".to_string(),
-                    None,
-                );
-            }
-        };
-
-        let result = block_on(async {
-            client
-                .download_snapshot(
-                    &repo_id,
-                    repo_type.as_deref(),
-                    revision.as_deref(),
-                    &local_dir,
-                    None, // allow_patterns
-                    None, // ignore_patterns
-                )
-                .await
-        });
-
-        match result {
-            Ok(path) => {
-                *out_path = CString::new(path).unwrap().into_raw();
-                ptr::null_mut()
-            }
-            Err(e) => XetError::from_anyhow(e),
+    let client_ref = unsafe { &*client };
+    let repo_id = match unsafe { c_str_to_string(repo_id) } {
+        Some(s) => s,
+        None => {
+            return XetError::new(
+                XetErrorCode::InvalidConfig,
+                "Invalid repo_id".to_string(),
+                None,
+            );
         }
+    };
+
+    let repo_type = unsafe { c_str_to_string(repo_type) };
+    let revision = unsafe { c_str_to_string(revision) };
+    let local_dir = match unsafe { c_str_to_string(local_dir) } {
+        Some(s) => s,
+        None => {
+            return XetError::new(
+                XetErrorCode::InvalidConfig,
+                "Invalid local_dir".to_string(),
+                None,
+            );
+        }
+    };
+
+    let cancel_check = unsafe { make_cancel_check(cancel_token) };
+    let progress = client_ref.new_progress_operation();
+
+    let result = block_on(async {
+        client_ref
+            .download_snapshot_with_options(
+                &repo_id,
+                repo_type.as_deref(),
+                revision.as_deref(),
+                &local_dir,
+                None,
+                None,
+                cancel_check,
+                progress.clone(),
+            )
+            .await
+    });
+
+    match result {
+        Ok(path) => {
+            unsafe {
+                *out_path = CString::new(path).unwrap().into_raw();
+            }
+            ptr::null_mut()
+        }
+        Err(e) => XetError::from_anyhow(e),
     }
 }
 

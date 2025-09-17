@@ -1,10 +1,14 @@
+use crate::progress::{OperationProgress, XetProgressPhase};
 use crate::xet_integration::{parse_xet_file_data_from_headers, XetFileData, XetTokenManager};
 use anyhow::{anyhow, Result};
 use futures::stream::{self, StreamExt};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
+use tokio::time::sleep;
 use tracing::{debug, info};
 
 #[derive(Clone)]
@@ -39,7 +43,71 @@ struct HfTreeItem {
     xet_hash: Option<String>,
 }
 
+const MAX_HTTP_RETRIES: usize = 3;
+const RETRY_BACKOFF_MS: u64 = 200;
+
 impl HfAdapter {
+    async fn send_with_retry<F, S>(
+        &self,
+        mut builder: F,
+        description: &str,
+        is_success: S,
+    ) -> Result<reqwest::Response>
+    where
+        F: FnMut() -> reqwest::RequestBuilder,
+        S: Fn(&reqwest::Response) -> bool,
+    {
+        for attempt in 0..=MAX_HTTP_RETRIES {
+            match builder().send().await {
+                Ok(resp) => {
+                    if is_success(&resp) {
+                        return Ok(resp);
+                    }
+
+                    debug!(
+                        "[RETRY] {} attempt {} failed with HTTP {}",
+                        description,
+                        attempt + 1,
+                        resp.status()
+                    );
+
+                    if attempt == MAX_HTTP_RETRIES {
+                        return Err(anyhow!(
+                            "{} failed after {} attempts: HTTP {}",
+                            description,
+                            attempt + 1,
+                            resp.status()
+                        ));
+                    }
+                }
+                Err(err) => {
+                    debug!(
+                        "[RETRY] {} attempt {} errored: {}",
+                        description,
+                        attempt + 1,
+                        err
+                    );
+
+                    if attempt == MAX_HTTP_RETRIES {
+                        return Err(anyhow!(
+                            "{} failed after {} attempts: {}",
+                            description,
+                            attempt + 1,
+                            err
+                        ));
+                    }
+                }
+            }
+
+            sleep(Duration::from_millis(
+                RETRY_BACKOFF_MS * (attempt as u64 + 1),
+            ))
+            .await;
+        }
+
+        unreachable!("retry loop should always return or err");
+    }
+
     pub fn new(
         endpoint: String,
         token: Option<String>,
@@ -84,11 +152,13 @@ impl HfAdapter {
         let url = format!("{}/api/models/{}/tree/{}", self.endpoint, repo_id, revision);
 
         // Make HTTP request to HF API
-        let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!("Failed to list files: HTTP {}", response.status()));
-        }
+        let response = self
+            .send_with_retry(
+                || self.client.get(&url),
+                "list files",
+                |resp| resp.status().is_success(),
+            )
+            .await?;
 
         // Parse the HF API response
         let tree_items: Vec<HfTreeItem> = response.json().await?;
@@ -119,162 +189,46 @@ impl HfAdapter {
         revision: Option<&str>,
         local_dir: Option<&str>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
     ) -> Result<String> {
-        // Check for cancellation
-        if let Some(ref cancel) = cancel_check {
-            if cancel() {
-                return Err(anyhow!("Download cancelled"));
-            }
-        }
-        let _repo_type = repo_type.unwrap_or("models");
         let revision = revision.unwrap_or("main");
 
-        // First, get the file info to get the metadata
+        if let Some(ref tracker) = progress {
+            tracker.set_phase(XetProgressPhase::Scanning, true);
+        }
+
+        // First, get the file info to determine metadata
         let files = self.list_files(repo_id, Some(revision)).await?;
         let file_info = files
             .iter()
             .find(|f| f.path == filename)
-            .ok_or_else(|| anyhow!("File {} not found in repository", filename))?
-            .clone();
+            .cloned()
+            .ok_or_else(|| anyhow!("File {} not found in repository", filename))?;
 
-        // Determine destination path
-        let dest_path = if let Some(local_dir) = local_dir {
-            let mut path = PathBuf::from(local_dir);
-            path.push(filename);
-            path
-        } else if let Some(cache_dir) = &self.cache_dir {
-            let mut path = cache_dir.clone();
-            path.push(repo_id.replace('/', "--"));
-            path.push(revision);
-            path.push(filename);
-            path
-        } else {
-            PathBuf::from(filename)
-        };
-
-        // Create parent directory if needed
-        if let Some(parent) = dest_path.parent() {
-            fs::create_dir_all(parent).await?;
+        if let Some(ref tracker) = progress {
+            tracker.set_total_hint(1, file_info.size);
+            tracker.set_phase(XetProgressPhase::Downloading, true);
+            tracker.ensure_file_entry(&file_info.path, file_info.size);
+            tracker.update_file_absolute(&file_info.path, 0, file_info.size, true);
         }
 
-        // Check if file already exists in cache (simple caching based on size)
-        if dest_path.exists() {
-            if let Ok(metadata) = fs::metadata(&dest_path).await {
-                if metadata.len() == file_info.size {
-                    // File already cached - report it
-                    debug!(
-                        "[CACHE HIT] {} ({}MB)",
-                        filename,
-                        file_info.size / 1_048_576
-                    );
-                    return Ok(dest_path.to_string_lossy().to_string());
-                } else {
-                    // Size mismatch, re-download
-                    debug!(
-                        "[CACHE MISS] {} - size mismatch (cached: {}, expected: {})",
-                        filename,
-                        metadata.len(),
-                        file_info.size
-                    );
-                }
-            }
-        }
-
-        // Construct the HF download URL
-        let download_url = format!(
-            "{}/{}/resolve/{}/{}",
-            self.endpoint, repo_id, revision, filename
-        );
-
-        // Make a HEAD request without following redirects to capture XET headers
-        // XET headers are only present on the initial HF response, not after CDN redirect
-        let no_redirect_client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none()) // Don't follow redirects
-            .build()?;
-
-        let head_response = no_redirect_client
-            .head(&download_url)
-            .header(
-                reqwest::header::AUTHORIZATION,
-                self.token
-                    .as_ref()
-                    .map(|t| format!("Bearer {}", t))
-                    .unwrap_or_default(),
+        let output = self
+            .download_file_with_info(
+                repo_id,
+                repo_type,
+                revision,
+                local_dir,
+                &file_info,
+                cancel_check,
+                progress.as_ref().map(|p| p.clone_for_tasks()),
             )
-            .send()
             .await?;
 
-        // Check for both success (200) and redirect (302) responses
-        // HuggingFace returns 302 with XET headers
-        let xet_file_data =
-            if head_response.status().is_success() || head_response.status().is_redirection() {
-                let headers = head_response.headers();
-                parse_xet_file_data_from_headers(headers)
-            } else {
-                None
-            };
-
-        // Try XET download if available and enabled
-        if let Some(xet_data) = xet_file_data {
-            if self.enable_dedup {
-                info!("[XET] File has XET support - hash: {}", xet_data.file_hash);
-                debug!("[XET] Refresh route: {}", xet_data.refresh_route);
-
-                // Try to download using XET
-                match self
-                    .download_with_xet(&xet_data, &dest_path, file_info.size, cancel_check.clone())
-                    .await
-                {
-                    Ok(path) => {
-                        return Ok(path);
-                    }
-                    Err(_) => {
-                        // Fall back to regular HTTP download
-                    }
-                }
-            } else {
-                debug!("[XET] File has XET support but dedup is disabled");
-            }
-        } else {
-            debug!("[XET] No XET metadata found for file");
-        }
-        // Regular HTTP download (fallback or primary)
-        let response = self.client.get(&download_url).send().await?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Failed to download file: HTTP {}",
-                response.status()
-            ));
+        if let Some(tracker) = progress {
+            tracker.finalize();
         }
 
-        // Check for cancellation before downloading content
-        if let Some(ref cancel) = cancel_check {
-            if cancel() {
-                return Err(anyhow!("Download cancelled"));
-            }
-        }
-
-        // Download file content
-        let content = response.bytes().await?;
-
-        // Write to destination
-        fs::write(&dest_path, &content).await?;
-
-        Ok(dest_path.to_string_lossy().to_string())
-    }
-
-    // Convenience method without cancellation
-    pub async fn download_file(
-        &self,
-        repo_id: &str,
-        filename: &str,
-        repo_type: Option<&str>,
-        revision: Option<&str>,
-        local_dir: Option<&str>,
-    ) -> Result<String> {
-        self.download_file_with_cancel(repo_id, filename, repo_type, revision, local_dir, None)
-            .await
+        Ok(output)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -286,15 +240,21 @@ impl HfAdapter {
         local_dir: &str,
         allow_patterns: Option<Vec<String>>,
         ignore_patterns: Option<Vec<String>>,
+        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
     ) -> Result<String> {
+        let revision = revision.unwrap_or("main");
+        if let Some(ref tracker) = progress {
+            tracker.set_phase(XetProgressPhase::Scanning, true);
+        }
+
         // List all files in the repository
-        let files = self.list_files(repo_id, revision).await?;
+        let files = self.list_files(repo_id, Some(revision)).await?;
 
         // Apply pattern filtering
         let filtered_files: Vec<_> = files
             .into_iter()
             .filter(|f| {
-                // Simple pattern matching - in production would use glob patterns
                 if let Some(ref allow) = allow_patterns {
                     if !allow.iter().any(|p| f.path.contains(p)) {
                         return false;
@@ -309,32 +269,47 @@ impl HfAdapter {
             })
             .collect();
 
+        let total_bytes: u64 = filtered_files.iter().map(|f| f.size).sum();
+        if let Some(ref tracker) = progress {
+            tracker.set_total_hint(filtered_files.len(), total_bytes);
+            tracker.set_phase(XetProgressPhase::Downloading, true);
+        }
+
         // Create local directory if needed
         fs::create_dir_all(local_dir).await?;
 
         // Download files in parallel with controlled concurrency
-        let max_concurrent = self.max_concurrent.min(filtered_files.len());
+        let max_concurrent = self.max_concurrent.max(1).min(filtered_files.len().max(1));
         let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrent));
+        let cancel_check = cancel_check.map(|c| c as Arc<_>);
+        let progress_shared = progress.as_ref().map(|p| p.clone_for_tasks());
 
-        let download_futures = filtered_files.iter().map(|file| {
+        let download_futures = filtered_files.into_iter().map(|file| {
             let semaphore = semaphore.clone();
-            let repo_id = repo_id.to_string();
-            let file_path = file.path.clone();
-            let repo_type = repo_type.map(|s| s.to_string());
-            let revision = revision.map(|s| s.to_string());
-            let local_dir = local_dir.to_string();
             let adapter = self.clone();
+            let repo_id = repo_id.to_string();
+            let repo_type = repo_type.map(|s| s.to_string());
+            let revision = revision.to_string();
+            let local_dir = local_dir.to_string();
+            let cancel_check = cancel_check.clone();
+            let progress = progress_shared.clone();
 
             async move {
                 let _permit = semaphore.acquire().await?;
 
+                if is_cancelled(&cancel_check) {
+                    return Err(anyhow!("Download cancelled"));
+                }
+
                 adapter
-                    .download_file(
+                    .download_file_with_info(
                         &repo_id,
-                        &file_path,
                         repo_type.as_deref(),
-                        revision.as_deref(),
+                        &revision,
                         Some(&local_dir),
+                        &file,
+                        cancel_check.clone(),
+                        progress.as_ref().map(|p| p.clone_for_tasks()),
                     )
                     .await
             }
@@ -351,18 +326,183 @@ impl HfAdapter {
             result?;
         }
 
+        if let Some(tracker) = progress {
+            tracker.finalize();
+        }
+
         Ok(local_dir.to_string())
     }
 
-    /// Download a file using XET/CAS
+    #[allow(clippy::too_many_arguments)]
+    async fn download_file_with_info(
+        &self,
+        repo_id: &str,
+        _repo_type: Option<&str>,
+        revision: &str,
+        local_dir: Option<&str>,
+        file_info: &HfFileInfo,
+        cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
+    ) -> Result<String> {
+        if is_cancelled(&cancel_check) {
+            return Err(anyhow!("Download cancelled"));
+        }
+
+        let destination = determine_destination(
+            local_dir,
+            self.cache_dir.as_deref(),
+            repo_id,
+            revision,
+            &file_info.path,
+        );
+
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
+        // Check cache hit
+        if destination.exists() {
+            if let Ok(metadata) = fs::metadata(&destination).await {
+                if metadata.len() == file_info.size {
+                    debug!("[CACHE HIT] {} ({} bytes)", file_info.path, file_info.size);
+                    if let Some(ref tracker) = progress {
+                        tracker.ensure_file_entry(&file_info.path, file_info.size);
+                        tracker.update_file_absolute(
+                            &file_info.path,
+                            file_info.size,
+                            file_info.size,
+                            true,
+                        );
+                    }
+                    return Ok(destination.to_string_lossy().to_string());
+                } else {
+                    debug!(
+                        "[CACHE MISS] {} - size mismatch (cached: {}, expected: {})",
+                        file_info.path,
+                        metadata.len(),
+                        file_info.size
+                    );
+                }
+            }
+        }
+
+        // Construct the HF download URL
+        let download_url = format!(
+            "{}/{}/resolve/{}/{}",
+            self.endpoint, repo_id, revision, file_info.path
+        );
+
+        // Make a HEAD request without following redirects to capture XET headers
+        let no_redirect_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?;
+
+        let auth_header = self.token.as_ref().map(|t| format!("Bearer {}", t));
+
+        let head_response = self
+            .send_with_retry(
+                || {
+                    let mut builder = no_redirect_client.head(&download_url);
+                    if let Some(ref auth) = auth_header {
+                        builder = builder.header(reqwest::header::AUTHORIZATION, auth.clone());
+                    }
+                    builder
+                },
+                "head request",
+                |resp| resp.status().is_success() || resp.status().is_redirection(),
+            )
+            .await?;
+
+        let xet_file_data = parse_xet_file_data_from_headers(head_response.headers());
+
+        // Try XET download if available and enabled
+        if let Some(xet_data) = xet_file_data {
+            if self.enable_dedup {
+                info!("[XET] File has XET support - hash: {}", xet_data.file_hash);
+                debug!("[XET] Refresh route: {}", xet_data.refresh_route);
+
+                match self
+                    .download_with_xet(
+                        &file_info.path,
+                        &xet_data,
+                        &destination,
+                        file_info.size,
+                        cancel_check.clone(),
+                        progress.as_ref().map(|p| p.clone_for_tasks()),
+                    )
+                    .await
+                {
+                    Ok(path) => return Ok(path),
+                    Err(err) => {
+                        debug!("[XET] Falling back to HTTP download: {err:?}");
+                    }
+                }
+            } else {
+                debug!("[XET] File has XET support but dedup is disabled");
+            }
+        } else {
+            debug!("[XET] No XET metadata found for file");
+        }
+
+        if is_cancelled(&cancel_check) {
+            return Err(anyhow!("Download cancelled"));
+        }
+
+        // Regular HTTP download (fallback or primary)
+        let response = self
+            .send_with_retry(
+                || self.client.get(&download_url),
+                "download request",
+                |resp| resp.status().is_success(),
+            )
+            .await?;
+
+        let expected_total = response.content_length().unwrap_or(file_info.size);
+        if let Some(ref tracker) = progress {
+            tracker.ensure_file_entry(&file_info.path, expected_total);
+        }
+
+        let mut stream = response.bytes_stream();
+        let mut file = fs::File::create(&destination).await?;
+        let mut downloaded: u64 = 0;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            downloaded += chunk.len() as u64;
+
+            if is_cancelled(&cancel_check) {
+                return Err(anyhow!("Download cancelled"));
+            }
+
+            file.write_all(&chunk).await?;
+            if let Some(ref tracker) = progress {
+                tracker.update_file_absolute(&file_info.path, downloaded, expected_total, false);
+            }
+        }
+
+        file.flush().await?;
+
+        if let Some(ref tracker) = progress {
+            tracker.update_file_absolute(&file_info.path, downloaded, expected_total, true);
+        }
+
+        Ok(destination.to_string_lossy().to_string())
+    }
+
     async fn download_with_xet(
         &self,
+        file_name: &str,
         xet_file_data: &XetFileData,
         dest_path: &Path,
-        _expected_size: u64,
+        expected_size: u64,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+        progress: Option<OperationProgress>,
     ) -> Result<String> {
         use crate::xet_downloader::XetDownloader;
+
+        if is_cancelled(&cancel_check) {
+            return Err(anyhow!("Download cancelled"));
+        }
 
         // Get XET connection info
         let mut token_manager = self.xet_token_manager.lock().await;
@@ -380,20 +520,60 @@ impl HfAdapter {
         // Create XET downloader with connection info
         let xet_downloader = XetDownloader::new(&connection_info, self.token.clone()).await?;
 
-        // Check for cancellation before starting
-        if let Some(ref cancel) = cancel_check {
-            if cancel() {
-                return Err(anyhow!("Download cancelled"));
-            }
+        if let Some(ref tracker) = progress {
+            tracker.ensure_file_entry(file_name, expected_size);
+        }
+
+        if is_cancelled(&cancel_check) {
+            return Err(anyhow!("Download cancelled"));
         }
 
         // Download using xet-core's FileDownloader
         let _bytes_downloaded = xet_downloader
-            .download_file(&xet_file_data.file_hash, dest_path)
+            .download_file(
+                &xet_file_data.file_hash,
+                dest_path,
+                file_name,
+                expected_size,
+                progress.as_ref().map(|p| p.clone_for_tasks()),
+            )
             .await?;
 
-        // Size verification is not critical - CAS may return slightly different sizes
+        if let Some(ref tracker) = progress {
+            tracker.update_file_absolute(file_name, expected_size, expected_size, true);
+        }
 
         Ok(dest_path.to_string_lossy().to_string())
     }
+}
+
+fn determine_destination(
+    local_dir: Option<&str>,
+    cache_dir: Option<&Path>,
+    repo_id: &str,
+    revision: &str,
+    filename: &str,
+) -> PathBuf {
+    if let Some(local_dir) = local_dir {
+        let mut path = PathBuf::from(local_dir);
+        path.push(filename);
+        return path;
+    }
+
+    if let Some(cache_dir) = cache_dir {
+        let mut path = cache_dir.to_path_buf();
+        path.push(repo_id.replace('/', "--"));
+        path.push(revision);
+        path.push(filename);
+        return path;
+    }
+
+    PathBuf::from(filename)
+}
+
+fn is_cancelled(cancel_check: &Option<Arc<dyn Fn() -> bool + Send + Sync>>) -> bool {
+    cancel_check
+        .as_ref()
+        .map(|cancel| cancel())
+        .unwrap_or(false)
 }

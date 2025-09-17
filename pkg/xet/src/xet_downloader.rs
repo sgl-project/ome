@@ -1,9 +1,14 @@
 // XET Core integration using FileDownloader for CAS operations
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use cas_client::remote_client::PREFIX_DEFAULT;
 use cas_client::{CacheConfig, FileProvider, OutputProvider, CHUNK_CACHE_SIZE_BYTES};
 use dirs::home_dir;
 use merklehash::MerkleHash;
+use progress_tracking::{
+    item_tracking::ItemProgressUpdater, ProgressUpdate as TrackerProgressUpdate,
+    TrackingProgressUpdater,
+};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::info;
@@ -15,6 +20,7 @@ use xet_core_data::configurations::{
 };
 use xet_core_data::FileDownloader;
 
+use crate::progress::OperationProgress;
 use crate::xet_integration::XetConnectionInfo;
 
 /// XET Downloader that uses xet-core's FileDownloader for CAS operations
@@ -46,36 +52,38 @@ impl XetDownloader {
     }
 
     /// Download a file from XET CAS using its hash
-    pub async fn download_file(&self, file_hash: &str, destination_path: &Path) -> Result<u64> {
+    pub async fn download_file(
+        &self,
+        file_hash: &str,
+        destination_path: &Path,
+        file_name: &str,
+        expected_size: u64,
+        progress: Option<OperationProgress>,
+    ) -> Result<u64> {
         // Parse the hash string to MerkleHash
-        // Try hex first (HuggingFace format), then base64 as fallback
         let hash = MerkleHash::from_hex(file_hash)
             .or_else(|_| MerkleHash::from_base64(file_hash))
             .context("Failed to parse file hash")?;
 
-        // Create parent directory if needed
         if let Some(parent) = destination_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        // Create output provider for the file
         let output = OutputProvider::File(FileProvider::new(destination_path.to_path_buf()));
+        let file_name_arc: Arc<str> = Arc::from(file_name.to_owned());
 
-        let file_name = destination_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("file");
+        let progress_updater = progress.as_ref().map(|tracker| {
+            let bridge = Arc::new(ProgressBridge::new(tracker.clone_for_tasks()));
+            ItemProgressUpdater::new(bridge)
+        });
 
-        // Use FileDownloader to get the file from CAS
+        if let Some(ref tracker) = progress {
+            tracker.ensure_file_entry(file_name, expected_size);
+        }
+
         let bytes_downloaded = self
             .downloader
-            .smudge_file_from_hash(
-                &hash,
-                Arc::from(file_name),
-                &output,
-                None, // No range
-                None, // No progress tracking
-            )
+            .smudge_file_from_hash(&hash, file_name_arc, &output, None, progress_updater)
             .await?;
 
         info!(
@@ -84,6 +92,27 @@ impl XetDownloader {
         );
 
         Ok(bytes_downloaded)
+    }
+}
+
+struct ProgressBridge {
+    progress: OperationProgress,
+}
+
+impl ProgressBridge {
+    fn new(progress: OperationProgress) -> Self {
+        Self { progress }
+    }
+}
+
+#[async_trait]
+impl TrackingProgressUpdater for ProgressBridge {
+    async fn register_updates(&self, updates: TrackerProgressUpdate) {
+        self.progress.apply_tracking_update(&updates);
+    }
+
+    async fn flush(&self) {
+        self.progress.force_emit();
     }
 }
 

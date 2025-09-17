@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/sgl-project/ome/pkg/xet"
 )
@@ -69,6 +70,10 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 		log.Fatalf("Failed to create xet client: %v", err)
 	}
 	defer client.Close()
+
+	if err := client.EnableConsoleProgress("direct", 250*time.Millisecond); err != nil {
+		log.Printf("warning: unable to enable progress reporting: %v", err)
+	}
 
 	fmt.Printf("Created xet client with endpoint: %s\n", endpoint)
 
