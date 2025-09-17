@@ -1,0 +1,41 @@
+[package]
+name = "ome-xet-binding"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "xet"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+# Use upstream xet-core from GitHub
+xet-core-data = { git = "https://github.com/huggingface/xet-core", package = "data" }
+cas-client = { git = "https://github.com/huggingface/xet-core", package = "cas_client" }
+cas-object = { git = "https://github.com/huggingface/xet-core", package = "cas_object" }
+utils = { git = "https://github.com/huggingface/xet-core", package = "utils" }
+xet-runtime = { git = "https://github.com/huggingface/xet-core", package = "xet_runtime" }
+progress-tracking = { git = "https://github.com/huggingface/xet-core", package = "progress_tracking" }
+merklehash = { git = "https://github.com/huggingface/xet-core", package = "merklehash" }
+
+# Standard dependencies
+ulid = "1.1"
+dirs = "5.0"
+tokio = { version = "1.35", features = ["full"] }
+libc = "0.2"
+once_cell = "1.19"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+reqwest = { version = "0.11", features = ["json", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+
+[build-dependencies]
+cbindgen = "0.26"
+
+[profile.release]
+lto = true
+opt-level = 3
+strip = true
