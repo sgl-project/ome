@@ -14,13 +14,13 @@ import (
 func main() {
 	// Command-line flags
 	var (
-		repoID   = flag.String("repo", "bert-base-uncased", "Hugging Face repository ID")
-		filename = flag.String("file", "config.json", "File to download")
-		localDir = flag.String("dir", "", "Local directory for download (default: temp dir)")
-		token    = flag.String("token", "", "Hugging Face API token")
-		endpoint = flag.String("endpoint", "https://huggingface.co", "API endpoint")
-		listOnly = flag.Bool("list", false, "Only list files, don't download")
-		snapshot = flag.Bool("snapshot", false, "Download entire repository")
+		repoID    = flag.String("repo", "bert-base-uncased", "Hugging Face repository ID")
+		filename  = flag.String("file", "config.json", "File to download")
+		localDir  = flag.String("dir", "", "Local directory for download (default: temp dir)")
+		token     = flag.String("token", "", "Hugging Face API token")
+		endpoint  = flag.String("endpoint", "https://huggingface.co", "API endpoint")
+		listOnly  = flag.Bool("list", false, "Only list files, don't download")
+		snapshot  = flag.Bool("snapshot", false, "Download entire repository")
 		useCompat = flag.Bool("compat", false, "Use HF compatibility layer")
 	)
 
@@ -34,7 +34,7 @@ func main() {
 		}
 		*localDir = tempDir
 	}
-	
+
 	// Always print where downloads will be saved
 	defer func() {
 		fmt.Printf("Downloads saved to: %s\n", *localDir)
@@ -84,7 +84,7 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 				fmt.Printf("  [%d] %s (size: %d, hash: %s)\n", i+1, file.Path, file.Size, file.Hash)
 			}
 		}
-		
+
 		if listOnly {
 			return
 		}
@@ -94,7 +94,7 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 	if snapshot {
 		fmt.Printf("\nDownloading entire repository to: %s\n", localDir)
 		fmt.Println("Using PARALLEL downloads with caching...")
-		
+
 		// Use the new parallel snapshot download
 		req := &xet.SnapshotRequest{
 			RepoID:   repoID,
@@ -104,16 +104,16 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 		}
 
 		path, err := client.DownloadSnapshot(req)
-		
+
 		if err != nil {
 			log.Fatalf("Failed to download snapshot: %v", err)
 		}
-		
+
 		fmt.Printf("\nSnapshot download complete! All files saved to: %s\n", path)
 	} else {
 		// Download single file
 		fmt.Printf("\nDownloading file: %s/%s\n", repoID, filename)
-		
+
 		req := &xet.DownloadRequest{
 			RepoID:   repoID,
 			RepoType: "models",
@@ -139,7 +139,7 @@ func testDirectClient(repoID, filename, localDir, token, endpoint string, listOn
 
 func testCompatibilityLayer(repoID, filename, localDir, token, endpoint string, snapshot bool) {
 	fmt.Println("Testing HF compatibility layer...")
-	
+
 	config := &xet.DownloadConfig{
 		RepoID:   repoID,
 		RepoType: "models",
