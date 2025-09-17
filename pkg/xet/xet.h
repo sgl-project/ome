@@ -62,13 +62,6 @@ typedef struct {
     char* details;
 } XetError;
 
-// Progress callback
-typedef void (*XetProgressCallback)(
-    const char* file_path,
-    uint64_t downloaded,
-    uint64_t total,
-    void* user_data
-);
 
 // Version check - link-time verification
 extern void xet_version_1_0_0(void);
@@ -89,8 +82,6 @@ XetError* xet_list_files(
 XetError* xet_download_file(
     XetClient* client,
     const XetDownloadRequest* request,
-    XetProgressCallback progress,
-    void* user_data,
     char** out_path
 );
 
@@ -100,8 +91,6 @@ XetError* xet_download_snapshot(
     const char* repo_type,
     const char* revision,
     const char* local_dir,
-    XetProgressCallback progress,
-    void* user_data,
     char** out_path
 );
 

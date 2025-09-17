@@ -15,12 +15,12 @@ pub fn init_logging() {
         // If RUST_LOG is not set, use our default
         if env::var("RUST_LOG").is_err() {
             // Check for XET_LOG_LEVEL first, otherwise use default
-            let log_level = env::var("XET_LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+            let log_level = env::var("XET_LOG_LEVEL").unwrap_or_else(|_| "warn".to_string());
             env::set_var("RUST_LOG", &log_level);
         }
 
         // Now create filter from environment (will use RUST_LOG we just set)
-        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
 
         // For simplicity, we'll just use the human-readable format
         // JSON format would require additional dependencies

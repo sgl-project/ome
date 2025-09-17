@@ -1,10 +1,8 @@
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::ptr;
-use std::sync::Arc;
 
 use crate::error::{XetError, XetErrorCode};
-use crate::progress::{wrap_c_progress_callback, CProgressCallback};
 use crate::{block_on, XetClient};
 
 #[repr(C)]
@@ -37,13 +35,6 @@ pub struct XetFileList {
     pub files: *mut XetFileInfoC,
     pub count: usize,
 }
-
-// Progress callback type (alias for clarity)
-pub type XetProgressCallback =
-    extern "C" fn(file_path: *const c_char, downloaded: u64, total: u64, user_data: *mut c_void);
-
-// Cancellation check callback
-pub type XetCancelCallback = extern "C" fn(user_data: *mut c_void) -> bool;
 
 // Helper to convert C string to Rust String
 unsafe fn c_str_to_string(s: *const c_char) -> Option<String> {
@@ -187,8 +178,6 @@ pub unsafe extern "C" fn xet_list_files(
 pub unsafe extern "C" fn xet_download_file(
     client: *mut XetClient,
     request: *const XetDownloadRequest,
-    progress: Option<XetProgressCallback>,
-    _user_data: *mut c_void,
     out_path: *mut *mut c_char,
 ) -> *mut XetError {
     if client.is_null() || request.is_null() || out_path.is_null() {
@@ -229,17 +218,6 @@ pub unsafe extern "C" fn xet_download_file(
         let revision = c_str_to_string(request.revision);
         let local_dir = c_str_to_string(request.local_dir);
 
-        // Create progress callback wrapper if provided
-        let progress_callback = progress.map(|cb| {
-            Arc::new(move |path: &str, downloaded: u64, total: u64| {
-                // Marshal the callback to C
-                let c_path = CString::new(path).unwrap_or_else(|_| CString::new("").unwrap());
-                // Note: user_data is not used in this implementation
-                // In production, you'd need a different approach to handle user_data safely
-                cb(c_path.as_ptr(), downloaded, total, ptr::null_mut());
-            }) as Arc<dyn Fn(&str, u64, u64) + Send + Sync>
-        });
-
         let result = block_on(async {
             client
                 .download_file(
@@ -248,7 +226,6 @@ pub unsafe extern "C" fn xet_download_file(
                     repo_type.as_deref(),
                     revision.as_deref(),
                     local_dir.as_deref(),
-                    progress_callback,
                 )
                 .await
         });
@@ -278,8 +255,6 @@ pub unsafe extern "C" fn xet_download_snapshot(
     repo_type: *const c_char,
     revision: *const c_char,
     local_dir: *const c_char,
-    progress: Option<XetProgressCallback>,
-    user_data: *mut c_void,
     out_path: *mut *mut c_char,
 ) -> *mut XetError {
     if client.is_null() || repo_id.is_null() || local_dir.is_null() || out_path.is_null() {
@@ -316,10 +291,6 @@ pub unsafe extern "C" fn xet_download_snapshot(
             }
         };
 
-        // Create progress callback wrapper if provided
-        let progress_callback =
-            wrap_c_progress_callback(progress.map(|cb| cb as CProgressCallback), user_data);
-
         let result = block_on(async {
             client
                 .download_snapshot(
@@ -329,7 +300,6 @@ pub unsafe extern "C" fn xet_download_snapshot(
                     &local_dir,
                     None, // allow_patterns
                     None, // ignore_patterns
-                    progress_callback,
                 )
                 .await
         });

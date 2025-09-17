@@ -1,5 +1,4 @@
 use crate::xet_integration::{parse_xet_file_data_from_headers, XetFileData, XetTokenManager};
-use crate::ProgressCallback;
 use anyhow::{anyhow, Result};
 use futures::stream::{self, StreamExt};
 use serde::Deserialize;
@@ -7,11 +6,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use tracing::{debug, info};
-// For xet-core integration (commented out for now)
-// use utils::auth::TokenRefresher;
-// use utils::errors::AuthError;
-// use progress_tracking::{TrackingProgressUpdater, ProgressUpdate, ItemProgressUpdate};
-// use async_trait::async_trait;
 
 #[derive(Clone)]
 pub struct HfAdapter {
@@ -124,7 +118,6 @@ impl HfAdapter {
         repo_type: Option<&str>,
         revision: Option<&str>,
         local_dir: Option<&str>,
-        progress_callback: Option<ProgressCallback>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
         // Check for cancellation
@@ -174,9 +167,6 @@ impl HfAdapter {
                         filename,
                         file_info.size / 1_048_576
                     );
-                    if let Some(cb) = progress_callback {
-                        cb(filename, file_info.size, file_info.size);
-                    }
                     return Ok(dest_path.to_string_lossy().to_string());
                 } else {
                     // Size mismatch, re-download
@@ -232,13 +222,7 @@ impl HfAdapter {
 
                 // Try to download using XET
                 match self
-                    .download_with_xet(
-                        &xet_data,
-                        &dest_path,
-                        file_info.size,
-                        progress_callback.clone(),
-                        cancel_check.clone(),
-                    )
+                    .download_with_xet(&xet_data, &dest_path, file_info.size, cancel_check.clone())
                     .await
                 {
                     Ok(path) => {
@@ -254,16 +238,6 @@ impl HfAdapter {
         } else {
             debug!("[XET] No XET metadata found for file");
         }
-
-        // Create progress updater if callback provided (commented out - needs xet-core traits)
-        // let progress_updater = progress_callback.as_ref().map(|cb| {
-        //     Arc::new(HfProgressUpdater {
-        //         callback: cb.clone(),
-        //         current_file: filename.to_string(),
-        //         total_size: file_info.size,
-        //     }) as Arc<dyn TrackingProgressUpdater>
-        // });
-
         // Regular HTTP download (fallback or primary)
         let response = self.client.get(&download_url).send().await?;
 
@@ -281,46 +255,8 @@ impl HfAdapter {
             }
         }
 
-        // Get content length for progress reporting
-        let total_size = response
-            .headers()
-            .get(reqwest::header::CONTENT_LENGTH)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(file_info.size);
-
-        // Download with progress reporting
+        // Download file content
         let content = response.bytes().await?;
-        let downloaded = content.len() as u64;
-
-        // Report progress (commented out until we have xet-core traits)
-        // if let Some(updater) = progress_updater {
-        //     let update = ProgressUpdate {
-        //         item_updates: vec![ItemProgressUpdate {
-        //             item_name: Arc::from(filename),
-        //             total_bytes: total_size,
-        //             bytes_completed: downloaded,
-        //             bytes_completion_increment: downloaded,
-        //         }],
-        //         total_bytes: total_size,
-        //         total_bytes_increment: 0,
-        //         total_bytes_completed: downloaded,
-        //         total_bytes_completion_increment: downloaded,
-        //         total_bytes_completion_rate: None,
-        //         total_transfer_bytes: total_size,
-        //         total_transfer_bytes_increment: 0,
-        //         total_transfer_bytes_completed: downloaded,
-        //         total_transfer_bytes_completion_increment: downloaded,
-        //         total_transfer_bytes_completion_rate: None,
-        //     };
-        //     updater.register_updates(update).await;
-        //     updater.flush().await;
-        // }
-
-        // Report via direct callback
-        if let Some(cb) = progress_callback {
-            cb(filename, downloaded, total_size);
-        }
 
         // Write to destination
         fs::write(&dest_path, &content).await?;
@@ -336,18 +272,9 @@ impl HfAdapter {
         repo_type: Option<&str>,
         revision: Option<&str>,
         local_dir: Option<&str>,
-        progress_callback: Option<ProgressCallback>,
     ) -> Result<String> {
-        self.download_file_with_cancel(
-            repo_id,
-            filename,
-            repo_type,
-            revision,
-            local_dir,
-            progress_callback,
-            None,
-        )
-        .await
+        self.download_file_with_cancel(repo_id, filename, repo_type, revision, local_dir, None)
+            .await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -359,7 +286,6 @@ impl HfAdapter {
         local_dir: &str,
         allow_patterns: Option<Vec<String>>,
         ignore_patterns: Option<Vec<String>>,
-        progress_callback: Option<ProgressCallback>,
     ) -> Result<String> {
         // List all files in the repository
         let files = self.list_files(repo_id, revision).await?;
@@ -397,7 +323,6 @@ impl HfAdapter {
             let repo_type = repo_type.map(|s| s.to_string());
             let revision = revision.map(|s| s.to_string());
             let local_dir = local_dir.to_string();
-            let progress_callback = progress_callback.clone();
             let adapter = self.clone();
 
             async move {
@@ -410,7 +335,6 @@ impl HfAdapter {
                         repo_type.as_deref(),
                         revision.as_deref(),
                         Some(&local_dir),
-                        progress_callback,
                     )
                     .await
             }
@@ -436,7 +360,6 @@ impl HfAdapter {
         xet_file_data: &XetFileData,
         dest_path: &Path,
         _expected_size: u64,
-        progress_callback: Option<ProgressCallback>,
         cancel_check: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     ) -> Result<String> {
         use crate::xet_downloader::XetDownloader;
@@ -466,7 +389,7 @@ impl HfAdapter {
 
         // Download using xet-core's FileDownloader
         let _bytes_downloaded = xet_downloader
-            .download_file(&xet_file_data.file_hash, dest_path, progress_callback)
+            .download_file(&xet_file_data.file_hash, dest_path)
             .await?;
 
         // Size verification is not critical - CAS may return slightly different sizes

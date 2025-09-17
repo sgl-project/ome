@@ -47,7 +47,7 @@ impl XetError {
 /// Free an error returned by XET functions.
 ///
 /// # Safety
-/// 
+///
 /// Caller must ensure that:
 /// - `err` is either null or a valid pointer returned by an XET function
 /// - `err` is not used after calling this function
@@ -69,7 +69,7 @@ pub unsafe extern "C" fn xet_free_error(err: *mut XetError) {
 /// Free a string returned by XET functions.
 ///
 /// # Safety
-/// 
+///
 /// Caller must ensure that:
 /// - `s` is either null or a valid pointer returned by an XET function
 /// - `s` is not used after calling this function

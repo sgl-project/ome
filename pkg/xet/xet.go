@@ -17,13 +17,8 @@ extern XetError* xet_download_snapshot(
     const char* repo_type,
     const char* revision,
     const char* local_dir,
-    XetProgressCallback progress,
-    void* user_data,
     char** out_path
 );
-
-// Progress callback wrapper
-void progressCallback(const char* file_path, uint64_t downloaded, uint64_t total, void* user_data);
 */
 import "C"
 import (
@@ -37,8 +32,8 @@ import (
 func init() {
 	// Set default logging level if not already set
 	if os.Getenv("RUST_LOG") == "" {
-		// Default to info level to show what's happening with XET operations
-		os.Setenv("RUST_LOG", "info")
+		// Default to warn level to reduce verbosity
+		os.Setenv("RUST_LOG", "warn")
 	}
 }
 
@@ -55,12 +50,12 @@ type Client struct {
 
 // Config holds configuration for the xet client
 type Config struct {
-	Endpoint              string
-	Token                 string
-	CacheDir              string
+	Endpoint               string
+	Token                  string
+	CacheDir               string
 	MaxConcurrentDownloads uint32
-	EnableDedup           bool
-	LogLevel              string // Optional: error, warn, info, debug, trace
+	EnableDedup            bool
+	LogLevel               string // Optional: error, warn, info, debug, trace
 }
 
 // DownloadRequest represents a file download request
@@ -89,9 +84,6 @@ type FileInfo struct {
 	Size uint64
 }
 
-// ProgressFunc is the callback for download progress
-type ProgressFunc func(filepath string, downloaded, total uint64)
-
 // XetError represents an error from xet-core
 type XetError struct {
 	Code    int
@@ -113,7 +105,7 @@ func NewClient(config *Config) (*Client, error) {
 			Endpoint:               "https://huggingface.co",
 			MaxConcurrentDownloads: 4,
 			EnableDedup:            true,
-			LogLevel:              "", // Use default from init()
+			LogLevel:               "", // Use default from init()
 		}
 	}
 
@@ -214,24 +206,13 @@ func (c *Client) DownloadFile(req *DownloadRequest) (string, error) {
 	defer freeDownloadRequest(&cReq)
 
 	var outPath *C.char
-	err := C.xet_download_file(c.client, &cReq, nil, nil, &outPath)
+	err := C.xet_download_file(c.client, &cReq, &outPath)
 	if err != nil {
 		return "", convertError(err)
 	}
 	defer C.xet_free_string(outPath)
 
 	return C.GoString(outPath), nil
-}
-
-// DownloadFileWithProgress downloads a file with progress callback
-func (c *Client) DownloadFileWithProgress(req *DownloadRequest, progress ProgressFunc) (string, error) {
-	if c.client == nil {
-		return "", fmt.Errorf("client is closed")
-	}
-
-	// TODO: Implement progress callback marshalling
-	// This requires more complex CGO callback handling
-	return c.DownloadFile(req)
 }
 
 // DownloadFileWithContext downloads a file with context support
@@ -243,58 +224,49 @@ func (c *Client) DownloadFileWithContext(ctx context.Context, req *DownloadReque
 
 // DownloadSnapshot downloads all files from a repository in parallel
 func (c *Client) DownloadSnapshot(req *SnapshotRequest) (string, error) {
-	return c.DownloadSnapshotWithProgress(req, nil)
-}
-
-// DownloadSnapshotWithProgress downloads all files with progress callback
-func (c *Client) DownloadSnapshotWithProgress(req *SnapshotRequest, progressFn func(string, uint64, uint64)) (string, error) {
 	var outPath *C.char
-	
+
 	var cRepoID *C.char
 	if req.RepoID != "" {
 		cRepoID = C.CString(req.RepoID)
 		defer C.free(unsafe.Pointer(cRepoID))
 	}
-	
+
 	var cRepoType *C.char
 	if req.RepoType != "" {
 		cRepoType = C.CString(req.RepoType)
 		defer C.free(unsafe.Pointer(cRepoType))
 	}
-	
+
 	var cRevision *C.char
 	if req.Revision != "" {
 		cRevision = C.CString(req.Revision)
 		defer C.free(unsafe.Pointer(cRevision))
 	}
-	
+
 	var cLocalDir *C.char
 	if req.LocalDir != "" {
 		cLocalDir = C.CString(req.LocalDir)
 		defer C.free(unsafe.Pointer(cLocalDir))
 	}
 
-	// For now, we'll call without progress callback
-	// TODO: Implement proper callback marshalling
 	cErr := C.xet_download_snapshot(
 		c.client,
 		cRepoID,
 		cRepoType,
 		cRevision,
 		cLocalDir,
-		nil, // No progress callback for now
-		nil,
 		&outPath,
 	)
-	
+
 	if cErr != nil {
 		defer C.xet_free_error(cErr)
 		return "", fmt.Errorf("xet error %d: %s", cErr.code, C.GoString(cErr.message))
 	}
-	
+
 	path := C.GoString(outPath)
 	C.xet_free_string(outPath)
-	
+
 	return path, nil
 }
 
@@ -302,7 +274,7 @@ func (c *Client) DownloadSnapshotWithProgress(req *SnapshotRequest, progressFn f
 
 func convertDownloadRequest(req *DownloadRequest) C.XetDownloadRequest {
 	cReq := C.XetDownloadRequest{}
-	
+
 	if req.RepoID != "" {
 		cReq.repo_id = C.CString(req.RepoID)
 	}
@@ -318,7 +290,7 @@ func convertDownloadRequest(req *DownloadRequest) C.XetDownloadRequest {
 	if req.LocalDir != "" {
 		cReq.local_dir = C.CString(req.LocalDir)
 	}
-	
+
 	return cReq
 }
 
@@ -345,7 +317,7 @@ func convertError(err *C.XetError) error {
 		return nil
 	}
 	defer C.xet_free_error(err)
-	
+
 	xetErr := &XetError{
 		Code:    int(err.code),
 		Message: C.GoString(err.message),
@@ -353,6 +325,6 @@ func convertError(err *C.XetError) error {
 	if err.details != nil {
 		xetErr.Details = C.GoString(err.details)
 	}
-	
+
 	return xetErr
 }

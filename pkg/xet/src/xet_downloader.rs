@@ -1,12 +1,9 @@
 // XET Core integration using FileDownloader for CAS operations
 use anyhow::{Context, Result};
-use crate::ProgressCallback;
 use cas_client::remote_client::PREFIX_DEFAULT;
 use cas_client::{CacheConfig, FileProvider, OutputProvider, CHUNK_CACHE_SIZE_BYTES};
 use dirs::home_dir;
 use merklehash::MerkleHash;
-use progress_tracking::item_tracking::ItemProgressUpdater;
-use progress_tracking::TrackingProgressUpdater;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::info;
@@ -49,12 +46,7 @@ impl XetDownloader {
     }
 
     /// Download a file from XET CAS using its hash
-    pub async fn download_file(
-        &self,
-        file_hash: &str,
-        destination_path: &Path,
-        progress_callback: Option<ProgressCallback>,
-    ) -> Result<u64> {
+    pub async fn download_file(&self, file_hash: &str, destination_path: &Path) -> Result<u64> {
         // Parse the hash string to MerkleHash
         // Try hex first (HuggingFace format), then base64 as fallback
         let hash = MerkleHash::from_hex(file_hash)
@@ -69,17 +61,10 @@ impl XetDownloader {
         // Create output provider for the file
         let output = OutputProvider::File(FileProvider::new(destination_path.to_path_buf()));
 
-        // Create progress updater if callback provided
-        let progress_updater = progress_callback.map(|callback| {
-            Arc::new(XetProgressUpdater::new(callback)) as Arc<dyn TrackingProgressUpdater>
-        });
-
         let file_name = destination_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("file");
-
-        let progress_tracker = progress_updater.map(ItemProgressUpdater::new);
 
         // Use FileDownloader to get the file from CAS
         let bytes_downloaded = self
@@ -89,7 +74,7 @@ impl XetDownloader {
                 Arc::from(file_name),
                 &output,
                 None, // No range
-                progress_tracker,
+                None, // No progress tracking
             )
             .await?;
 
@@ -174,29 +159,4 @@ fn create_xet_config(
         session_id: Some(Ulid::new().to_string()),
         progress_config: ProgressConfig { aggregate: true },
     })
-}
-
-/// Progress updater wrapper for xet-core
-struct XetProgressUpdater {
-    callback: ProgressCallback,
-}
-
-impl XetProgressUpdater {
-    fn new(callback: ProgressCallback) -> Self {
-        Self { callback }
-    }
-}
-
-#[async_trait::async_trait]
-impl TrackingProgressUpdater for XetProgressUpdater {
-    async fn register_updates(&self, updates: progress_tracking::ProgressUpdate) {
-        // Convert item progress to our callback format
-        for item in &updates.item_updates {
-            (self.callback)(&item.item_name, item.bytes_completed, item.total_bytes);
-        }
-    }
-
-    async fn flush(&self) {
-        // Nothing to do on flush
-    }
 }

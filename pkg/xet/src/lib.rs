@@ -3,7 +3,6 @@ mod error;
 mod ffi;
 mod hf_adapter;
 mod logging;
-mod progress;
 mod runtime;
 mod xet_downloader;
 mod xet_integration;
@@ -16,10 +15,6 @@ pub use ffi::*;
 pub use runtime::{block_on, get_runtime};
 
 use anyhow::Result;
-use std::sync::Arc;
-
-// Type alias for progress callback to avoid clippy complexity warnings
-pub type ProgressCallback = Arc<dyn Fn(&str, u64, u64) + Send + Sync>;
 
 // Main client structure
 pub struct XetClient {
@@ -66,15 +61,13 @@ impl XetClient {
         repo_type: Option<&str>,
         revision: Option<&str>,
         local_dir: Option<&str>,
-        progress: Option<ProgressCallback>,
     ) -> Result<String> {
         self.adapter
-            .download_file(repo_id, filename, repo_type, revision, local_dir, progress)
+            .download_file(repo_id, filename, repo_type, revision, local_dir)
             .await
     }
 
     /// Download entire repository
-    #[allow(clippy::too_many_arguments)]
     pub async fn download_snapshot(
         &self,
         repo_id: &str,
@@ -83,7 +76,6 @@ impl XetClient {
         local_dir: &str,
         allow_patterns: Option<Vec<String>>,
         ignore_patterns: Option<Vec<String>>,
-        progress: Option<ProgressCallback>,
     ) -> Result<String> {
         self.adapter
             .download_snapshot(
@@ -93,7 +85,6 @@ impl XetClient {
                 local_dir,
                 allow_patterns,
                 ignore_patterns,
-                progress,
             )
             .await
     }
