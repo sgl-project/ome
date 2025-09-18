@@ -305,13 +305,13 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 	}
 
 	// Validate ETag if available (SHA256 hash)
-	if metadata.Etag != "" && IsSHA256(metadata.Etag) {
-		if err := VerifyChecksum(incompletePath, metadata.Etag); err != nil {
-			// Remove the invalid file
-			os.Remove(incompletePath)
-			return fmt.Errorf("ETag validation failed: %w", err)
-		}
-	}
+	//if metadata.Etag != "" && IsSHA256(metadata.Etag) {
+	//	if err := VerifyChecksum(incompletePath, metadata.Etag); err != nil {
+	//		// Remove the invalid file
+	//		os.Remove(incompletePath)
+	//		return fmt.Errorf("ETag validation failed: %w", err)
+	//	}
+	//}
 
 	// Ensure the incomplete file exists before trying to rename
 	if _, err := os.Stat(incompletePath); err != nil {
