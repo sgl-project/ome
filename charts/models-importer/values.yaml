@@ -567,11 +567,11 @@ grok-4:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-grok-4-mini-reasoning:
+grok-4-fast-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
-grok-4-mini-non-reasoning:
+grok-4-fast-non-reasoning:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
