@@ -256,6 +256,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 
 			if result.err != nil {
 				totalErrors++
+				fmt.Printf("Error downloading file %s: %v", result.filePath, result.err)
 			} else {
 				// Update overall progress
 				downloadedBytes += result.size
