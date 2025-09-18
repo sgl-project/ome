@@ -1,11 +1,12 @@
 .PHONY: build test clean release-darwin-% release-linux-% release
 
 RUST_TARGET ?=
+GO_LDFLAGS = -ldflags="-extldflags '-L./'"
 
 # Default target
 all: build
 
-# Build the Rust library
+# Build the Rust library and Go bindings
 build:
 	@echo "Building Rust library..."
 	cargo build --release $(if $(RUST_TARGET),--target $(RUST_TARGET))
@@ -15,11 +16,15 @@ build:
 	else \
 		cp target/$(RUST_TARGET)/release/libxet.a . 2>/dev/null || true; \
 	fi
+	@echo "Building Go bindings..."
+	go build $(GO_LDFLAGS) .
 
 # Run tests
 test: build
 	@echo "Running Rust tests..."
 	cargo test
+	@echo "Running Go tests..."
+	go test $(GO_LDFLAGS) -v ./... -count=1
 
 # Build for specific Darwin architecture
 release-darwin-%: test
@@ -47,19 +52,24 @@ clean:
 	cargo clean
 	rm -f libxet.a libxet.so libxet.dylib
 	rm -rf artifacts/
+	go clean
 
 # Install dependencies
 deps:
 	@echo "Installing Rust dependencies..."
 	cargo fetch
+	@echo "Installing Go dependencies..."
+	go mod download
 
 # Format code
 fmt:
 	cargo fmt
+	go fmt ./...
 
 # Run linters
 lint:
 	cargo clippy
+	golangci-lint run ./...
 
 # Generate C header from Rust (requires cbindgen)
 header:
@@ -68,8 +78,8 @@ header:
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  make build    - Build the Rust library"
-	@echo "  make test     - Run Rust tests"
+	@echo "  make build    - Build the library and Go bindings"
+	@echo "  make test     - Run all tests"
 	@echo "  make clean    - Clean build artifacts"
 	@echo "  make release  - Build release artifacts for all platforms"
 	@echo "  make deps     - Install dependencies"

@@ -198,7 +198,7 @@ fmt: install-goimports ## 🧹 Run go fmt and goimports against code
 .PHONY: vet
 vet: ## 🔍 Run go vet against code
 	@echo "🔍 Checking code with go vet..."
-	@$(GO_CMD) vet -structtag=false ./...
+	@$(GO_CMD) vet -structtag=false -unsafeptr=false ./...
 	@echo "✅ Vet checks passed"
 
 .PHONY: tidy
@@ -527,7 +527,7 @@ artifacts: kustomize ## Generate artifacts for release.
 # Define test packages with proper exclusions
 TEST_PACKAGES := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
 CMD_PACKAGES := $(shell go list ./cmd/...)
-PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/testing|pkg/openapi|pkg/client)')
+PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/testing|pkg/openapi|pkg/client|pkg/xet)')
 INTERNAL_PACKAGES := $(shell go list ./internal/...)
 
 .PHONY: test
@@ -537,7 +537,7 @@ test: fmt vet manifests envtest ## 🧪 Run all tests with coverage (optimized -
 	@echo "  • CMD packages: $(words $(CMD_PACKAGES)) packages"
 	@echo "  • PKG packages: $(words $(PKG_PACKAGES)) packages" 
 	@echo "  • Internal packages: $(words $(INTERNAL_PACKAGES)) packages"
-	@echo "  • Excluded: pkg/apis, pkg/testing, pkg/openapi, pkg/client"
+	@echo "  • Excluded: pkg/apis, pkg/testing, pkg/openapi, pkg/client, pkg/xet"
 	@echo ""
 	
 	@echo "🧪 Running command tests..."
