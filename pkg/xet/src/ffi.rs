@@ -195,53 +195,9 @@ pub unsafe extern "C" fn xet_list_files(
                 let mut c_files = Vec::with_capacity(count);
 
                 for file in files {
-                    let path_cstring = match CString::new(file.path) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            // Clean up any previously allocated strings
-                            for existing_file in &c_files {
-                                unsafe {
-                                    if !existing_file.path.is_null() {
-                                        let _ = CString::from_raw(existing_file.path);
-                                    }
-                                    if !existing_file.hash.is_null() {
-                                        let _ = CString::from_raw(existing_file.hash);
-                                    }
-                                }
-                            }
-                            return XetError::new(
-                                XetErrorCode::InvalidConfig,
-                                "File path contains invalid null bytes".to_string(),
-                                None,
-                            );
-                        }
-                    };
-                    let hash_cstring = match CString::new(file.hash) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            // Clean up the path we just allocated
-                            drop(path_cstring);
-                            // Clean up any previously allocated strings
-                            for existing_file in &c_files {
-                                unsafe {
-                                    if !existing_file.path.is_null() {
-                                        let _ = CString::from_raw(existing_file.path);
-                                    }
-                                    if !existing_file.hash.is_null() {
-                                        let _ = CString::from_raw(existing_file.hash);
-                                    }
-                                }
-                            }
-                            return XetError::new(
-                                XetErrorCode::InvalidConfig,
-                                "File hash contains invalid null bytes".to_string(),
-                                None,
-                            );
-                        }
-                    };
                     let c_file = XetFileInfoC {
-                        path: path_cstring.into_raw(),
-                        hash: hash_cstring.into_raw(),
+                        path: CString::new(file.path).unwrap().into_raw(),
+                        hash: CString::new(file.hash).unwrap().into_raw(),
                         size: file.size,
                     };
                     c_files.push(c_file);
