@@ -239,15 +239,16 @@ func hfHubDownloadToLocalDir(ctx context.Context, config *DownloadConfig) (strin
 		if err == nil {
 			// Check if the local file matches the expected size and etag
 			if size, err := GetFileSize(filePath); err == nil && size == metadata.Size {
-				// For LFS files, verify checksum
-				if metadata.Etag != "" && IsSHA256(metadata.Etag) {
-					if err := VerifyChecksum(filePath, metadata.Etag); err == nil {
-						return filePath, nil
-					}
-				} else {
-					// For non-LFS files, size match is sufficient
-					return filePath, nil
-				}
+				//// For LFS files, verify checksum
+				//if metadata.Etag != "" && IsSHA256(metadata.Etag) {
+				//	if err := VerifyChecksum(filePath, metadata.Etag); err == nil {
+				//		return filePath, nil
+				//	}
+				//} else {
+				//	// For non-LFS files, size match is sufficient
+				//	return filePath, nil
+				//}
+				return filePath, nil
 			}
 		}
 	}
