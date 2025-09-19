@@ -519,18 +519,18 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 		break
 	}
 
-	// Validate checksum if this was a resumed download and we have an ETag
-	if resumeSize > 0 && metadata.Etag != "" && IsSHA256(metadata.Etag) {
-		// Close the file to flush all writes
-		file.Close()
-
-		// Verify the complete file
-		if err := VerifyChecksum(filePath, metadata.Etag); err != nil {
-			// File is corrupted, delete it
-			os.Remove(filePath)
-			return fmt.Errorf("checksum validation failed after resume: %w", err)
-		}
-	}
+	//// Validate checksum if this was a resumed download and we have an ETag
+	//if resumeSize > 0 && metadata.Etag != "" && IsSHA256(metadata.Etag) {
+	//	// Close the file to flush all writes
+	//	file.Close()
+	//
+	//	// Verify the complete file
+	//	if err := VerifyChecksum(filePath, metadata.Etag); err != nil {
+	//		// File is corrupted, delete it
+	//		os.Remove(filePath)
+	//		return fmt.Errorf("checksum validation failed after resume: %w", err)
+	//	}
+	//}
 
 	return nil
 }

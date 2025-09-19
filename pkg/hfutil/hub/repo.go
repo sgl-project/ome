@@ -256,7 +256,7 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 
 			if result.err != nil {
 				totalErrors++
-				fmt.Printf("Error downloading file %s: %v", result.filePath, result.err)
+				fmt.Printf("Error downloading file %s: %v\n", result.filePath, result.err)
 			} else {
 				// Update overall progress
 				downloadedBytes += result.size
@@ -316,13 +316,13 @@ func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadT
 			startTime := time.Now()
 
 			// Perform the download (HfHubDownload handles its own progress per file)
-			filePath, err := HfHubDownload(ctx, task.config)
+			_, err := HfHubDownload(ctx, task.config)
 
 			duration := time.Since(startTime)
 
 			result := downloadResult{
 				index:    task.index,
-				filePath: filePath,
+				filePath: task.file.Path,
 				err:      err,
 				duration: duration,
 				size:     task.file.Size,
