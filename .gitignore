@@ -78,4 +78,7 @@ coverage-*.html
 *target
 *Cargo.lock
 
+# static library
+*.a
+
 hack/python-sdk/openapi-generator-cli-*.jar
