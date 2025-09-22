@@ -1108,3 +1108,39 @@ deberta_v3_base_prompt_injection_v2_dedicated:
   enabled: false
   minReplicas: 1
   maxReplicas: 1
+
+# XAI configuration
+xai:
+  commonLabels:
+    logging-forward: enabled
+    sidecar.istio.io/inject: 'true'
+  
+  grokImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/xai-oci-all
+    tag: "v1.0.0"
+  
+  # Environment variables for XAI containers
+  keyId: "ocid1.vaultsecret.oc1.us-chicago-1.amaaaaaaql3powiaduj7uvj35kcszyoqx2b7d7dy6qgl2k5sjmkc5vhbo6ea"  # Will be set by shepherd based on region
+  ociRegion: "us-chicago-1"  # Will be set by shepherd based on deployment region
+  
+  readinessProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          curl -s -f http://localhost:8080/v1/chat/completions \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"model":"grok-3-mini","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
+            --max-time 25
+    failureThreshold: 5
+    successThreshold: 1
+    periodSeconds: 60
+    timeoutSeconds: 30
+    initialDelaySeconds: 100
+
+grok_3_mini:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1

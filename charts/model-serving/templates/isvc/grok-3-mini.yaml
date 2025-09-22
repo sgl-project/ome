@@ -1,0 +1,21 @@
+{{- if .Values.grok_3_mini.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: grok-3-mini
+  namespace: grok-3-mini
+spec:
+  predictor:
+    model:
+      baseModel:  grok-3-mini-low
+      protocolVersion: xAI
+    minReplicas: {{ .Values.grok_3_mini.minReplicas}}
+    maxReplicas: {{ .Values.grok_3_mini.maxReplicas}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grok-3-mini
+
+{{- end }}
