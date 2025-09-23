@@ -3,11 +3,12 @@ package common
 import (
 	"testing"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
 func TestObjectSummaryReplicationObject(t *testing.T) {
@@ -35,23 +36,21 @@ func TestObjectSummaryReplicationObject_NilFields(t *testing.T) {
 
 func TestRepoFileReplicationObject(t *testing.T) {
 	path := "models/model.bin"
-	size := int64(2048)
-	typeStr := "model"
-	repoFile := hub.RepoFile{
+	size := uint64(2048)
+	repoFile := xet.FileInfo{
 		Path: path,
 		Size: size,
-		Type: typeStr,
 	}
-	ro := RepoFileReplicationObject{RepoFile: repoFile}
+	ro := HFRepoFileInfoReplicationObject{FileInfo: repoFile}
 
 	assert.Equal(t, path, ro.GetName(), "GetName should return the file's path")
-	assert.Equal(t, size, ro.GetSize(), "GetSize should return the file's size")
+	assert.Equal(t, int64(size), ro.GetSize(), "GetSize should return the file's size")
 	assert.Equal(t, path, ro.GetPath(), "GetPath should return the file's path")
 }
 
 func TestRepoFileReplicationObject_EmptyFields(t *testing.T) {
-	repoFile := hub.RepoFile{}
-	ro := RepoFileReplicationObject{RepoFile: repoFile}
+	repoFile := xet.FileInfo{}
+	ro := HFRepoFileInfoReplicationObject{FileInfo: repoFile}
 
 	assert.Equal(t, "", ro.GetName(), "GetName should return empty string if Path is empty")
 	assert.Equal(t, int64(0), ro.GetSize(), "GetSize should return 0 if Size is zero")

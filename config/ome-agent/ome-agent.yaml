@@ -6,6 +6,9 @@ region: "us-ashburn-1"
 hf_token: ""
 cache_dir: "/tmp/.cache/huggingface"
 endpoint: "https://huggingface.co"
+enable_dedup: true
+max_concurrent_downloads: 4
+enable_progress_reporting: true
 max_retries: 5
 retry_interval: "10s"
 max_workers: 8

@@ -3,8 +3,9 @@ package replicator
 import (
 	"path/filepath"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 )
 
@@ -16,7 +17,7 @@ type HFToPVCReplicator struct {
 
 type HFToPVCReplicatorConfig struct {
 	LocalPath string
-	HubClient *hub.HubClient
+	HubClient *xet.Client
 }
 
 func (r *HFToPVCReplicator) Replicate(objects []common.ReplicationObject) error {

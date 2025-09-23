@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
@@ -11,7 +13,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/sgl-project/ome/pkg/afero"
-	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
@@ -96,7 +97,7 @@ func TestNewReplicaAgent(t *testing.T) {
 				NumConnections:       5,
 				Source: SourceStruct{
 					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct@experimental",
-					HubClient:     &hf.HubClient{},
+					HubClient:     &xet.Client{},
 				},
 				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
@@ -116,7 +117,7 @@ func TestNewReplicaAgent(t *testing.T) {
 				NumConnections:       5,
 				Source: SourceStruct{
 					StorageURIStr: "hf://meta-llama/Llama-3-70B-Instruct@experimental",
-					HubClient:     &hf.HubClient{},
+					HubClient:     &xet.Client{},
 				},
 				Target: TargetStruct{
 					StorageURIStr: "pvc://target-pvc/models",
@@ -301,7 +302,7 @@ func TestNewReplicaAgent(t *testing.T) {
 				NumConnections:       5,
 				Source: SourceStruct{
 					StorageURIStr: "hf://", // Invalid: missing model ID
-					HubClient:     &hf.HubClient{},
+					HubClient:     &xet.Client{},
 				},
 				Target: TargetStruct{
 					StorageURIStr:  "oci://n/tgt-ns/b/tgt-bucket/o/models",
@@ -409,18 +410,18 @@ func TestValidateModelSize(t *testing.T) {
 			},
 			objects: func() []common.ReplicationObject {
 				return []common.ReplicationObject{
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "pytorch_model.bin",
-							Size: 1 * GB, // 1 GB
-							Type: "file",
+							Size: 1073741824, // 1 GB
+							Hash: "sha256:abc123...",
 						},
 					},
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "config.json",
 							Size: 1024, // 1 KB
-							Type: "file",
+							Hash: "sha256:def123...",
 						},
 					},
 				}
@@ -459,25 +460,25 @@ func TestValidateModelSize(t *testing.T) {
 			},
 			objects: func() []common.ReplicationObject {
 				return []common.ReplicationObject{
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "pytorch_model-00001-of-00002.bin",
-							Size: 1 * GB, // 1 GB
-							Type: "file",
+							Size: 1073741824, // 1 GB
+							Hash: "sha256:...",
 						},
 					},
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "pytorch_model-00002-of-00002.bin",
-							Size: 1 * GB, // 1 GB
-							Type: "file",
+							Size: 1073741824, // 1 GB
+							Hash: "sha256:...",
 						},
 					},
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "config.json",
 							Size: 1024, // 1 KB
-							Type: "file",
+							Hash: "sha256:...",
 						},
 					},
 				}
@@ -516,18 +517,18 @@ func TestValidateModelSize(t *testing.T) {
 			},
 			objects: func() []common.ReplicationObject {
 				return []common.ReplicationObject{
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "pytorch_model.bin",
-							Size: 2 * GB, // 2 GB
-							Type: "file",
+							Size: 4294967296, // 4 GB
+							Hash: "sha256:...",
 						},
 					},
-					common.RepoFileReplicationObject{
-						RepoFile: hf.RepoFile{
+					common.HFRepoFileInfoReplicationObject{
+						FileInfo: xet.FileInfo{
 							Path: "tokenizer.json",
-							Size: 512 * 1024, // 512 KB
-							Type: "file",
+							Size: 524288, // 512 KB
+							Hash: "sha256:...",
 						},
 					},
 				}

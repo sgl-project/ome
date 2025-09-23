@@ -194,16 +194,6 @@ type cancellationBridge struct {
 	ctx context.Context
 }
 
-// Config holds configuration for the xet client
-type Config struct {
-	Endpoint               string
-	Token                  string
-	CacheDir               string
-	MaxConcurrentDownloads uint32
-	EnableDedup            bool
-	LogLevel               string // Optional: error, warn, info, debug, trace
-}
-
 // DownloadRequest represents a file download request
 type DownloadRequest struct {
 	RepoID   string
@@ -247,12 +237,11 @@ func (e *XetError) Error() string {
 // NewClient creates a new xet client
 func NewClient(config *Config) (*Client, error) {
 	if config == nil {
-		config = &Config{
-			Endpoint:               "https://huggingface.co",
-			MaxConcurrentDownloads: 4,
-			EnableDedup:            true,
-			LogLevel:               "", // Use default from init()
-		}
+		config = defaultConfig()
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
 	// Set log level if specified
