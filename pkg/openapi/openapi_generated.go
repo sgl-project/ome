@@ -1810,7 +1810,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Description: "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -1826,7 +1826,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"annotations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Description: "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -1838,6 +1838,18 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 									},
 								},
 							},
+						},
+					},
+					"minAvailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable specifies how many component pods can be unavailable",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
 					"deploymentStrategy": {
@@ -1855,7 +1867,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "k8s.io/api/apps/v1.DeploymentStrategy"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
 	}
 }
 
@@ -2471,7 +2483,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Description: "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -2487,7 +2499,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"annotations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Description: "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -2499,6 +2511,18 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 									},
 								},
 							},
+						},
+					},
+					"minAvailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable specifies how many component pods can be unavailable",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
 					"deploymentStrategy": {
@@ -2540,7 +2564,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
 	}
 }
 
@@ -3134,7 +3158,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Description: "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -3150,7 +3174,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"annotations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Description: "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -3162,6 +3186,18 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 									},
 								},
 							},
+						},
+					},
+					"minAvailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable specifies how many component pods can be unavailable",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
 					"deploymentStrategy": {
@@ -3203,7 +3239,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.AcceleratorSelector", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.LeaderSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
 	}
 }
 
@@ -6527,7 +6563,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Description: "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -6543,7 +6579,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 					},
 					"annotations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Description: "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -6555,6 +6591,18 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 									},
 								},
 							},
+						},
+					},
+					"minAvailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable specifies how many component pods can be unavailable",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
 					"deploymentStrategy": {
@@ -6578,7 +6626,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.ModelSpec", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.WorkerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
 	}
 }
 
@@ -7108,7 +7156,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"labels": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+							Description: "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -7124,7 +7172,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"annotations": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+							Description: "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -7136,6 +7184,18 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 									},
 								},
 							},
+						},
+					},
+					"minAvailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
+						},
+					},
+					"maxUnavailable": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxUnavailable specifies how many component pods can be unavailable",
+							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
 					"deploymentStrategy": {
@@ -7175,7 +7235,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 			},
 		},
 		Dependencies: []string{
-			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity"},
+			"github.com/sgl-project/ome/pkg/apis/ome/v1beta1.KedaConfig", "github.com/sgl-project/ome/pkg/apis/ome/v1beta1.RunnerSpec", "k8s.io/api/apps/v1.DeploymentStrategy", "k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Container", "k8s.io/api/core/v1.EphemeralContainer", "k8s.io/api/core/v1.HostAlias", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/api/core/v1.PodDNSConfig", "k8s.io/api/core/v1.PodOS", "k8s.io/api/core/v1.PodReadinessGate", "k8s.io/api/core/v1.PodResourceClaim", "k8s.io/api/core/v1.PodSchedulingGate", "k8s.io/api/core/v1.PodSecurityContext", "k8s.io/api/core/v1.Toleration", "k8s.io/api/core/v1.TopologySpreadConstraint", "k8s.io/api/core/v1.Volume", "k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/util/intstr.IntOrString"},
 	}
 }
 

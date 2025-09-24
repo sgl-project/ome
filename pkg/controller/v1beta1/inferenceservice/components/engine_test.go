@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -58,6 +59,7 @@ func TestEngineReconcile(t *testing.T) {
 	g.Expect(lws.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(kedav1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(autoscalingv2.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(policyv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name           string

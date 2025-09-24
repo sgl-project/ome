@@ -19,11 +19,12 @@ import (
 
 var log = logf.Log.WithName("PDBReconciler")
 
-// HPAReconciler is the struct of Raw K8S Object
+// PDBReconciler is the struct of Raw K8S Object
 type PDBReconciler struct {
-	client client.Client
-	scheme *runtime.Scheme
-	PDB    *policyv1.PodDisruptionBudget
+	client       client.Client
+	scheme       *runtime.Scheme
+	PDB          *policyv1.PodDisruptionBudget
+	componentExt *v1beta1.ComponentExtensionSpec
 }
 
 func NewPDBReconciler(client client.Client,
@@ -31,23 +32,40 @@ func NewPDBReconciler(client client.Client,
 	componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec) *PDBReconciler {
 	return &PDBReconciler{
-		client: client,
-		scheme: scheme,
-		PDB:    createPDB(componentMeta, componentExt),
+		client:       client,
+		scheme:       scheme,
+		PDB:          createPDB(componentMeta, componentExt),
+		componentExt: componentExt,
 	}
 }
 
 func createPDB(componentMeta metav1.ObjectMeta,
 	componentExt *v1beta1.ComponentExtensionSpec) *policyv1.PodDisruptionBudget {
 
-	minReplicas := calculateMinReplicas(componentExt)
-	maxReplicas := calculateMaxReplicas(componentExt)
+	var minAvailable *intstr.IntOrString
+	var maxUnavailable *intstr.IntOrString
+
+	if componentExt.MinAvailable != nil {
+		minAvailable = componentExt.MinAvailable
+	}
+
+	if componentExt.MaxUnavailable != nil {
+		maxUnavailable = componentExt.MaxUnavailable
+	}
+
+	if componentExt.MinAvailable == nil && componentExt.MaxUnavailable == nil {
+		// Set maxUnavailable = 1 as default
+		maxUnavailable = &intstr.IntOrString{
+			Type:   intstr.Int,
+			IntVal: 1,
+		}
+	}
 
 	pdb := &policyv1.PodDisruptionBudget{
 		ObjectMeta: componentMeta,
 		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable:   minReplicas,
-			MaxUnavailable: maxReplicas,
+			MinAvailable:   minAvailable,
+			MaxUnavailable: maxUnavailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": constants.GetRawServiceLabel(componentMeta.Name),
@@ -58,7 +76,7 @@ func createPDB(componentMeta metav1.ObjectMeta,
 	return pdb
 }
 
-// checkPDBExist checks if the hpa exists?
+// checkPDBExist checks if the pdb exists
 func (r *PDBReconciler) checkPDBExist(client client.Client) (constants.CheckResultType, *policyv1.PodDisruptionBudget, error) {
 	//get pdb
 	existingPDB := &policyv1.PodDisruptionBudget{}
@@ -131,20 +149,4 @@ func (r *PDBReconciler) Reconcile() (*policyv1.PodDisruptionBudget, error) {
 	default:
 		return existingPDB, nil
 	}
-}
-
-func calculateMinReplicas(componentExt *v1beta1.ComponentExtensionSpec) *intstr.IntOrString {
-	if componentExt.MinReplicas == nil || *componentExt.MinReplicas < constants.DefaultMinReplicas {
-		return &intstr.IntOrString{IntVal: int32(constants.DefaultMinReplicas)}
-	}
-	return &intstr.IntOrString{IntVal: int32(*componentExt.MinReplicas)}
-}
-
-func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec) *intstr.IntOrString {
-	maxReplicas := int32(componentExt.MaxReplicas)
-	minReplicas := int32(*componentExt.MinReplicas)
-	if maxReplicas < minReplicas {
-		maxReplicas = minReplicas
-	}
-	return &intstr.IntOrString{IntVal: maxReplicas}
 }

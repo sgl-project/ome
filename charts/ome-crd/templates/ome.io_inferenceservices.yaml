@@ -6335,6 +6335,16 @@ spec:
                       type: object
                     maxReplicas:
                       type: integer
+                    maxUnavailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
+                    minAvailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
                     minReplicas:
                       type: integer
                     nodeName:
@@ -18557,6 +18567,16 @@ spec:
                       type: object
                     maxReplicas:
                       type: integer
+                    maxUnavailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
+                    minAvailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
                     minReplicas:
                       type: integer
                     nodeName:
@@ -26496,6 +26516,16 @@ spec:
                       type: object
                     maxReplicas:
                       type: integer
+                    maxUnavailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
+                    minAvailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
                     minReplicas:
                       type: integer
                     model:
@@ -34423,6 +34453,16 @@ spec:
                       type: object
                     maxReplicas:
                       type: integer
+                    maxUnavailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
+                    minAvailable:
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      x-kubernetes-int-or-string: true
                     minReplicas:
                       type: integer
                     nodeName:

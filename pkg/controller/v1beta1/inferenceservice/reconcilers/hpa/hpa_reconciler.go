@@ -2,7 +2,6 @@ package hpa
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -96,9 +95,6 @@ func calculateMaxReplicas(componentExt *v1beta1.ComponentExtensionSpec, minRepli
 }
 
 func getDeploymentName(metadata metav1.ObjectMeta) string {
-	if enabledKueue, ok := metadata.Annotations["kueue-enabled"]; ok && enabledKueue == "true" {
-		return fmt.Sprintf("%s-%s", metadata.Name, "new")
-	}
 	return metadata.Name
 }
 

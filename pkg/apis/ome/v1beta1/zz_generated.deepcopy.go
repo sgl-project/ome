@@ -10,6 +10,7 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	servingv1 "knative.dev/serving/pkg/apis/serving/v1"
@@ -964,6 +965,16 @@ func (in *ComponentExtensionSpec) DeepCopyInto(out *ComponentExtensionSpec) {
 		for key, val := range *in {
 			(*out)[key] = val
 		}
+	}
+	if in.MinAvailable != nil {
+		in, out := &in.MinAvailable, &out.MinAvailable
+		*out = new(intstr.IntOrString)
+		**out = **in
+	}
+	if in.MaxUnavailable != nil {
+		in, out := &in.MaxUnavailable, &out.MaxUnavailable
+		*out = new(intstr.IntOrString)
+		**out = **in
 	}
 	if in.DeploymentStrategy != nil {
 		in, out := &in.DeploymentStrategy, &out.DeploymentStrategy

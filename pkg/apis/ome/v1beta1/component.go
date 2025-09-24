@@ -2,6 +2,7 @@ package v1beta1
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // ComponentExtensionSpec defines the deployment configuration for a given InferenceService component
@@ -32,14 +33,20 @@ type ComponentExtensionSpec struct {
 	// CanaryTrafficPercent defines the traffic split percentage between the candidate revision and the last ready revision
 	// +optional
 	CanaryTrafficPercent *int64 `json:"canaryTrafficPercent,omitempty"`
-	// Labels that will be add to the component pod.
+	// Labels that will be added to the component pod.
 	// More info: http://kubernetes.io/docs/user-guide/labels
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
-	// Annotations that will be add to the component pod.
+	// Annotations that will be added to the component pod.
 	// More info: http://kubernetes.io/docs/user-guide/annotations
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+	// MinAvailiable specifies how many component pods must still be aviliable after the eviction
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+	// MaxUnavailable specifies how many component pods can be unavailable
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 
 	// The deployment strategy to use to replace existing pods with new ones. Only applicable for raw deployment mode.
 	// +optional

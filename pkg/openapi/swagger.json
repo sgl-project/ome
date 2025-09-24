@@ -924,7 +924,7 @@
       "type": "object",
       "properties": {
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -949,7 +949,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -960,6 +960,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -1047,7 +1055,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1178,7 +1186,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1193,6 +1201,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -1432,7 +1448,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1563,7 +1579,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -1578,6 +1594,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -3334,7 +3358,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -3465,7 +3489,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -3476,6 +3500,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
@@ -3673,7 +3705,7 @@
           "$ref": "#/definitions/v1.Affinity"
         },
         "annotations": {
-          "description": "Annotations that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
+          "description": "Annotations that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/annotations",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -3812,7 +3844,7 @@
           "$ref": "#/definitions/v1beta1.KedaConfig"
         },
         "labels": {
-          "description": "Labels that will be add to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
+          "description": "Labels that will be added to the component pod. More info: http://kubernetes.io/docs/user-guide/labels",
           "type": "object",
           "additionalProperties": {
             "type": "string",
@@ -3823,6 +3855,14 @@
           "description": "Maximum number of replicas for autoscaling.",
           "type": "integer",
           "format": "int32"
+        },
+        "maxUnavailable": {
+          "description": "MaxUnavailable specifies how many component pods can be unavailable",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
+        },
+        "minAvailable": {
+          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
           "description": "Minimum number of replicas, defaults to 1 but can be set to 0 to enable scale-to-zero.",
