@@ -36,11 +36,19 @@ spec:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-4-scout-17b-16e-instruct" "osBucket" }}/o/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
   additionalMetadata:
+    {{ if index .Values "llama-4-scout-17b-16e-instruct" "isA100Only" }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_GENERIC
+          quotaUnit: 1
+          default: true
+    {{ else }}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: LARGE_GENERIC_V2
           quotaUnit: 1
           default: true
+    {{ end }}
     image-text-to-text: "true"
   modelConfiguration:
     {
