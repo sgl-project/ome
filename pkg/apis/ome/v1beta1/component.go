@@ -41,7 +41,7 @@ type ComponentExtensionSpec struct {
 	// More info: http://kubernetes.io/docs/user-guide/annotations
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
-	// MinAvailiable specifies how many component pods must still be aviliable after the eviction
+	// MinAvailable specifies how many component pods must still be available after the eviction
 	// +optional
 	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
 	// MaxUnavailable specifies how many component pods can be unavailable
