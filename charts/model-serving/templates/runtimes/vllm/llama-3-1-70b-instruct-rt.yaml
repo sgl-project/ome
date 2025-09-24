@@ -51,7 +51,7 @@ spec:
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      autoSelect: true
+      autoSelect: false
       modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
       priority: 1
@@ -73,7 +73,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_1_70b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_70b_instruct.image.tag | default .Values.vllm.latestImage.tag}}
+      image: {{ .Values.llama_3_1_70b_instruct.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_1_70b_instruct.image.vllm.tag | default .Values.vllm.latestImage.tag}}
       ports:
         - containerPort: {{ .Values.vllm.port }}
           name: http1

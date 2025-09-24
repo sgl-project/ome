@@ -351,8 +351,12 @@ llama_3_1_70b_instruct:
   maxReplicas: 1
   scaleMetric: {}
   image:
-    repository:
-    tag:
+    vllm:
+      repository:
+      tag:
+    srt:
+      repository:
+      tag:
 
 llama_3_3_70b_instruct:
   enabled: false
@@ -400,8 +404,12 @@ llama_3_3_70b_instruct:
   maxReplicas: 1
   scaleMetric: { }
   image:
-    repository:
-    tag:
+    vllm:
+      repository:
+      tag:
+    srt:
+      repository:
+      tag:
 
 llama_3_3_70b_instruct_fp8_dynamic:
   enabled: false
