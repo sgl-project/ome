@@ -237,7 +237,7 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 	// Check runtime selection/validation
 	if isvc.Spec.Runtime != nil && isvc.Spec.Runtime.Name != "" {
 		// Validate specified runtime
-		if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc.Namespace); err != nil {
+		if err := v.RuntimeSelector.ValidateRuntime(ctx, isvc.Spec.Runtime.Name, baseModel, isvc); err != nil {
 			return warnings, fmt.Errorf("runtime %s does not support model %s: %w",
 				isvc.Spec.Runtime.Name, isvc.Spec.Model.Name, err)
 		}
@@ -245,7 +245,7 @@ func (v *InferenceServiceValidator) resolveModelAndRuntime(ctx context.Context, 
 			isvc.Spec.Runtime.Name, isvc.Spec.Model.Name))
 	} else {
 		// Check if runtime can be auto-selected
-		selection, err := v.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc.Namespace)
+		selection, err := v.RuntimeSelector.SelectRuntime(ctx, baseModel, isvc)
 		if err != nil {
 			return warnings, fmt.Errorf("no supporting runtime found for model %s and engine does not have complete runner configuration", isvc.Spec.Model.Name)
 		}
