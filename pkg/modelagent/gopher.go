@@ -14,6 +14,7 @@ import (
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	v1beta1lister "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/client/listers/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/hfutil/hub"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/logging"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/ociobjectstore"
@@ -22,6 +23,7 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -41,19 +43,21 @@ type GopherTask struct {
 }
 
 type Gopher struct {
-	modelConfigParser    *ModelConfigParser
-	configMapReconciler  *ConfigMapReconciler
-	downloadRetry        int
-	concurrency          int
-	multipartConcurrency int
-	modelRootDir         string
-	hubClient            *hub.HubClient
-	kubeClient           kubernetes.Interface
-	gopherChan           <-chan *GopherTask
-	nodeLabelReconciler  *NodeLabelReconciler
-	metrics              *Metrics
-	logger               *zap.SugaredLogger
-	configMapMutex       sync.Mutex // Mutex to coordinate ConfigMap access
+	modelConfigParser      *ModelConfigParser
+	configMapReconciler    *ConfigMapReconciler
+	downloadRetry          int
+	concurrency            int
+	multipartConcurrency   int
+	modelRootDir           string
+	hubClient              *hub.HubClient
+	kubeClient             kubernetes.Interface
+	gopherChan             <-chan *GopherTask
+	nodeLabelReconciler    *NodeLabelReconciler
+	metrics                *Metrics
+	logger                 *zap.SugaredLogger
+	configMapMutex         sync.Mutex // Mutex to coordinate ConfigMap access
+	baseModelLister        v1beta1lister.BaseModelLister
+	clusterBaseModelLister v1beta1lister.ClusterBaseModelLister
 }
 
 const (
@@ -72,25 +76,29 @@ func NewGopher(
 	gopherChan <-chan *GopherTask,
 	nodeLabelReconciler *NodeLabelReconciler,
 	metrics *Metrics,
-	logger *zap.SugaredLogger) (*Gopher, error) {
+	logger *zap.SugaredLogger,
+	baseModelLister v1beta1lister.BaseModelLister,
+	clusterBaseModelLister v1beta1lister.ClusterBaseModelLister) (*Gopher, error) {
 
 	if hubClient == nil {
 		return nil, fmt.Errorf("hugging face hub client cannot be nil")
 	}
 
 	return &Gopher{
-		modelConfigParser:    modelConfigParser,
-		configMapReconciler:  configMapReconciler,
-		downloadRetry:        downloadRetry,
-		concurrency:          concurrency,
-		multipartConcurrency: multipartConcurrency,
-		modelRootDir:         modelRootDir,
-		hubClient:            hubClient,
-		kubeClient:           kubeClient,
-		gopherChan:           gopherChan,
-		nodeLabelReconciler:  nodeLabelReconciler,
-		metrics:              metrics,
-		logger:               logger,
+		modelConfigParser:      modelConfigParser,
+		configMapReconciler:    configMapReconciler,
+		downloadRetry:          downloadRetry,
+		concurrency:            concurrency,
+		multipartConcurrency:   multipartConcurrency,
+		modelRootDir:           modelRootDir,
+		hubClient:              hubClient,
+		kubeClient:             kubeClient,
+		gopherChan:             gopherChan,
+		nodeLabelReconciler:    nodeLabelReconciler,
+		metrics:                metrics,
+		logger:                 logger,
+		baseModelLister:        baseModelLister,
+		clusterBaseModelLister: clusterBaseModelLister,
 	}, nil
 }
 
@@ -354,15 +362,25 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		case storage.StorageTypeOCI:
 			s.logger.Infof("Starting deletion for model %s", modelInfo)
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
-			err = s.deleteModel(destPath, task)
+
+			// Double-check if the path is still referenced by other models
+			isReferenced, err := s.isPathReferencedByOtherModels(destPath, task.BaseModel, task.ClusterBaseModel)
 			if err != nil {
-				s.logger.Errorf("Failed to delete model %s: %v", modelInfo, err)
-				return err
-			}
-			if task.BaseModel != nil {
-				s.logger.Infof("Successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
+				// Cannot determine if the path is referenced; skip deletion to be safe
+				s.logger.Errorf("Failed to check if path %s is referenced by other models, skip the path deletion: %v", destPath, err)
+			} else if isReferenced {
+				s.logger.Infof("Skipping deletion of path %s for model %s as it is still referenced by other models", destPath, modelInfo)
 			} else {
-				s.logger.Infof("Successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
+				err = s.deleteModel(destPath, task)
+				if err != nil {
+					s.logger.Errorf("Failed to delete model %s: %v", modelInfo, err)
+					return err
+				}
+				if task.BaseModel != nil {
+					s.logger.Infof("Successfully deleted the BaseModel %s in namespace %s", task.BaseModel.Name, task.BaseModel.Namespace)
+				} else {
+					s.logger.Infof("Successfully deleted the ClusterBaseModel %s", task.ClusterBaseModel.Name)
+				}
 			}
 		case storage.StorageTypeVendor:
 			s.logger.Infof("Skipping deletion for model %s", modelInfo)
@@ -370,12 +388,22 @@ func (s *Gopher) processTask(task *GopherTask) error {
 			s.logger.Infof("Removing Hugging Face model %s", modelInfo)
 			modelRepo := strings.TrimPrefix(*baseModelSpec.Storage.StorageUri, "hf://")
 			destPath := filepath.Join(s.modelRootDir, modelRepo)
-			err = s.deleteModel(destPath, task)
+
+			// Double-check if the path is still referenced by other models
+			isReferenced, err := s.isPathReferencedByOtherModels(destPath, task.BaseModel, task.ClusterBaseModel)
 			if err != nil {
-				s.logger.Errorf("Failed to delete Hugging Face model %s: %v", modelInfo, err)
-				return err
+				// Cannot determine if the path is referenced; skip deletion to be safe
+				s.logger.Errorf("Failed to check if path %s is referenced by other models, skip the path deletion: %v", destPath, err)
+			} else if isReferenced {
+				s.logger.Infof("Skipping deletion of path %s for model %s as it is still referenced by other models", destPath, modelInfo)
+			} else {
+				err = s.deleteModel(destPath, task)
+				if err != nil {
+					s.logger.Errorf("Failed to delete Hugging Face model %s: %v", modelInfo, err)
+					return err
+				}
+				s.logger.Infof("Successfully deleted Hugging Face model %s", modelInfo)
 			}
-			s.logger.Infof("Successfully deleted Hugging Face model %s", modelInfo)
 		}
 
 		// Mark the model as deleted in the node labels and remove from ConfigMap
@@ -393,6 +421,50 @@ func (s *Gopher) processTask(task *GopherTask) error {
 	}
 
 	return nil
+}
+
+// isPathReferencedByOtherModels checks if the given path is still referenced by other BaseModel or ClusterBaseModel resources
+// excluding the model being deleted
+func (s *Gopher) isPathReferencedByOtherModels(targetPath string, excludeBaseModel *v1beta1.BaseModel, excludeClusterBaseModel *v1beta1.ClusterBaseModel) (bool, error) {
+	// Check BaseModels
+	baseModels, err := s.baseModelLister.List(labels.Everything())
+	if err != nil {
+		return false, fmt.Errorf("failed to list BaseModels: %w", err)
+	}
+
+	for _, baseModel := range baseModels {
+		// Skip the model being deleted
+		if excludeBaseModel != nil && baseModel.Namespace == excludeBaseModel.Namespace && baseModel.Name == excludeBaseModel.Name {
+			continue
+		}
+
+		// Check if this BaseModel references the same path
+		if baseModel.Spec.Storage.Path != nil && *baseModel.Spec.Storage.Path == targetPath {
+			s.logger.Infof("Path %s is still referenced by BaseModel %s/%s", targetPath, baseModel.Namespace, baseModel.Name)
+			return true, nil
+		}
+	}
+
+	// Check ClusterBaseModels
+	clusterBaseModels, err := s.clusterBaseModelLister.List(labels.Everything())
+	if err != nil {
+		return false, fmt.Errorf("failed to list ClusterBaseModels: %w", err)
+	}
+
+	for _, clusterBaseModel := range clusterBaseModels {
+		// Skip the model being deleted
+		if excludeClusterBaseModel != nil && clusterBaseModel.Name == excludeClusterBaseModel.Name {
+			continue
+		}
+
+		// Check if this ClusterBaseModel references the same path
+		if clusterBaseModel.Spec.Storage.Path != nil && *clusterBaseModel.Spec.Storage.Path == targetPath {
+			s.logger.Infof("Path %s is still referenced by ClusterBaseModel %s", targetPath, clusterBaseModel.Name)
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func getModelInfoForLogging(task *GopherTask) string {
