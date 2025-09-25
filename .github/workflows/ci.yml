@@ -64,6 +64,22 @@ jobs:
           go-version: '1.24.1'
           cache: true
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            pkg/xet/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('pkg/xet/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
       - name: Run unit tests
         if: matrix.test-suite == 'unit'
         run: |
@@ -102,6 +118,24 @@ jobs:
           go-version: '1.24.1'
           cache: true
 
+      - name: Setup Rust
+        if: matrix.component == 'ome-agent'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        if: matrix.component == 'ome-agent'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            pkg/xet/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('pkg/xet/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
       - name: Build ${{ matrix.component }}
         run: make ${{ matrix.component }}
 
@@ -128,6 +162,24 @@ jobs:
         with:
           go-version: '1.24.1'
           cache: true
+
+      - name: Setup Rust
+        if: matrix.image == 'ome-agent-image'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        if: matrix.image == 'ome-agent-image'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            pkg/xet/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('pkg/xet/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
