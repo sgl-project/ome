@@ -3,13 +3,14 @@ package main
 import (
 	"fmt"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica"
 	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 )
@@ -48,10 +49,9 @@ func (r *ReplicaAgent) FxModules() []fx.Option {
 		afero.Module,
 		logging.Module,
 		logging.ModuleNamed("another_log"),
-		logging.ModuleNamed("hub_logger"),
 		OCIOSDataStoreListProvider(),
 		PVCFileSystemProviders(),
-		hub.Module,
+		xet.Module,
 		replica.Module,
 		fx.Populate(&r.agent),
 	}

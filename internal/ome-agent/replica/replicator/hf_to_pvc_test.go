@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
@@ -21,7 +22,7 @@ func TestHFToPVCReplicator_Replicate_Success(t *testing.T) {
 	}()
 
 	// Replace downloadFromHFFunc with a mock version
-	downloadFromHFFunc = func(input common.ReplicationInput, client *hub.HubClient, path string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, client *xet.Client, path string, logger logging.Interface) (string, error) {
 		if path != "/mnt/data/meta/lama-Guard-4-12B" {
 			t.Errorf("unexpected path: got %s, want /mnt/data/meta/lama-Guard-4-12B", path)
 		}
@@ -32,7 +33,7 @@ func TestHFToPVCReplicator_Replicate_Success(t *testing.T) {
 		Logger: testingPkg.SetupMockLogger(),
 		Config: HFToPVCReplicatorConfig{
 			LocalPath: "/mnt/data/",
-			HubClient: &hub.HubClient{},
+			HubClient: &xet.Client{},
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{
@@ -60,7 +61,7 @@ func TestHFToPVCReplicator_Replicate_Failure(t *testing.T) {
 		downloadFromHFFunc = originalDownloadFunc
 	}()
 
-	downloadFromHFFunc = func(input common.ReplicationInput, client *hub.HubClient, path string, logger logging.Interface) (string, error) {
+	downloadFromHFFunc = func(input common.ReplicationInput, client *xet.Client, path string, logger logging.Interface) (string, error) {
 		return "", fmt.Errorf("mock error")
 	}
 
@@ -68,7 +69,7 @@ func TestHFToPVCReplicator_Replicate_Failure(t *testing.T) {
 		Logger: testingPkg.SetupMockLogger(),
 		Config: HFToPVCReplicatorConfig{
 			LocalPath: "/tmp",
-			HubClient: &hub.HubClient{},
+			HubClient: &xet.Client{},
 		},
 		ReplicationInput: common.ReplicationInput{
 			Source: ociobjectstore.ObjectURI{

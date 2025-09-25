@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
@@ -29,10 +31,12 @@ const (
 	OCIObjectSHA256MetadataKey = "opc-meta-sha256"
 )
 
-// Indirection for testability
-var downloadFromHFFunc = downloadFromHF
-var uploadDirectoryToOCIOSDataStoreFunc = uploadDirectoryToOCIOSDataStore
-var downloadObjectsFromOCIOSDataStoreFunc = downloadObjectsFromOCIOSDataStore
+var (
+	downloadSnapHook                      = func(c *xet.Client, req *xet.SnapshotRequest) (string, error) { return c.DownloadSnapshot(req) }
+	downloadFromHFFunc                    = downloadFromHF
+	uploadDirectoryToOCIOSDataStoreFunc   = uploadDirectoryToOCIOSDataStore
+	downloadObjectsFromOCIOSDataStoreFunc = downloadObjectsFromOCIOSDataStore
+)
 
 func UploadObjectToOCIOSDataStore(ociOSDataStore *ociobjectstore.OCIOSDataStore, object ociobjectstore.ObjectURI, filePath string) error {
 	if ociOSDataStore == nil {

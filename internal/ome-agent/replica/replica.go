@@ -7,9 +7,6 @@ import (
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
-	"golang.org/x/net/context"
-
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/utils/storage"
 )
@@ -109,12 +106,12 @@ func (r *ReplicaAgent) listSourceObjects() ([]common.ReplicationObject, error) {
 		r.Logger.Infof("Listed %d model weight objects under prefix %s", len(listOfObjectSummary), r.ReplicationInput.Source.Prefix)
 		return common.ConvertToReplicationObjectsFromObjectSummary(listOfObjectSummary), nil
 	case storage.StorageTypeHuggingFace:
-		repoFiles, err := r.Config.Source.HubClient.ListFiles(context.Background(), r.ReplicationInput.Source.BucketName, hub.WithRepoType(hub.RepoTypeModel))
+		repoFiles, err := r.Config.Source.HubClient.ListFiles(r.ReplicationInput.Source.BucketName, r.ReplicationInput.Source.Prefix)
 		if err != nil {
 			return nil, err
 		}
 		r.Logger.Infof("Listed %d model weight files under model %s with %s branch", len(repoFiles), r.ReplicationInput.Source.BucketName, r.ReplicationInput.Source.Prefix)
-		return common.ConvertToReplicationObjectsFromRepoFile(repoFiles), nil
+		return common.ConvertToReplicationObjectsFromHFRepoFileInfo(repoFiles), nil
 	case storage.StorageTypePVC:
 		sourceDirPath := filepath.Join(r.Config.LocalPath, r.ReplicationInput.Source.Prefix)
 		files, err := r.Config.Source.PVCFileSystem.ListFiles(sourceDirPath)
@@ -122,7 +119,7 @@ func (r *ReplicaAgent) listSourceObjects() ([]common.ReplicationObject, error) {
 			return nil, err
 		}
 		r.Logger.Infof("Listed %d model weight files under path %s", len(files), sourceDirPath)
-		return common.ConvertToReplicationObjectsFromFileInfo(files), nil
+		return common.ConvertToReplicationObjectsFromPVCFileEntry(files), nil
 	default:
 		return nil, fmt.Errorf("unsupported source storage type: %s", string(r.ReplicationInput.SourceStorageType))
 	}

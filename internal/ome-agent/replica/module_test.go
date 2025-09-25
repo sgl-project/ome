@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
@@ -24,7 +25,7 @@ func TestReplicaParams(t *testing.T) {
 	// Test the replicaParams struct
 	mockLogger := testingPkg.SetupMockLogger()
 	var mockDataStores []*ociobjectstore.OCIOSDataStore
-	mockHubClient := &hub.HubClient{}
+	mockHubClient := &xet.Client{}
 
 	params := replicaParams{
 		AnotherLogger:      mockLogger,
@@ -62,7 +63,7 @@ func TestModuleProvider(t *testing.T) {
 			},
 			setupParams: func() replicaParams {
 				mockLogger := testingPkg.SetupMockLogger()
-				mockHubClient := &hub.HubClient{}
+				mockHubClient := &xet.Client{}
 				var mockDataStores []*ociobjectstore.OCIOSDataStore
 
 				return replicaParams{
@@ -82,7 +83,7 @@ func TestModuleProvider(t *testing.T) {
 			},
 			setupParams: func() replicaParams {
 				mockLogger := testingPkg.SetupMockLogger()
-				mockHubClient := &hub.HubClient{}
+				mockHubClient := &xet.Client{}
 				var mockDataStores []*ociobjectstore.OCIOSDataStore
 
 				return replicaParams{
@@ -105,7 +106,7 @@ func TestModuleProvider(t *testing.T) {
 			},
 			setupParams: func() replicaParams {
 				mockLogger := testingPkg.SetupMockLogger()
-				mockHubClient := &hub.HubClient{}
+				mockHubClient := &xet.Client{}
 				var mockDataStores []*ociobjectstore.OCIOSDataStore
 
 				return replicaParams{
@@ -196,7 +197,7 @@ func TestModuleIntegration(t *testing.T) {
 
 	// Setup mock dependencies
 	mockLogger := testingPkg.SetupMockLogger()
-	mockHubClient := &hub.HubClient{}
+	mockHubClient := &xet.Client{}
 
 	// Create mock data stores with proper configuration
 	authType := principals.InstancePrincipal
