@@ -1,13 +1,13 @@
 package replicator
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/sgl-project/ome/pkg/xet"
 
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
@@ -26,7 +26,7 @@ type HFToOCIReplicatorConfig struct {
 	LocalPath      string
 	NumConnections int
 	ChecksumConfig *common.ChecksumConfig
-	HubClient      *hub.HubClient
+	HubClient      *xet.Client
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
 }
 
@@ -63,37 +63,19 @@ func (r *HFToOCIReplicator) Replicate(objects []common.ReplicationObject) error 
 	return nil
 }
 
-func downloadFromHF(input common.ReplicationInput, hubClient *hub.HubClient, downloadDir string, logger logging.Interface) (string, error) {
-	var downloadOptions []hub.DownloadOption
-	// Set revision if specified
-	if input.Source.Prefix != "" {
-		downloadOptions = append(downloadOptions, hub.WithRevision(input.Source.Prefix))
+func downloadFromHF(input common.ReplicationInput, hubClient *xet.Client, downloadDir string, logger logging.Interface) (string, error) {
+	req := &xet.SnapshotRequest{
+		RepoID:   input.Source.BucketName,
+		RepoType: hub.RepoTypeModel,
+		Revision: input.Source.Prefix,
+		LocalDir: downloadDir,
 	}
-	// Set repository type (always model for HuggingFace)
-	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
-	downloadPath, err := hubClient.SnapshotDownload(
-		context.Background(),
-		input.Source.BucketName,
-		downloadDir,
-		downloadOptions...,
-	)
+	path, err := downloadSnapHook(hubClient, req)
 	if err != nil {
-		// Check error type for better handling
-		var rateLimitErr *hub.RateLimitError
-		var httpErr *hub.HTTPError
-		if errors.As(err, &rateLimitErr) ||
-			errors.As(err, &httpErr) && httpErr.StatusCode == 429 ||
-			strings.Contains(err.Error(), "429") ||
-			strings.Contains(err.Error(), "rate limit") {
-			logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", input.Source.BucketName, err)
-		} else {
-			logger.Errorf("Failed to download HuggingFace model %s: %v", input.Source.BucketName, err)
-		}
-		return downloadPath, err
+		logger.Errorf("Failed to download snapshot: %v", err)
 	}
-
-	return downloadPath, nil
+	return path, err
 }
 
 type UploadTask struct {

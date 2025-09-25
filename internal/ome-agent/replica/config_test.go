@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/sgl-project/ome/pkg/afero"
@@ -11,7 +13,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
-	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	testingPkg "github.com/sgl-project/ome/pkg/testing"
 	"github.com/sgl-project/ome/pkg/utils/storage"
@@ -21,7 +22,7 @@ import (
 type SourceStruct struct {
 	StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 	OCIOSDataStore *ociobjectstore.OCIOSDataStore
-	HubClient      *hf.HubClient
+	HubClient      *xet.Client
 	PVCFileSystem  *afero.OsFs
 }
 
@@ -227,19 +228,19 @@ func TestWithAppParams(t *testing.T) {
 	targetDataStore := &ociobjectstore.OCIOSDataStore{
 		Config: &ociobjectstore.Config{Name: ociobjectstore.TargetOsConfigName},
 	}
-	mockHubClient := &hf.HubClient{}
+	mockHubClient := &xet.Client{}
 	sourcePVCFileSystem := afero.NewOsFs().(*afero.OsFs)
 	targetPVCFileSystem := afero.NewOsFs().(*afero.OsFs)
 
 	tests := []struct {
 		name                string
 		dataStores          []*ociobjectstore.OCIOSDataStore
-		hubClient           *hf.HubClient
+		hubClient           *xet.Client
 		sourcePVCFileSystem *afero.OsFs
 		targetPVCFileSystem *afero.OsFs
 		expectSource        *ociobjectstore.OCIOSDataStore
 		expectTarget        *ociobjectstore.OCIOSDataStore
-		expectHubClient     *hf.HubClient
+		expectHubClient     *xet.Client
 		expectSourcePVC     *afero.OsFs
 		expectTargetPVC     *afero.OsFs
 	}{
@@ -422,7 +423,7 @@ func TestDefaultConfig(t *testing.T) {
 func TestConfig_ValidateRequiredDependencies(t *testing.T) {
 	// Create mock objects for testing
 	mockOCIOSDataStore := &ociobjectstore.OCIOSDataStore{}
-	mockHubClient := &hf.HubClient{}
+	mockHubClient := &xet.Client{}
 
 	tests := []struct {
 		name              string

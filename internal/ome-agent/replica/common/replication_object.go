@@ -3,9 +3,9 @@ package common
 import (
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/utils/storage"
+	"github.com/sgl-project/ome/pkg/xet"
 )
 
 type ReplicationInput struct {
@@ -43,20 +43,20 @@ func (a ObjectSummaryReplicationObject) GetSize() int64 {
 	return 0
 }
 
-type RepoFileReplicationObject struct {
-	hub.RepoFile
+type HFRepoFileInfoReplicationObject struct {
+	xet.FileInfo
 }
 
-func (a RepoFileReplicationObject) GetName() string {
+func (a HFRepoFileInfoReplicationObject) GetName() string {
 	return a.GetPath()
 }
 
-func (a RepoFileReplicationObject) GetPath() string {
+func (a HFRepoFileInfoReplicationObject) GetPath() string {
 	return a.Path
 }
 
-func (a RepoFileReplicationObject) GetSize() int64 {
-	return a.Size
+func (a HFRepoFileInfoReplicationObject) GetSize() int64 {
+	return int64(a.Size)
 }
 
 type PVCFileReplicationObject struct {

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sgl-project/ome/pkg/afero"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
+	"github.com/sgl-project/ome/pkg/xet"
 )
 
 func TestConvertToReplicationObjectsFromObjectSummary(t *testing.T) {
@@ -85,95 +85,6 @@ func TestConvertToReplicationObjectsFromObjectSummary(t *testing.T) {
 	}
 }
 
-func TestConvertToReplicationObjectsFromRepoFile(t *testing.T) {
-	tests := []struct {
-		name     string
-		repo     []hub.RepoFile
-		expected int
-	}{
-		{
-			name:     "empty slice",
-			repo:     []hub.RepoFile{},
-			expected: 0,
-		},
-		{
-			name: "single file",
-			repo: []hub.RepoFile{
-				{
-					Path: "test-file.txt",
-					Size: 1024,
-					Type: "file",
-				},
-			},
-			expected: 1,
-		},
-		{
-			name: "multiple files",
-			repo: []hub.RepoFile{
-				{
-					Path: "test/file1.txt",
-					Size: 1024,
-					Type: "file",
-				},
-				{
-					Path: "test/file2.txt",
-					Size: 2048,
-					Type: "file",
-				},
-				{
-					Path: "test/file3.txt",
-					Size: 3072,
-					Type: "file",
-				},
-			},
-			expected: 3,
-		},
-		{
-			name: "files with different types",
-			repo: []hub.RepoFile{
-				{
-					Path: "config.json",
-					Size: 512,
-					Type: "file",
-				},
-				{
-					Path: "model/",
-					Size: 0,
-					Type: "directory",
-				},
-				{
-					Path: "model/weights.bin",
-					Size: 1024 * 1024,
-					Type: "file",
-				},
-			},
-			expected: 3,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ConvertToReplicationObjectsFromRepoFile(tt.repo)
-
-			assert.Len(t, result, tt.expected)
-
-			for i, obj := range result {
-				// Verify the result implements ReplicationObject interface
-				replicationObj, ok := obj.(RepoFileReplicationObject)
-				assert.True(t, ok, "Result should be RepoFileReplicationObject")
-
-				// Verify the underlying RepoFile is preserved
-				assert.Equal(t, tt.repo[i], replicationObj.RepoFile)
-
-				// Test the interface methods
-				assert.Equal(t, tt.repo[i].Path, replicationObj.GetPath())
-				assert.Equal(t, tt.repo[i].Size, replicationObj.GetSize())
-				assert.Equal(t, tt.repo[i].Path, replicationObj.GetName())
-			}
-		})
-	}
-}
-
 func TestConvertToReplicationObjectsFromFileInfo(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -212,7 +123,7 @@ func TestConvertToReplicationObjectsFromFileInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ConvertToReplicationObjectsFromFileInfo(tt.files)
+			result := ConvertToReplicationObjectsFromPVCFileEntry(tt.files)
 			assert.Len(t, result, tt.expected)
 			for i, obj := range result {
 				replicationObj, ok := obj.(PVCFileReplicationObject)
@@ -228,6 +139,88 @@ func TestConvertToReplicationObjectsFromFileInfo(t *testing.T) {
 					assert.Equal(t, int64(0), replicationObj.GetSize())
 				}
 				assert.Equal(t, tt.files[i].FilePath, replicationObj.GetPath())
+			}
+		})
+	}
+}
+
+func TestConvertToReplicationObjectsFromHFRepoFileInfo(t *testing.T) {
+	tests := []struct {
+		name      string
+		repoFiles []xet.FileInfo
+		expected  int
+	}{
+		{
+			name:      "empty slice",
+			repoFiles: []xet.FileInfo{},
+			expected:  0,
+		},
+		{
+			name: "single file",
+			repoFiles: []xet.FileInfo{
+				{
+					Path: "models/model.bin",
+					Hash: "abc123def456",
+					Size: 1024,
+				},
+			},
+			expected: 1,
+		},
+		{
+			name: "multiple files",
+			repoFiles: []xet.FileInfo{
+				{
+					Path: "models/file1.bin",
+					Hash: "hash1",
+					Size: 1024,
+				},
+				{
+					Path: "models/file2.bin",
+					Hash: "hash2",
+					Size: 2048,
+				},
+				{
+					Path: "models/file3.bin",
+					Hash: "hash3",
+					Size: 3072,
+				},
+			},
+			expected: 3,
+		},
+		{
+			name: "files with empty path, zero size, without hash",
+			repoFiles: []xet.FileInfo{
+				{
+					Path: "",
+					Size: 0,
+				},
+				{
+					Path: "models/empty.bin",
+					Size: 0,
+				},
+			},
+			expected: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertToReplicationObjectsFromHFRepoFileInfo(tt.repoFiles)
+
+			assert.Len(t, result, tt.expected)
+
+			for i, obj := range result {
+				// Verify the result implements ReplicationObject interface
+				replicationObj, ok := obj.(HFRepoFileInfoReplicationObject)
+				assert.True(t, ok, "Result should be HFRepoFileInfoReplicationObject")
+
+				// Verify the underlying FileInfo is preserved
+				assert.Equal(t, tt.repoFiles[i], replicationObj.FileInfo)
+
+				// Test the interface methods
+				assert.Equal(t, tt.repoFiles[i].Path, replicationObj.GetPath())
+				assert.Equal(t, tt.repoFiles[i].Path, replicationObj.GetName())
+				assert.Equal(t, int64(tt.repoFiles[i].Size), replicationObj.GetSize())
 			}
 		})
 	}

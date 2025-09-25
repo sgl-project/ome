@@ -3,6 +3,8 @@ package replica
 import (
 	"fmt"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/internal/ome-agent/replica/common"
 
 	"github.com/go-playground/validator/v10"
@@ -10,7 +12,6 @@ import (
 
 	"github.com/sgl-project/ome/pkg/afero"
 	"github.com/sgl-project/ome/pkg/configutils"
-	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/utils/storage"
@@ -27,7 +28,7 @@ type Config struct {
 	Source struct {
 		StorageURIStr  string `mapstructure:"storage_uri" validate:"required"`
 		OCIOSDataStore *ociobjectstore.OCIOSDataStore
-		HubClient      *hf.HubClient
+		HubClient      *xet.Client
 		PVCFileSystem  *afero.OsFs
 	} `mapstructure:"source"`
 

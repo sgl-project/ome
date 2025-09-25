@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/sgl-project/ome/pkg/xet"
+
 	"github.com/sgl-project/ome/pkg/afero"
 
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
-
-	hf "github.com/sgl-project/ome/pkg/hfutil/hub"
 )
 
 type ChecksumConfig struct {
@@ -24,15 +24,15 @@ func ConvertToReplicationObjectsFromObjectSummary(summaries []objectstorage.Obje
 	return result
 }
 
-func ConvertToReplicationObjectsFromRepoFile(repo []hf.RepoFile) []ReplicationObject {
-	result := make([]ReplicationObject, len(repo))
-	for i, file := range repo {
-		result[i] = RepoFileReplicationObject{RepoFile: file}
+func ConvertToReplicationObjectsFromHFRepoFileInfo(repoFiles []xet.FileInfo) []ReplicationObject {
+	result := make([]ReplicationObject, len(repoFiles))
+	for i, file := range repoFiles {
+		result[i] = HFRepoFileInfoReplicationObject{FileInfo: file}
 	}
 	return result
 }
 
-func ConvertToReplicationObjectsFromFileInfo(files []afero.FileEntry) []ReplicationObject {
+func ConvertToReplicationObjectsFromPVCFileEntry(files []afero.FileEntry) []ReplicationObject {
 	result := make([]ReplicationObject, len(files))
 	for i, file := range files {
 		result[i] = PVCFileReplicationObject{FileEntry: file}

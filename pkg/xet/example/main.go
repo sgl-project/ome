@@ -18,9 +18,6 @@ var (
 	enableProgressHook = func(c *xet.Client, label string, d time.Duration) error { return c.EnableConsoleProgress(label, d) }
 	downloadFileHook   = func(c *xet.Client, req *xet.DownloadRequest) (string, error) { return c.DownloadFile(req) }
 	downloadSnapHook   = func(c *xet.Client, req *xet.SnapshotRequest) (string, error) { return c.DownloadSnapshot(req) }
-
-	hfHubDownloadHook    = xet.HfHubDownload
-	snapshotDownloadHook = xet.SnapshotDownload
 )
 
 func main() {
