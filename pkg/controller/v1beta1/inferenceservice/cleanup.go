@@ -213,6 +213,7 @@ func getCoreResourceTypes() []schema.GroupVersionKind {
 		{Group: "apps", Version: "v1", Kind: "Deployment"},
 		{Group: "", Version: "v1", Kind: "Service"},
 		{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler"},
+		{Group: "policy", Version: "v1", Kind: "PodDisruptionBudget"},
 		{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"},
 		{Group: "", Version: "v1", Kind: "ConfigMap"},
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
