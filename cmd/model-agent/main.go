@@ -239,7 +239,7 @@ func initializeComponents(
 	// Create default Hugging Face hub config
 	// Use log-only mode for cleaner logs in production
 	hfHubConfig, err := hub.NewHubConfig(
-		hub.WithViper(v), // Apply viper config first to set defaults
+		hub.WithViper(v),                                 // Apply viper config first to set defaults
 		hub.WithLogger(logging.ForZap(zapLogger)),        // Then set the logger
 		hub.WithProgressDisplayMode(hub.ProgressModeLog), // Use log mode for clean production logs
 		hub.WithDetailedLogs(false),                      // Disable detailed progress logging to reduce log flooding
@@ -270,7 +270,10 @@ func initializeComponents(
 		gopherTaskChan,
 		nodeLabelReconciler,
 		metrics,
-		logger)
+		logger,
+		baseModelInformer.Lister(),
+		clusterBaseModelInformer.Lister(),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)
 	}
