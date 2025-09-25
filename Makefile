@@ -262,7 +262,7 @@ model-agent: ## 🤖 Build model-agent binary.
 	@echo "✅ Build complete"
 
 .PHONY: ome-agent
-ome-agent: ## 🔄 Build ome-agent binary.
+ome-agent: xet-build ## 🔄 Build ome-agent binary.
 	@echo "🔄 Building ome-agent..."
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/ome-agent ./cmd/ome-agent
 	@echo "✅ Build complete"
@@ -335,7 +335,7 @@ multinode-prober-image: fmt vet ## Build multinode-prober image.
 	@echo "✅ Image built"
 
 .PHONY: ome-agent-image
-ome-agent-image: fmt vet ## Build ome-agent image.
+ome-agent-image: fmt vet xet-build ## Build ome-agent image.
 	@echo "🚀 Building ome-agent image..."
 	$(DOCKER_BUILD_CMD) build --platform=$(ARCH) \
 		--build-arg VERSION=$(GIT_TAG) \
@@ -527,11 +527,18 @@ artifacts: kustomize ## Generate artifacts for release.
 # Define test packages with proper exclusions
 TEST_PACKAGES := $(shell go list ./... | grep -v -E '(pkg/apis|pkg/testing|pkg/openapi|pkg/client)')
 CMD_PACKAGES := $(shell go list ./cmd/...)
+CMD_PACKAGES_NO_XET := $(shell go list ./cmd/... | grep -v './cmd/ome-agent')
 PKG_PACKAGES := $(shell go list ./pkg/... | grep -v -E '(pkg/testing|pkg/openapi|pkg/client|pkg/xet)')
 INTERNAL_PACKAGES := $(shell go list ./internal/...)
 
+.PHONY: xet-build
+xet-build: ## 🔧 Build XET library for ome-agent dependency
+	@echo "🔧 Building XET library..."
+	@cd pkg/xet && $(MAKE) build
+	@echo "✅ XET library built"
+
 .PHONY: test
-test: fmt vet manifests envtest ## 🧪 Run all tests with coverage (optimized - runs dependencies once)
+test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage (optimized - runs dependencies once)
 	@echo "\n🧪 Running comprehensive test suite..."
 	@echo "📋 Test scope:"
 	@echo "  • CMD packages: $(words $(CMD_PACKAGES)) packages"
@@ -571,6 +578,48 @@ test: fmt vet manifests envtest ## 🧪 Run all tests with coverage (optimized -
 	@echo "✅ Internal tests passed"
 	
 	@echo "\n🎉 All tests completed successfully!"
+
+.PHONY: test-no-xet
+test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent (for environments without Rust)
+	@echo "\n🧪 Running test suite (excluding ome-agent)..."
+	@echo "📋 Test scope:"
+	@echo "  • CMD packages (no ome-agent): $(words $(CMD_PACKAGES_NO_XET)) packages"
+	@echo "  • PKG packages: $(words $(PKG_PACKAGES)) packages" 
+	@echo "  • Internal packages: $(words $(INTERNAL_PACKAGES)) packages"
+	@echo "  • Excluded: pkg/apis, pkg/testing, pkg/openapi, pkg/client, pkg/xet, cmd/ome-agent"
+	@echo ""
+	
+	@echo "🧪 Running command tests (excluding ome-agent)..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		$(CMD_PACKAGES_NO_XET) \
+		-coverprofile=coverage-cmd-no-xet.out.tmp \
+		--covermode=atomic
+	@echo "🔍 Filtering CMD coverage report..."
+	@cat coverage-cmd-no-xet.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-cmd-no-xet.out
+	@rm coverage-cmd-no-xet.out.tmp
+	@echo "✅ Command tests passed (excluding ome-agent)"
+	
+	@echo "\n🧪 Running package tests..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		$(PKG_PACKAGES) \
+		-coverprofile=coverage-pkg-no-xet.out.tmp \
+		--covermode=atomic
+	@echo "🔍 Filtering PKG coverage report..."
+	@cat coverage-pkg-no-xet.out.tmp | grep -v -E "(pkg/hfutil/modelconfig/examples/|pkg/hfutil/hub/samples/|pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/openapi/|pkg/client/)" > coverage-pkg-no-xet.out
+	@rm coverage-pkg-no-xet.out.tmp
+	@echo "✅ Package tests passed"
+	
+	@echo "\n🧪 Running internal tests..."
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+		$(INTERNAL_PACKAGES) \
+		-coverprofile=coverage-internal-no-xet.out.tmp \
+		--covermode=atomic
+	@echo "🔍 Filtering Internal coverage report..."
+	@cat coverage-internal-no-xet.out.tmp | grep -v -E "(pkg/testing/|pkg/testutils/|_generated\.go|zz_generated|pkg/apis/|pkg/openapi/|pkg/client/)" > coverage-internal-no-xet.out
+	@rm coverage-internal-no-xet.out.tmp
+	@echo "✅ Internal tests passed"
+	
+	@echo "\n🎉 All tests completed successfully (excluding ome-agent)!"
 
 .PHONY: coverage
 coverage: ## Show coverage for all packages
