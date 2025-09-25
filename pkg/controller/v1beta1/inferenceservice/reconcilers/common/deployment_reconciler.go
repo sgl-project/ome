@@ -150,6 +150,10 @@ func (r *DeploymentReconciler) setRawReferences(isvc *v1beta1.InferenceService, 
 	if err := controllerutil.SetControllerReference(isvc, reconciler.Service.Service, r.Scheme); err != nil {
 		return errors.Wrapf(err, "failed to set service owner reference")
 	}
+	if err := controllerutil.SetControllerReference(isvc, reconciler.PodDisruptionBudget.PDB, r.Scheme); err != nil {
+		return errors.Wrapf(err, "failed to set pdb owner reference")
+	}
+
 	return reconciler.Scaler.Autoscaler.SetControllerReferences(isvc, r.Scheme)
 }
 

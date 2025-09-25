@@ -14,17 +14,19 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/deployment"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/services"
+	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/pdb"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/service"
 )
 
 // RawKubeReconciler reconciles the Native K8S Resources
 type RawKubeReconciler struct {
-	client     client.Client
-	scheme     *runtime.Scheme
-	Deployment *deployment.DeploymentReconciler
-	Service    *service.ServiceReconciler
-	Scaler     *autoscaler.AutoscalerReconciler
-	URL        *knapis.URL
+	client              client.Client
+	scheme              *runtime.Scheme
+	Deployment          *deployment.DeploymentReconciler
+	Service             *service.ServiceReconciler
+	Scaler              *autoscaler.AutoscalerReconciler
+	PodDisruptionBudget *pdb.PDBReconciler
+	URL                 *knapis.URL
 }
 
 // NewRawKubeReconciler creates raw kubernetes resource reconciler.
@@ -40,6 +42,7 @@ func NewRawKubeReconciler(client client.Client,
 		return nil, err
 	}
 
+	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta, &inferenceServiceSpec.Predictor.ComponentExtensionSpec)
 	url, err := createRawURL(clientset, componentMeta)
 	if err != nil {
 		return nil, err
@@ -50,12 +53,13 @@ func NewRawKubeReconciler(client client.Client,
 	componentExt := &inferenceServiceSpec.Predictor.ComponentExtensionSpec
 
 	return &RawKubeReconciler{
-		client:     client,
-		scheme:     scheme,
-		Deployment: deployment.NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec),
-		Service:    service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, nil),
-		Scaler:     as,
-		URL:        url,
+		client:              client,
+		scheme:              scheme,
+		Deployment:          deployment.NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec),
+		Service:             service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, nil),
+		Scaler:              as,
+		PodDisruptionBudget: pdb,
+		URL:                 url,
 	}, nil
 }
 
@@ -89,6 +93,11 @@ func (r *RawKubeReconciler) Reconcile() (*appsv1.Deployment, error) {
 	}
 	// reconcile HPA
 	err = r.Scaler.Reconcile()
+	if err != nil {
+		return nil, err
+	}
+	// reconcile PDB
+	_, err = r.PodDisruptionBudget.Reconcile()
 	if err != nil {
 		return nil, err
 	}
