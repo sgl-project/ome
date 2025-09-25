@@ -548,7 +548,10 @@ test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage (o
 	@echo ""
 	
 	@echo "🧪 Running command tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
+	$(GO_CMD) test \
 		$(CMD_PACKAGES) \
 		-coverprofile=coverage-cmd.out.tmp \
 		--covermode=atomic
@@ -558,7 +561,10 @@ test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage (o
 	@echo "✅ Command tests passed"
 	
 	@echo "\n🧪 Running package tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
+	$(GO_CMD) test \
 		$(PKG_PACKAGES) \
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
@@ -568,7 +574,10 @@ test: fmt vet manifests envtest xet-build ## 🧪 Run all tests with coverage (o
 	@echo "✅ Package tests passed"
 	
 	@echo "\n🧪 Running internal tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
+	$(GO_CMD) test \
 		$(INTERNAL_PACKAGES) \
 		-coverprofile=coverage-internal.out.tmp \
 		--covermode=atomic
@@ -590,7 +599,10 @@ test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent (fo
 	@echo ""
 	
 	@echo "🧪 Running command tests (excluding ome-agent)..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
+	$(GO_CMD) test \
 		$(CMD_PACKAGES_NO_XET) \
 		-coverprofile=coverage-cmd-no-xet.out.tmp \
 		--covermode=atomic
@@ -600,7 +612,10 @@ test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent (fo
 	@echo "✅ Command tests passed (excluding ome-agent)"
 	
 	@echo "\n🧪 Running package tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
+	$(GO_CMD) test \
 		$(PKG_PACKAGES) \
 		-coverprofile=coverage-pkg-no-xet.out.tmp \
 		--covermode=atomic
@@ -610,7 +625,10 @@ test-no-xet: fmt vet manifests envtest ## 🧪 Run tests excluding ome-agent (fo
 	@echo "✅ Package tests passed"
 	
 	@echo "\n🧪 Running internal tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" \
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
+	$(GO_CMD) test \
 		$(INTERNAL_PACKAGES) \
 		-coverprofile=coverage-internal-no-xet.out.tmp \
 		--covermode=atomic
@@ -647,6 +665,8 @@ coverage: ## Show coverage for all packages
 .PHONY: integration-test
 integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."
+	LD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$LD_LIBRARY_PATH" \
+	DYLD_LIBRARY_PATH="$(shell pwd)/pkg/xet/target/release:$$DYLD_LIBRARY_PATH" \
 	go test -v ./tests/... -ginkgo.v -ginkgo.trace
 	@echo "✅ Integration tests passed"
 
