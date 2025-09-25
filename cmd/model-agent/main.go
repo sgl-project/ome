@@ -270,7 +270,10 @@ func initializeComponents(
 		gopherTaskChan,
 		nodeLabelReconciler,
 		metrics,
-		logger)
+		logger,
+		baseModelInformer.Lister(),
+		clusterBaseModelInformer.Lister(),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gopher: %w", err)
 	}
