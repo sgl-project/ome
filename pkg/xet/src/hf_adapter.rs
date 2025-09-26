@@ -149,35 +149,45 @@ impl HfAdapter {
         revision: Option<&str>,
     ) -> Result<Vec<HfFileInfo>> {
         let revision = revision.unwrap_or("main");
-        let url = format!("{}/api/models/{}/tree/{}", self.endpoint, repo_id, revision);
+        let mut all_files = Vec::new();
+        let mut directories_to_process = vec!["".to_string()]; // Start with root directory
 
-        // Make HTTP request to HF API
-        let response = self
-            .send_with_retry(
-                || self.client.get(&url),
-                "list files",
-                |resp| resp.status().is_success(),
-            )
-            .await?;
+        while let Some(current_path) = directories_to_process.pop() {
+            let url = if current_path.is_empty() {
+                format!("{}/api/models/{}/tree/{}", self.endpoint, repo_id, revision)
+            } else {
+                format!("{}/api/models/{}/tree/{}/{}", self.endpoint, repo_id, revision, current_path)
+            };
 
-        // Parse the HF API response
-        let tree_items: Vec<HfTreeItem> = response.json().await?;
+            // Make HTTP request to HF API
+            let response = self
+                .send_with_retry(
+                    || self.client.get(&url),
+                    "list files",
+                    |resp| resp.status().is_success(),
+                )
+                .await?;
 
-        // Convert to HfFileInfo, filtering out directories
-        let files: Vec<HfFileInfo> = tree_items
-            .into_iter()
-            .filter(|item| item.item_type == "file")
-            .map(|item| {
-                HfFileInfo {
-                    path: item.path,
-                    hash: item.oid.clone(), // Git OID
-                    size: item.size,
-                    xet_hash: item.xet_hash, // XET hash if available
+            // Parse the HF API response
+            let tree_items: Vec<HfTreeItem> = response.json().await?;
+
+            for item in tree_items {
+                if item.item_type == "file" {
+                    // Add file to results
+                    all_files.push(HfFileInfo {
+                        path: item.path,
+                        hash: item.oid.clone(), // Git OID
+                        size: item.size,
+                        xet_hash: item.xet_hash, // XET hash if available
+                    });
+                } else if item.item_type == "directory" {
+                    // Add directory to processing queue
+                    directories_to_process.push(item.path);
                 }
-            })
-            .collect();
+            }
+        }
 
-        Ok(files)
+        Ok(all_files)
     }
 
     #[allow(clippy::too_many_arguments)]
