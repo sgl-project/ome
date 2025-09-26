@@ -14,15 +14,15 @@ type Selector interface {
 	// SelectRuntime finds the best runtime for a given model.
 	// It returns the highest scoring runtime that supports the model.
 	// If no compatible runtime is found, it returns an error.
-	SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, namespace string) (*RuntimeSelection, error)
+	SelectRuntime(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) (*RuntimeSelection, error)
 
 	// GetCompatibleRuntimes returns all compatible runtimes sorted by priority.
 	// This is useful for debugging and for showing available options.
-	GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, namespace string) ([]RuntimeMatch, error)
+	GetCompatibleRuntimes(ctx context.Context, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, namespace string) ([]RuntimeMatch, error)
 
 	// ValidateRuntime checks if a specific runtime supports a model.
 	// It returns nil if the runtime is compatible, or an error explaining why it's not.
-	ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, namespace string) error
+	ValidateRuntime(ctx context.Context, runtimeName string, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService) error
 
 	// GetRuntime fetches a specific runtime by name.
 	// Returns the runtime spec and whether it's cluster-scoped.
@@ -107,11 +107,11 @@ type RuntimeCollection struct {
 type RuntimeMatcher interface {
 	// IsCompatible checks if a runtime can serve a model.
 	// Returns true if compatible, false otherwise.
-	IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, runtimeName string) (bool, error)
+	IsCompatible(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (bool, error)
 
 	// GetCompatibilityDetails returns detailed compatibility information.
 	// This includes specific reasons for compatibility or incompatibility.
-	GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, runtimeName string) (*CompatibilityReport, error)
+	GetCompatibilityDetails(runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec, isvc *v1beta1.InferenceService, runtimeName string) (*CompatibilityReport, error)
 }
 
 // CompatibilityReport provides detailed compatibility analysis.
