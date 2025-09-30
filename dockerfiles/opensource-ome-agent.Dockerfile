@@ -2,12 +2,27 @@ FROM odo-docker-signed-local.artifactory.oci.oraclecorp.com/oke-golang-fips:go1.
 ENV GOPROXY="https://artifactory-builds.oci.oraclecorp.com/api/go/go-proxy"
 
 # Use commit hash artifact for current test purpose, will update to use released version later
-ARG COMMIT_HASH=09ec7c26bfa0afc3fe0afd2e3e6cf7e5c065a530
+ARG COMMIT_HASH=04cdb94a8afba266caa43bff1c9ed09e44d7ba80
 
 ARG OME_VERSION=0.1.3
-ARG BUILD_CGO_ENABLED=0
+ARG BUILD_CGO_ENABLED=1
 # Setup the environment variables used in the Go Language build
 ENV GOPATH=/gopath GOROOT=/usr/local/go
+
+# Install Rust build dependencies
+RUN microdnf install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    cmake \
+    pkgconfig \
+    openssl3-devel \
+    curl \
+    && microdnf clean all
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN if [ -n "$COMMIT_HASH" ]; then \
         curl -sSL "https://artifactory.oci.oraclecorp.com/api/vcs/downloadCommit/github-vcs-remote/sgl-project/ome/${COMMIT_HASH}" | tar -xzvf - && mv ome-* /ome; \
@@ -17,7 +32,20 @@ RUN if [ -n "$COMMIT_HASH" ]; then \
 
 WORKDIR /ome
 
-# Build the ome-agent binary
+# Set env so Rust picks up OpenSSL 3
+ENV OPENSSL_DIR=/usr \
+    OPENSSL_LIB_DIR=/usr/lib64/openssl3 \
+    OPENSSL_INCLUDE_DIR=/usr/include/openssl3
+
+# Build the Rust xet library first (required for Go CGO linking)
+RUN cd pkg/xet && \
+    cargo build --release
+
+# Copy the static lib for CGO
+RUN cp pkg/xet/target/release/libxet.a /usr/local/lib/
+ENV CGO_LDFLAGS="-L/usr/local/lib -L/usr/lib64/openssl3 -lxet -lssl -lcrypto -ldl -lpthread"
+
+# Build the ome-agent binary with CGO enabled for xet integration
 RUN GOFIPS140=latest CGO_ENABLED=${BUILD_CGO_ENABLED} GOOS=linux go build -o ome-agent ./cmd/ome-agent
 
 # Build runnable image
