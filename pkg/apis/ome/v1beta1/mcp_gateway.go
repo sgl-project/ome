@@ -23,10 +23,6 @@ type MCPGatewaySpec struct {
 	// +kubebuilder:validation:Required
 	MCPServers MCPServerDiscoveryConfig `json:"mcpServers"`
 
-	// Transport defines the supported transport protocols for MCP communication.
-	// +optional
-	Transport *MCPTransportType `json:"transport,omitempty"`
-
 	// Policy defines unified security, authentication, authorization, and traffic policies.
 	// +optional
 	Policy *MCPGatewayPolicyConfig `json:"policy,omitempty"`
