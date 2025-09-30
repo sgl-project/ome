@@ -49,7 +49,7 @@ This OEP introduces native support for the Model Context Protocol (MCP) in OME t
 
 -   **Dynamic Discovery**: Discovers `MCPServer`s using label selectors or static references.
 -   **Intelligent Routing**: Routes requests based on priority, health, and other parameters defined in server references.
--   **Unified Policy Enforcement**: Centralizes authentication, authorization, rate limiting, and other policies (Note: `Policy` and `Observability` specs are still under development and will subject to change).
+-   **Unified Policy Enforcement**: Centralizes authentication, authorization, and rate limiting policies (Note: `Policy` spec is still under development and subject to change).
 -   **Flexible Network Exposure**: Provides extensive options for exposing the gateway via Kubernetes Services and Ingress.
 
 This separation of concerns—`MCPServer` for tool implementation and `MCPGateway` for tool consumption—creates a scalable, secure, and manageable ecosystem for integrating LLMs with external tools and services.
@@ -272,7 +272,12 @@ This setup provides a highly available, unified entry point for all shared tools
 2.  **Permissions**: The new `permissionProfile` with `kubeResources` is very powerful. Misconfiguration can create security risks. The controller creates `Roles`/`RoleBindings`, so RBAC must be enabled in the cluster.
 3.  **Gateway as Entry Point**: While direct access to `MCPServer` services is possible, the intended architecture is for all traffic to flow through an `MCPGateway`. The gateway provides crucial features like policy enforcement, routing, and a stable endpoint.
 4.  **Transport Limitations**: `stdio` transport is only suitable for simple, single-shot tools and does not support scaling beyond one replica. `streamable-http` or `sse` are recommended for production.
-5.  **Incomplete Gateway Features**: The provided API spec for `MCPGateway` includes fields for `policy` and `observability`, but their detailed schemas are not yet fully determined. 
+5.  **Incomplete Gateway Features**: The provided API spec for `MCPGateway` includes a field for `policy`, but its detailed schema is not yet fully determined.
+6.  **Observability**: The gateway follows Kubernetes-native observability patterns:
+  - Health checks via standard K8s probes
+  - Metrics via Prometheus annotations
+  - Tracing via service mesh/OpenTelemetry
+  - Logging via stdout/stderr
 
 ### Risks and Mitigations
 
@@ -419,11 +424,6 @@ type MCPGatewaySpec struct {
 	// (Note: Schema for this field is not yet fully defined)
 	// +optional
 	Policy *MCPGatewayPolicyConfig `json:"policy,omitempty"`
-
-	// Observability defines monitoring, metrics, and tracing configuration.
-	// (Note: Schema for this field is not yet fully defined)
-	// +optional
-	Observability *MCPGatewayObservabilityConfig `json:"observability,omitempty"`
 
 	// Network defines service exposure and ingress settings.
 	// +optional
