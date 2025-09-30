@@ -27,10 +27,6 @@ type MCPGatewaySpec struct {
 	// +optional
 	Policy *MCPGatewayPolicyConfig `json:"policy,omitempty"`
 
-	// Observability defines monitoring, metrics, and tracing configuration.
-	// +optional
-	Observability *MCPGatewayObservabilityConfig `json:"observability,omitempty"`
-
 	// Network defines service exposure and ingress settings.
 	// +optional
 	Network *MCPGatewayNetworkConfig `json:"network,omitempty"`
