@@ -249,18 +249,7 @@ type MCPServer struct {
 // +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.url"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// ClusterMCPServer is the cluster-scoped Schema for the mcpservers API
-type ClusterMCPServer struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// +kubebuilder:validation:Required
-	Spec   MCPServerSpec   `json:"spec"`
-	Status MCPServerStatus `json:"status,omitempty"`
-}
-
 // +kubebuilder:object:root=true
-
 // MCPServerList contains a list of MCPServer
 type MCPServerList struct {
 	metav1.TypeMeta `json:",inline"`
@@ -268,16 +257,6 @@ type MCPServerList struct {
 	Items           []MCPServer `json:"items"`
 }
 
-// +kubebuilder:object:root=true
-
-// ClusterMCPServerList contains a list of ClusterMCPServer
-type ClusterMCPServerList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ClusterMCPServer `json:"items"`
-}
-
 func init() {
 	SchemeBuilder.Register(&MCPServer{}, &MCPServerList{})
-	SchemeBuilder.Register(&ClusterMCPServer{}, &ClusterMCPServerList{})
 }

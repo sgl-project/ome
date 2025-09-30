@@ -382,25 +382,6 @@ type MCPGatewayList struct {
 // +kubebuilder:printcolumn:name="Tools",type="integer",JSONPath=".status.toolRegistry.totalTools"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// ClusterMCPGateway is the cluster-scoped Schema for the mcpgateways API.
-// capabilities for Model Context Protocol (MCP) servers across the entire cluster.
-type ClusterMCPGateway struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   MCPGatewaySpec   `json:"spec,omitempty"`
-	Status MCPGatewayStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-// ClusterMCPGatewayList contains a list of ClusterMCPGateway.
-type ClusterMCPGatewayList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ClusterMCPGateway `json:"items"`
-}
-
 // MCPProtocolVersionConfig defines MCP protocol version constraints and negotiation settings.
 type MCPProtocolVersionConfig struct {
 	// Supported defines the list of supported MCP protocol versions.
@@ -436,5 +417,4 @@ type MCPProtocolVersionConfig struct {
 
 func init() {
 	SchemeBuilder.Register(&MCPGateway{}, &MCPGatewayList{})
-	SchemeBuilder.Register(&ClusterMCPGateway{}, &ClusterMCPGatewayList{})
 }
