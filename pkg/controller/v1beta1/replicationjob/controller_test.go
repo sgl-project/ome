@@ -247,6 +247,7 @@ func TestReplicationJobReconciler_buildMetadata(t *testing.T) {
 
 	expectedLabels := map[string]string{
 		constants.ReplicationJobLabel: replicationJob.Name,
+		"logging-forward":             "enabled",
 	}
 
 	assert.Equal(t, replicationJob.Name, meta.Name)

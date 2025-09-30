@@ -164,6 +164,7 @@ func (r *ReplicationJobReconciler) buildMetadata(replicationJob *v1beta1.Replica
 		Namespace: replicationJob.Namespace,
 		Labels: map[string]string{
 			constants.ReplicationJobLabel: replicationJob.Name,
+			"logging-forward":             "enabled",
 		},
 	}
 }
