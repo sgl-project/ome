@@ -113,7 +113,7 @@ Alice, a data scientist, has a containerized Python script that uses MCP to expo
 
 ```yaml
 # 1. Deploy the MCPServer for the database tool
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
   name: sql-tool-server
@@ -146,7 +146,7 @@ spec:
 
 ---
 # 2. Deploy an MCPGateway to expose the tool securely
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPGateway
 metadata:
   name: data-science-gateway
@@ -176,7 +176,7 @@ Now, applications in the `data-science` namespace can connect to `data-science-g
 Bob, a DevOps engineer, wants to provide an MCP tool that can read `Pod` and `Deployment` resources in specific namespaces. He needs to grant it precise, read-only Kubernetes API access.
 
 ```yaml
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
   name: k8s-reader-tool
@@ -213,7 +213,7 @@ Carol's platform team manages several shared tools (e.g., a code search tool, a 
 
 ```yaml
 # A shared tool server
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
   name: code-search-tool
@@ -225,7 +225,7 @@ spec:
 
 ---
 # Another shared tool server
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
   name: ticketing-tool
@@ -237,7 +237,7 @@ spec:
 
 ---
 # The cluster-wide gateway that discovers all servers with the right label
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPGateway
 metadata:
   name: default-gateway
@@ -605,7 +605,7 @@ An `MCPServer` of type `remote` is created to represent a tool hosted outside th
 
 ```yaml
 # Represents an external tool
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
   name: external-weather-service
@@ -618,7 +618,7 @@ spec:
   transport: streamable-http
 
 # A gateway that routes to it
-apiVersion: ome.io/v1beta1
+apiVersion: ome.io/v1alpha1
 kind: MCPGateway
 metadata:
   name: default-gateway
