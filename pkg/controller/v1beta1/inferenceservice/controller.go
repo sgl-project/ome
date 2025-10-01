@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sgl-project/ome/pkg/acceleratorclassselector"
+
 	policyv1 "k8s.io/api/policy/v1"
 
 	"github.com/go-logr/logr"
@@ -101,13 +103,14 @@ const (
 // InferenceServiceReconciler reconciles an InferenceService object
 type InferenceServiceReconciler struct {
 	client.Client
-	ClientConfig    *rest.Config
-	Clientset       kubernetes.Interface
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	StatusManager   *status.StatusReconciler
-	RuntimeSelector runtimeselector.Selector
+	ClientConfig             *rest.Config
+	Clientset                kubernetes.Interface
+	Log                      logr.Logger
+	Scheme                   *runtime.Scheme
+	Recorder                 record.EventRecorder
+	StatusManager            *status.StatusReconciler
+	RuntimeSelector          runtimeselector.Selector
+	AcceleratorClassSelector acceleratorclassselector.Selector
 }
 
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -255,7 +258,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Step 3: Merge rt and isvc specs to get final engine, decoder, and router specs
-	mergedEngine, mergedDecoder, mergedRouter, err := isvcutils.MergeRuntimeSpecs(isvc, rt)
+	mergedEngine, mergedDecoder, mergedRouter, err := isvcutils.MergeRuntimeSpecs(isvc, rt, r.Log)
 	if err != nil {
 		r.Log.Error(err, "Failed to merge specs", "Name", isvc.Name)
 		r.Recorder.Eventf(isvc, v1.EventTypeWarning, "MergeSpecsError", err.Error())
@@ -283,10 +286,18 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Step 5: Create reconcilers based on merged specs
 	if mergedEngine != nil {
+		engineAC, engineAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.EngineComponent)
+		if err != nil {
+			r.Log.Error(err, "Failed to get accelerator class for engine component", "Name", isvc.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for engine: %v", err)
+			return reconcile.Result{}, err
+		}
+		engineSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel)
 		r.Log.Info("Creating engine reconciler",
 			"deploymentMode", engineDeploymentMode,
 			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
+			"inferenceService", isvc.Name,
+			"acceleratorClass", engineAcName)
 
 		engineReconciler := componentBuilderFactory.CreateEngineComponent(
 			engineDeploymentMode,
@@ -295,11 +306,21 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			mergedEngine,
 			rt,
 			rtName,
+			engineSupportedModelFormats,
+			engineAC,
+			engineAcName,
 		)
 		reconcilers = append(reconcilers, engineReconciler)
 	}
 
 	if mergedDecoder != nil {
+		decoderAC, decoderAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.DecoderComponent)
+		if err != nil {
+			r.Log.Error(err, "Failed to get accelerator class for decoder component", "Name", isvc.Name)
+			r.Recorder.Eventf(isvc, v1.EventTypeWarning, "AcceleratorClassError", "Failed to get accelerator class for decoder: %v", err)
+			return reconcile.Result{}, err
+		}
+		decoderSupportedModelFormats := r.RuntimeSelector.GetSupportedModelFormat(ctx, rt, baseModel)
 		r.Log.Info("Creating decoder reconciler",
 			"deploymentMode", decoderDeploymentMode,
 			"namespace", isvc.Namespace,
@@ -312,6 +333,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			mergedDecoder,
 			rt,
 			rtName,
+			decoderSupportedModelFormats,
+			decoderAC,
+			decoderAcName,
 		)
 		reconcilers = append(reconcilers, decoderReconciler)
 	}
@@ -545,6 +569,9 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager, deployCo
 
 	// Initialize RuntimeSelector
 	r.RuntimeSelector = runtimeselector.New(mgr.GetClient())
+
+	// Initialize AcceleratorClassSelector
+	r.AcceleratorClassSelector = acceleratorclassselector.New(mgr.GetClient())
 
 	ksvcFound, err := utils.IsCrdAvailable(r.ClientConfig, knservingv1.SchemeGroupVersion.String(), constants.KnativeServiceKind)
 	if err != nil {

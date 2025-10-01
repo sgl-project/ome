@@ -316,3 +316,22 @@ func getModelName(model *v1beta1.BaseModelSpec) string {
 	}
 	return "unknown"
 }
+
+func (s *defaultSelector) GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) *v1beta1.SupportedModelFormat {
+	if runtime.SupportedModelFormats == nil {
+		return nil
+	}
+	maxScore := int64(0)
+	bestSupportedFormat := v1beta1.SupportedModelFormat{}
+	for _, supportedFormat := range runtime.SupportedModelFormats {
+		score := s.scorer.CalculateFormatScore(model, supportedFormat, int64(s.config.DefaultPriority))
+		if score > maxScore {
+			maxScore = score
+			bestSupportedFormat = supportedFormat
+		}
+	}
+	if maxScore > 0 {
+		return &bestSupportedFormat
+	}
+	return nil
+}

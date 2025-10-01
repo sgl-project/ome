@@ -47,7 +47,7 @@ func (s *DefaultRuntimeScorer) CalculateScore(runtime *v1beta1.ServingRuntimeSpe
 		}
 
 		// Calculate score for this format
-		score := s.calculateFormatScore(model, supportedFormat, priority)
+		score := s.CalculateFormatScore(model, supportedFormat, priority)
 
 		if score > maxScore {
 			maxScore = score
@@ -101,7 +101,7 @@ func (s *DefaultRuntimeScorer) CompareRuntimes(r1, r2 RuntimeMatch, model *v1bet
 
 // calculateFormatScore calculates the score for a specific supported format.
 // This matches the exact logic from the original score() function.
-func (s *DefaultRuntimeScorer) calculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64 {
+func (s *DefaultRuntimeScorer) CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64 {
 	// Compare model format
 	modelFormatMatches := false
 	if supportedFormat.ModelFormat != nil && &model.ModelFormat.Name != nil {

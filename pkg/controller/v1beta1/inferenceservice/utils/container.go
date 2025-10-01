@@ -60,6 +60,15 @@ func UpdateEnvVars(container *v1.Container, envVar *v1.EnvVar) {
 	}
 }
 
+func AppendEnvVarIfNotExist(container *v1.Container, envVar *v1.EnvVar) {
+	for i := range container.Env {
+		if container.Env[i].Name == envVar.Name {
+			return
+		}
+	}
+	container.Env = append(container.Env, *envVar)
+}
+
 // GetGpuCountFromContainer extracts the GPU count from container resources.
 // It checks both Limits and Requests, preferring Limits.
 func GetGpuCountFromContainer(container *v1.Container) int {

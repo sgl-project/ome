@@ -25,6 +25,9 @@ type ComponentBuilder struct {
 	baseModelMeta          *metav1.ObjectMeta
 	runtime                *v1beta1.ServingRuntimeSpec
 	runtimeName            string
+	supportedModelFormat   *v1beta1.SupportedModelFormat
+	acceleratorClass       *v1beta1.AcceleratorClassSpec
+	acceleratorClassName   string
 	logger                 logr.Logger
 }
 
@@ -70,6 +73,19 @@ func (b *ComponentBuilder) WithLogger(logger logr.Logger) *ComponentBuilder {
 	return b
 }
 
+// WithAcceleratorClass sets the accelerator class
+func (b *ComponentBuilder) WithAcceleratorClass(acceleratorClass *v1beta1.AcceleratorClassSpec, acceleratorClassName string) *ComponentBuilder {
+	b.acceleratorClass = acceleratorClass
+	b.acceleratorClassName = acceleratorClassName
+	return b
+}
+
+// WithSupportedModelFormat sets the supported model format
+func (b *ComponentBuilder) WithSupportedModelFormat(format *v1beta1.SupportedModelFormat) *ComponentBuilder {
+	b.supportedModelFormat = format
+	return b
+}
+
 // buildBaseFields creates the common base fields
 func (b *ComponentBuilder) buildBaseFields() BaseComponentFields {
 	return BaseComponentFields{
@@ -101,6 +117,9 @@ func (b *ComponentBuilder) BuildEngine(spec *v1beta1.EngineSpec) Component {
 		spec,
 		b.runtime,
 		b.runtimeName,
+		b.supportedModelFormat,
+		b.acceleratorClass,
+		b.acceleratorClassName,
 	)
 }
 
@@ -118,6 +137,9 @@ func (b *ComponentBuilder) BuildDecoder(spec *v1beta1.DecoderSpec) Component {
 		spec,
 		b.runtime,
 		b.runtimeName,
+		b.supportedModelFormat,
+		b.acceleratorClass,
+		b.acceleratorClassName,
 	)
 }
 
@@ -184,11 +206,16 @@ func (f *ComponentBuilderFactory) CreateEngineComponent(
 	engineSpec *v1beta1.EngineSpec,
 	runtime *v1beta1.ServingRuntimeSpec,
 	runtimeName string,
+	supportedModelFormat *v1beta1.SupportedModelFormat,
+	acceleratorClass *v1beta1.AcceleratorClassSpec,
+	acceleratorClassName string,
 ) Component {
 	return f.NewBuilder().
 		WithDeploymentMode(deploymentMode).
 		WithBaseModel(baseModel, baseModelMeta).
 		WithRuntime(runtime, runtimeName).
+		WithAcceleratorClass(acceleratorClass, acceleratorClassName).
+		WithSupportedModelFormat(supportedModelFormat).
 		BuildEngine(engineSpec)
 }
 
@@ -200,11 +227,16 @@ func (f *ComponentBuilderFactory) CreateDecoderComponent(
 	decoderSpec *v1beta1.DecoderSpec,
 	runtime *v1beta1.ServingRuntimeSpec,
 	runtimeName string,
+	supportedModelFormat *v1beta1.SupportedModelFormat,
+	acceleratorClass *v1beta1.AcceleratorClassSpec,
+	acceleratorClassName string,
 ) Component {
 	return f.NewBuilder().
 		WithDeploymentMode(deploymentMode).
 		WithBaseModel(baseModel, baseModelMeta).
 		WithRuntime(runtime, runtimeName).
+		WithAcceleratorClass(acceleratorClass, acceleratorClassName).
+		WithSupportedModelFormat(supportedModelFormat).
 		BuildDecoder(decoderSpec)
 }
 

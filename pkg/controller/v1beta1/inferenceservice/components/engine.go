@@ -24,6 +24,7 @@ import (
 )
 
 var _ Component = &Engine{}
+var _ ComponentConfig = &Engine{}
 
 // Engine reconciles resources for the engine component
 type Engine struct {
@@ -45,6 +46,9 @@ func NewEngine(
 	engineSpec *v1beta1.EngineSpec,
 	runtime *v1beta1.ServingRuntimeSpec,
 	runtimeName string,
+	supportedModelFormat *v1beta1.SupportedModelFormat,
+	acceleratorClass *v1beta1.AcceleratorClassSpec,
+	acceleratorClassName string,
 ) Component {
 	base := BaseComponentFields{
 		Client:                 client,
@@ -58,6 +62,9 @@ func NewEngine(
 		RuntimeName:            runtimeName,
 		StatusManager:          status.NewStatusReconciler(),
 		Log:                    ctrl.Log.WithName("EngineReconciler"),
+		AcceleratorClass:       acceleratorClass,
+		AcceleratorClassName:   acceleratorClassName,
+		SupportedModelFormat:   supportedModelFormat,
 	}
 
 	return &Engine{
@@ -276,6 +283,8 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 	if runnerSpec != nil {
 		UpdateEnvVariables(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		UpdateVolumeMounts(&e.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+		MergeResources(&e.BaseComponentFields, &runnerSpec.Container)
+		MergeRuntimeArgumentsOverride(&e.BaseComponentFields, &runnerSpec.Container)
 		e.setParallelismEnvVarForEngine(&runnerSpec.Container, e.getWorkerSize())
 	}
 
@@ -305,6 +314,8 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 		if workerRunner != nil {
 			UpdateVolumeMounts(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			UpdateEnvVariables(&e.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+			MergeResources(&e.BaseComponentFields, &workerRunner.Container)
+			MergeRuntimeArgumentsOverride(&e.BaseComponentFields, &workerRunner.Container)
 			e.setParallelismEnvVarForEngine(&workerRunner.Container, e.getWorkerSize())
 		}
 	}
@@ -344,4 +355,31 @@ func (e *Engine) setParallelismEnvVarForEngine(container *v1.Container, workerRe
 	} else {
 		e.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
+}
+
+// GetComponentType implements ComponentConfig interface
+func (e *Engine) GetComponentType() v1beta1.ComponentType {
+	return v1beta1.EngineComponent
+}
+
+// GetComponentSpec implements ComponentConfig interface
+func (e *Engine) GetComponentSpec() *v1beta1.ComponentExtensionSpec {
+	if e.engineSpec == nil {
+		return nil
+	}
+	return &e.engineSpec.ComponentExtensionSpec
+}
+
+// GetServiceSuffix implements ComponentConfig interface
+func (e *Engine) GetServiceSuffix() string {
+	return "-engine"
+}
+
+// ValidateSpec implements ComponentConfig interface
+func (e *Engine) ValidateSpec() error {
+	if e.engineSpec == nil {
+		return errors.New("engine spec is nil")
+	}
+	// Add more validation logic as needed
+	return nil
 }

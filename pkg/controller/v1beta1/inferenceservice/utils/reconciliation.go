@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
+
 	goerrors "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,7 +66,7 @@ func ReconcileBaseModel(cl client.Client, isvc *v1beta1.InferenceService) (*v1be
 }
 
 // MergeRuntimeSpecs merges the runtime and isvc specs to get final engine, decoder, and router specs
-func MergeRuntimeSpecs(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec) (*v1beta1.EngineSpec, *v1beta1.DecoderSpec, *v1beta1.RouterSpec, error) {
+func MergeRuntimeSpecs(isvc *v1beta1.InferenceService, runtime *v1beta1.ServingRuntimeSpec, log logr.Logger) (*v1beta1.EngineSpec, *v1beta1.DecoderSpec, *v1beta1.RouterSpec, error) {
 	var runtimeEngine *v1beta1.EngineSpec
 	var runtimeDecoder *v1beta1.DecoderSpec
 	var runtimeRouter *v1beta1.RouterSpec

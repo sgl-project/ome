@@ -32,11 +32,14 @@ type BaseComponentFields struct {
 	BaseModelMeta                     *metav1.ObjectMeta
 	Runtime                           *v1beta1.ServingRuntimeSpec
 	RuntimeName                       string
+	AcceleratorClass                  *v1beta1.AcceleratorClassSpec
+	AcceleratorClassName              string
 	FineTunedServing                  bool
 	FineTunedServingWithMergedWeights bool
 	FineTunedWeights                  []*v1beta1.FineTunedWeight
 	StatusManager                     *status.StatusReconciler
 	Log                               logr.Logger
+	SupportedModelFormat              *v1beta1.SupportedModelFormat
 }
 
 // Common methods as functions that operate on BaseComponentFields
@@ -188,6 +191,20 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 			b.Log.Info("Warning: no vendor given in base model spec - no env var added/updated")
 		}
 	}
+
+	// append env var from runtime spec if it is specified.
+	// runner container is user values, it takes precedence over runtime values.
+	// only append env var that does not exist in runner container.
+	if b.SupportedModelFormat != nil && b.SupportedModelFormat.AcceleratorConfig != nil && b.AcceleratorClassName != "" {
+		acceleratorConfig := b.SupportedModelFormat.GetAcceleratorConfig(b.AcceleratorClassName)
+		if acceleratorConfig != nil {
+			envOverride := acceleratorConfig.EnvironmentOverride
+			for envName, envVar := range envOverride {
+				isvcutils.AppendEnvVarIfNotExist(container, &corev1.EnvVar{
+					Name: envName, Value: envVar})
+			}
+		}
+	}
 }
 
 // UpdatePodSpecNodeSelector updates pod spec with node selector for model scheduling
@@ -224,6 +241,15 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 
 	// Add node selector for model with "Ready" status
 	podSpec.NodeSelector[labelKey] = "Ready"
+
+	// Add node selector merged from AcceleratorClass if applicable
+	// Only add mergedNodeSelector to engine and decoder component.
+	mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, v1beta1.EngineComponent)
+	if len(mergedNodeSelector) > 0 {
+		for k, v := range mergedNodeSelector {
+			podSpec.NodeSelector[k] = v
+		}
+	}
 
 	b.Log.Info("Added node selector for model scheduling",
 		"labelKey", labelKey,
@@ -274,6 +300,48 @@ func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService
 		}
 		podSpec.Volumes = append(podSpec.Volumes, blockListConfigMapVolume)
 	}
+}
+
+// MergeRuntimeArgumentsOverride merges runtime argument overrides according AcceleratorClass into the container args
+func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Container) {
+	// append arg var from runtime spec if it is specified
+	if b.SupportedModelFormat != nil && b.SupportedModelFormat.AcceleratorConfig != nil && b.AcceleratorClassName != "" {
+		acceleratorModelConfig := b.SupportedModelFormat.GetAcceleratorConfig(b.AcceleratorClassName)
+		argsOverride := acceleratorModelConfig.RuntimeArgsOverride
+		container.Args = isvcutils.MergeMultilineArgs(container.Args, argsOverride)
+
+		// if runtime argument override has TensorParallelism, update the args accordingly
+		if acceleratorModelConfig.TensorParallelismOverride != nil {
+			tensorParallelismConfig := acceleratorModelConfig.TensorParallelismOverride
+
+			// Override tensor parallel size if specified
+			if tensorParallelismConfig.TensorParallelSize != nil && *tensorParallelismConfig.TensorParallelSize > 0 {
+				var updated bool
+				// Check --tp-size first
+				container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--tp-size", *tensorParallelismConfig.TensorParallelSize)
+				if !updated {
+					// If --tp-size doesn't exist, check --tensor-parallel-size
+					container.Args, _ = isvcutils.OverrideIntParam(container.Args, "--tensor-parallel-size", *tensorParallelismConfig.TensorParallelSize)
+				}
+			}
+
+			// Override pipeline parallel size if specified
+			if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
+				var updated bool
+				// Check --pp-size first
+				container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--pp-size", *tensorParallelismConfig.PipelineParallelSize)
+				if !updated {
+					// If --pp-size doesn't exist, check --pipeline-parallel-size
+					container.Args, _ = isvcutils.OverrideIntParam(container.Args, "--pipeline-parallel-size", *tensorParallelismConfig.PipelineParallelSize)
+				}
+			}
+		}
+	}
+
+}
+
+func MergeResources(b *BaseComponentFields, container *corev1.Container) {
+	isvcutils.MergeResource(container, b.AcceleratorClass, b.Runtime)
 }
 
 // ProcessBaseAnnotations processes common annotations
