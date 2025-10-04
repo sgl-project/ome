@@ -19,6 +19,7 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
 	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
+	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 // BaseComponentFields contains common fields for all components
@@ -205,6 +206,17 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		return
 	}
 
+	// Skip node selector for PVC storage (model accessible from any node)
+	if b.BaseModel.Storage != nil && b.BaseModel.Storage.StorageUri != nil {
+		storageType, err := utilstorage.GetStorageType(*b.BaseModel.Storage.StorageUri)
+		if err == nil && storageType == utilstorage.StorageTypePVC {
+			b.Log.Info("Skipping node selector for PVC storage",
+				"inferenceService", isvc.Name, "namespace", isvc.Namespace,
+				"storageUri", *b.BaseModel.Storage.StorageUri)
+			return
+		}
+	}
+
 	// Determine if this is a ClusterBaseModel or BaseModel
 	var labelKey string
 	isClusterScoped := b.BaseModelMeta.Namespace == ""
@@ -235,14 +247,57 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 // UpdatePodSpecVolumes updates pod spec with common volumes
 func UpdatePodSpecVolumes(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, objectMeta *metav1.ObjectMeta) {
 	// Add model volume if base model is specified
-	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil && b.BaseModelMeta != nil {
-		modelVolume := corev1.Volume{
-			Name: b.BaseModelMeta.Name,
-			VolumeSource: corev1.VolumeSource{
+	if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModelMeta != nil {
+		var volumeSource corev1.VolumeSource
+
+		// Check if this is PVC storage
+		if b.BaseModel.Storage.StorageUri != nil {
+			storageType, err := utilstorage.GetStorageType(*b.BaseModel.Storage.StorageUri)
+			if err == nil && storageType == utilstorage.StorageTypePVC {
+				// Parse PVC URI to get PVC name
+				pvcComponents, err := utilstorage.ParsePVCStorageURI(*b.BaseModel.Storage.StorageUri)
+				if err != nil {
+					b.Log.Error(err, "Failed to parse PVC storage URI", "storageUri", *b.BaseModel.Storage.StorageUri)
+					return
+				}
+
+				// Create PVC volume source
+				volumeSource = corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcComponents.PVCName,
+						ReadOnly:  true,
+					},
+				}
+
+				b.Log.Info("Created PVC volume for model",
+					"pvcName", pvcComponents.PVCName,
+					"modelName", b.BaseModelMeta.Name)
+			} else if b.BaseModel.Storage.Path != nil {
+				// Use HostPath for non-PVC storage types
+				volumeSource = corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: *b.BaseModel.Storage.Path,
+					},
+				}
+			} else {
+				// No valid storage configuration
+				return
+			}
+		} else if b.BaseModel.Storage.Path != nil {
+			// Legacy case: only Path specified (no StorageUri)
+			volumeSource = corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: *b.BaseModel.Storage.Path,
 				},
-			},
+			}
+		} else {
+			// No valid storage configuration
+			return
+		}
+
+		modelVolume := corev1.Volume{
+			Name:         b.BaseModelMeta.Name,
+			VolumeSource: volumeSource,
 		}
 		podSpec.Volumes = append(podSpec.Volumes, modelVolume)
 	}

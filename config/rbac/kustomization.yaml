@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
 - service_account.yaml
+- serviceaccount_metadata_extractor.yaml
 - role.yaml
 - role_binding.yaml
 - leader_election_role.yaml

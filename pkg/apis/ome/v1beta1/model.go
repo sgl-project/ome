@@ -297,6 +297,11 @@ type ModelStatusSpec struct {
 
 	// +listType=atomic
 	NodesFailed []string `json:"nodesFailed,omitempty"`
+
+	// Conditions represent the latest available observations of the model's state
+	// +optional
+	// +listType=atomic
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // BaseModel is the Schema for the basemodels API

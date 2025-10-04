@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +26,7 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/modelagent"
+	utilstorage "github.com/sgl-project/ome/pkg/utils/storage"
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=basemodels,verbs=get;list;watch;create;update;patch;delete
@@ -36,6 +38,9 @@ import (
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 
 // BaseModelReconciler reconciles BaseModel objects
 type BaseModelReconciler struct {
@@ -88,7 +93,26 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.Recorder.Event(baseModel, corev1.EventTypeNormal, "FinalizerAdded", "Added finalizer")
 	}
 
-	// Update status based on ConfigMaps
+	// Add storage type routing for PVC storage
+	if baseModel.Spec.Storage != nil && baseModel.Spec.Storage.StorageUri != nil {
+		storageType, err := utilstorage.GetStorageType(*baseModel.Spec.Storage.StorageUri)
+		if err != nil {
+			log.Error(err, "Failed to determine storage type")
+			r.Recorder.Event(baseModel, corev1.EventTypeWarning, "StorageTypeError",
+				fmt.Sprintf("Failed to determine storage type: %v", err))
+			return ctrl.Result{RequeueAfter: time.Minute}, err
+		}
+
+		if storageType == utilstorage.StorageTypePVC {
+			log.Info("Detected PVC storage, handling in controller")
+			return r.handlePVCStorageWithValidation(ctx, baseModel)
+		}
+
+		log.V(1).Info("Detected non-PVC storage, delegating to model agent",
+			"storageType", storageType)
+	}
+
+	// Update status based on ConfigMaps (existing model agent workflow)
 	if err := r.updateModelStatus(ctx, baseModel); err != nil {
 		log.Error(err, "Failed to update BaseModel status")
 		r.Recorder.Event(baseModel, corev1.EventTypeWarning, "StatusUpdateFailed", "Failed to update status")
@@ -133,7 +157,26 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		r.Recorder.Event(clusterBaseModel, corev1.EventTypeNormal, "FinalizerAdded", "Added finalizer")
 	}
 
-	// Update status based on ConfigMaps
+	// Add storage type routing for PVC storage
+	if clusterBaseModel.Spec.Storage != nil && clusterBaseModel.Spec.Storage.StorageUri != nil {
+		storageType, err := utilstorage.GetStorageType(*clusterBaseModel.Spec.Storage.StorageUri)
+		if err != nil {
+			log.Error(err, "Failed to determine storage type")
+			r.Recorder.Event(clusterBaseModel, corev1.EventTypeWarning, "StorageTypeError",
+				fmt.Sprintf("Failed to determine storage type: %v", err))
+			return ctrl.Result{RequeueAfter: time.Minute}, err
+		}
+
+		if storageType == utilstorage.StorageTypePVC {
+			log.Info("Detected PVC storage, handling in controller")
+			return r.handlePVCStorageWithValidation(ctx, clusterBaseModel)
+		}
+
+		log.V(1).Info("Detected non-PVC storage, delegating to model agent",
+			"storageType", storageType)
+	}
+
+	// Update status based on ConfigMaps (existing model agent workflow)
 	if err := r.updateModelStatus(ctx, clusterBaseModel); err != nil {
 		log.Error(err, "Failed to update ClusterBaseModel status")
 		r.Recorder.Event(clusterBaseModel, corev1.EventTypeWarning, "StatusUpdateFailed", "Failed to update status")
@@ -405,6 +448,7 @@ func updateModelSpecWithConfig(ctx context.Context, kubeClient client.Client, lo
 func (r *BaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.BaseModel{}).
+		Owns(&batchv1.Job{}).
 		Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -419,6 +463,7 @@ func (r *BaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ClusterBaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.ClusterBaseModel{}).
+		Owns(&batchv1.Job{}).
 		Watches(
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

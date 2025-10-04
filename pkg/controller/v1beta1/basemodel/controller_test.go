@@ -3,13 +3,16 @@ package basemodel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
@@ -272,7 +276,7 @@ func TestBaseModelReconcile(t *testing.T) {
 					g.Expect(updated.Finalizers).NotTo(gomega.ContainElement(constants.BaseModelFinalizer))
 				} else {
 					// If object is not found, that's also acceptable as it means deletion completed
-					g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
+					g.Expect(apierrors.IsNotFound(err)).To(gomega.BeTrue())
 				}
 			},
 		},
@@ -420,7 +424,7 @@ func TestBaseModelReconcile(t *testing.T) {
 				if err == nil {
 					g.Expect(updated.Finalizers).NotTo(gomega.ContainElement(constants.BaseModelFinalizer))
 				} else {
-					g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue())
+					g.Expect(apierrors.IsNotFound(err)).To(gomega.BeTrue())
 				}
 			},
 		},
@@ -1145,6 +1149,446 @@ func TestAddToSlice(t *testing.T) {
 			g.Expect(result).To(gomega.Equal(tt.expected))
 		})
 	}
+}
+
+// TestValidatePVCWithSecurity tests the enhanced PVC security validation
+func TestValidatePVCWithSecurity(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name          string
+		pvcURI        string
+		namespace     string
+		setupMocks    func(client.Client)
+		expectedError string
+		errorType     ErrorType
+		validateCond  func(*testing.T, *v1beta1.BaseModel)
+	}{
+		{
+			name:      "Valid PVC validation success",
+			pvcURI:    "pvc://test-ns:model-data/models",
+			namespace: "test-ns",
+			setupMocks: func(c client.Client) {
+				// Create bound PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "model-data",
+						Namespace: "test-ns",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+						Capacity: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("100Gi"),
+						},
+						AccessModes: []corev1.PersistentVolumeAccessMode{
+							corev1.ReadWriteOnce,
+						},
+					},
+				}
+				err := c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			expectedError: "",
+			errorType:     "",
+		},
+		{
+			name:          "Invalid PVC URI format",
+			pvcURI:        "invalid-uri-format",
+			namespace:     "test-ns",
+			setupMocks:    func(c client.Client) {},
+			expectedError: "Invalid PVC URI format",
+			errorType:     ErrorTypeValidation,
+			// Note: No condition validation for parsing errors since they occur before object type determination
+		},
+		{
+			name:          "Cross-namespace security violation",
+			pvcURI:        "pvc://other-ns:model-data/models",
+			namespace:     "test-ns",
+			setupMocks:    func(c client.Client) {},
+			expectedError: "Cross-namespace PVC access denied",
+			errorType:     ErrorTypeSecurity,
+			validateCond: func(t *testing.T, bm *v1beta1.BaseModel) {
+				cond := getConditionByType(bm.Status.Conditions, ConditionPVCValidated)
+				g.Expect(cond).ToNot(gomega.BeNil())
+				g.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(gomega.Equal("CrossNamespaceAccessDenied"))
+			},
+		},
+		{
+			name:      "PVC not found",
+			pvcURI:    "pvc://test-ns:nonexistent-pvc/models",
+			namespace: "test-ns",
+			setupMocks: func(c client.Client) {
+				// Don't create the PVC
+			},
+			expectedError: "not found",
+			errorType:     ErrorTypeValidation,
+			validateCond: func(t *testing.T, bm *v1beta1.BaseModel) {
+				cond := getConditionByType(bm.Status.Conditions, ConditionPVCValidated)
+				g.Expect(cond).ToNot(gomega.BeNil())
+				g.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(gomega.Equal("PVCNotFound"))
+			},
+		},
+		{
+			name:      "PVC not bound",
+			pvcURI:    "pvc://test-ns:pending-pvc/models",
+			namespace: "test-ns",
+			setupMocks: func(c client.Client) {
+				// Create pending PVC
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pending-pvc",
+						Namespace: "test-ns",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimPending,
+					},
+				}
+				err := c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			expectedError: "not bound",
+			errorType:     ErrorTypeValidation,
+			validateCond: func(t *testing.T, bm *v1beta1.BaseModel) {
+				cond := getConditionByType(bm.Status.Conditions, ConditionPVCValidated)
+				g.Expect(cond).ToNot(gomega.BeNil())
+				g.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(gomega.Equal("PVCNotBound"))
+				g.Expect(strings.Contains(cond.Message, "pending")).To(gomega.BeTrue())
+			},
+		},
+		{
+			name:      "PVC with incompatible access modes",
+			pvcURI:    "pvc://test-ns:bad-access-pvc/models",
+			namespace: "test-ns",
+			setupMocks: func(c client.Client) {
+				// Create PVC with WriteOnlyMany (invalid)
+				pvc := &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "bad-access-pvc",
+						Namespace: "test-ns",
+					},
+					Status: corev1.PersistentVolumeClaimStatus{
+						Phase: corev1.ClaimBound,
+						AccessModes: []corev1.PersistentVolumeAccessMode{
+							"WriteOnlyMany", // Invalid access mode
+						},
+					},
+				}
+				err := c.Create(context.TODO(), pvc)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			expectedError: "incompatible access modes",
+			errorType:     ErrorTypeValidation,
+			validateCond: func(t *testing.T, bm *v1beta1.BaseModel) {
+				cond := getConditionByType(bm.Status.Conditions, ConditionPVCValidated)
+				g.Expect(cond).ToNot(gomega.BeNil())
+				g.Expect(cond.Status).To(gomega.Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(gomega.Equal("IncompatibleAccessModes"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create client
+			c := ctrlclientfake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+
+			// Setup test mocks
+			tt.setupMocks(c)
+
+			// Create BaseModel for condition testing
+			baseModel := &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-model",
+					Namespace: tt.namespace,
+				},
+				Status: v1beta1.ModelStatusSpec{
+					State:      v1beta1.LifeCycleStateInTransit,
+					Conditions: []metav1.Condition{},
+				},
+			}
+
+			// Create recorder and reconciler
+			recorder := record.NewFakeRecorder(10)
+			reconciler := &BaseModelReconciler{
+				Client:   c,
+				Scheme:   c.Scheme(),
+				Recorder: recorder,
+				Log:      zap.New(zap.UseDevMode(true)),
+			}
+
+			// Generate correlation ID
+			correlationID := generateCorrelationID()
+
+			// Call validatePVCWithSecurity
+			err := reconciler.validatePVCWithSecurity(context.TODO(), baseModel, tt.pvcURI, tt.namespace, correlationID)
+
+			// Validate error expectations
+			if tt.expectedError != "" {
+				g.Expect(err).To(gomega.HaveOccurred())
+				g.Expect(err.Error()).To(gomega.ContainSubstring(tt.expectedError))
+
+				// Validate error type if specified
+				if tt.errorType != "" {
+					var validationErr *ValidationError
+					g.Expect(errors.As(err, &validationErr)).To(gomega.BeTrue())
+					g.Expect(validationErr.Type).To(gomega.Equal(tt.errorType))
+				}
+
+				// Validate condition if specified
+				if tt.validateCond != nil {
+					tt.validateCond(t, baseModel)
+				}
+			} else {
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Validate successful condition
+				cond := getConditionByType(baseModel.Status.Conditions, ConditionPVCValidated)
+				g.Expect(cond).ToNot(gomega.BeNil())
+				g.Expect(cond.Status).To(gomega.Equal(metav1.ConditionTrue))
+				g.Expect(cond.Reason).To(gomega.Equal("ValidationSucceeded"))
+			}
+		})
+	}
+}
+
+// TestValidationErrorTypes tests error classification
+func TestValidationErrorTypes(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name     string
+		err      error
+		expected ErrorType
+	}{
+		{
+			name:     "Cross-namespace error",
+			err:      fmt.Errorf("cross-namespace access denied"),
+			expected: ErrorTypeSecurity,
+		},
+		{
+			name:     "Access denied error",
+			err:      fmt.Errorf("access denied to resource"),
+			expected: ErrorTypeSecurity,
+		},
+		{
+			name:     "Not found error",
+			err:      fmt.Errorf("PVC not found"),
+			expected: ErrorTypeValidation,
+		},
+		{
+			name:     "Not bound error",
+			err:      fmt.Errorf("PVC not bound"),
+			expected: ErrorTypeValidation,
+		},
+		{
+			name:     "Invalid format error",
+			err:      fmt.Errorf("invalid URI format"),
+			expected: ErrorTypeValidation,
+		},
+		{
+			name:     "Generic error",
+			err:      fmt.Errorf("some other error"),
+			expected: ErrorTypeTransient,
+		},
+		{
+			name:     "Nil error",
+			err:      nil,
+			expected: ErrorTypeTransient,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := classifyError(tt.err)
+			g.Expect(result).To(gomega.Equal(tt.expected))
+		})
+	}
+}
+
+// TestValidationError tests the ValidationError struct
+func TestValidationError(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name          string
+		validationErr *ValidationError
+		expectedMsg   string
+	}{
+		{
+			name: "Error with cause",
+			validationErr: &ValidationError{
+				Type:    ErrorTypeValidation,
+				Message: "PVC validation failed",
+				Cause:   fmt.Errorf("not found"),
+			},
+			expectedMsg: "PVC validation failed: not found",
+		},
+		{
+			name: "Error without cause",
+			validationErr: &ValidationError{
+				Type:    ErrorTypeSecurity,
+				Message: "Security violation detected",
+				Cause:   nil,
+			},
+			expectedMsg: "Security violation detected",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.validationErr.Error()
+			g.Expect(result).To(gomega.Equal(tt.expectedMsg))
+
+			// Test Unwrap
+			if tt.validationErr.Cause != nil {
+				g.Expect(tt.validationErr.Unwrap()).To(gomega.Equal(tt.validationErr.Cause))
+			} else {
+				g.Expect(tt.validationErr.Unwrap()).To(gomega.BeNil())
+			}
+		})
+	}
+}
+
+// TestRetryLogic tests retry count and correlation ID management
+func TestRetryLogic(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name                string
+		initialAnnotations  map[string]string
+		expectedCount       int
+		expectCorrelationID bool
+	}{
+		{
+			name:                "New model without annotations",
+			initialAnnotations:  nil,
+			expectedCount:       0,
+			expectCorrelationID: false,
+		},
+		{
+			name: "Model with existing retry count",
+			initialAnnotations: map[string]string{
+				RetryCountAnnotationKey: "2",
+			},
+			expectedCount:       2,
+			expectCorrelationID: false,
+		},
+		{
+			name: "Model with existing correlation ID",
+			initialAnnotations: map[string]string{
+				CorrelationIDAnnotationKey: "pvc-12345",
+			},
+			expectedCount:       0,
+			expectCorrelationID: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-model",
+					Namespace:   "default",
+					Annotations: tt.initialAnnotations,
+				},
+			}
+
+			// Test getRetryCount
+			count := getRetryCount(model)
+			g.Expect(count).To(gomega.Equal(tt.expectedCount))
+
+			// Test incrementRetryCount
+			incrementRetryCount(model)
+			newCount := getRetryCount(model)
+			g.Expect(newCount).To(gomega.Equal(tt.expectedCount + 1))
+
+			// Test clearRetryCount
+			clearRetryCount(model)
+			clearedCount := getRetryCount(model)
+			g.Expect(clearedCount).To(gomega.Equal(0))
+
+			// Test correlation ID management
+			correlationID := getOrSetCorrelationID(model)
+			g.Expect(correlationID).ToNot(gomega.BeEmpty())
+
+			if tt.expectCorrelationID {
+				g.Expect(correlationID).To(gomega.Equal("pvc-12345"))
+			} else {
+				g.Expect(strings.HasPrefix(correlationID, "pvc-")).To(gomega.BeTrue())
+			}
+
+			// Test consistency
+			secondCall := getOrSetCorrelationID(model)
+			g.Expect(secondCall).To(gomega.Equal(correlationID))
+		})
+	}
+}
+
+// TestRetryConfig tests retry configuration and backoff calculation
+func TestRetryConfig(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	config := NewDefaultRetryConfig()
+	g.Expect(config.MaxRetries).To(gomega.Equal(DefaultMaxRetries))
+	g.Expect(config.BaseDelay).To(gomega.Equal(DefaultBaseDelay))
+	g.Expect(config.MaxDelay).To(gomega.Equal(DefaultMaxDelay))
+	g.Expect(config.BackoffFactor).To(gomega.Equal(DefaultBackoffFactor))
+
+	tests := []struct {
+		name        string
+		retryCount  int
+		expectedMin time.Duration
+		expectedMax time.Duration
+	}{
+		{
+			name:        "First retry",
+			retryCount:  1,
+			expectedMin: 2 * time.Second, // BaseDelay
+			expectedMax: 4 * time.Second, // BaseDelay * BackoffFactor
+		},
+		{
+			name:        "Second retry",
+			retryCount:  2,
+			expectedMin: 4 * time.Second, // BaseDelay * BackoffFactor
+			expectedMax: 8 * time.Second, // BaseDelay * BackoffFactor^2
+		},
+		{
+			name:        "High retry count (should cap at MaxDelay)",
+			retryCount:  10,
+			expectedMin: DefaultMaxDelay,
+			expectedMax: DefaultMaxDelay,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			delay := config.calculateBackoffDelay(tt.retryCount)
+			g.Expect(delay).To(gomega.BeNumerically(">=", tt.expectedMin))
+			g.Expect(delay).To(gomega.BeNumerically("<=", tt.expectedMax))
+		})
+	}
+}
+
+// Helper functions for tests
+
+// getConditionByType finds a condition by type in the conditions slice
+func getConditionByType(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for _, condition := range conditions {
+		if condition.Type == conditionType {
+			return &condition
+		}
+	}
+	return nil
 }
 
 // Helper functions
