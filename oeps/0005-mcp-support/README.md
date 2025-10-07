@@ -1,12 +1,12 @@
-# OEP-0005: Model Context Protocol (MCP) Support with Gateway API Pattern
+# OEP-0005: Model Context Protocol (MCP) Support
 
 <!--
 This OEP introduces comprehensive support for the Model Context Protocol (MCP) in OME,
-following the Kubernetes Gateway API pattern with separate resources for gateway infrastructure
-(MCPGateway), routing logic (MCPRoute), and policies (MCPAuthenticationPolicy, etc.).
-This design enables Large Language Models to integrate with external tools and services
-through a secure, scalable, and multi-tenant gateway infrastructure that follows industry
-standards and best practices.
+enabling Large Language Models to integrate with external tools and services through
+a simplified, operator-managed architecture. The design focuses on ease of use while
+maintaining flexibility, with an optional managed gateway component that OME automatically
+deploys when needed. This approach prioritizes developer experience and operational
+simplicity while providing a clear evolution path to more advanced features in future versions.
 -->
 
 <!-- toc -->
@@ -16,27 +16,24 @@ standards and best practices.
   - [Non-Goals](#non-goals)
 - [Proposal](#proposal)
   - [User Stories](#user-stories)
-    - [Story 1: Platform Team Deploying Shared Gateway Infrastructure](#story-1-platform-team-deploying-shared-gateway-infrastructure)
-    - [Story 2: Application Team Creating Routes to Backend Servers](#story-2-application-team-creating-routes-to-backend-servers)
-    - [Story 3: Security Team Attaching Policies for Authentication and Rate Limiting](#story-3-security-team-attaching-policies-for-authentication-and-rate-limiting)
+    - [Story 1: Data Scientist Using MCP Tools](#story-1-data-scientist-using-mcp-tools)
+    - [Story 2: Direct Server Access for Trusted Environments](#story-2-direct-server-access-for-trusted-environments)
   - [Notes/Constraints/Caveats](#notesconstraintscaveats)
   - [Risks and Mitigations](#risks-and-mitigations)
 - [Design Details](#design-details)
   - [API Specifications](#api-specifications)
     - [MCPServer Resource](#mcpserver-resource)
-    - [MCPGateway Resource](#mcpgateway-resource)
-    - [MCPRoute Resource](#mcproute-resource)
-    - [Policy Resources](#policy-resources)
+    - [InferenceService MCP Integration](#inferenceservice-mcp-integration)
   - [Architecture Overview](#architecture-overview)
     - [Component Interaction](#component-interaction)
     - [Request Flow](#request-flow)
   - [Security Model](#security-model)
   - [Deployment Patterns](#deployment-patterns)
-    - [Pattern 1: Shared Gateway with Multi-Tenant Routes](#pattern-1-shared-gateway-with-multi-tenant-routes)
-    - [Pattern 2: Cross-Namespace Routing with ReferenceGrant](#pattern-2-cross-namespace-routing-with-referencegrant)
-    - [Pattern 3: Canary Deployment with Traffic Splitting](#pattern-3-canary-deployment-with-traffic-splitting)
-    - [Pattern 4: Tool-Based Routing with Advanced Matching](#pattern-4-tool-based-routing-with-advanced-matching)
-    - [Pattern 5: Remote Server Integration with Policies](#pattern-5-remote-server-integration-with-policies)
+    - [Pattern 1: Direct Server Access](#pattern-1-direct-server-access)
+    - [Pattern 2: Managed Gateway with Multiple Servers](#pattern-2-managed-gateway-with-multiple-servers)
+    - [Pattern 3: Remote Server Integration](#pattern-3-remote-server-integration)
+    - [Pattern 4: Canary Deployment with Traffic Splitting](#pattern-4-canary-deployment-with-traffic-splitting)
+  - [Evolution Path](#evolution-path)
   - [Test Plan](#test-plan)
     - [Unit Tests](#unit-tests)
     - [Integration Tests](#integration-tests)
@@ -45,21 +42,23 @@ standards and best practices.
 
 ## Summary
 
-This OEP introduces native support for the Model Context Protocol (MCP) in OME following the **Kubernetes Gateway API pattern** with three architectural layers:
+This OEP introduces native support for the Model Context Protocol (MCP) in OME with a **hybrid architecture** that balances simplicity with multi-tenancy capabilities.
 
-1. **`MCPServer`**: Defines and manages the lifecycle of individual MCP tool servers, whether hosted within the cluster or external remote services.
+**Core Design Principles**:
 
-2. **`MCPGateway`**: Defines gateway infrastructure and listener configuration. Acts as the entry point for MCP traffic, similar to gateway.networking.k8s.io/v1 Gateway. Typically managed by platform teams.
+1. **`MCPServer` CRD**: Defines and manages individual MCP tool servers, supporting both in-cluster hosted servers (via `PodTemplateSpec`) and external remote services. Includes permission profiles for security.
 
-3. **`MCPRoute`**: Defines routing rules for MCP traffic, including server selection, traffic splitting, and request matching. Attaches to MCPGateway via parentRefs, similar to HTTPRoute in Gateway API. Managed by application teams.
+2. **`MCPRoute` CRD**: User-facing routing configuration that defines how requests reach MCP servers. Supports traffic splitting, tool-level matching, and embedded policies (authentication, authorization, rate limiting).
 
-4. **Policy CRDs**: Separate policy resources (`MCPAuthenticationPolicy`, `MCPAuthorizationPolicy`, `MCPRateLimitPolicy`, `MCPSecurityPolicy`) that attach to Gateway or Route resources via targetRef pattern, following GEP-713 Policy Attachment.
+3. **Internal Managed Gateway**: OME deploys gateway infrastructure based on operator-managed default config via ConfigMap or Helm values. Gateway auto-discovers MCPRoute resources and applies routing rules dynamically. No user-visible Gateway CRD (unlike full Gateway API).
 
-This separation provides:
-- **Clear Ownership**: Platform teams manage gateway infrastructure, application teams manage routing, security teams manage policies
-- **Multi-tenancy**: Multiple teams share one gateway with isolated routes and policies
-- **Industry Standard**: Follows Kubernetes Gateway API patterns used by Kong, Istio, and Envoy Gateway
-- **Flexible RBAC**: Different permission levels for gateway, route, and policy management
+This approach provides:
+- **Multi-Tenancy Support**: Platform teams set gateway defaults, app teams define routes, security teams enforce policies
+- **Simpler than Gateway API**: No parentRef complexity, no cross-namespace ReferenceGrant, fewer CRDs
+- **Proven Pattern**: Similar to Istio VirtualService+Gateway, AWS App Mesh - industry-validated architecture
+- **Flexible Control**: Gateway-level defaults + route-level overrides
+- **Evolution Path**: Start with v1alpha1 embedded config, evolve to v1beta1 hybrid based on validated needs
+- **Consistency**: Follows OME's philosophy of "declare intent, operator handles complexity"
 
 ## Motivation
 
@@ -74,17 +73,14 @@ Currently, integrating LLMs with external tools requires custom implementations 
 
 ### Goals
 
-1.  **Multi-Layer Architecture**: Provide separate CRDs for server definition (`MCPServer`), gateway infrastructure (`MCPGateway`), routing logic (`MCPRoute`), and policies.
-2.  **Flexible Server Definition**: Support both in-cluster `Hosted` servers using a native `PodTemplateSpec` and `Remote` external servers.
-3.  **Gateway-Centric Consumption**: Establish the `MCPGateway` as the primary, secure entry point for all MCP tool traffic.
-4.  **Dynamic Server Discovery**: Enable routes to dynamically discover and select `MCPServer`s using label selectors.
-5.  **Advanced Security Model**: Implement a granular permission model for `MCPServer`s, including access to Kubernetes resources, with policy attachment for authentication/authorization.
-6.  **Rich Network Configuration**: Offer comprehensive options for service exposure, transport protocols, and ingress.
-7.  **Developer Experience**: Provide intuitive and idiomatic Kubernetes APIs with strong validation and sensible defaults.
-8.  **Gateway/Route Separation**: Clearly separate gateway infrastructure (MCPGateway) from routing logic (MCPRoute) following Gateway API patterns
-9.  **Policy Attachment Pattern**: Implement GEP-713 Policy Attachment with separate policy CRDs using targetRef
-10. **Multi-tenancy by Design**: Enable multiple teams to share gateway infrastructure with namespace-level isolation
-11. **Industry Alignment**: Follow patterns established by Kong Gateway, Istio Gateway, and Envoy Gateway
+1.  **Multi-Tenancy Support**: Enable platform teams, application teams, and security teams to work independently with clear RBAC boundaries while sharing infrastructure.
+2.  **Flexible Server Definition**: Support both in-cluster `Hosted` servers using native `PodTemplateSpec` and `Remote` external servers with consistent API patterns.
+3.  **User-Controlled Routing**: Provide MCPRoute CRD for explicit routing control (traffic splitting, tool matching, policies) while maintaining simple auto-create mode for basic use cases.
+4.  **Operator-managed Gateway**: Platform teams to set infrastructure defaults (replicas, resources) and baseline policies directly into the operator configuration that routes inherit.
+5.  **Policy Hierarchy**: Support both gateway-level default policies (enforced by platform/security teams) and route-level policy additions (managed by app teams), with more restrictive policies winning.
+6.  **Granular Security Model**: Implement comprehensive permission model for MCPServers (K8s resources, network restrictions) and policy enforcement (authentication, authorization, rate limiting).
+7. **Proven Pattern**: Follow industry-validated patterns similar to Istio VirtualService+Gateway and AWS App Mesh.
+8. **Evolution Path**: Start with v1alpha1 embedded config, evolve to v1beta1 hybrid model based on validated needs, with option to add full Gateway API in v2 if required.
 
 ### Non-Goals
 
@@ -94,119 +90,78 @@ Currently, integrating LLMs with external tools requires custom implementations 
 
 ## Proposal
 
-We will introduce four primary CRD types following the Kubernetes Gateway API pattern: `MCPServer`, `MCPGateway`, `MCPRoute`, and policy resources.
+We introduce a architecture with two CRDs that balances simplicity with multi-tenancy capabilities:
 
-### `MCPServer`: The Tool Provider
+### `MCPServer`: The Tool Server Definition
 
-This CRD defines a single MCP tool server. The `spec` clearly distinguishes between two types of servers:
+Defines individual MCP tool servers (namespace-scoped). The `spec` distinguishes between two server types:
 
--   **`hosted`**: For servers running inside the cluster. It contains a `podSpec` of type `corev1.PodTemplateSpec`, allowing users to define the server's workload using the full power of Kubernetes pod specifications.
--   **`remote`**: For servers running outside the cluster, specified by a simple `url`.
+-   **`hosted`**: In-cluster servers using `PodTemplateSpec` for full Kubernetes pod configuration flexibility
+-   **`remote`**: External servers specified by `url` for SaaS integrations
 
-The `MCPServer` spec also defines the server's capabilities, transport protocol, and a powerful `permissionProfile` for controlling access to Kubernetes resources and outbound network traffic.
+Key features:
+- **Transport protocol**: stdio, streamable-http, or sse
+- **Capabilities**: Declares supported MCP features (tools, resources, prompts)
+- **Permission profile**: Controls access to Kubernetes resources and outbound network traffic
+- **Tool filtering**: Optional whitelist/blacklist of specific tools
 
-### `MCPGateway`: The Gateway Infrastructure
+### `MCPRoute`: User-Facing Routing Configuration
 
-This CRD defines gateway infrastructure and listener configuration, similar to `gateway.networking.k8s.io/v1` Gateway. Its core responsibilities are:
+Defines routing from gateway to backend MCPServers (namespace-scoped). Application teams create routes to control traffic flow:
 
--   **Listener Definition**: Defines listeners with protocol (HTTP/gRPC/WebSocket), port, and TLS configuration
--   **Network Exposure**: Controls how the gateway is exposed via Service and addresses
--   **Gateway Class**: References a GatewayClass that determines the controller implementation
--   **Route Attachment**: Allows MCPRoute resources to attach via parentRefs
+-   **Backend references**: List of MCPServers with optional traffic weights for canary/blue-green deployments
+-   **Tool matching**: Route specific tools to specific backends (e.g., "db_*" → database server)
+-   **Embedded policies**: Authentication, authorization, and rate limiting specific to this route
+-   **Request filters**: Header modifications, transformations
 
-Typically managed by platform teams who control infrastructure.
+Routes are **automatically discovered** by gateway (no parentRef needed). 
 
-### `MCPRoute`: The Routing Logic
+### Internal Gateway Deployment (Auto-Managed by OME)
 
-This CRD defines routing rules for MCP traffic, similar to HTTPRoute in Gateway API. Its core responsibilities are:
+OME inject gateway infrastructure per Inference Service and MCPRoute:
 
--   **Gateway Attachment**: Attaches to one or more MCPGateways via parentRefs, enabling cross-namespace routing with ReferenceGrant
--   **Server Selection**: Selects backend MCPServers via backendRefs with optional namespace and weight for traffic splitting
--   **Traffic Matching**: Matches requests based on MCP tool names, methods, and headers
--   **Request Processing**: Applies filters for header manipulation, request transformation, etc.
+-   **Auto-discovery**: Watches MCPRoute resources and dynamically configures routing
+-   **Policy merging**: Combines gateway defaults with route-specific policies (more restrictive wins)
+-   **Load balancing**: Distributes requests across server replicas with health checks
+-   **Protocol handling**: HTTP, gRPC, WebSocket support
+-   **Observability**: Metrics and logs labeled by namespace, route, server
 
-Typically managed by application teams who control routing logic.
+The gateway deployment itself is **not a user-facing CRD** (unlike Kubernetes Gateway API). Engineer defines defaults in operator configurations(infrastructure) and users interact with MCPRoute (routing).
 
-### Policy Resources: Separate Security and Traffic Management
+### `InferenceService` Integration
 
-Following GEP-713 Policy Attachment, security and traffic policies are separate CRDs that attach to Gateway or Route resources:
+Extended with two integration modes for flexibility:
 
--   **`MCPAuthenticationPolicy`**: OIDC, JWT, API key authentication
--   **`MCPAuthorizationPolicy`**: Role-based and attribute-based authorization
--   **`MCPRateLimitPolicy`**: Request rate limiting and throttling
--   **`MCPSecurityPolicy`**: TLS, CORS, security headers
+**Simple Mode** (Auto-Create MCPRoute):
+```yaml
+spec:
+  mcpServers:
+  - serverRef: {name: my-server}
+  mcpRoute:
+    authentication: {...}  # Embedded config
+```
 
-Typically managed by security teams with dedicated RBAC permissions.
-
-This separation ensures tool consumers interact with a stable gateway endpoint, application teams control routing independently, and security policies are managed centrally by security teams.
+**Explicit Mode** (Reference Existing MCPRoute):
+```yaml
+spec:
+  mcpRoute:
+    routeRef: {name: shared-route}
+```
+InferenceService references existing MCPRoute. Enables route sharing across multiple InferenceServices.
 
 ### User Stories
 
-#### Story 1: Platform Team Deploying Shared Gateway Infrastructure
+#### Story 1: Data Scientist Using MCP Tools
 
-Alice is a platform engineer responsible for setting up shared infrastructure. She creates an MCPGateway with listeners and grants access to application teams via ReferenceGrant.
-
-```yaml
-# 1. Platform team creates a shared gateway with listeners
-apiVersion: ome.io/v1alpha1
-kind: MCPGateway
-metadata:
-  name: shared-mcp-gateway
-  namespace: platform-infra
-spec:
-  gatewayClassName: ome-gateway
-  listeners:
-  - name: http
-    protocol: HTTP
-    port: 8080
-  - name: grpc
-    protocol: GRPC
-    port: 9090
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: gateway-tls-cert
-  addresses:
-  - type: IPAddress
-    value: "10.0.0.100"
-
----
-# 2. Grant permission for application namespaces to attach routes
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-app-routes
-  namespace: platform-infra
-spec:
-  from:
-  - group: ome.io
-    kind: MCPRoute
-    namespace: team-data-science
-  - group: ome.io
-    kind: MCPRoute
-    namespace: team-ml-ops
-  to:
-  - group: ome.io
-    kind: MCPGateway
-    name: shared-mcp-gateway
-```
-
-Now multiple application teams can create MCPRoutes that reference this gateway, enabling multi-tenant usage with centralized infrastructure management.
-
-#### Story 2: Application Team Creating Routes to Backend Servers
-
-Bob is a data scientist on the data-science team. He deploys his database tool servers and creates an MCPRoute that attaches to the platform team's shared gateway.
+Bob is a data scientist who wants his LLM to access a PostgreSQL database through MCP tools. He creates tool servers and references them in his InferenceService.
 
 ```yaml
-# 1. Deploy MCPServers for database tools
+# 1. Deploy MCPServer for database tools
 apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: postgres-tool-v1
-  namespace: team-data-science
-  labels:
-    app: db-tools
-    version: v1
+  name: postgres-tools
+  namespace: my-team
 spec:
   transport: streamable-http
   hosted:
@@ -222,22 +177,69 @@ spec:
               secretKeyRef:
                 name: db-credentials
                 key: uri
+  # Embedded permission profile
   permissionProfile:
     inline:
       allow:
       - network:
           allowHost:
-          - "postgres.team-data-science.svc.cluster.local"
+          - "postgres.my-team.svc.cluster.local"
+  # Embedded policies (no separate Policy CRDs needed)
+  authentication:
+    jwt:
+      audiences: ["mcp-tools"]
+      jwksURI: "https://auth.company.com/.well-known/jwks.json"
+  rateLimit:
+    limits:
+    - dimension: user
+      requests: 1000
+      unit: hour
 
 ---
+# 2. Deploy InferenceService with MCP tool references
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: my-llm
+  namespace: my-team
+spec:
+  model:
+    name: llama-3-70b
+  runtime:
+    name: vllm
+  # NEW: MCP server references
+  mcpServers:
+  - serverRef:
+      name: postgres-tools
+    # Optional: per-server overrides
+    weight: 100
+  # Optional: gateway configuration
+  mcpGateway:
+    enabled: true  # Enable managed gateway (default: true for multiple servers)
+    mode: managed  # or 'direct' to bypass gateway
+```
+
+**What OME does automatically**:
+1. Creates Deployment and Service for `postgres-tools` MCPServer
+2. Detects InferenceService references MCP servers
+3. Deploys internal gateway component (since `enabled: true`)
+4. Configures routing from LLM pods → gateway → postgres-tools
+5. Injects gateway endpoint into LLM pods as `MCP_GATEWAY_URL` environment variable
+6. Applies authentication and rate limiting policies at gateway level
+
+Bob's LLM can now access database tools through a secure, load-balanced gateway without complex configuration.
+
+#### Story 2: Direct Server Access for Trusted Environments
+
+Alice is deploying an LLM in a trusted internal environment where she wants minimal latency and doesn't need centralized audit logging.
+
+```yaml
+# 1. Deploy MCPServer
 apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: postgres-tool-v2
-  namespace: team-data-science
-  labels:
-    app: db-tools
-    version: v2
+  name: k8s-tools
+  namespace: my-team
 spec:
   transport: streamable-http
   hosted:
@@ -246,187 +248,89 @@ spec:
       spec:
         containers:
         - name: mcp-server
-          image: my-registry/postgres-mcp:2.0.0
-          env:
-          - name: DATABASE_URI
-            valueFrom:
-              secretKeyRef:
-                name: db-credentials
-                key: uri
+          image: my-registry/k8s-mcp:1.0.0
+  # Grant Kubernetes API access
   permissionProfile:
     inline:
       allow:
-      - network:
-          allowHost:
-          - "postgres.team-data-science.svc.cluster.local"
+      - kubeResources:
+          apiGroups: [""]
+          resources: ["pods", "services"]
+          verbs: ["get", "list"]
 
 ---
-# 2. Create MCPRoute that attaches to platform gateway (cross-namespace)
-apiVersion: ome.io/v1alpha1
-kind: MCPRoute
+# 2. InferenceService with direct access mode
+apiVersion: ome.io/v1beta1
+kind: InferenceService
 metadata:
-  name: db-tools-route
-  namespace: team-data-science
+  name: my-llm
+  namespace: my-team
 spec:
-  # Attach to platform team's gateway in different namespace
-  parentRefs:
-  - name: shared-mcp-gateway
-    namespace: platform-infra
-    sectionName: http  # Attach to specific listener
-  # Route rules for traffic management
-  rules:
-  - matches:
-    - tools: ["db_query", "db_execute", "db_*"]  # Wildcard matching
-      method: "tools/call"
-    # Canary deployment: 80% v1, 20% v2
-    backendRefs:
-    - name: postgres-tool-v1
-      weight: 80
-    - name: postgres-tool-v2
-      weight: 20
-    timeouts:
-      request: 30s
+  model:
+    name: llama-3-70b
+  runtime:
+    name: vllm
+  mcpServers:
+  - serverRef:
+      name: k8s-tools
+  # Disable gateway for direct access
+  mcpGateway:
+    enabled: false  # Direct pod-to-pod communication
 ```
 
-Bob's team now has full control over their routing logic (server selection, traffic splits, matching rules) while using the platform team's shared gateway infrastructure. They can perform canary deployments without platform team involvement.
+**What OME does automatically**:
+1. Creates Deployment, Service, and RBAC (Role/RoleBinding) for `k8s-tools`
+2. Injects direct server endpoint into LLM pods as `MCP_SERVER_K8S_TOOLS_URL`
+3. No gateway deployed - LLM connects directly to k8s-tools Service
+4. Lower latency (no proxy hop), simpler debugging
 
-#### Story 3: Security Team Attaching Policies for Authentication and Rate Limiting
-
-Carol is a security engineer responsible for enforcing authentication and rate limiting across all MCP traffic. She creates policies that attach to the gateway (global enforcement) and specific routes (per-team customization).
-
-```yaml
-# 1. Global authentication policy attached to gateway
-apiVersion: ome.io/v1alpha1
-kind: MCPAuthenticationPolicy
-metadata:
-  name: gateway-auth
-  namespace: platform-infra
-spec:
-  targetRef:
-    group: ome.io
-    kind: MCPGateway
-    name: shared-mcp-gateway
-  oidc:
-    issuer: "https://auth.company.com"
-    clientID: "mcp-gateway-client"
-    clientSecretRef:
-      name: oidc-client-secret
-      key: client-secret
-    scopes: ["openid", "profile", "mcp:tools"]
-  jwt:
-    audiences: ["mcp-api"]
-    jwksURI: "https://auth.company.com/.well-known/jwks.json"
-
----
-# 2. Authorization policy for data-science team route
-apiVersion: ome.io/v1alpha1
-kind: MCPAuthorizationPolicy
-metadata:
-  name: db-tools-authz
-  namespace: team-data-science
-spec:
-  targetRef:
-    group: ome.io
-    kind: MCPRoute
-    name: db-tools-route
-  rules:
-  - principals:
-    - "group:data-scientists"
-    - "group:ml-engineers"
-    permissions:
-    - tools: ["db_query"]
-      actions: ["read"]
-  - principals:
-    - "group:db-admins"
-    permissions:
-    - tools: ["db_*"]
-      actions: ["read", "write"]
-
----
-# 3. Rate limit policy per team
-apiVersion: ome.io/v1alpha1
-kind: MCPRateLimitPolicy
-metadata:
-  name: data-science-rate-limit
-  namespace: team-data-science
-spec:
-  targetRef:
-    group: ome.io
-    kind: MCPRoute
-    name: db-tools-route
-  limits:
-  - dimension: user
-    requests: 1000
-    unit: hour
-  - dimension: ip
-    requests: 100
-    unit: minute
-  - dimension: tool
-    tools: ["db_execute"]
-    requests: 10
-    unit: minute
-
----
-# 4. Security headers policy at gateway level
-apiVersion: ome.io/v1alpha1
-kind: MCPSecurityPolicy
-metadata:
-  name: gateway-security
-  namespace: platform-infra
-spec:
-  targetRef:
-    group: ome.io
-    kind: MCPGateway
-    name: shared-mcp-gateway
-  cors:
-    allowOrigins:
-    - "https://*.company.com"
-    allowMethods:
-    - "POST"
-    - "OPTIONS"
-    allowHeaders:
-    - "Authorization"
-    - "Content-Type"
-    maxAge: 3600
-  headers:
-    set:
-      "X-Frame-Options": "DENY"
-      "X-Content-Type-Options": "nosniff"
-      "Strict-Transport-Security": "max-age=31536000"
-```
-
-Carol can now enforce authentication globally at the gateway level, while individual teams can customize authorization and rate limiting for their specific routes. The security team maintains control through dedicated policy resources with separate RBAC permissions.
+Alice gets direct server access with minimal overhead while still benefiting from OME's server lifecycle management and RBAC generation.
 
 ### Notes/Constraints/Caveats
 
-1.  **Hosted Server Container Name**: When using a `hosted` `MCPServer`, the container running the MCP server process within the `podSpec` must be named `mcp-server` for the controller to correctly inject configurations.
-2.  **Permissions**: The `permissionProfile` with `kubeResources` is very powerful. Misconfiguration can create security risks. The controller creates `Roles`/`RoleBindings`, so RBAC must be enabled in the cluster.
-3.  **Gateway API Pattern**: This design follows Kubernetes Gateway API patterns with clear separation between Gateway (infrastructure), Route (routing logic), and Policy (security/traffic management). Platform teams manage gateways, application teams manage routes, and security teams manage policies.
-4.  **Cross-Namespace Access**: MCPRoutes can reference MCPGateways in different namespaces via ReferenceGrant, enabling centralized gateway management with distributed route ownership.
-5.  **Policy Precedence**: When multiple policies target the same resource, route-level policies override gateway-level policies. Among policies of the same type targeting the same resource, the oldest policy takes precedence.
-6.  **Transport Limitations**: `stdio` transport is only suitable for simple, single-shot tools and does not support scaling beyond one replica. `streamable-http` or `sse` are recommended for production.
-7.  **Observability**: The gateway follows Kubernetes-native observability patterns:
+1.  **Hosted Server Container Name**: When using a `hosted` `MCPServer`, the container running the MCP server process within the `podSpec` must be named `mcp-server` for the controller to correctly inject configurations. (This requirement may be relaxed in future versions using label selectors.)
+2.  **Permissions**: The `permissionProfile` with `kubeResources` is very powerful. Misconfiguration can create security risks. The controller creates `Roles`/`RoleBindings`, so RBAC must be enabled in the cluster. Documentation will strongly emphasize the principle of least privilege.
+3.  **Operator-Managed Gateway**: The gateway component in v1alpha1 is **not a user-facing CRD**. It's managed internally by OME based on InferenceService configuration. 
+4.  **Gateway Scope**: In v1alpha1, each InferenceService gets its own logical gateway configuration. Shared gateway infrastructure (multi-tenant) will be considered for v1beta1 if user feedback indicates strong demand.
+5.  **Policy Embedding**: Policies (authentication, authorization, rate limiting) are embedded in MCPServer and InferenceService specs rather than separate CRDs. This simplifies the API for v1alpha1 while maintaining a path to separate Policy CRDs in future versions.
+6.  **Transport Limitations**: `stdio` transport is only suitable for simple, single-shot tools and does not support scaling beyond one replica. `streamable-http` or `sse` are recommended for production deployments.
+7.  **Observability**: Both MCPServer and gateway components follow Kubernetes-native observability patterns:
   - Health checks via standard K8s probes
   - Metrics via Prometheus annotations
-  - Tracing via service mesh/OpenTelemetry
-  - Logging via stdout/stderr
+  - Tracing via service mesh/OpenTelemetry integration
+  - Logging via stdout/stderr (structured logging recommended)
+8.  **Service Mesh Integration**: When service mesh (Istio, Linkerd) is available, users can choose to disable the managed gateway and rely on service mesh policies for authentication, authorization, and traffic management.
 
 ### Risks and Mitigations
 
 -   **Risk 1: Over-privileged Tool Servers**: The `kubeResources` permission could grant excessive permissions.
-    -   **Mitigation**: The API is declarative. All permissions are explicitly defined in the YAML and auditable. The controller generates narrowly scoped `Roles`. Documentation will strongly emphasize the principle of least privilege.
--   **Risk 2: Gateway as a Single Point of Failure**: If the gateway goes down, all tool access is lost.
-    -   **Mitigation**: The `MCPGateway` spec supports `replicas`, allowing for highly available deployments. Standard Kubernetes practices for HA (e.g., Pod anti-affinity) can be applied via the `podSpec`.
--   **Risk 3: Complex Configuration**: The new specs, especially `MCPGateway`'s network config and `MCPServer`'s `podSpec`, add complexity.
-    -   **Mitigation**: The API will have sensible defaults. We will provide comprehensive documentation, examples, and user guides for common patterns.
+    -   **Mitigation**: The API is declarative with all permissions explicitly defined in YAML and auditable. The controller generates narrowly scoped `Roles` with least-privilege principles. Documentation and examples will strongly emphasize security best practices. Consider adding validation webhooks to warn about overly broad permissions.
+
+-   **Risk 2: Gateway as Single Point of Failure**: If the managed gateway goes down, all tool access is lost (when gateway mode is enabled).
+    -   **Mitigation**: The managed gateway will support multiple replicas with automatic load balancing. Standard Kubernetes practices for HA (Pod anti-affinity, PodDisruptionBudget) will be applied. Users can also disable gateway mode for direct access, eliminating this single point of failure at the cost of centralized policy enforcement.
+
+-   **Risk 3: Limited Flexibility in v1alpha1**: Starting with operator-managed gateway means less flexibility for advanced users who need custom gateway configurations.
+    -   **Mitigation**: The design includes a clear evolution path. v1beta1 can introduce user-facing MCPGateway CRD and separate Policy CRDs based on validated user needs. The simplified v1alpha1 design accelerates time-to-market while gathering real-world usage patterns to inform future enhancements.
+
+-   **Risk 4: Gateway Data Plane Implementation Complexity**: Building an MCP-aware gateway requires significant development effort (12-18 months estimated).
+    -   **Mitigation**: Start with a minimal viable gateway that handles basic routing and load balancing. Advanced features (protocol translation, complex policies) can be added incrementally based on priority. Consider leveraging existing proxy infrastructure (Envoy, nginx) with MCP-specific extensions rather than building from scratch.
 
 ## Design Details
 
-### API Specifications
+## API Specifications
 
-#### MCPServer Resource
+The model introduces two CRDs with clear separation of concerns.
 
-The `MCPServer` CRD defines a tool server. Its `spec` is the core of the definition.
+### MCPServer Resource
+
+MCPServer defines individual MCP tool servers (namespace-scoped). 
+
+**Key Points**:
+- Namespace-scoped (routes can only reference servers in same namespace)
+- Supports both `hosted` (in-cluster) and `remote` (external) servers
+- Permission profiles for K8s resource and network access control
+- No embedded policies (per-route policies moved to MCPRoute)
+
 
 **`MCPServerSpec`**
 
@@ -467,8 +371,6 @@ type MCPServerSpec struct {
 	ToolsFilter []string `json:"toolsFilter,omitempty"`
 }
 
-// Note: Authentication and authorization are now handled via separate policy CRDs
-// (MCPAuthenticationPolicy, MCPAuthorizationPolicy) that attach to MCPGateway or MCPRoute resources.
 ```
 
 -   **`hosted` vs `remote`**: The spec enforces that exactly one of these is set.
@@ -523,772 +425,704 @@ type MCPServerSpec struct {
     }
     ```
 
-#### MCPGateway Resource
+### MCPRoute Resource
 
-The `MCPGateway` CRD defines gateway infrastructure and listeners, following the Kubernetes Gateway API pattern.
-
-**`MCPGatewaySpec`**
+MCPRoute defines routing configuration from gateway to backend MCPServers (namespace-scoped).
 
 ```go
-// MCPGatewaySpec defines the desired state of MCPGateway.
-// MCPGateway provides infrastructure for MCP traffic, defining listeners
-// and network exposure. Routing logic is defined separately in MCPRoute resources.
-type MCPGatewaySpec struct {
-	// GatewayClassName references a GatewayClass resource that defines the
-	// controller implementation.
-	// +kubebuilder:validation:Required
-	GatewayClassName string `json:"gatewayClassName"`
+// MCPRoute is the Schema for the mcproutes API
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced,shortName=mcpr
+// +kubebuilder:printcolumn:name="Backends",type=integer,JSONPath=`.spec.backendRefs[*]`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+type MCPRoute struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Listeners define the ports and protocols this gateway accepts.
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=64
-	Listeners []Listener `json:"listeners"`
-
-	// Addresses requested for this Gateway (optional, auto-assigned if not specified).
-	// +optional
-	Addresses []GatewayAddress `json:"addresses,omitempty"`
+	Spec   MCPRouteSpec   `json:"spec"`
+	Status MCPRouteStatus `json:"status,omitempty"`
 }
 
-type Listener struct {
-	// Name is the unique name of this listener.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name"`
-
-	// Protocol is the MCP transport protocol for this listener.
-	// +kubebuilder:validation:Enum=HTTP;GRPC;WebSocket
-	// +kubebuilder:default=HTTP
-	Protocol ProtocolType `json:"protocol"`
-
-	// Port is the network port.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port"`
-
-	// TLS defines TLS configuration for this listener.
-	// +optional
-	TLS *GatewayTLSConfig `json:"tls,omitempty"`
-
-	// AllowedRoutes defines which Routes may attach to this listener.
-	// +optional
-	AllowedRoutes *AllowedRoutes `json:"allowedRoutes,omitempty"`
-}
-
-type GatewayAddress struct {
-	// Type of the address.
-	// +kubebuilder:validation:Enum=IPAddress;Hostname
-	Type string `json:"type"`
-
-	// Value of the address (IP or hostname).
-	// +kubebuilder:validation:Required
-	Value string `json:"value"`
-}
-
-type GatewayTLSConfig struct {
-	// Mode defines the TLS behavior for the listener.
-	// +kubebuilder:validation:Enum=Terminate;Passthrough
-	// +kubebuilder:default=Terminate
-	Mode string `json:"mode"`
-
-	// CertificateRefs references Secrets containing TLS certificates.
-	// +optional
-	// +kubebuilder:validation:MaxItems=64
-	CertificateRefs []SecretObjectReference `json:"certificateRefs,omitempty"`
-}
-
-type AllowedRoutes struct {
-	// Namespaces indicates namespaces from which Routes may attach.
-	// +optional
-	Namespaces *RouteNamespaces `json:"namespaces,omitempty"`
-
-	// Kinds specifies the kinds of Routes that may attach.
-	// +optional
-	// +kubebuilder:validation:MaxItems=8
-	Kinds []RouteGroupKind `json:"kinds,omitempty"`
-}
-
-type RouteNamespaces struct {
-	// From indicates where Routes should be selected from.
-	// +kubebuilder:validation:Enum=All;Same;Selector
-	// +kubebuilder:default=Same
-	From string `json:"from"`
-
-	// Selector matches namespaces using label selector.
-	// +optional
-	Selector *metav1.LabelSelector `json:"selector,omitempty"`
-}
-```
-
-#### MCPRoute Resource
-
-The `MCPRoute` CRD defines routing rules for MCP traffic, similar to HTTPRoute in Gateway API.
-
-**`MCPRouteSpec`**
-
-```go
-// MCPRouteSpec defines routing rules for MCP traffic.
-// MCPRoute attaches to MCPGateway(s) and selects backend MCPServer(s).
 type MCPRouteSpec struct {
-	// ParentRefs references the Gateway(s) this Route attaches to.
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=32
-	ParentRefs []ParentReference `json:"parentRefs"`
-
-	// Hostnames defines hostname matching for this route (optional for MCP).
-	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Hostnames []string `json:"hostnames,omitempty"`
-
-	// Rules defines routing rules for this route.
-	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Rules []MCPRouteRule `json:"rules,omitempty"`
-}
-
-type ParentReference struct {
-	// Group is the group of the parent resource.
-	// +kubebuilder:default="ome.io"
-	// +optional
-	Group *string `json:"group,omitempty"`
-
-	// Kind is the kind of the parent resource.
-	// +kubebuilder:default="MCPGateway"
-	// +optional
-	Kind *string `json:"kind,omitempty"`
-
-	// Name is the name of the parent resource.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Namespace is the namespace of the parent resource.
-	// +optional
-	Namespace *string `json:"namespace,omitempty"`
-
-	// SectionName is the listener name to attach to (optional).
-	// +optional
-	SectionName *string `json:"sectionName,omitempty"`
-}
-
-type MCPRouteRule struct {
-	// Matches define conditions for this rule.
-	// +optional
-	// +kubebuilder:validation:MaxItems=8
-	Matches []MCPRouteMatch `json:"matches,omitempty"`
-
-	// Filters define processing steps for matched requests.
-	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Filters []MCPRouteFilter `json:"filters,omitempty"`
-
-	// BackendRefs defines the backend MCPServers.
+	// BackendRefs defines where to route requests
+	// All backends must be MCPServers in the same namespace
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
 	BackendRefs []MCPBackendRef `json:"backendRefs"`
 
-	// Timeouts defines request timeout configuration.
+	// Matches defines routing rules (optional)
+	// If not specified, routes all tools from backend servers
 	// +optional
-	Timeouts *MCPRouteTimeouts `json:"timeouts,omitempty"`
-}
+	Matches []MCPRouteMatch `json:"matches,omitempty"`
 
-type MCPRouteMatch struct {
-	// Tools matches based on MCP tool names.
-	// Supports wildcards: ["*"] matches all, ["db_*"] matches db_query, db_exec, etc.
+	// Authentication policy for this route
+	// Overrides/extends gateway default if present
 	// +optional
-	Tools []string `json:"tools,omitempty"`
+	Authentication *MCPAuthentication `json:"authentication,omitempty"`
 
-	// Method matches based on MCP protocol method.
+	// Authorization policy for this route
+	// Adds to gateway default authorization
 	// +optional
-	// +kubebuilder:validation:Enum=tools/call;tools/list;resources/read;resources/list;prompts/get;prompts/list
-	Method *string `json:"method,omitempty"`
+	Authorization *MCPAuthorization `json:"authorization,omitempty"`
 
-	// Headers matches based on request headers.
+	// RateLimit for this route
+	// Adds to gateway default rate limits
 	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Headers []HeaderMatch `json:"headers,omitempty"`
-}
+	RateLimit *MCPRateLimit `json:"rateLimit,omitempty"`
 
-type HeaderMatch struct {
-	// Type specifies how to match the header value.
-	// +kubebuilder:validation:Enum=Exact;RegularExpression
-	// +kubebuilder:default=Exact
-	Type string `json:"type"`
-
-	// Name is the header name.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Value is the header value to match.
-	// +kubebuilder:validation:Required
-	Value string `json:"value"`
-}
-
-type MCPRouteFilter struct {
-	// Type identifies the filter type.
-	// +kubebuilder:validation:Enum=RequestHeaderModifier;ResponseHeaderModifier;RequestMirror
-	Type string `json:"type"`
-
-	// RequestHeaderModifier modifies request headers.
+	// Filters for request/response modification
 	// +optional
-	RequestHeaderModifier *HeaderModifier `json:"requestHeaderModifier,omitempty"`
-
-	// ResponseHeaderModifier modifies response headers.
-	// +optional
-	ResponseHeaderModifier *HeaderModifier `json:"responseHeaderModifier,omitempty"`
-}
-
-type HeaderModifier struct {
-	// Set overwrites request headers.
-	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Set []Header `json:"set,omitempty"`
-
-	// Add adds request headers.
-	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Add []Header `json:"add,omitempty"`
-
-	// Remove removes request headers.
-	// +optional
-	// +kubebuilder:validation:MaxItems=16
-	Remove []string `json:"remove,omitempty"`
+	Filters []MCPRouteFilter `json:"filters,omitempty"`
 }
 
 type MCPBackendRef struct {
-	// Name is the name of the MCPServer resource.
+	// ServerRef references an MCPServer in the same namespace
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	ServerRef LocalObjectReference `json:"serverRef"`
 
-	// Namespace is the namespace of the MCPServer (optional, defaults to route namespace).
-	// +optional
-	Namespace *string `json:"namespace,omitempty"`
-
-	// Weight defines traffic split weight (default: 1).
+	// Weight for traffic splitting across backends
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=1
 	// +optional
 	Weight *int32 `json:"weight,omitempty"`
 }
 
-type MCPRouteTimeouts struct {
-	// Request timeout for this route.
+type MCPRouteMatch struct {
+	// Tools to match (supports wildcards: "db_*", "file_*")
 	// +optional
-	Request *metav1.Duration `json:"request,omitempty"`
+	Tools []string `json:"tools,omitempty"`
 
-	// BackendRequest timeout for backend requests.
+	// Method to match (tools/call, tools/list, prompts/get, etc.)
 	// +optional
-	BackendRequest *metav1.Duration `json:"backendRequest,omitempty"`
+	Method *string `json:"method,omitempty"`
+
+	// Headers to match
+	// +optional
+	Headers []HeaderMatch `json:"headers,omitempty"`
+}
+
+type HeaderMatch struct {
+	// Name of the header
+	Name string `json:"name"`
+
+	// Value to match
+	Value string `json:"value"`
+
+	// Type of match (Exact, Prefix, Regex)
+	// +kubebuilder:validation:Enum=Exact;Prefix;Regex
+	// +kubebuilder:default=Exact
+	Type string `json:"type"`
+}
+
+type MCPRouteFilter struct {
+	// Type of filter
+	// +kubebuilder:validation:Enum=RequestHeaderModifier;ResponseHeaderModifier
+	Type string `json:"type"`
+
+	// RequestHeaderModifier configuration
+	// +optional
+	RequestHeaderModifier *HeaderModifier `json:"requestHeaderModifier,omitempty"`
+
+	// ResponseHeaderModifier configuration
+	// +optional
+	ResponseHeaderModifier *HeaderModifier `json:"responseHeaderModifier,omitempty"`
+}
+
+type HeaderModifier struct {
+	// Set headers (replaces if exists)
+	// +optional
+	Set []Header `json:"set,omitempty"`
+
+	// Add headers (appends if exists)
+	// +optional
+	Add []Header `json:"add,omitempty"`
+
+	// Remove headers
+	// +optional
+	Remove []string `json:"remove,omitempty"`
+}
+
+type Header struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type MCPRouteStatus struct {
+	// Conditions represent the latest available observations
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// GatewayURL is the endpoint LLMs should connect to for this route
+	// Format: http://gateway.namespace/routes/{namespace}/{route-name}
+	GatewayURL string `json:"gatewayURL,omitempty"`
+
+	// BackendStatuses shows health of each backend
+	BackendStatuses []BackendStatus `json:"backendStatuses,omitempty"`
+}
+
+type BackendStatus struct {
+	ServerRef LocalObjectReference `json:"serverRef"`
+	Ready     bool                  `json:"ready"`
+	Endpoint  string                `json:"endpoint,omitempty"`
+	Message   string                `json:"message,omitempty"`
 }
 ```
 
-#### Policy Resources
-
-Following GEP-713 Policy Attachment, policies are separate CRDs that attach to Gateway or Route resources via `targetRef`.
-
-**`MCPAuthenticationPolicy`**
+**Policy Type Definitions** :
 
 ```go
-// MCPAuthenticationPolicy defines authentication requirements for MCP traffic.
-type MCPAuthenticationPolicySpec struct {
-	// TargetRef identifies the Gateway or Route to which this policy applies.
-	// +kubebuilder:validation:Required
-	TargetRef PolicyTargetReference `json:"targetRef"`
-
-	// OIDC defines OpenID Connect authentication.
+type MCPAuthentication struct {
+	// OIDC defines OpenID Connect authentication
 	// +optional
 	OIDC *OIDCAuthentication `json:"oidc,omitempty"`
 
-	// JWT defines JWT token authentication.
+	// JWT defines JWT token authentication
 	// +optional
 	JWT *JWTAuthentication `json:"jwt,omitempty"`
 
-	// APIKey defines API key authentication.
+	// APIKey defines API key authentication
 	// +optional
 	APIKey *APIKeyAuthentication `json:"apiKey,omitempty"`
 }
 
-type PolicyTargetReference struct {
-	// Group is the group of the target resource.
-	// +kubebuilder:validation:Required
-	Group string `json:"group"`
-
-	// Kind is the kind of the target resource.
-	// +kubebuilder:validation:Enum=MCPGateway;MCPRoute
-	// +kubebuilder:validation:Required
-	Kind string `json:"kind"`
-
-	// Name is the name of the target resource.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-}
-
 type OIDCAuthentication struct {
-	// Issuer is the OIDC issuer URL.
+	// Issuer is the OIDC issuer URL
 	// +kubebuilder:validation:Required
 	Issuer string `json:"issuer"`
 
-	// ClientID is the OAuth2 client ID.
+	// ClientID is the OAuth2 client ID
 	// +kubebuilder:validation:Required
 	ClientID string `json:"clientID"`
 
-	// ClientSecretRef references a Secret containing the client secret.
+	// ClientSecretRef references a Secret containing the client secret
 	// +kubebuilder:validation:Required
 	ClientSecretRef corev1.SecretKeySelector `json:"clientSecretRef"`
 
-	// Scopes defines the OAuth2 scopes to request.
+	// Scopes defines the OAuth2 scopes to request
 	// +optional
 	Scopes []string `json:"scopes,omitempty"`
 }
 
 type JWTAuthentication struct {
-	// Audiences defines valid JWT audiences.
+	// Audiences defines valid JWT audiences
 	// +kubebuilder:validation:MinItems=1
 	Audiences []string `json:"audiences"`
 
-	// JWKSURI is the URI for the JSON Web Key Set.
+	// JWKSURI is the URI for the JSON Web Key Set
 	// +kubebuilder:validation:Required
 	JWKSURI string `json:"jwksURI"`
 
-	// Issuer defines the expected JWT issuer.
+	// Issuer defines the expected JWT issuer (optional)
 	// +optional
 	Issuer *string `json:"issuer,omitempty"`
 }
 
 type APIKeyAuthentication struct {
-	// Header is the name of the header containing the API key.
+	// Header is the name of the header containing the API key
 	// +kubebuilder:default="X-API-Key"
 	Header string `json:"header"`
 
-	// SecretRefs references Secrets containing valid API keys.
+	// SecretRefs references Secrets containing valid API keys
 	// +kubebuilder:validation:MinItems=1
 	SecretRefs []corev1.SecretKeySelector `json:"secretRefs"`
 }
-```
 
-**`MCPAuthorizationPolicy`**
-
-```go
-// MCPAuthorizationPolicy defines authorization rules for MCP traffic.
-type MCPAuthorizationPolicySpec struct {
-	// TargetRef identifies the Gateway or Route to which this policy applies.
-	// +kubebuilder:validation:Required
-	TargetRef PolicyTargetReference `json:"targetRef"`
-
-	// Rules defines authorization rules.
+type MCPAuthorization struct {
+	// Rules defines authorization rules
 	// +kubebuilder:validation:MinItems=1
 	Rules []AuthorizationRule `json:"rules"`
 }
 
 type AuthorizationRule struct {
-	// Principals defines who this rule applies to.
+	// Principals this rule applies to (users, groups, service accounts)
+	// Format: "user:alice", "group:developers", "serviceaccount:my-sa"
 	// +kubebuilder:validation:MinItems=1
 	Principals []string `json:"principals"`
 
-	// Permissions defines what actions are allowed.
+	// Permissions define allowed actions
 	// +kubebuilder:validation:MinItems=1
 	Permissions []Permission `json:"permissions"`
 
-	// Conditions defines additional conditions for this rule.
+	// Conditions for additional filtering (optional)
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
 }
 
 type Permission struct {
-	// Tools defines which MCP tools this permission applies to.
-	// Supports wildcards: ["*"] matches all, ["db_*"] matches db_query, db_exec, etc.
+	// Tools this permission applies to (supports wildcards)
 	// +kubebuilder:validation:MinItems=1
 	Tools []string `json:"tools"`
 
-	// Actions defines allowed actions.
+	// Actions allowed
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:Enum=read;write;execute
 	Actions []string `json:"actions"`
 }
-```
 
-**`MCPRateLimitPolicy`**
+type Condition struct {
+	// Type of condition check
+	// +kubebuilder:validation:Enum=IPAddress;TimeOfDay;RequestHeader
+	Type string `json:"type"`
 
-```go
-// MCPRateLimitPolicy defines rate limiting for MCP traffic.
-type MCPRateLimitPolicySpec struct {
-	// TargetRef identifies the Gateway or Route to which this policy applies.
+	// Key for the condition (e.g., header name for RequestHeader type)
+	// +optional
+	Key *string `json:"key,omitempty"`
+
+	// Value to match against
 	// +kubebuilder:validation:Required
-	TargetRef PolicyTargetReference `json:"targetRef"`
+	Value string `json:"value"`
 
-	// Limits defines rate limiting rules.
+	// Operator for matching
+	// +kubebuilder:validation:Enum=Equal;NotEqual;In;NotIn;Matches;NotMatches
+	// +kubebuilder:default=Equal
+	Operator string `json:"operator"`
+}
+
+type MCPRateLimit struct {
+	// Limits defines rate limiting rules
 	// +kubebuilder:validation:MinItems=1
 	Limits []RateLimit `json:"limits"`
 }
 
 type RateLimit struct {
-	// Dimension defines what to rate limit by (user, ip, tool, etc.).
-	// +kubebuilder:validation:Enum=user;ip;tool;principal
+	// Dimension defines what to rate limit by
+	// +kubebuilder:validation:Enum=user;ip;tool;principal;namespace
 	// +kubebuilder:validation:Required
 	Dimension string `json:"dimension"`
 
-	// Tools restricts this limit to specific tools (optional).
+	// Tools restricts this limit to specific tools (optional)
 	// +optional
 	Tools []string `json:"tools,omitempty"`
 
-	// Requests is the maximum number of requests allowed.
+	// Requests is the maximum number of requests allowed
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Required
 	Requests int32 `json:"requests"`
 
-	// Unit is the time unit for the limit.
+	// Unit is the time unit for the limit
 	// +kubebuilder:validation:Enum=second;minute;hour;day
 	// +kubebuilder:validation:Required
 	Unit string `json:"unit"`
 }
 ```
 
-**`MCPSecurityPolicy`**
+### InferenceService MCP Integration
+
+InferenceService is extended to support with two modes.
 
 ```go
-// MCPSecurityPolicy defines security headers and CORS for MCP traffic.
-type MCPSecurityPolicySpec struct {
-	// TargetRef identifies the Gateway or Route to which this policy applies.
+type InferenceServiceSpec struct {
+	// ... existing fields (model, runtime, etc.) ...
+
+	// MCPServers for auto-creating MCPRoute (backward compatible)
+	// Mutually exclusive with MCPRoute.RouteRef
+	// +optional
+	// +kubebuilder:validation:MaxItems=32
+	MCPServers []MCPServerReference `json:"mcpServers,omitempty"`
+
+	// MCPRoute configuration
+	// +optional
+	MCPRoute *MCPRouteConfig `json:"mcpRoute,omitempty"`
+}
+
+type MCPServerReference struct {
+	// ServerRef references an MCPServer resource
 	// +kubebuilder:validation:Required
-	TargetRef PolicyTargetReference `json:"targetRef"`
+	ServerRef LocalObjectReference `json:"serverRef"`
 
-	// CORS defines CORS configuration.
+	// Namespace of the MCPServer (optional, defaults to InferenceService namespace)
 	// +optional
-	CORS *CORSPolicy `json:"cors,omitempty"`
+	Namespace *string `json:"namespace,omitempty"`
 
-	// Headers defines security headers to set.
+	// Weight for traffic splitting (default: 1)
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=1
 	// +optional
-	Headers *SecurityHeaders `json:"headers,omitempty"`
+	Weight *int32 `json:"weight,omitempty"`
 }
 
-type CORSPolicy struct {
-	// AllowOrigins defines allowed origins.
-	// +kubebuilder:validation:MinItems=1
-	AllowOrigins []string `json:"allowOrigins"`
-
-	// AllowMethods defines allowed HTTP methods.
+type MCPRouteConfig struct {
+	// RouteRef references an existing MCPRoute (explicit mode)
+	// When set, MCPServers and embedded config are ignored
 	// +optional
-	AllowMethods []string `json:"allowMethods,omitempty"`
+	RouteRef *LocalObjectReference `json:"routeRef,omitempty"`
 
-	// AllowHeaders defines allowed headers.
+	// Embedded config for auto-creating MCPRoute (simple mode)
+	// Only used when RouteRef is not set
 	// +optional
-	AllowHeaders []string `json:"allowHeaders,omitempty"`
-
-	// MaxAge defines preflight cache duration in seconds.
-	// +optional
-	MaxAge *int32 `json:"maxAge,omitempty"`
-}
-
-type SecurityHeaders struct {
-	// Set defines headers to set on responses.
-	// +optional
-	Set map[string]string `json:"set,omitempty"`
+	Authentication *MCPAuthentication `json:"authentication,omitempty"`
+	Authorization *MCPAuthorization `json:"authorization,omitempty"`
+	RateLimit *MCPRateLimit `json:"rateLimit,omitempty"`
+	Matches []MCPRouteMatch `json:"matches,omitempty"`
+	Filters []MCPRouteFilter `json:"filters,omitempty"`
 }
 ```
 
-Notes:
+**How It Works**:
 
-##### MCPServer.transport vs MCPGateway.network.transport:
-  1. Definition
-    - MCPServer.transport → Backend protocol (how the server communicates)
-    - MCPGateway.network.transport → Frontend protocol (how clients connect to gateway)
-  2. Gateway Should Support Multiple Protocols Simultaneously:
-    - Clients should be able to connect via HTTP, gRPC, or WebSocket
-    - Gateway translates between client protocol and backend MCPServer protocols
-    - Different MCPServers can use different transports
-  3. Follows Industry Best Practices:
-    - Aligns with Envoy, Kong, Istio Gateway patterns
-    - Enables protocol translation (a key gateway feature)
-    - Provides value beyond simple pass-through
-    
+1. **Simple Mode** (Auto-Create MCPRoute):
+   - User specifies `mcpServers` with optional embedded config in `mcpRoute`
+   - InferenceService controller creates MCPRoute resource automatically
+   - MCPRoute name: `{inference-service-name}-route`
+   - Maintains v1alpha1 backward compatibility
+
+2. **Explicit Mode** (Reference Existing MCPRoute):
+   - User creates MCPRoute separately
+   - User specifies `mcpRoute.routeRef` in InferenceService
+   - InferenceService just references the route
+   - Enables route sharing across multiple InferenceServices
+
+3. **Validation**:
+   - Webhook ensures either `mcpServers` OR `mcpRoute.routeRef`, not both
+   - If `routeRef` is set, `mcpServers` must be empty
 ### Architecture Overview
 
-The architecture follows the Kubernetes Gateway API pattern with clear separation between Gateway (infrastructure), Route (routing logic), and Policy (security/traffic management).
+The architecture uses two user-facing CRDs with operator-managed gateway infrastructure.
 
 ```mermaid
-graph TD
-    subgraph "Tool Consumers"
-        App1["LLM Application A"]
-        App2["LLM Application B"]
+graph TB
+    subgraph "User-Facing Layer"
+        direction LR
+        U1[Application Team]
+        U2[Platform Team]
     end
 
-    subgraph "Platform Team: Gateway Infrastructure"
-        MCPG["MCPGateway<br/>Listeners & Network"]
-        GWController["Gateway Controller"]
+    subgraph "CRD Resources"
+        direction TB
+        CRD1[MCPServer<br/>Type: hosted/remote<br/>PermissionProfile]
+        CRD2[MCPRoute<br/>BackendRefs<br/>Policies<br/>Matches]
+        CRD3[InferenceService<br/>mcpServers[]<br/>mcpRoute config]
     end
 
-    subgraph "Application Teams: Routing Logic"
-        Route1["Team A: MCPRoute<br/>DB Tools"]
-        Route2["Team B: MCPRoute<br/>K8s Tools"]
+    subgraph "Control Plane - ome-system namespace"
+        direction TB
+
+        subgraph "Controllers"
+            direction LR
+            C1[MCPServer<br/>Controller]
+            C2[MCPRoute<br/>Controller]
+            C3[InferenceService<br/>Controller]
+        end
+
+        subgraph "Managed Gateway Infrastructure"
+            direction TB
+            GW[MCP Gateway<br/>┌──────────────┐<br/>│ Auto-Discovery│<br/>│ Policy Enforce│<br/>│ Load Balancing│<br/>└──────────────┘]
+
+            subgraph "Gateway Functions"
+                direction LR
+                GW1[Authentication<br/>JWT/OIDC/APIKey]
+                GW2[Authorization<br/>RBAC Policies]
+                GW3[Rate Limiting<br/>Multi-dimension]
+                GW4[Route Table<br/>Dynamic Update]
+            end
+        end
     end
 
-    subgraph "Security Team: Policies"
-        AuthPolicy["Authentication Policy<br/>Gateway-level"]
-        AuthzPolicy1["Authorization Policy<br/>Route A"]
-        RatePolicy2["Rate Limit Policy<br/>Route B"]
+    subgraph "Data Plane - app namespace"
+        direction TB
+
+        subgraph "Hosted MCPServers"
+            direction LR
+            HS1[MCPServer Pod 1<br/>Deployment<br/>Service<br/>RBAC]
+            HS2[MCPServer Pod 2<br/>Deployment<br/>Service<br/>RBAC]
+        end
+
+        subgraph "Remote MCPServers"
+            RS1[External Service<br/>URL validated]
+        end
+
+        subgraph "LLM Workload"
+            LLM[InferenceService Pod<br/>ENV: MCP_GATEWAY_URL<br/>http://gateway/routes/ns/route]
+        end
     end
 
-    subgraph "Backend Servers"
-        Server1["MCPServer<br/>DB Tools v1"]
-        Server2["MCPServer<br/>DB Tools v2"]
-        Server3["MCPServer<br/>K8s Tools"]
-        Server4["MCPServer (Remote)<br/>External API"]
-    end
+    %% CRD Creation Flow
+    U1 -->|1. Create| CRD1
+    U1 -->|2a. Create Explicit| CRD2
+    U1 -->|2b. Auto-create via| CRD3
 
-    subgraph "External Systems"
-        DB[("Database")]
-        K8sAPI[("Kubernetes API")]
-        External[("External Service")]
-    end
+    %% Controller Reconciliation
+    CRD1 -->|watches| C1
+    CRD2 -->|watches| C2
+    CRD3 -->|watches| C3
 
-    subgraph "OME Control Plane"
-        ServerController["MCPServer Controller"]
-        RouteController["MCPRoute Controller"]
-        PolicyController["Policy Controller"]
-    end
+    C1 -->|hosted: creates| HS1
+    C1 -->|hosted: creates| HS2
+    C1 -->|remote: validates| RS1
 
-    %% Traffic Flow
-    App1 --> MCPG
-    App2 --> MCPG
+    C2 -->|validates backends<br/>updates status| CRD2
+    C2 -->|registers route| GW4
 
-    %% Route Attachment
-    Route1 -.parentRef.-> MCPG
-    Route2 -.parentRef.-> MCPG
+    C3 -->|auto-creates| CRD2
+    C3 -->|injects gateway URL| LLM
+    C3 -->|creates LLM pods| LLM
 
-    %% Policy Attachment
-    AuthPolicy -.targetRef.-> MCPG
-    AuthzPolicy1 -.targetRef.-> Route1
-    RatePolicy2 -.targetRef.-> Route2
+    %% Gateway Discovery
+    GW4 -.->|watches MCPRoute| CRD2
+    GW4 -.->|discovers backends| HS1
+    GW4 -.->|discovers backends| HS2
+    GW4 -.->|discovers backends| RS1
 
-    %% Routing to Backends
-    Route1 -->|80% weight| Server1
-    Route1 -->|20% weight| Server2
-    Route2 --> Server3
-    Route2 --> Server4
+    %% Runtime Request Flow
+    LLM ==>|① MCP Request<br/>POST /routes/ns/route<br/>tool: db_query| GW
+    GW ==>|② Authenticate| GW1
+    GW1 ==>|③ Authorize| GW2
+    GW2 ==>|④ Rate Limit| GW3
+    GW3 ==>|⑤ Route Lookup| GW4
+    GW4 ==>|⑥ Backend Select<br/>weighted/health| HS1
+    GW4 -.->|fallback| HS2
+    GW4 -.->|or remote| RS1
+    HS1 ==>|⑦ Execute Tool<br/>via K8s RBAC| HS1
+    HS1 ==>|⑧ Response| GW
+    GW ==>|⑨ Return Result| LLM
 
-    %% Backend to External
-    Server1 --> DB
-    Server2 --> DB
-    Server3 --> K8sAPI
-    Server4 --> External
-
-    %% Control Plane
-    GWController -->|manages| MCPG
-    RouteController -->|manages| Route1
-    RouteController -->|manages| Route2
-    ServerController -->|manages| Server1
-    ServerController -->|manages| Server2
-    ServerController -->|manages| Server3
-    PolicyController -->|enforces| AuthPolicy
-    PolicyController -->|enforces| AuthzPolicy1
-    PolicyController -->|enforces| RatePolicy2
+    %% Policy Enforcement Points
+    GW1 -.->|merge policies| CRD2
+    GW2 -.->|merge policies| CRD2
+    GW3 -.->|merge policies| CRD2
 
     %% Styling
-    classDef consumer fill:#e3f2fd,stroke:#1e88e5
-    classDef gateway fill:#e8f5e9,stroke:#388e3c
-    classDef route fill:#fff3e0,stroke:#f57c00
-    classDef policy fill:#fce4ec,stroke:#d81b60
-    classDef server fill:#f3e5f5,stroke:#8e24aa
-    classDef external fill:#fffde7,stroke:#fbc02d
-    classDef controller fill:#e0f2f1,stroke:#00897b
+    classDef userClass fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef crdClass fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef controllerClass fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef gatewayClass fill:#ffebee,stroke:#b71c1c,stroke-width:3px
+    classDef workloadClass fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef policyClass fill:#fce4ec,stroke:#880e4f,stroke-width:2px
 
-    class App1,App2 consumer;
-    class MCPG gateway;
-    class Route1,Route2 route;
-    class AuthPolicy,AuthzPolicy1,RatePolicy2 policy;
-    class Server1,Server2,Server3,Server4 server;
-    class DB,K8sAPI,External external;
-    class GWController,ServerController,RouteController,PolicyController controller;
+    class U1,U2 userClass
+    class CRD1,CRD2,CRD3 crdClass
+    class C1,C2,C3 controllerClass
+    class GW,GW4 gatewayClass
+    class GW1,GW2,GW3 policyClass
+    class HS1,HS2,RS1,LLM workloadClass
 ```
 
 #### Component Interaction
 
-1.  **`MCPServer` Controller**: Watches `MCPServer` resources. For `hosted` servers, it creates `Deployments`, `Services`, and any necessary RBAC resources (`Role`, `RoleBinding`) based on the `permissionProfile`.
+**Application Team Workflow**:
 
-2.  **`MCPGateway` Controller**: Watches `MCPGateway` resources. It creates a `Deployment` and `Service` for the gateway infrastructure, configures listeners based on the gateway spec, and manages network exposure.
+1.  **Create MCPServer**: App team creates tool servers in their namespace:
+    - For `hosted`: Controller creates Deployment, Service, RBAC based on `permissionProfile`
+    - For `remote`: Controller validates URL accessibility
+    - Server becomes available as backend for routing
 
-3.  **`MCPRoute` Controller**: Watches `MCPRoute` resources. It validates that parentRefs point to valid MCPGateways (checking ReferenceGrants for cross-namespace access), discovers backend MCPServers referenced in backendRefs, and configures routing rules in the gateway data plane.
+2.  **Create MCPRoute** (explicit) OR **Use InferenceService** (auto-create):
 
-4.  **Policy Controllers**: Watch policy resources (`MCPAuthenticationPolicy`, `MCPAuthorizationPolicy`, etc.). They validate targetRefs, attach policies to the appropriate Gateway or Route, and configure policy enforcement in the gateway data plane.
+    **Option A - Explicit MCPRoute**:
+    - App team creates MCPRoute with backend MCPServer references
+    - Configures traffic weights, tool matching, route-specific policies
+    - MCPRoute Controller validates route and updates status with gateway URL
 
-5.  **Gateway Data Plane**: The running gateway pods receive requests from consumers. They:
-   - Match requests against attached MCPRoute rules
-   - Apply gateway-level and route-level policies in order
-   - Route requests to backend MCPServers based on weights and health
-   - Apply filters and transformations as configured
+    **Option B - Auto-Create via InferenceService**:
+    - App team specifies `mcpServers` in InferenceService spec
+    - InferenceService Controller auto-creates MCPRoute resource
+    - MCPRoute inherits config from InferenceService.mcpRoute
 
-6.  **MCPServer Data Plane**: The running tool server pods execute the tool logic, potentially interacting with other systems like databases or the Kubernetes API.
+3.  **Gateway Auto-Discovery**:
+    - For each route, gateway:
+      - Merges gateway default policies with route-specific policies (more restrictive wins)
+      - Configures routing rules to backend MCPServers
+      - Updates internal routing table dynamically (no restart needed)
+
+4.  **InferenceService Controller**: Creates LLM pods and injects gateway endpoints:
+    - **Simple mode**: Injects `MCP_GATEWAY_URL` environment variable pointing to gateway
+    - **Explicit mode**: Reads gateway URL from referenced MCPRoute status
+    - LLM pods use this URL to make MCP tool calls
+
+5.  **Runtime**: MCPServer workloads execute tool logic using granted permissions
 
 #### Request Flow
 
-1.  A **Tool Consumer** (e.g., an LLM application) sends an MCP request to the `MCPGateway`'s service endpoint.
+**Model Request Flow**:
 
-2.  The **Gateway Data Plane** receives the request at a specific listener (HTTP/gRPC/WebSocket).
+1.  **LLM → Gateway**:
+    - LLM pod sends MCP request to `http://gateway.ome-system/routes/{namespace}/{route-name}`
+    - Request includes tool name, method, and parameters
 
-3.  The gateway applies **gateway-level policies** (e.g., global authentication from `MCPAuthenticationPolicy` targeting the gateway).
+2.  **Gateway Policy Enforcement**:
+    - **Authentication**: Gateway validates JWT/OIDC/API key (from operator defaults or MCPRoute override)
+    - **Authorization**: Gateway checks if principal has permission to access requested tool
+    - **Rate Limiting**: Gateway enforces limits from both gateway config and route (combined)
 
-4.  The gateway matches the request against **MCPRoute rules** based on tool names, methods, and headers.
+3.  **Route Selection**:
+    - Gateway extracts namespace and route name from URL path
+    - Looks up MCPRoute configuration from internal routing table
 
-5.  The gateway applies **route-level policies** (e.g., authorization and rate limiting from policies targeting the matched route).
+4.  **Backend Selection**:
+    - Gateway evaluates traffic weights across backend MCPServers
+    - Checks backend health status
+    - Selects healthy backend based on weighted random or round-robin
 
-6.  The gateway selects a backend **MCPServer** from the route's backendRefs based on weights and health status.
+5.  **Request Forwarding**:
+    - Gateway forwards request to selected MCPServer endpoint
+    - For `hosted` servers: `http://{server-name}.{namespace}.svc:8080`
+    - For `remote` servers: External URL from MCPServer.remote.url
 
-7.  The gateway applies any **route filters** (e.g., header modifications).
+6.  **Tool Execution**:
+    - MCPServer receives request and executes tool logic
+    - Server may access K8s API (if granted via permissionProfile)
+    - Server may access databases or external APIs (if permitted by network policies)
 
-8.  The gateway forwards the MCP request to the selected `MCPServer`.
+7.  **Response Path**:
+    - MCPServer returns result to gateway
+    - Gateway logs request for audit (tool name, user, latency, status)
+    - Gateway returns response to LLM pod
 
-9.  The `MCPServer` processes the request, performs the tool action, and sends the response back to the gateway.
-
-10. The gateway applies response filters and streams the response back to the original consumer.
+8.  **Error Handling**:
+    - If backend unhealthy: Gateway automatically retries with different backend
+    - If all backends down: Gateway returns 503 Service Unavailable
+    - If policy violation: Gateway returns 401/403 with details
 
 ### Security Model
 
-The security model is multi-layered following the separation of concerns:
+The architecture provides a comprehensive security model with policy hierarchy, multi-tenancy RBAC, and workload isolation:
 
-1.  **Policy-Based Security (Gateway & Route Level)**:
-    - **Authentication**: `MCPAuthenticationPolicy` resources attach to MCPGateway (global) or MCPRoute (per-route) to enforce OIDC, JWT, or API key authentication
-    - **Authorization**: `MCPAuthorizationPolicy` resources define fine-grained RBAC rules for tool access based on principals and permissions
-    - **Rate Limiting**: `MCPRateLimitPolicy` resources prevent abuse with per-user, per-IP, or per-tool limits
-    - **Security Headers**: `MCPSecurityPolicy` resources configure CORS and security headers
+#### 1. Policy Hierarchy
 
-2.  **Workload Permissions (`permissionProfile`)**: `MCPServer`s run with the minimum necessary permissions. The `permissionProfile` allows operators to define granular access to:
-    -   **Kubernetes API**: Through `kubeResources`, the controller generates least-privilege `Roles`
-    -   **Network**: Through `network`, outbound traffic from the tool server can be restricted to a specific list of hosts
+Security policies are defined at two levels with automatic merging:
 
-3.  **Cross-Namespace Access Control**: `ReferenceGrant` resources (from Gateway API) enable controlled cross-namespace access between MCPRoute and MCPGateway, allowing centralized gateway management with secure delegation
+**Gateway-Level Default Policies** (MCPGateway):
+- Managed by OME operator
+- Apply to all routes using default gateway config
+- Set baseline security requirements (e.g., "all traffic must be authenticated")
 
-4.  **RBAC Separation**: Different RBAC permissions for different personas:
-    - **Platform teams**: Can create/modify MCPGateway and ReferenceGrant
-    - **Application teams**: Can create/modify MCPRoute and MCPServer in their namespace
-    - **Security teams**: Can create/modify policy resources across namespaces
+**Route-Level Policy Overrides** (MCPRoute):
+- Managed by application teams
+- Can add more restrictive policies on top of gateway defaults
+- Cannot weaken gateway policies
+- Configured via `authentication`, `authorization`, `rateLimit` in MCPRoute spec
 
-5.  **Kubernetes Security Primitives**: By leveraging `PodTemplateSpec`, users can apply standard Kubernetes security mechanisms like `SecurityContext`, `NetworkPolicy`, and `ServiceAccount` configuration.
+**Policy Merging Rules**:
+- **More restrictive policy wins**: If gateway requires JWT auth and route requires API key, both are enforced (AND logic)
+- **Rate limits combine**: If gateway sets 1000 req/hour and route sets 100 req/hour, 100 req/hour wins (minimum)
+- **Authorization combines**: Both gateway and route authorization rules must pass (AND logic)
 
-### Deployment Patterns
+**Example Policy Combination**:
 
-#### Pattern 1: Shared Gateway with Multi-Tenant Routes
+Operator config:
+```
+defaultAuthentication:
+  jwt:
+    audiences: ["mcp-prod"]
+    jwksURI: "https://auth.company.com/.well-known/jwks.json"
+defaultRateLimit:
+  limits:
+  - dimension: namespace
+    requests: 10000
+    unit: hour
+routeConstraints:
+  requireAuthentication: true  # Enforce: all routes must have auth
 
-**Scenario**: Platform team manages gateway infrastructure, multiple application teams create routes.
-
-```yaml
-# Platform team creates shared gateway (platform-infra namespace)
-apiVersion: ome.io/v1alpha1
-kind: MCPGateway
-metadata:
-  name: shared-gateway
-  namespace: platform-infra
-spec:
-  gatewayClassName: ome-gateway
-  listeners:
-  - name: http
-    protocol: HTTP
-    port: 8080
-    allowedRoutes:
-      namespaces:
-        from: All  # Allow routes from any namespace
-
----
-# Team A creates route in their namespace
-apiVersion: ome.io/v1alpha1
-kind: MCPRoute
-metadata:
-  name: team-a-route
-  namespace: team-a
-spec:
-  parentRefs:
-  - name: shared-gateway
-    namespace: platform-infra
-  rules:
-  - backendRefs:
-    - name: team-a-server
-      weight: 100
-
----
-# Team B creates route in their namespace
-apiVersion: ome.io/v1alpha1
-kind: MCPRoute
-metadata:
-  name: team-b-route
-  namespace: team-b
-spec:
-  parentRefs:
-  - name: shared-gateway
-    namespace: platform-infra
-  rules:
-  - backendRefs:
-    - name: team-b-server
-      weight: 100
 ```
 
-**Benefits**: Single gateway instance, multiple teams with isolated routes, efficient resource usage.
-
-#### Pattern 2: Cross-Namespace Routing with ReferenceGrant
-
-**Scenario**: Gateway in one namespace, routes in another, explicit permission via ReferenceGrant.
 
 ```yaml
-# Platform team creates gateway (platform-infra namespace)
-apiVersion: ome.io/v1alpha1
-kind: MCPGateway
-metadata:
-  name: production-gateway
-  namespace: platform-infra
-spec:
-  gatewayClassName: ome-gateway
-  listeners:
-  - name: http
-    protocol: HTTP
-    port: 8080
-
 ---
-# Platform team grants access to specific namespaces
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-app-namespaces
-  namespace: platform-infra
-spec:
-  from:
-  - group: ome.io
-    kind: MCPRoute
-    namespace: app-prod
-  - group: ome.io
-    kind: MCPRoute
-    namespace: app-staging
-  to:
-  - group: ome.io
-    kind: MCPGateway
-    name: production-gateway
-
----
-# Application team creates route (app-prod namespace)
+# Route override: Add stricter rate limit + authorization
 apiVersion: ome.io/v1alpha1
 kind: MCPRoute
 metadata:
-  name: app-route
-  namespace: app-prod
+  name: sensitive-tools
+  namespace: finance-team
 spec:
-  parentRefs:
-  - name: production-gateway
-    namespace: platform-infra  # Cross-namespace reference
-  rules:
-  - backendRefs:
-    - name: app-server
-      weight: 100
+  backendRefs:
+  - name: payment-server
+  # Inherits JWT auth from gateway, adds authorization
+  authorization:
+    rules:
+    - principals: ["group:finance-admins"]
+      tools: ["*"]
+  # Stricter rate limit (100 wins over 10000)
+  rateLimit:
+    limits:
+    - dimension: user
+      requests: 100
+      unit: hour
 ```
 
-**Benefits**: Explicit security control, centralized gateway management, namespace isolation.
+**Result**: Requests must pass JWT auth (gateway) AND group membership check (route) AND 100 req/hour limit (route override).
 
-#### Pattern 3: Canary Deployment with Traffic Splitting
+#### 2. Multi-Tenancy RBAC
 
-**Scenario**: Gradual rollout of new tool versions using weighted traffic splitting.
+The model supports clear role separation:
 
+**Platform Team** (Cluster/Namespace Admin):
+- Sets infrastructure defaults (replicas, resources, autoscaling)
+- Enforces baseline policies via `defaultAuthentication`, `defaultAuthorization`, `defaultRateLimit`
+
+**Application Team** (Namespace Developer):
+- Creates `MCPServer`, `MCPRoute`, `InferenceService` in their namespace
+- Can add more restrictive policies to routes (but not weaken gateway defaults)
+- Cannot access servers in other namespaces (isolation enforced)
+- RBAC: `get/list/watch/create/update/delete` on `MCPServer`, `MCPRoute`, `InferenceService` in own namespace
+
+**Namespace Isolation**:
+- `MCPRoute.spec.backendRefs` can only reference `MCPServer` resources in the same namespace
+- Cross-namespace access requires duplicating servers (intentional security feature)
+
+#### 3. Workload Permissions (`permissionProfile`)
+
+MCPServers run with least-privilege permissions defined declaratively:
+
+- **Kubernetes API Access**: `kubeResources` defines allowed API groups, resources, and verbs. Controller generates scoped `Role` and `RoleBinding`.
+- **Network Access**: `network.allowHost` restricts outbound traffic to specific hosts
+- **Audit Trail**: All permission grants are declarative and version-controlled in Git
+
+Example:
 ```yaml
-# Deploy two versions of MCPServer
 apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: analytics-tool-v1
-  namespace: data-team
+  name: k8s-tools
+  namespace: my-team
+spec:
+  permissionProfile:
+    inline:
+      allow:
+      - kubeResources:
+          apiGroups: [""]
+          resources: ["pods", "services"]
+          verbs: ["get", "list"]
+          namespaces: ["my-team"]  # Restricted to own namespace
+      - network:
+          allowHost:
+          - "api.company.com"
+          - "*.internal.svc.cluster.local"
+```
+
+#### 4. Service Account Isolation
+
+Each hosted MCPServer gets a dedicated ServiceAccount with only the permissions specified in `permissionProfile`. No shared credentials.
+
+#### 5. Kubernetes Security Primitives
+
+Users can leverage standard mechanisms via `PodTemplateSpec`:
+- `SecurityContext` for pod/container security settings
+- `NetworkPolicy` for network-level isolation
+- `PodSecurityPolicy` or `PodSecurityStandards` for cluster-wide policies
+- Resource limits and quotas
+
+#### 6. Optional Service Mesh Integration
+
+When service mesh (Istio, Linkerd) is available:
+- Use service mesh `AuthorizationPolicy` for fine-grained mTLS-based access control
+- Leverage distributed tracing and metrics
+
+### Deployment Patterns
+
+The architecture supports four deployment patterns ranging from simple direct access to advanced multi-tenant gateway routing.
+
+#### Pattern 1: Traffic Splitting for Canary Deployment
+
+**Scenario**: Gradual rollout of new tool version using weight-based traffic splitting via MCPRoute.
+
+```yaml
+# Deploy v1 (stable)
+apiVersion: ome.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: analytics-v1
+  namespace: my-app
   labels:
     app: analytics
     version: v1
@@ -1300,14 +1134,15 @@ spec:
       spec:
         containers:
         - name: mcp-server
-          image: analytics-tool:1.0.0
+          image: my-registry/analytics:1.0.0
 
 ---
+# Deploy v2 (canary)
 apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: analytics-tool-v2
-  namespace: data-team
+  name: analytics-v2
+  namespace: my-app
   labels:
     app: analytics
     version: v2
@@ -1319,139 +1154,168 @@ spec:
       spec:
         containers:
         - name: mcp-server
-          image: analytics-tool:2.0.0
+          image: my-registry/analytics:2.0.0
 
 ---
-# Create route with traffic splitting
+# MCPRoute with traffic splitting (90% v1, 10% v2)
 apiVersion: ome.io/v1alpha1
 kind: MCPRoute
 metadata:
-  name: analytics-route
-  namespace: data-team
+  name: analytics-canary
+  namespace: my-app
 spec:
-  parentRefs:
-  - name: shared-gateway
-    namespace: platform-infra
-  rules:
-  - matches:
-    - tools: ["analyze_*"]
-    backendRefs:
-    - name: analytics-tool-v1
-      weight: 90  # 90% traffic to v1
-    - name: analytics-tool-v2
-      weight: 10  # 10% traffic to v2 (canary)
-```
+  backendRefs:
+  - name: analytics-v1
+    weight: 90
+  - name: analytics-v2
+    weight: 10
+  # Monitor v2 with stricter limits initially
+  rateLimit:
+    limits:
+    - dimension: user
+      requests: 100
+      unit: hour
 
-**Benefits**: Safe rollout, easy rollback, gradual validation of new versions.
-
-#### Pattern 4: Tool-Based Routing with Advanced Matching
-
-**Scenario**: Route different tools to different backend servers based on tool names and methods.
-
-```yaml
-apiVersion: ome.io/v1alpha1
-kind: MCPRoute
+---
+# InferenceService referencing the route
+apiVersion: ome.io/v1beta1
+kind: InferenceService
 metadata:
-  name: multi-tool-route
-  namespace: tools
+  name: analytics-llm
+  namespace: my-app
 spec:
-  parentRefs:
-  - name: shared-gateway
-    namespace: platform-infra
-  rules:
-  # Route all database tools to db-server
-  - matches:
-    - tools: ["db_*"]
-      method: "tools/call"
-    backendRefs:
-    - name: database-server
-
-  # Route all kubernetes tools to k8s-server
-  - matches:
-    - tools: ["k8s_*", "kubectl_*"]
-      method: "tools/call"
-    backendRefs:
-    - name: kubernetes-server
-
-  # Route everything else to general-server
-  - matches:
-    - tools: ["*"]
-    backendRefs:
-    - name: general-server
+  model:
+    modelRef:
+      name: llama-3-70b
+  runtime:
+    runtimeRef:
+      name: vllm
+  mcpRoute:
+    routeRef:
+      name: analytics-canary
 ```
 
-**Benefits**: Intelligent routing, server specialization, efficient resource usage.
+**What OME does**:
+- Gateway routes 90% of requests to v1, 10% to v2 based on MCPRoute weights
+- Gradual adjustment: Edit MCPRoute to change weights (80/20 → 50/50 → 20/80 → 0/100)
+- Easy rollback: Update MCPRoute to set v1 weight to 100 if v2 has issues
 
-#### Pattern 5: Remote Server Integration with Policies
+**Benefits**:
+- Safe rollout with controlled traffic percentage
+- Gradual validation with metrics monitoring
+- Easy rollback by updating single MCPRoute resource
+- No InferenceService changes needed during rollout
 
-**Scenario**: Integrate external MCP servers with authentication and rate limiting.
+**Use when**: Deploying new tool versions, A/B testing, validating changes in production
+
+**Rollout Process**:
+1. Deploy v2 with MCPRoute weight=10
+2. Monitor metrics (error rates, latency, success rates)
+3. Gradually increase v2 weight via `kubectl edit mcproute analytics-canary`
+4. Eventually scale down v1 and remove from backendRefs
+5. If issues found, immediately update route to set v1 weight=100
+
+#### Pattern 4: Tool-Based Routing with Multiple Servers
+
+**Scenario**: Route different tool categories to specialized servers based on tool name patterns.
 
 ```yaml
-# Define remote server
+# Deploy specialized servers
 apiVersion: ome.io/v1alpha1
 kind: MCPServer
 metadata:
-  name: external-crm-api
-  namespace: integrations
-  labels:
-    type: external
+  name: database-server
+  namespace: my-app
 spec:
-  remote:
-    url: "https://api.crm-provider.com/mcp"
   transport: streamable-http
+  hosted:
+    replicas: 3
+    podSpec:
+      spec:
+        containers:
+        - name: mcp-server
+          image: my-registry/db-tools:1.0.0
 
 ---
-# Create route to external server
+apiVersion: ome.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: k8s-server
+  namespace: my-app
+spec:
+  transport: streamable-http
+  hosted:
+    replicas: 2
+    podSpec:
+      spec:
+        containers:
+        - name: mcp-server
+          image: my-registry/k8s-tools:1.0.0
+  permissionProfile:
+    inline:
+      allow:
+      - kubeResources:
+          apiGroups: [""]
+          resources: ["pods", "services"]
+          verbs: ["get", "list"]
+
+---
+# MCPRoute with tool-based matching
 apiVersion: ome.io/v1alpha1
 kind: MCPRoute
 metadata:
-  name: crm-route
-  namespace: integrations
+  name: smart-routing
+  namespace: my-app
 spec:
-  parentRefs:
-  - name: shared-gateway
-    namespace: platform-infra
-  rules:
-  - matches:
-    - tools: ["crm_*"]
+  # Route database tools to database-server
+  matches:
+  - tools:
+      prefixMatch: "db_"
     backendRefs:
-    - name: external-crm-api
+    - name: database-server
+  # Route k8s tools to k8s-server
+  - tools:
+      prefixMatch: "k8s_"
+    backendRefs:
+    - name: k8s-server
+  # Default: Load balance across both
+  backendRefs:
+  - name: database-server
+    weight: 50
+  - name: k8s-server
+    weight: 50
 
 ---
-# Attach authentication policy to route
-apiVersion: ome.io/v1alpha1
-kind: MCPAuthenticationPolicy
+# InferenceService using smart routing
+apiVersion: ome.io/v1beta1
+kind: InferenceService
 metadata:
-  name: crm-auth
-  namespace: integrations
+  name: smart-llm
+  namespace: my-app
 spec:
-  targetRef:
-    group: ome.io
-    kind: MCPRoute
-    name: crm-route
-  jwt:
-    audiences: ["crm-api"]
-    jwksURI: "https://auth.company.com/.well-known/jwks.json"
-
----
-# Attach rate limiting policy
-apiVersion: ome.io/v1alpha1
-kind: MCPRateLimitPolicy
-metadata:
-  name: crm-rate-limit
-  namespace: integrations
-spec:
-  targetRef:
-    group: ome.io
-    kind: MCPRoute
-    name: crm-route
-  limits:
-  - dimension: user
-    requests: 100
-    unit: hour
+  model:
+    modelRef:
+      name: llama-3-70b
+  runtime:
+    runtimeRef:
+      name: vllm
+  mcpRoute:
+    routeRef:
+      name: smart-routing
 ```
 
-**Benefits**: Unified access to internal and external tools, consistent security policies, rate limiting protection.
+**What OME does**:
+- Gateway inspects tool name in MCP request
+- Routes `db_query`, `db_insert` → database-server
+- Routes `k8s_get_pod`, `k8s_list_svc` → k8s-server
+- Routes other tools → 50/50 load balance
+
+**Benefits**:
+- Intelligent routing based on tool semantics
+- Specialized servers for different tool categories
+- Fallback routing for unmatched tools
+
+**Use when**: Multiple specialized tool servers, need intelligent routing, performance optimization
 
 ### Test Plan
 
@@ -1461,125 +1325,324 @@ spec:
     -   Test reconciliation logic for `hosted` and `remote` servers
     -   Test correct generation of `Deployment`, `Service`, `Role`, and `RoleBinding` from a `hosted` spec
     -   Test validation of `permissionProfile` rules
-
--   **`MCPGateway` Controller**:
-    -   Test reconciliation logic for the gateway deployment
-    -   Test listener configuration and validation
-    -   Test correct generation of gateway Service and network exposure
+    -   Test server status reporting (ready, error conditions)
 
 -   **`MCPRoute` Controller**:
-    -   Test parentRef validation and attachment to MCPGateway
-    -   Test cross-namespace reference validation with ReferenceGrant
-    -   Test backend MCPServer discovery and configuration
-    -   Test traffic splitting logic with weighted backendRefs
-    -   Test route matching rules (tools, methods, headers)
+    -   Test route reconciliation with single and multiple backend references
+    -   Test weight validation and normalization (weights sum validation)
+    -   Test tool-based matching configuration (prefixMatch, exactMatch, regexMatch)
+    -   Test policy validation (authentication, authorization, rateLimit)
+    -   Test filter configuration (header modifications, transformations)
+    -   Test backend reference validation (ensure backends exist in same namespace)
+    -   Test route status reporting (accepted, backend not found, policy errors)
 
--   **Policy Controllers**:
-    -   Test targetRef validation for Gateway and Route resources
-    -   Test policy attachment and precedence rules (route-level overrides gateway-level)
-    -   Test authentication policy enforcement (OIDC, JWT, API key)
-    -   Test authorization policy evaluation
-    -   Test rate limiting logic with different dimensions
+-   **`InferenceService` Controller (MCP Integration)**:
+    -   Test auto-create MCPRoute mode: verify route creation from `mcpServers` list
+    -   Test explicit MCPRoute reference mode: verify route reference validation
+    -   Test mutual exclusion validation (mcpServers vs mcpRoute.routeRef)
+    -   Test gateway URL injection based on namespace gateway config
+    -   Test route ownership (InferenceService owns auto-created routes)
+    -   Test route lifecycle (deletion when InferenceService deleted)
+
+-   **Gateway Component**:
+    -   Test MCPRoute auto-discovery (watch MCPRoute resources, update routing table)
+    -   Test routing logic with single and multiple backends (health checks, failover)
+    -   Test weight-based traffic splitting algorithm (verify distribution matches weights)
+    -   Test tool-based routing (route by tool name patterns)
+    -   Test policy enforcement:
+        -   Route-level policy overrides (from MCPRoute)
+        -   Policy merging rules (more restrictive wins)
+    -   Test authentication enforcement (OIDC, JWT, API key)
+    -   Test authorization rule evaluation (principals, tools, conditions)
+    -   Test rate limiting with different dimensions (user, namespace, IP, tool)
 
 -   **API Webhooks**:
-    -   Test validation rules for `MCPServerSpec`, `MCPGatewaySpec`, `MCPRouteSpec`, and policy specs
-    -   Test mutual exclusion rules (e.g., hosted vs remote)
-    -   Test cross-namespace reference validation
+    -   Test `MCPServer` validation (hosted vs remote mutual exclusion, permissionProfile validation)
+    -   Test `MCPRoute` validation (backend references, weight ranges, policy configs)
+    -   Test `InferenceService` validation (mcpServers vs mcpRoute.routeRef mutual exclusion)
+    -   Test cross-resource validation (routes can only reference servers in same namespace)
 
 #### Integration Tests
 
--   **Basic Flow**:
-    -   Deploy a `hosted` `MCPServer` and verify all child resources are created correctly
-    -   Deploy an `MCPGateway` with listeners
-    -   Create an `MCPRoute` that attaches to the gateway
-    -   Send an MCP request to the gateway and verify it is correctly routed to the server
+-   **Pattern 1: Platform Gateway with Route-Based Routing**:
+    -   App team creates MCPServer, MCPRoute, InferenceService in namespace
+    -   Verify gateway infrastructure is deployed
+    -   Verify gateway auto-discovers MCPRoute in production namespace
+    -   Verify InferenceService receives `MCP_GATEWAY_URL` pointing to production gateway
+    -   Send MCP requests and verify routing through gateway to backend server
+    -   Test policy merging: gateway default auth + route-level rate limit
+    -   Verify other namespaces (without production label) do NOT use this gateway
 
--   **Cross-Namespace Routing**:
-    -   Deploy `MCPGateway` in one namespace
-    -   Create `ReferenceGrant` to allow access from another namespace
-    -   Create `MCPRoute` in different namespace with parentRef to gateway
-    -   Verify requests are correctly routed
+-   **Pattern 2: Simple Auto-Created Route**:
+    -   App team creates MCPServer and InferenceService with `mcpServers` list (no explicit MCPRoute)
+    -   Verify InferenceService controller auto-creates MCPRoute resource
+    -   Verify auto-created route references the correct backend server
+    -   Verify gateway auto-discovers the auto-created route
+    -   Send MCP requests and verify end-to-end routing
+    -   Delete InferenceService and verify auto-created route is also deleted
 
--   **Traffic Splitting**:
-    -   Deploy two versions of `MCPServer`
-    -   Create `MCPRoute` with weighted backendRefs (e.g., 80/20 split)
-    -   Send multiple requests and verify traffic is split according to weights
+-   **Pattern 3: Traffic Splitting for Canary Deployment**:
+    -   Deploy two MCPServer versions (v1, v2)
+    -   Create MCPRoute with weighted backends (90% v1, 10% v2)
+    -   Create InferenceService referencing the MCPRoute
+    -   Send 1000 requests and verify traffic distribution matches weights (90/10 ± 5%)
+    -   Update MCPRoute weights to 50/50 and verify traffic redistribution
+    -   Test rollback by updating MCPRoute to set v1 weight=100
+    -   Verify no InferenceService changes needed during weight adjustments
 
--   **Policy Enforcement**:
-    -   Create `MCPAuthenticationPolicy` targeting gateway
-    -   Verify unauthenticated requests are rejected
-    -   Create `MCPAuthorizationPolicy` targeting route
-    -   Verify unauthorized tool access is denied
-    -   Create `MCPRateLimitPolicy` and verify rate limiting works
+-   **Pattern 4: Tool-Based Routing with Multiple Servers**:
+    -   Deploy multiple specialized MCPServers (database-server, k8s-server)
+    -   Create MCPRoute with tool-based matches (db_* → database-server, k8s_* → k8s-server)
+    -   Send requests with different tool names and verify correct routing
+    -   Test fallback routing for tools that don't match any pattern
 
--   **Advanced Routing**:
-    -   Create `MCPRoute` with tool-based matching (e.g., "db_*")
-    -   Verify requests are routed to correct backend based on tool names
-    -   Test header-based routing and filters
+-   **Policy Hierarchy Enforcement**:
+    -   Create MCPRoute with authorization rules and stricter 100 req/hour rate limit
+    -   Verify requests must pass both JWT auth (gateway) AND authorization check (route)
+    -   Verify rate limiting enforces 100 req/hour (route override wins)
+    -   Test policy constraint: set `requireAuthentication=true` in gateway config
+    -   Attempt to create MCPRoute without authentication and verify it's rejected
+
+-   **Multi-Tenancy RBAC**:
+    -   Create app team role with access to MCPServer, MCPRoute in own namespace only
+    -   Verify app team can create resources in own namespace
+    -   Verify app team CANNOT access resources in other namespaces
+    -   Verify app team CANNOT create MCPRoute referencing servers in different namespace
 
 -   **Permissions**:
-    -   Test the `kubeResources` permission by deploying a tool that tries to access allowed and denied Kubernetes resources
-    -   Test the `network` permission by deploying a tool that tries to connect to allowed and denied hosts
+    -   Test `kubeResources` permission by deploying a tool that accesses allowed/denied K8s resources
+    -   Test `network` permission by deploying a tool that connects to allowed/denied hosts
+    -   Verify proper RBAC creation for hosted servers
 
--   **High Availability**:
-    -   Test gateway scaling and rolling updates
-    -   Test backend server failover when one server becomes unhealthy
+-   **High Availability and Scaling**:
+    -   Test backend server failover when one server pod becomes unhealthy
+    -   Test MCPRoute update with changing backend references
+
+-   **Edge Cases and Error Handling**:
+    -   Create MCPRoute referencing non-existent MCPServer and verify route status shows error
+    -   Create MCPRoute referencing MCPServer in different namespace and verify webhook blocks it
+    -   Create InferenceService with both `mcpServers` and `mcpRoute.routeRef` and verify webhook blocks it
+    -   Test gateway behavior when all backends are unhealthy (503 response)
+    -   Test gateway behavior with invalid JWT tokens (401 response)
+    -   Test gateway behavior when rate limit exceeded (429 response)
 
 ## Drawbacks
 
-1.  **Increased Complexity**: The multi-layer architecture (Gateway, Route, Policies) is more powerful but also more complex to understand and manage than a simple two-CRD model. Users must understand the Gateway API pattern and how resources interact.
+1.  **No Separate Policy CRDs**: Policies are embedded in MCPRoute specs rather than being separate, reusable Policy resources. This means:
+    - Policies cannot be versioned and managed independently from routes
+    - Same policy configuration may need to be duplicated across multiple routes
+    - No policy composition (combining multiple policy libraries)
+    - **Mitigation**: Operator managed MCPGateway provides default configs that routes inherit, reducing duplication. If >30% of users need reusable policies, v1beta1 can add separate Policy CRDs while maintaining backward compatibility.
 
-2.  **Resource Overhead**: Running gateway pods in addition to server pods consumes more cluster resources. Multiple policy controllers add to the control plane overhead.
+2.  **Namespace Isolation**: MCPRoute can only reference MCPServer resources in the same namespace. Cross-namespace access requires duplicating servers.
+    - Cannot share a single MCPServer across multiple namespaces
+    - Platform teams must duplicate common tools in each namespace
+    - **Rationale**: This is an intentional security feature, not a bug. Most organizations want namespace isolation. If >30% of users need cross-namespace sharing, v1beta1 can add `ReferenceGrant` similar to Gateway API.
 
-3.  **Latency**: The gateway introduces an extra network hop, which may add a small amount of latency to tool calls. Policy evaluation (authentication, authorization, rate limiting) adds processing time.
+3.  **Gateway as Internal Component**: Making the gateway an internal component rather than a user-facing CRD means:
+    - Less flexibility for advanced gateway customization (custom listeners, TLS configs)
+    - Cannot independently manage gateway lifecycle
+    - Gateway deployment details abstracted (users cannot directly edit gateway pods)
+    - **Mitigation**: If users need more control, v1beta1 can introduce MCPGatewayConfig CRD to provide control over replicas, resources, autoscaling, and policies.
 
-4.  **Learning Curve**: Users must learn:
-    - The Gateway API pattern with parentRefs and targetRefs
-    - When to use Gateway vs Route vs Policy resources
-    - How to use ReferenceGrant for cross-namespace access
-    - Policy attachment and precedence rules
+4.  **No Cross-Namespace Route Sharing**: InferenceService can only reference MCPRoute in the same namespace.
+    - Platform teams cannot create a single shared route for all namespaces
+    - Route configuration must be duplicated per namespace
+    - **Mitigation**: v1beta1 introduces MCPGateway Config that provides defaults. Routes inherit these defaults, minimizing duplication. Use auto-create mode to avoid managing routes entirely.
 
-5.  **RBAC Management**: The multi-persona model (platform teams, application teams, security teams) requires careful RBAC configuration to ensure proper separation of concerns.
+5.  **Resource Overhead (Gateway Mode)**: Running gateway pods in addition to server pods consumes cluster resources:
+    - Each gateway config deploys 1-N gateway replicas (typically 2-3 for HA)
+    - Estimated overhead: 1-2 CPU cores, 2-4 GB memory per gateway
+    - **Mitigation**: Namespace label selectors allow sharing one gateway across many namespaces. 
 
-6.  **Migration Complexity**: Teams familiar with simpler gateway models may need significant effort to migrate to this pattern, though it provides long-term benefits.
+6.  **Latency Overhead**: Gateway introduces extra network hop and policy evaluation overhead:
+    - Estimated latency: 2-10ms per request (varies by policy complexity)
+    - Authentication/authorization adds ~1-5ms per request
+    - Rate limiting adds ~0.5-2ms per request
+    - **Mitigation**: Use direct mode (skip gateway) for latency-sensitive workloads. Optimize gateway deployment with resource allocation and autoscaling.
 
-## Future Work
+7.  **Learning Curve (vs Fully Embedded)**: The model requires understanding 2 CRDs:
+    - Engineer teams must learn MCPGateway operator with default config
+    - App teams must learn MCPRoute (unless using auto-create mode)
+    - More cognitive load compared to fully embedded policies
+    - **Mitigation**: Provide clear documentation and examples. Auto-create mode hides MCPRoute complexity for simple use cases. Most app teams only need to understand MCPServer.
 
-### Cluster-Scoped Resources
+8.  **Increased Development Complexity**: Implementing requires more development effort:
+    - 2 controllers (MCPServer, MCPRoute)
+    - Gateway auto-discovery and policy merging logic
+    - **Justification**: 50% more development effort delivers 80-90% of full Gateway API multi-tenancy benefits, which justifies the investment for medium-to-large deployments.
 
-While this OEP focuses on namespace-scoped resources, there is potential value in introducing cluster-scoped variants (`ClusterMCPServer`, `ClusterMCPGateway`) in a future iteration.
+9.  **Evolution Uncertainty**: While the v1alpha1 → v1beta1 evolution path is designed, there's uncertainty about:
+    - Whether the community will validate the need for separate Policy CRDs
+    - Whether cross-namespace sharing becomes a validated requirement
+    - Potential API changes if we add MCPGateway CRD in v1beta1
+    - **Mitigation**: Clear versioning strategy (`v1alpha1` → `v1beta1` → `v1`). Backward compatibility commitment: v1alpha1 patterns will continue to work in all future versions.
 
-Cluster-scoped resources would provide:
--   **Simplified Management**: Platform administrators could define shared MCP servers once at the cluster level, reducing duplication across namespaces
--   **Centralized Governance**: Cluster-wide policies and access controls for MCP tool infrastructure
--   **Resource Efficiency**: Single deployment of common tools accessible across all namespaces
+## Evolution Path
 
-The namespace-scoped approach in this OEP provides sufficient flexibility through cross-namespace routing (via `ReferenceGrant`), making cluster-scoped resources a potential optimization rather than a requirement.
+This proposal takes a **balanced approach** to MCP support in OME. We start with v1alpha1 hybrid architecture that provides 80-90% of multi-tenancy benefits at 50% complexity, then evolve to more advanced patterns only when validated needs emerge.
 
-### Advanced Features
+### v1alpha1
 
-Future enhancements to consider:
+**API Version**: `ome.io/v1alpha1`
 
-1.  **Service Mesh Integration**: Native integration with Istio/Linkerd for advanced traffic management, mTLS, and observability
+**Resources**:
+- `MCPServer` (namespace-scoped) - Define tool servers (hosted or remote)
+- `MCPRoute` (namespace-scoped) - Routing configuration with traffic splitting, tool matching, policies
+- `InferenceService` extensions - Two integration modes (auto-create MCPRoute or reference existing)
+- Managed Gateway (internal component, NOT a user-facing CRD)
 
-2.  **Advanced Route Matching**: Additional matching criteria such as:
-    - Request body inspection
-    - Client IP/CIDR matching
-    - Time-based routing (business hours vs off-hours)
-    - Custom header-based routing
+**Key Characteristics**:
+- **Multi-Tenancy Support**: app teams manage `MCPRoute` and `MCPServer`
+- **Policy Hierarchy**: Gateway default policies + route-level overrides (more restrictive wins)
+- **Auto-Discovery**: Gateway watches MCPRoute resources, no parentRef complexity
+- **Embedded Policies**: Authentication, authorization, rate limiting inline (no separate Policy CRDs)
+- **Flexible Integration**: Auto-create MCPRoute (simple) or reference existing MCPRoute (explicit)
 
-3.  **Circuit Breaking and Retry**: Implement circuit breaker patterns and automatic retry logic at the gateway level
+**Comparison to Alternatives**:
+- **vs Single CRD**: Adds MCPRoute for multi-tenancy
+- **vs Full Gateway API**: Removes MCPGateway CRD and 3 Policy CRDs
+- **Result**: 80-90% of multi-tenancy benefits at 50% of full Gateway API complexity
 
-4.  **Request Transformation**: Support for request/response body transformation, not just header manipulation
+**Target Users**:
+- Platform teams managing shared infrastructure
+- Application teams with 1-20 tool servers per namespace
+- Organizations with moderate multi-tenancy needs
 
-5.  **Tool Aggregation**: Gateway-level tool composition where multiple backend tools are combined into a single logical tool
 
-6.  **Caching Layer**: Gateway-level caching for frequently accessed tools with configurable TTL
+### v1beta1 (Conditional - Based on Validated Needs)
 
-7.  **GraphQL-style Tool Queries**: Allow clients to request multiple tools in a single request with intelligent batching
+**When to Consider**: After 6-12 months of v1alpha1 usage, if we observe:
+- Strong demand for **reusable policy resources** across many routes (50+ routes per cluster)
+- Need for **policy versioning and lifecycle management** independent of routes
+- Requests for **cross-namespace route sharing** (current design intentionally restricts to same namespace)
+- Complex **policy composition** requirements (combining multiple policy libraries)
 
-8.  **Progressive Delivery**: Integration with tools like Flagger for automated canary analysis and promotion
+**Potential Changes** (only if validated):
 
-9.  **Cost Management**: Track and limit tool usage based on cost/quota policies
+**Option 1: Separate Policy CRDs**
+```yaml
+# Introduce reusable policy resources
+apiVersion: ome.io/v1beta1
+kind: MCPAuthenticationPolicy
+metadata:
+  name: company-jwt-auth
+  namespace: platform-policies
+spec:
+  jwt:
+    audiences: ["mcp-production"]
+    jwksURI: "https://auth.company.com/.well-known/jwks.json"
 
-10. **Multi-Cluster Support**: Federation of MCPGateways across multiple Kubernetes clusters
+---
+# MCPRoute references policy instead of embedding
+apiVersion: ome.io/v1beta1
+kind: MCPRoute
+metadata:
+  name: my-route
+spec:
+  authenticationPolicyRef:
+    name: company-jwt-auth
+    namespace: platform-policies
+  # Still supports embedded for simple cases
+  authorization: {...}
+```
+
+**Option 2: Full Gateway API Alignment**
+- Add `MCPGateway` CRD for explicit gateway lifecycle management
+- Add `parentRef` to MCPRoute for explicit gateway attachment
+- Enable cross-namespace `ReferenceGrant` for advanced use cases
+
+**Migration Path**:
+```yaml
+apiVersion: ome.io/v1alpha1
+kind: MCPRoute
+metadata:
+  name: my-route
+spec:
+  authentication: {...}  # Embedded
+  backendRefs: [...]
+
+# v1beta1 (if separate policies adopted)
+apiVersion: ome.io/v1beta1
+kind: MCPRoute
+metadata:
+  name: my-route
+spec:
+  authenticationPolicyRef: {...}  # Referenced
+  # OR authentication: {...}  # Embedded (backward compatible)
+  backendRefs: [...]
+```
+
+**Key Principles**:
+- **Gradual Adoption**: Users opt into Policy CRDs when complexity justifies
+
+### v1 (Stable API)
+
+**When**: After v1alpha1 or v1beta1 proves stable (6-12 months of production usage)
+
+**Criteria for Stability**:
+- API tested in production by 10+ organizations
+- No major design changes needed for 6+ months
+- Comprehensive test coverage (>80%) and documentation
+- Clear migration paths from alpha/beta versions
+- Performance validated at scale (100+ MCPServers, 1000+ req/sec)
+
+**Graduation Paths**:
+- **Direct Path**: `v1alpha1 hybrid` → `v1` (if v1beta1 changes not needed)
+- **Iterative Path**: `v1alpha1 hybrid` → `v1beta1 hybrid+` → `v1`
+
+### Decision Points
+
+At each evolution stage, we evaluate:
+
+1. **User Feedback**: What are real users actually requesting? (surveys, GitHub issues, support tickets)
+2. **Complexity Justification**: Does the additional API surface justify the benefits? (80/20 rule)
+3. **Ecosystem Maturity**: How has the MCP ecosystem evolved? (new transports, protocol changes)
+4. **Operational Experience**: What patterns emerge from production deployments? (top 5 pain points)
+
+**Example Decision Framework**:
+- If <10% of users need reusable policies → Keep embedded policies in v1
+- If 10-30% need reusable policies → Add optional Policy CRDs in v1beta1
+- If >30% need reusable policies → Make Policy CRDs primary pattern in v1
+
+### Feature Roadmap (Conditional)
+
+Future enhancements to consider **only if validated needs emerge**:
+
+**Cluster-Scoped Resources** (v1beta1+):
+- `ClusterMCPServer` - Shared tool servers across namespaces (avoid duplication)
+- `ClusterMCPRoute` - Global routing rules managed by platform team
+- `ClusterMCPGateway` - Centralized gateway for entire cluster
+- **Benefits**: Reduced duplication, centralized governance, resource efficiency
+- **When**: >50% of MCPServers are identical across namespaces
+
+**Advanced Routing Features** (v1beta1+):
+- Header-based routing (route by custom headers, user groups)
+- Time-based routing (different backends for peak/off-peak hours)
+- Geographic routing (route to nearest server based on client location)
+- **When**: >20% of routes need advanced matching beyond tool names
+
+**Advanced Gateway Features** (v1+):
+- Circuit breaking and retry policies (resilience patterns)
+- Request/response transformation (protocol translation, enrichment)
+- Tool aggregation and composition (combine multiple tools into one)
+- Caching layer with configurable TTL (reduce backend load)
+- **When**: >30% of deployments request these specific features
+
+**Enterprise Features** (v1+):
+- Multi-cluster federation (route across clusters based on load, cost)
+- Cost tracking and quota management (chargeback, budget enforcement)
+- Progressive delivery with Flagger integration (automated canary with metrics)
+- Advanced observability and audit logging (SIEM integration, compliance)
+- **When**: >50% of enterprise deployments require these capabilities
+
+**Cross-Namespace Sharing** (v1beta1+):
+- `ReferenceGrant` for cross-namespace MCPServer access (similar to Gateway API)
+- Controlled sharing with explicit grants (security by default)
+- **When**: >30% of users duplicate servers across namespaces
+
+**Guiding Principles**:
+- **Validated Demand**: Each feature needs ≥3 customer requests with specific use cases
+- **Complexity Budget**: Total CRDs + fields ≤ 2x v1alpha1 (maintain simplicity advantage)
+- **User Choice**: Advanced features always optional, never required
+- **Evolution > Revolution**: Iterate based on learning, not speculation

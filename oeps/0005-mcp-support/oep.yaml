@@ -1,9 +1,9 @@
-title: Model Context Protocol (MCP) Support with Gateway Architecture
+title: Model Context Protocol (MCP) Support with Optional Build-in Gateway Architecture
 oep-number: 0005
 authors:
   - "@YouNeedCryDear"
 status: provisional
-creation-date: 2025-08-22
+creation-date: 2025-10-02
 reviewers:
   - "@slin1237"
 approvers:
@@ -19,8 +19,6 @@ stage: alpha
 feature-gates:
   - name: MCPServerSupport
     disable-supported: true
-  - name: MCPGatewaySupport
-    disable-supported: true
 
 # The following PRR answers are required at beta release
 metrics:
@@ -28,15 +26,6 @@ metrics:
   - ome_mcp_server_total
   - ome_mcp_server_status
   - ome_mcp_server_permission_violations_total
-
-  # MCPGateway Metrics
-  - ome_mcp_gateway_total
-  - ome_mcp_gateway_status
-  - ome_mcp_gateway_requests_total
-  - ome_mcp_gateway_requests_duration_seconds
-  - ome_mcp_gateway_upstream_connections_total
-  - ome_mcp_gateway_upstream_health_status
-  - ome_mcp_gateway_auth_failures_total
 
   # General MCP Metrics
   - ome_mcp_connection_duration_seconds
