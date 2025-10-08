@@ -180,6 +180,10 @@ cohere:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.10.7-07312025"
 
+  commandAReasoningImage:
+    repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
+    tag: "v0.10.7-07312025"
+
   embedMultiModalImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
     tag: "v0.8.1-04012025"

@@ -1,0 +1,57 @@
+{{- if index .Values "command-a-reasoning" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: command-a-reasoning
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "command-a-reasoning" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "command-a-reasoning" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "command-a-reasoning" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "cohere-command-a-reasoning"
+    models.ome.io/category: "LARGE"
+    models.ome.io/experimental: "{{ index .Values "command-a-reasoning" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "command-a-reasoning" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "command-a-reasoning" "lifecyclePhase" }}"
+    ome.io/base-model-decryption-key-name: "command_3"
+    ome.io/base-model-decryption-secret-name: "command_3-dek"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: cohere.command-a-reasoning
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "command-a-reasoning" "osBucket" }}/o/{{ index .Values "command-a-reasoning" "vendor" }}/{{ index .Values "command-a-reasoning" "osPrefixOverride" }}"
+    path: "/mnt/data/models/{{ index .Values "command-a-reasoning" "vendor" }}/{{ index .Values "command-a-reasoning" "osPrefixOverride" }}"
+  vendor: {{ index .Values "command-a-reasoning" "vendor" }}
+  version: "1.0"
+  # keep trt structure for now
+  modelFormat:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelFramework:
+    name: tensorrtllm
+    version: 'v0.8.0'
+  modelArchitecture: CohereForCausalLM
+  modelParameterSize: 111B
+  modelCapabilities:
+    - "CHAT"
+  maxTokens: 256000
+  additionalMetadata:
+    {{/* this model will use LARGE_COHERE only in regions with no H100, LARGE_COHERE_V2 in other regions*/}}
+    {{- if index .Values "command-a-reasoning" "isA100Only" -}}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_COHERE
+          quotaUnit: 1
+          default: true
+    {{- else }}
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: LARGE_COHERE_V2
+          quotaUnit: 1
+          default: true
+    {{- end }}
+    internalName: "command-a-reasoning"
+    type: "Serving"
+{{- end }}
