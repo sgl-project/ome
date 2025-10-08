@@ -91,6 +91,7 @@ spec:
           --model-path="$MODEL_PATH" \
           --tp 1 \
           --mem-frac=0.9 \
+          --log-requests-level=1 \
           --tool-call-parser=gpt-oss \
           --reasoning-parser=gpt-oss \
           --context-length=131072

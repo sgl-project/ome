@@ -81,6 +81,7 @@ spec:
           --log-requests \
           --model-path="$MODEL_PATH" \
           --tp 2 \
+          --log-requests-level=1 \
           --tool-call-parser=gpt-oss \
           --reasoning-parser=gpt-oss \
           --context-length=131072
