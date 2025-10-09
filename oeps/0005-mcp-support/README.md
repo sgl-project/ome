@@ -1,13 +1,6 @@
 # OEP-0005: Model Context Protocol (MCP) Support
 
-<!--
-This OEP introduces comprehensive support for the Model Context Protocol (MCP) in OME,
-enabling Large Language Models to integrate with external tools and services through
-a simplified, operator-managed architecture. The design focuses on ease of use while
-maintaining flexibility, with an optional managed gateway component that OME automatically
-deploys when needed. This approach prioritizes developer experience and operational
-simplicity while providing a clear evolution path to more advanced features in future versions.
--->
+This OEP introduces native support for the Model Context Protocol (MCP) in OME through a hybrid architecture that balances simplicity with multi-tenancy. The design uses two CRDs (MCPServer and MCPRoute) with an operator-managed gateway, avoiding the complexity of full Kubernetes Gateway API while supporting platform team infrastructure control and application team routing flexibility.
 
 <!-- toc -->
 - [Summary](#summary)
@@ -184,16 +177,6 @@ spec:
       - network:
           allowHost:
           - "postgres.my-team.svc.cluster.local"
-  # Embedded policies (no separate Policy CRDs needed)
-  authentication:
-    jwt:
-      audiences: ["mcp-tools"]
-      jwksURI: "https://auth.company.com/.well-known/jwks.json"
-  rateLimit:
-    limits:
-    - dimension: user
-      requests: 1000
-      unit: hour
 
 ---
 # 2. Deploy InferenceService with MCP tool references
@@ -213,19 +196,16 @@ spec:
       name: postgres-tools
     # Optional: per-server overrides
     weight: 100
-  # Optional: gateway configuration
-  mcpGateway:
-    enabled: true  # Enable managed gateway (default: true for multiple servers)
-    mode: managed  # or 'direct' to bypass gateway
 ```
 
 **What OME does automatically**:
 1. Creates Deployment and Service for `postgres-tools` MCPServer
 2. Detects InferenceService references MCP servers
-3. Deploys internal gateway component (since `enabled: true`)
-4. Configures routing from LLM pods → gateway → postgres-tools
-5. Injects gateway endpoint into LLM pods as `MCP_GATEWAY_URL` environment variable
-6. Applies authentication and rate limiting policies at gateway level
+3. Auto-creates MCPRoute for the server references
+4. Deploys internal gateway component (operator-managed)
+5. Configures routing from LLM pods → gateway → postgres-tools
+6. Injects gateway endpoint into LLM pods as `MCP_GATEWAY_URL` environment variable
+7. Applies authentication and rate limiting policies at gateway level
 
 Bob's LLM can now access database tools through a secure, load-balanced gateway without complex configuration.
 
@@ -259,7 +239,7 @@ spec:
           verbs: ["get", "list"]
 
 ---
-# 2. InferenceService with direct access mode
+# 2. InferenceService with MCP server ref
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
@@ -273,16 +253,15 @@ spec:
   mcpServers:
   - serverRef:
       name: k8s-tools
-  # Disable gateway for direct access
-  mcpGateway:
-    enabled: false  # Direct pod-to-pod communication
 ```
 
 **What OME does automatically**:
 1. Creates Deployment, Service, and RBAC (Role/RoleBinding) for `k8s-tools`
-2. Injects direct server endpoint into LLM pods as `MCP_SERVER_K8S_TOOLS_URL`
-3. No gateway deployed - LLM connects directly to k8s-tools Service
-4. Lower latency (no proxy hop), simpler debugging
+2. Auto-creates MCPRoute for the server reference
+3. Deploys managed gateway (single server still uses gateway for policy enforcement)
+4. Injects gateway endpoint into LLM pods as `MCP_GATEWAY_URL`
+
+Note: For truly direct pod-to-pod access without gateway, users can configure this via operator-level settings. The default is to always use the managed gateway for consistent policy enforcement.
 
 Alice gets direct server access with minimal overhead while still benefiting from OME's server lifecycle management and RBAC generation.
 
@@ -307,7 +286,7 @@ Alice gets direct server access with minimal overhead while still benefiting fro
     -   **Mitigation**: The API is declarative with all permissions explicitly defined in YAML and auditable. The controller generates narrowly scoped `Roles` with least-privilege principles. Documentation and examples will strongly emphasize security best practices. Consider adding validation webhooks to warn about overly broad permissions.
 
 -   **Risk 2: Gateway as Single Point of Failure**: If the managed gateway goes down, all tool access is lost (when gateway mode is enabled).
-    -   **Mitigation**: The managed gateway will support multiple replicas with automatic load balancing. Standard Kubernetes practices for HA (Pod anti-affinity, PodDisruptionBudget) will be applied. Users can also disable gateway mode for direct access, eliminating this single point of failure at the cost of centralized policy enforcement.
+    -   **Mitigation**: The managed gateway will support multiple replicas with automatic load balancing. Standard Kubernetes practices for HA (Pod anti-affinity, PodDisruptionBudget) will be applied. 
 
 -   **Risk 3: Limited Flexibility in v1alpha1**: Starting with operator-managed gateway means less flexibility for advanced users who need custom gateway configurations.
     -   **Mitigation**: The design includes a clear evolution path. v1beta1 can introduce user-facing MCPGateway CRD and separate Policy CRDs based on validated user needs. The simplified v1alpha1 design accelerates time-to-market while gathering real-world usage patterns to inform future enhancements.
@@ -422,8 +401,66 @@ type MCPServerSpec struct {
         APIGroups []string `json:"apiGroups"`
         Resources []string `json:"resources"`
         Verbs     []string `json:"verbs"`
+        // Namespaces restricts permissions to specific namespaces
+        // If empty, permissions apply to the MCPServer's namespace only
+        // +optional
+        Namespaces []string `json:"namespaces,omitempty"`
+    }
+
+    type NetworkPermission struct {
+        // AllowHost specifies allowed destination hosts
+        // Supports wildcards: "*.internal.svc.cluster.local"
+        // +optional
+        AllowHost []string `json:"allowHost,omitempty"`
+
+        // AllowCIDR specifies allowed destination CIDR blocks (optional for future)
+        // +optional
+        AllowCIDR []string `json:"allowCIDR,omitempty"`
     }
     ```
+
+**Network Enforcement Clarification**:
+
+The `NetworkPermission` type provides declarative intent for network access control. Actual enforcement depends on the cluster's network policy implementation:
+
+1. **NetworkPolicy Enforcement** (Recommended):
+   - For hosted MCPServers, the controller generates Kubernetes `NetworkPolicy` resources based on `allowHost` and `allowCIDR`
+   - NetworkPolicy egress rules restrict pod-to-pod and pod-to-external traffic
+   - Requires a CNI plugin with NetworkPolicy support (Calico, Cilium, Weave Net, etc.)
+   - Implementation: Controller translates DNS names to ClusterIP selectors and CIDR blocks to ipBlock rules
+   - Wildcards (e.g., `*.internal.svc.cluster.local`) are expanded to matching Service selectors
+
+2. **Service Mesh Enforcement** (Optional):
+   - When service mesh (Istio, Linkerd) is detected, controller can optionally generate:
+     - `ServiceEntry` resources for external destinations (allowHost)
+     - `AuthorizationPolicy` resources for egress rules (allowHost/allowCIDR)
+   - Provides additional features: mTLS, retry policies, circuit breaking
+   - Enforcement happens at sidecar proxy level (more fine-grained than NetworkPolicy)
+
+3. **No Enforcement Mode** (Declarative Only):
+   - In clusters without NetworkPolicy support or service mesh, `NetworkPermission` serves as documentation only
+   - Controller logs warnings: "NetworkPermission specified but no enforcement mechanism available"
+   - Status field `networkEnforcement` indicates actual enforcement mode
+   - Suitable for development environments or trusted internal networks
+
+4. **Status Reporting**:
+   ```go
+   type MCPServerStatus struct {
+       // NetworkEnforcement indicates how network permissions are enforced
+       // +kubebuilder:validation:Enum=NetworkPolicy;ServiceMesh;None
+       // +optional
+       NetworkEnforcement *string `json:"networkEnforcement,omitempty"`
+
+       // ... other status fields
+   }
+   ```
+   - Controller populates based on cluster capabilities detected at reconciliation time
+   - Users can verify enforcement mode via `kubectl get mcpserver -o jsonpath='{.status.networkEnforcement}'`
+
+**Best Practices**:
+- **Production deployments**: Use CNI with NetworkPolicy support or service mesh for security guarantees
+- **Development/testing**: Declarative-only mode acceptable with explicit acknowledgment
+- **Validation**: Controller webhook warns if NetworkPermission specified but no enforcement available (unless explicitly disabled via annotation)
 
 ### MCPRoute Resource
 
@@ -489,9 +526,14 @@ type MCPBackendRef struct {
 }
 
 type MCPRouteMatch struct {
-	// Tools to match (supports wildcards: "db_*", "file_*")
+	// Tools to match - supports simple wildcards in tool names
+	// Examples: "db_query", "db_*", "*_query"
 	// +optional
 	Tools []string `json:"tools,omitempty"`
+
+	// ToolMatch defines advanced tool matching (alternative to Tools)
+	// +optional
+	ToolMatch *ToolMatcher `json:"toolMatch,omitempty"`
 
 	// Method to match (tools/call, tools/list, prompts/get, etc.)
 	// +optional
@@ -500,6 +542,25 @@ type MCPRouteMatch struct {
 	// Headers to match
 	// +optional
 	Headers []HeaderMatch `json:"headers,omitempty"`
+
+	// BackendRefs for this match (optional)
+	// If specified, overrides route-level backendRefs for matching requests
+	// +optional
+	BackendRefs []MCPBackendRef `json:"backendRefs,omitempty"`
+}
+
+type ToolMatcher struct {
+	// PrefixMatch matches tools with this prefix
+	// +optional
+	PrefixMatch *string `json:"prefixMatch,omitempty"`
+
+	// ExactMatch matches exact tool names
+	// +optional
+	ExactMatch *string `json:"exactMatch,omitempty"`
+
+	// RegexMatch matches tools using regex
+	// +optional
+	RegexMatch *string `json:"regexMatch,omitempty"`
 }
 
 type HeaderMatch struct {
@@ -726,13 +787,10 @@ type InferenceServiceSpec struct {
 }
 
 type MCPServerReference struct {
-	// ServerRef references an MCPServer resource
+	// ServerRef references an MCPServer in the same namespace as the InferenceService
+	// Cross-namespace references are not supported (enforced by validation webhook)
 	// +kubebuilder:validation:Required
 	ServerRef LocalObjectReference `json:"serverRef"`
-
-	// Namespace of the MCPServer (optional, defaults to InferenceService namespace)
-	// +optional
-	Namespace *string `json:"namespace,omitempty"`
 
 	// Weight for traffic splitting (default: 1)
 	// +kubebuilder:validation:Minimum=0
@@ -791,7 +849,7 @@ graph TB
         direction TB
         CRD1[MCPServer<br/>Type: hosted/remote<br/>PermissionProfile]
         CRD2[MCPRoute<br/>BackendRefs<br/>Policies<br/>Matches]
-        CRD3[InferenceService<br/>mcpServers[]<br/>mcpRoute config]
+        CRD3[InferenceService<br/>mcpServers list<br/>mcpRoute config]
     end
 
     subgraph "Control Plane - ome-system namespace"
@@ -996,6 +1054,45 @@ Security policies are defined at two levels with automatic merging:
 - **More restrictive policy wins**: If gateway requires JWT auth and route requires API key, both are enforced (AND logic)
 - **Rate limits combine**: If gateway sets 1000 req/hour and route sets 100 req/hour, 100 req/hour wins (minimum)
 - **Authorization combines**: Both gateway and route authorization rules must pass (AND logic)
+
+**Policy Merge Algorithm**:
+
+The gateway implements policy merging at request-time with the following precedence order:
+
+1. **Authentication (AND Logic - All Must Pass)**:
+   - Gateway authentication config (from operator defaults)
+   - Route authentication config (from MCPRoute spec)
+   - Implementation: Request must satisfy ALL configured auth methods in sequence
+   - Example: Gateway JWT + Route OIDC = Client must present valid JWT AND complete OIDC flow
+   - Validation: Webhook warns if route weakens authentication (not possible to disable gateway auth)
+
+2. **Authorization (AND Logic - All Rules Must Pass)**:
+   - Collect all authorization rules from gateway config
+   - Collect all authorization rules from route config
+   - Request must satisfy EVERY rule from combined set
+   - Implementation: Gateway evaluates rules in order, short-circuits on first denial
+   - Example: Gateway allows "group:developers" AND Route allows "group:finance-admins" = User must be in BOTH groups
+
+3. **Rate Limiting (Minimum Wins - Most Restrictive)**:
+   - For each dimension (user, IP, tool, principal, namespace):
+     - Find all limits from gateway config
+     - Find all limits from route config
+     - Apply the LOWEST limit for that dimension
+   - Implementation: Gateway maintains per-dimension counters, enforces strictest limit
+   - Example: Gateway 1000 req/hour + Route 100 req/hour = Enforce 100 req/hour
+   - Special case: If limits have different units, normalize to common unit (seconds) before comparison
+
+4. **Conflict Resolution**:
+   - Routes CANNOT weaken gateway policies (validation webhook enforces)
+   - Routes CAN add additional restrictions
+   - Routes CAN specify finer-grained controls (e.g., tool-specific rate limits)
+   - Operator defaults are immutable at runtime (require operator restart to change)
+
+5. **Enforcement Points**:
+   - Gateway controller watches both operator ConfigMap and MCPRoute resources
+   - On route creation/update: Merge policies and update internal policy cache
+   - On request: Look up cached merged policy for the route
+   - On policy violation: Return 401 (auth), 403 (authz), or 429 (rate limit) with specific error
 
 **Example Policy Combination**:
 
@@ -1269,12 +1366,12 @@ metadata:
 spec:
   # Route database tools to database-server
   matches:
-  - tools:
+  - toolMatch:
       prefixMatch: "db_"
     backendRefs:
     - name: database-server
   # Route k8s tools to k8s-server
-  - tools:
+  - toolMatch:
       prefixMatch: "k8s_"
     backendRefs:
     - name: k8s-server
@@ -1468,9 +1565,10 @@ spec:
     - **Mitigation**: Provide clear documentation and examples. Auto-create mode hides MCPRoute complexity for simple use cases. Most app teams only need to understand MCPServer.
 
 8.  **Increased Development Complexity**: Implementing requires more development effort:
-    - 2 controllers (MCPServer, MCPRoute)
+    - 2 controllers (MCPServer, MCPRoute) vs 1 (embedded approach)
     - Gateway auto-discovery and policy merging logic
-    - **Justification**: 50% more development effort delivers 80-90% of full Gateway API multi-tenancy benefits, which justifies the investment for medium-to-large deployments.
+    - Estimated: ~50% more development effort than single-CRD approach
+    - **Justification**: The additional effort is justified for medium-to-large deployments requiring multi-tenancy (see Evolution Path section for benefits analysis)
 
 9.  **Evolution Uncertainty**: While the v1alpha1 → v1beta1 evolution path is designed, there's uncertainty about:
     - Whether the community will validate the need for separate Policy CRDs
@@ -1480,7 +1578,12 @@ spec:
 
 ## Evolution Path
 
-This proposal takes a **balanced approach** to MCP support in OME. We start with v1alpha1 hybrid architecture that provides 80-90% of multi-tenancy benefits at 50% complexity, then evolve to more advanced patterns only when validated needs emerge.
+This proposal takes a **balanced approach** to MCP support in OME. We start with v1alpha1 hybrid architecture that **provides 80-90% of multi-tenancy benefits at 50% of full Gateway API complexity**, then evolve to more advanced patterns only when validated needs emerge.
+
+**Why 80-90%?** This estimate is based on analysis of multi-tenancy requirements:
+- ✅ **Achieved (90%)**: Namespace isolation, policy hierarchy (gateway + route), RBAC separation, auto-discovery, embedded policies, traffic splitting, tool-based routing
+- ✅ **Deferred to v1beta1 (10%)**: Cross-namespace sharing (ReferenceGrant), separate Policy CRDs, explicit Gateway lifecycle management
+- **Complexity Reduction**: 2 CRDs (MCPServer, MCPRoute) vs 5 CRDs in full Gateway API (Gateway, GatewayClass, HTTPRoute, Policy×3), no parentRef attachment complexity, no cross-namespace ReferenceGrant
 
 ### v1alpha1
 
@@ -1500,9 +1603,9 @@ This proposal takes a **balanced approach** to MCP support in OME. We start with
 - **Flexible Integration**: Auto-create MCPRoute (simple) or reference existing MCPRoute (explicit)
 
 **Comparison to Alternatives**:
-- **vs Single CRD**: Adds MCPRoute for multi-tenancy
-- **vs Full Gateway API**: Removes MCPGateway CRD and 3 Policy CRDs
-- **Result**: 80-90% of multi-tenancy benefits at 50% of full Gateway API complexity
+- **vs Single CRD**: Adds MCPRoute for multi-tenancy support
+- **vs Full Gateway API**: Removes MCPGateway CRD and 3 Policy CRDs, no parentRef complexity
+- **Result**: Balanced tradeoff (see Evolution Path section for detailed justification)
 
 **Target Users**:
 - Platform teams managing shared infrastructure
@@ -1646,3 +1749,164 @@ Future enhancements to consider **only if validated needs emerge**:
 - **Complexity Budget**: Total CRDs + fields ≤ 2x v1alpha1 (maintain simplicity advantage)
 - **User Choice**: Advanced features always optional, never required
 - **Evolution > Revolution**: Iterate based on learning, not speculation
+
+## Open Questions
+
+This section documents unresolved design questions and areas requiring further investigation or community feedback before implementation.
+
+### 1. Remote MCPServer Authentication
+
+**Question**: How should remote MCPServers authenticate to external services they depend on?
+
+**Context**: The current design specifies `RemoteMCPServer.url` for external services, but doesn't address how the remote server authenticates to its own dependencies (databases, APIs, etc.).
+
+**Options**:
+- **Option A**: Remote servers handle their own authentication (out of scope for OME). User deploys remote server with credentials externally.
+- **Option B**: Add optional `authConfig` to `RemoteMCPServer` with support for common patterns (basic auth, OAuth2, mTLS). OME controller validates connectivity with auth.
+- **Option C**: Use Kubernetes External Secrets or similar for credential injection into remote server URLs (e.g., `https://${SECRET_TOKEN}@api.example.com`)
+
+**Recommendation**: Start with Option A (out of scope) for v1alpha1. If >30% of users request remote server credential management, add Option B in v1beta1.
+
+### 2. MCPServer and MCPRoute Status Fields
+
+**Question**: What status information should be exposed in CRD status subresources?
+
+**Current Design**:
+- `MCPServerStatus`: Basic ready condition, network enforcement mode
+- `MCPRouteStatus`: Gateway URL, backend health, ready condition
+
+**Additional Status Fields to Consider**:
+- **MCPServer**:
+  - `discoveredTools`: List of tools discovered from server introspection (MCP `tools/list`)
+  - `capabilities`: Actual capabilities reported by server vs. declared in spec
+  - `serverVersion`: Runtime version of MCP server software
+  - `lastHealthCheck`: Timestamp of last successful health check
+  - `errorMessage`: Detailed error for debugging failed servers
+
+- **MCPRoute**:
+  - `activeBackends`: Count of healthy backends currently serving traffic
+  - `routingRules`: Summary of compiled routing rules (for debugging)
+  - `policyStatus`: Which policies are active (gateway defaults + route overrides)
+  - `requestMetrics`: Basic request count, error rate (last 5 minutes)
+
+**Recommendation**: Start minimal in v1alpha1 (ready condition, gateway URL, basic error messages). Add observability-focused status fields in v1beta1 based on user debugging needs.
+
+### 3. Gateway API Resource Reuse
+
+**Question**: Should we reuse existing Kubernetes Gateway API resources (HTTPRoute, Gateway) instead of defining custom MCPRoute/MCPServer CRDs?
+
+**Context**: Kubernetes Gateway API is now GA (v1.0.0). It provides standardized traffic routing with broad ecosystem support.
+
+**Pros of Reusing Gateway API**:
+- Standard Kubernetes pattern (no custom learning curve)
+- Works with existing Gateway implementations (Istio, Envoy Gateway, nginx)
+- Ecosystem tooling (kubectl plugins, dashboards) already exists
+- Cross-team familiarity (SREs already know Gateway API)
+
+**Cons of Reusing Gateway API**:
+- HTTPRoute doesn't natively support tool-based routing (requires custom HTTPRoute filters)
+- No built-in support for MCP-specific policies (authentication, authorization, rate limiting)
+- MCPServer concept (hosted vs remote) doesn't map cleanly to Gateway API backends
+- Need to bridge MCP-specific concepts (tools, permissions) into generic HTTP routing
+- Requires Gateway controller installation (additional cluster dependency)
+
+**Hybrid Option**: Use Gateway API for routing infrastructure, add MCP-specific CRDs for server definition and policy?
+
+**Recommendation**: Defer to v1beta1 or v2. Start with custom MCPRoute/MCPServer in v1alpha1 to validate MCP-specific patterns (tool routing, permission profiles). If >50% of users request Gateway API alignment, consider migration in v1beta1.
+
+### 4. Multi-Cluster MCP Server Discovery
+
+**Question**: How should MCPServers be discovered and routed across multiple Kubernetes clusters?
+
+**Context**: Large enterprises may want to share tool servers across clusters (cost efficiency, centralized governance).
+
+**Options**:
+- **Option A**: Single-cluster only in v1alpha1. Multi-cluster is future enhancement (v1beta1+).
+- **Option B**: Support remote MCPServers pointing to servers in other clusters (URL-based, no native discovery).
+- **Option C**: Integrate with service mesh federation (Istio multi-cluster, Linkerd) for transparent cross-cluster routing.
+- **Option D**: Add ClusterMCPServer (cluster-scoped) with cross-cluster service discovery via DNS or custom controller.
+
+**Recommendation**: Start with Option A (single-cluster) in v1alpha1. Add Option B (remote URLs to other clusters) if needed. Evaluate Option C/D for v1beta1 based on user demand for transparent multi-cluster routing.
+
+### 5. Tool Server Versioning and Compatibility
+
+**Question**: How should OME handle versioning of MCP tool servers and ensure compatibility between LLMs and tool APIs?
+
+**Context**: Tool servers may evolve over time with breaking changes to tool signatures or behavior.
+
+**Considerations**:
+- Should MCPServer spec include version constraints (e.g., `minMCPVersion: 2024-11-05`)?
+- How to handle deprecated tools during canary deployments (route old traffic to v1, new traffic to v2)?
+- Should gateway validate tool call compatibility at runtime (reject calls to removed tools)?
+- How to communicate tool schema changes to LLM applications?
+
+**Recommendation**: Start simple in v1alpha1 (no version enforcement, rely on server versioning). Add versioning metadata and compatibility checks in v1beta1 if protocol evolution creates breaking changes.
+
+### 6. Gateway Observability and Debugging
+
+**Question**: What observability features are critical for debugging MCP gateway routing issues?
+
+**Options**:
+- **Request tracing**: Distributed tracing with OpenTelemetry (trace ID across LLM → Gateway → MCPServer)
+- **Request logs**: Structured logs with tool name, user, latency, backend selection
+- **Metrics**: Prometheus metrics (request rate, error rate, p99 latency per tool/route/backend)
+- **Debug mode**: Optional verbose logging for specific routes (e.g., annotation `mcp.ome.io/debug: "true"`)
+- **Traffic shadowing**: Route requests to both v1 and v2, compare results (for canary validation)
+
+**Recommendation**: Implement basic request logging and Prometheus metrics in v1alpha1. Add distributed tracing and debug mode in v1beta1 based on user debugging experience.
+
+### 7. Policy Validation and Testing
+
+**Question**: How should users validate that gateway policies (authentication, authorization, rate limiting) are correctly configured before production deployment?
+
+**Options**:
+- **Dry-run mode**: Annotation on MCPRoute to log policy decisions without enforcement (e.g., `mcp.ome.io/policy-dry-run: "true"`)
+- **Policy simulator**: CLI tool or API endpoint to test policy evaluation for hypothetical requests
+- **Integration test framework**: Provide test utilities for users to validate policies in CI/CD pipelines
+- **Admission webhook warnings**: Webhook warns about common misconfigurations (e.g., overly permissive rules)
+
+**Recommendation**: Start with admission webhook warnings in v1alpha1. Add dry-run mode in v1beta1. Provide policy testing utilities as documentation/examples.
+
+### 8. Cost Tracking and Quota Management
+
+**Question**: Should OME provide built-in support for tracking MCP tool usage costs and enforcing quotas?
+
+**Context**: Tool calls may have associated costs (API calls, database queries, LLM inference). Enterprises want cost attribution and budgets.
+
+**Options**:
+- **Option A**: Out of scope. Users implement cost tracking externally via gateway logs/metrics.
+- **Option B**: Add cost metadata to MCPServer spec (e.g., `costPerRequest: 0.001`). Gateway tracks cumulative cost in metrics.
+- **Option C**: Integrate with Kubernetes ResourceQuota or custom quota CRDs. Enforce cost limits at gateway level (reject requests over budget).
+- **Option D**: Add cost reporting API (query usage by namespace, user, tool). Integrate with billing systems.
+
+**Recommendation**: Start with Option A (out of scope) in v1alpha1. If >30% of users request cost tracking, add Option B (cost metadata + metrics) in v1beta1.
+
+### 9. Security Considerations for Remote MCPServers
+
+**Question**: What security controls should OME enforce for remote MCPServers accessed via URL?
+
+**Context**: Remote servers are external services. They may be untrusted or compromised.
+
+**Considerations**:
+- **TLS verification**: Should controller validate TLS certificates for remote URLs? Allow self-signed certs for dev?
+- **Network egress control**: Should remote servers be subject to NetworkPermission restrictions (even though they're external)?
+- **Allowlist enforcement**: Should controller enforce URL allowlist (e.g., only `*.company.com` allowed)?
+- **Mutual TLS**: Should OME support mTLS for authenticating gateway to remote servers?
+- **Request signing**: Should gateway sign requests to remote servers (verify authenticity)?
+
+**Recommendation**: Require HTTPS for remote servers in v1alpha1. Add TLS verification and optional mTLS in v1beta1. Consider request signing if user feedback indicates trust concerns with remote servers.
+
+### 10. Graceful Degradation and Failover
+
+**Question**: How should the gateway handle backend failures? Should there be built-in fallback strategies?
+
+**Context**: MCPServers may become unhealthy during deployments or outages.
+
+**Options**:
+- **Fail fast**: Return 503 immediately if all backends unhealthy (current design).
+- **Degraded mode**: Return cached results for read-only tools, fail for write tools.
+- **Fallback backends**: Allow MCPRoute to specify fallback servers (different namespace, remote URL).
+- **Circuit breaker**: Temporarily stop routing to unhealthy backends, retry after cooldown period.
+- **Tool-level failover**: If primary server fails for specific tool, route to alternative server that implements the same tool.
+
+**Recommendation**: Start with fail-fast in v1alpha1. Add circuit breaker logic in v1beta1. Consider tool-level failover in v1 if users report reliability issues.
