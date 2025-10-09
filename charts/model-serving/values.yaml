@@ -575,14 +575,14 @@ llama_3_1_8b_instruct:
             - BM.GPU.H200.8
             - BM.GPU.H200-NC.8
       preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
+      - weight: 1
         preference:
           matchExpressions:
           - key: node.kubernetes.io/instance-type
             operator: In
             values:
             - BM.GPU.A100-v2.8
-      - weight: 1
+      - weight: 100
         preference:
           matchExpressions:
           - key: node.kubernetes.io/instance-type
