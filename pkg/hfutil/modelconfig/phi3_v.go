@@ -10,6 +10,9 @@ import (
 type Phi3VConfig struct {
 	BaseModelConfig
 
+	// Auto map for custom model loading
+	AutoMap *AutoMap `json:"auto_map,omitempty"`
+
 	// Model dimensions
 	HiddenSize            int `json:"hidden_size"`
 	IntermediateSize      int `json:"intermediate_size"`

@@ -1,0 +1,64 @@
+{
+  "aligner_config": {
+    "cls": "MlpProjector",
+    "model_type": "aligner",
+    "params": {
+      "depth": 2,
+      "input_dim": 1024,
+      "n_embed": 2048,
+      "projector_type": "mlp_gelu"
+    }
+  },
+  "gen_aligner_config": {
+    "cls": "MlpProjector",
+    "model_type": "gen_aligner",
+    "params": {
+      "depth": 2,
+      "input_dim": 8,
+      "n_embed": 2048,
+      "projector_type": "mlp_gelu"
+    }
+  },
+  "gen_head_config": {
+    "cls": "vision_head",
+    "model_type": "gen_head",
+    "params": {
+      "image_token_embed": 2048,
+      "image_token_size": 16384,
+      "n_embed": 2048
+    }
+  },
+  "gen_vision_config": {
+    "cls": "VQ-16",
+    "model_type": "gen_vision",
+    "params": {
+      "image_token_size": 16384,
+      "n_embed": 8
+    }
+  },
+  "language_config": {
+    "hidden_size": 2048,
+    "intermediate_size": 5632,
+    "max_position_embeddings": 16384,
+    "model_type": "llama",
+    "num_attention_heads": 16,
+    "num_hidden_layers": 24,
+    "num_key_value_heads": 16,
+    "torch_dtype": "bfloat16",
+    "vocab_size": 102400,
+    "_attn_implementation": "flash_attention_2"
+  },
+  "model_type": "multi_modality",
+  "torch_dtype": "bfloat16",
+  "transformers_version": "4.38.2",
+  "vision_config": {
+    "cls": "CLIPVisionTower",
+    "model_type": "vision",
+    "params": {
+      "image_size": 384,
+      "model_name": "siglip_large_patch16_384",
+      "select_feature": "same",
+      "select_layer": -1
+    }
+  }
+}

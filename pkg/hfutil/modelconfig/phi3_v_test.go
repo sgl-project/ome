@@ -69,4 +69,19 @@ func TestLoadPhi3VConfig(t *testing.T) {
 			t.Errorf("Expected embedding_cls to be 'image', but got '%v'", embdLayer["embedding_cls"])
 		}
 	}
+
+	// Check auto_map parsing
+	if phi3Config.AutoMap == nil {
+		t.Error("Expected auto_map to be parsed, but it is nil")
+	} else {
+		expectedAutoConfig := "configuration_phi3_v.Phi3VConfig"
+		if phi3Config.AutoMap.AutoConfig != expectedAutoConfig {
+			t.Errorf("Expected AutoConfig to be '%s', but got '%s'", expectedAutoConfig, phi3Config.AutoMap.AutoConfig)
+		}
+
+		expectedAutoModel := "modeling_phi3_v.Phi3VForCausalLM"
+		if phi3Config.AutoMap.AutoModelForCausalLM != expectedAutoModel {
+			t.Errorf("Expected AutoModelForCausalLM to be '%s', but got '%s'", expectedAutoModel, phi3Config.AutoMap.AutoModelForCausalLM)
+		}
+	}
 }
