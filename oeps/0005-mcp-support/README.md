@@ -22,10 +22,6 @@ This OEP introduces native support for the Model Context Protocol (MCP) in OME t
     - [Request Flow](#request-flow)
   - [Security Model](#security-model)
   - [Deployment Patterns](#deployment-patterns)
-    - [Pattern 1: Direct Server Access](#pattern-1-direct-server-access)
-    - [Pattern 2: Managed Gateway with Multiple Servers](#pattern-2-managed-gateway-with-multiple-servers)
-    - [Pattern 3: Remote Server Integration](#pattern-3-remote-server-integration)
-    - [Pattern 4: Canary Deployment with Traffic Splitting](#pattern-4-canary-deployment-with-traffic-splitting)
   - [Evolution Path](#evolution-path)
   - [Test Plan](#test-plan)
     - [Unit Tests](#unit-tests)
@@ -83,7 +79,7 @@ Currently, integrating LLMs with external tools requires custom implementations 
 
 ## Proposal
 
-We introduce a architecture with two CRDs that balances simplicity with multi-tenancy capabilities:
+We introduce an architecture with two CRDs that balances simplicity with multi-tenancy capabilities:
 
 ### `MCPServer`: The Tool Server Definition
 
@@ -119,7 +115,7 @@ OME inject gateway infrastructure per Inference Service and MCPRoute:
 -   **Protocol handling**: HTTP, gRPC, WebSocket support
 -   **Observability**: Metrics and logs labeled by namespace, route, server
 
-The gateway deployment itself is **not a user-facing CRD** (unlike Kubernetes Gateway API). Engineer defines defaults in operator configurations(infrastructure) and users interact with MCPRoute (routing).
+The gateway deployment itself is **not a user-facing CRD** (unlike Kubernetes Gateway API). Engineer defines defaults in operator configurations (infrastructure) and users interact with MCPRoute (routing).
 
 ### `InferenceService` Integration
 
@@ -271,7 +267,7 @@ Alice gets direct server access with minimal overhead while still benefiting fro
 2.  **Permissions**: The `permissionProfile` with `kubeResources` is very powerful. Misconfiguration can create security risks. The controller creates `Roles`/`RoleBindings`, so RBAC must be enabled in the cluster. Documentation will strongly emphasize the principle of least privilege.
 3.  **Operator-Managed Gateway**: The gateway component in v1alpha1 is **not a user-facing CRD**. It's managed internally by OME based on InferenceService configuration. 
 4.  **Gateway Scope**: In v1alpha1, each InferenceService gets its own logical gateway configuration. Shared gateway infrastructure (multi-tenant) will be considered for v1beta1 if user feedback indicates strong demand.
-5.  **Policy Embedding**: Policies (authentication, authorization, rate limiting) are embedded in MCPServer and InferenceService specs rather than separate CRDs. This simplifies the API for v1alpha1 while maintaining a path to separate Policy CRDs in future versions.
+5.  **Policy Embedding**: Policies (authentication, authorization, rate limiting) are embedded in MCPRoute and InferenceService specs rather than separate CRDs. This simplifies the API for v1alpha1 while maintaining a path to separate Policy CRDs in future versions.
 6.  **Transport Limitations**: `stdio` transport is only suitable for simple, single-shot tools and does not support scaling beyond one replica. `streamable-http` or `sse` are recommended for production deployments.
 7.  **Observability**: Both MCPServer and gateway components follow Kubernetes-native observability patterns:
   - Health checks via standard K8s probes
@@ -296,7 +292,7 @@ Alice gets direct server access with minimal overhead while still benefiting fro
 
 ## Design Details
 
-## API Specifications
+### API Specifications
 
 The model introduces two CRDs with clear separation of concerns.
 
@@ -471,7 +467,7 @@ MCPRoute defines routing configuration from gateway to backend MCPServers (names
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=mcpr
-// +kubebuilder:printcolumn:name="Backends",type=integer,JSONPath=`.spec.backendRefs[*]`
+// +kubebuilder:printcolumn:name="Backends",type=string,JSONPath=`.spec.backendRefs[*]`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 type MCPRoute struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -716,7 +712,7 @@ type Permission struct {
 
 	// Actions allowed
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:Enum=read;write;execute
+	// +kubebuilder:validation:Enum=tools/call,tools/list
 	Actions []string `json:"actions"`
 }
 
@@ -864,7 +860,7 @@ graph TB
 
         subgraph "Managed Gateway Infrastructure"
             direction TB
-            GW[MCP Gateway<br/>┌──────────────┐<br/>│ Auto-Discovery│<br/>│ Policy Enforce│<br/>│ Load Balancing│<br/>└──────────────┘]
+            GW[MCP Gateway<br/>┌──────────────┐<br/>│ Auto-Discovery│<br/>│ Policy Enforcement│<br/>│ Load Balancing│<br/>└──────────────┘]
 
             subgraph "Gateway Functions"
                 direction LR
@@ -890,7 +886,7 @@ graph TB
         end
 
         subgraph "LLM Workload"
-            LLM[InferenceService Pod<br/>ENV: MCP_GATEWAY_URL<br/>http://gateway/routes/ns/route]
+            LLM[InferenceService Pod<br/>ENV: MCP_GATEWAY_URL<br/>http://gateway/routes/{namespace}/{route-name}]
         end
     end
 
@@ -1312,7 +1308,7 @@ spec:
 4. Eventually scale down v1 and remove from backendRefs
 5. If issues found, immediately update route to set v1 weight=100
 
-#### Pattern 4: Tool-Based Routing with Multiple Servers
+#### Pattern 2: Tool-Based Routing with Multiple Servers
 
 **Scenario**: Route different tool categories to specialized servers based on tool name patterns.
 
@@ -1545,32 +1541,27 @@ spec:
 4.  **No Cross-Namespace Route Sharing**: InferenceService can only reference MCPRoute in the same namespace.
     - Platform teams cannot create a single shared route for all namespaces
     - Route configuration must be duplicated per namespace
-    - **Mitigation**: v1beta1 introduces MCPGateway Config that provides defaults. Routes inherit these defaults, minimizing duplication. Use auto-create mode to avoid managing routes entirely.
+    - **Mitigation**: v1beta1 introduces MCPGateway Config that provides defaults. Routes inherit these defaults, minimizing duplication. Use auto-create mode to avoid managing routes entirely. 
 
-5.  **Resource Overhead (Gateway Mode)**: Running gateway pods in addition to server pods consumes cluster resources:
-    - Each gateway config deploys 1-N gateway replicas (typically 2-3 for HA)
-    - Estimated overhead: 1-2 CPU cores, 2-4 GB memory per gateway
-    - **Mitigation**: Namespace label selectors allow sharing one gateway across many namespaces. 
-
-6.  **Latency Overhead**: Gateway introduces extra network hop and policy evaluation overhead:
+5.  **Latency Overhead**: Gateway introduces extra network hop and policy evaluation overhead:
     - Estimated latency: 2-10ms per request (varies by policy complexity)
     - Authentication/authorization adds ~1-5ms per request
     - Rate limiting adds ~0.5-2ms per request
     - **Mitigation**: Use direct mode (skip gateway) for latency-sensitive workloads. Optimize gateway deployment with resource allocation and autoscaling.
 
-7.  **Learning Curve (vs Fully Embedded)**: The model requires understanding 2 CRDs:
-    - Engineer teams must learn MCPGateway operator with default config
+6.  **Learning Curve (vs Fully Embedded)**: The model requires understanding 2 CRDs:
+    - Engineer teams must learn the default configuration for operator-managed MCP gateway
     - App teams must learn MCPRoute (unless using auto-create mode)
     - More cognitive load compared to fully embedded policies
     - **Mitigation**: Provide clear documentation and examples. Auto-create mode hides MCPRoute complexity for simple use cases. Most app teams only need to understand MCPServer.
 
-8.  **Increased Development Complexity**: Implementing requires more development effort:
+7.  **Increased Development Complexity**: Implementing requires more development effort:
     - 2 controllers (MCPServer, MCPRoute) vs 1 (embedded approach)
     - Gateway auto-discovery and policy merging logic
     - Estimated: ~50% more development effort than single-CRD approach
     - **Justification**: The additional effort is justified for medium-to-large deployments requiring multi-tenancy (see Evolution Path section for benefits analysis)
 
-9.  **Evolution Uncertainty**: While the v1alpha1 → v1beta1 evolution path is designed, there's uncertainty about:
+8.  **Evolution Uncertainty**: While the v1alpha1 → v1beta1 evolution path is designed, there's uncertainty about:
     - Whether the community will validate the need for separate Policy CRDs
     - Whether cross-namespace sharing becomes a validated requirement
     - Potential API changes if we add MCPGateway CRD in v1beta1
@@ -1578,9 +1569,9 @@ spec:
 
 ## Evolution Path
 
-This proposal takes a **balanced approach** to MCP support in OME. We start with v1alpha1 hybrid architecture that **provides 80-90% of multi-tenancy benefits at 50% of full Gateway API complexity**, then evolve to more advanced patterns only when validated needs emerge.
+This proposal takes a **balanced approach** to MCP support in OME. We start with v1alpha1 hybrid architecture that **provides multi-tenancy benefits at 50% of full Gateway API complexity**, then evolve to more advanced patterns only when validated needs emerge.
 
-**Why 80-90%?** This estimate is based on analysis of multi-tenancy requirements:
+**Why** This estimate is based on analysis of multi-tenancy requirements:
 - ✅ **Achieved (90%)**: Namespace isolation, policy hierarchy (gateway + route), RBAC separation, auto-discovery, embedded policies, traffic splitting, tool-based routing
 - ✅ **Deferred to v1beta1 (10%)**: Cross-namespace sharing (ReferenceGrant), separate Policy CRDs, explicit Gateway lifecycle management
 - **Complexity Reduction**: 2 CRDs (MCPServer, MCPRoute) vs 5 CRDs in full Gateway API (Gateway, GatewayClass, HTTPRoute, Policy×3), no parentRef attachment complexity, no cross-namespace ReferenceGrant
@@ -1810,7 +1801,7 @@ This section documents unresolved design questions and areas requiring further i
 - Need to bridge MCP-specific concepts (tools, permissions) into generic HTTP routing
 - Requires Gateway controller installation (additional cluster dependency)
 
-**Hybrid Option**: Use Gateway API for routing infrastructure, add MCP-specific CRDs for server definition and policy?
+**Hybrid Option**: Use Gateway API for routing infrastructure, add MCP-specific CRDs for server definition and policy.
 
 **Recommendation**: Defer to v1beta1 or v2. Start with custom MCPRoute/MCPServer in v1alpha1 to validate MCP-specific patterns (tool routing, permission profiles). If >50% of users request Gateway API alignment, consider migration in v1beta1.
 
