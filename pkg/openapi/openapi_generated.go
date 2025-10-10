@@ -1842,7 +1842,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -2515,7 +2515,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -3190,7 +3190,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -6595,7 +6595,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -7188,7 +7188,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},

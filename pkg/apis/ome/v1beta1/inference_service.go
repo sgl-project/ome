@@ -68,7 +68,6 @@ type AcceleratorSelector struct {
 
 	// Policy defines the selection policy when multiple accelerators match
 	// +kubebuilder:validation:Enum=BestFit;Cheapest;MostCapable;FirstAvailable
-	// +kubebuilder:default=BestFit
 	// +optional
 	Policy AcceleratorSelectionPolicy `json:"policy,omitempty"`
 }

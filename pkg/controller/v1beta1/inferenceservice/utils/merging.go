@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"html/template"
+	"regexp"
+	"strconv"
+	"strings"
 
 	goerrors "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -173,4 +176,186 @@ func ReplacePlaceholders(container *v1.Container, meta metav1.ObjectMeta) error 
 		return err
 	}
 	return json.Unmarshal(buf.Bytes(), container)
+}
+
+// MergeNodeSelector merges node selectors from runtime, accelerator class, and inference service (isvc).
+// Only add mergedNodeSelector to engine and decoder component.
+func MergeNodeSelector(runtime *v1beta1.ServingRuntimeSpec, acceleratorClass *v1beta1.AcceleratorClassSpec, isvc *v1beta1.InferenceService, component v1beta1.ComponentType) map[string]string {
+	// Start with runtime node selector
+	mergedNodeSelector := map[string]string{}
+	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.NodeSelector != nil {
+		for k, v := range runtime.ServingRuntimePodSpec.NodeSelector {
+			mergedNodeSelector[k] = v
+		}
+	}
+
+	// Merge in accelerator class node selector, overriding any conflicts
+	if acceleratorClass != nil && acceleratorClass.Discovery.NodeSelector != nil {
+		for k, v := range acceleratorClass.Discovery.NodeSelector {
+			mergedNodeSelector[k] = v
+		}
+	}
+
+	// Finally merge in isvc node selector, overriding any conflicts
+	switch component {
+	case v1beta1.EngineComponent:
+		if isvc.Spec.Engine != nil && &isvc.Spec.Engine.PodSpec != nil && isvc.Spec.Engine.PodSpec.NodeSelector != nil {
+			for k, v := range isvc.Spec.Engine.PodSpec.NodeSelector {
+				mergedNodeSelector[k] = v
+			}
+		}
+		return mergedNodeSelector
+
+	case v1beta1.DecoderComponent:
+		if isvc.Spec.Decoder != nil && &isvc.Spec.Decoder.PodSpec != nil && isvc.Spec.Decoder.PodSpec.NodeSelector != nil {
+			for k, v := range isvc.Spec.Decoder.PodSpec.NodeSelector {
+				mergedNodeSelector[k] = v
+			}
+		}
+		return mergedNodeSelector
+	}
+
+	return mergedNodeSelector
+}
+
+// MergeResource merges resource requests and limits from runtime, accelerator class, and container spec.
+// Take the maximum value for each resource type to ensure sufficient allocation.
+func MergeResource(container *v1.Container, acceleratorClass *v1beta1.AcceleratorClassSpec, runtime *v1beta1.ServingRuntimeSpec) {
+	if container == nil {
+		return
+	}
+
+	// Merge resource requests.
+	if container.Resources.Requests == nil {
+		container.Resources.Requests = v1.ResourceList{}
+	}
+	// Merge resource requests from runtime with the same container name.
+	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.Containers != nil {
+		for _, rtContainer := range runtime.ServingRuntimePodSpec.Containers {
+			if rtContainer.Name == container.Name {
+				for resourceName, quantity := range rtContainer.Resources.Requests {
+					if existingQty, exists := container.Resources.Requests[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
+						container.Resources.Requests[resourceName] = quantity.DeepCopy()
+					}
+				}
+				break
+			}
+		}
+	}
+	// Merge resource requests from accelerator class when this resource is required in container.
+	if acceleratorClass != nil && acceleratorClass.Resources != nil {
+		for _, resource := range acceleratorClass.Resources {
+			resourceName := v1.ResourceName(resource.Name)
+			quantity := resource.Quantity
+			if existingQty, exists := container.Resources.Requests[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
+				container.Resources.Requests[resourceName] = quantity.DeepCopy()
+			}
+		}
+
+	}
+
+	// Merge resource limits
+	if container.Resources.Limits == nil {
+		container.Resources.Limits = v1.ResourceList{}
+	}
+	if runtime != nil && &runtime.ServingRuntimePodSpec != nil && runtime.ServingRuntimePodSpec.Containers != nil {
+		for _, rtContainer := range runtime.ServingRuntimePodSpec.Containers {
+			if rtContainer.Name == container.Name {
+				for resourceName, quantity := range rtContainer.Resources.Limits {
+					if existingQty, exists := container.Resources.Limits[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
+						container.Resources.Limits[resourceName] = quantity.DeepCopy()
+					}
+				}
+				break
+			}
+		}
+	}
+	if acceleratorClass != nil && acceleratorClass.Resources != nil {
+		for _, resource := range acceleratorClass.Resources {
+			resourceName := v1.ResourceName(resource.Name)
+			quantity := resource.Quantity
+			if existingQty, exists := container.Resources.Limits[resourceName]; !exists || quantity.Cmp(existingQty) > 0 {
+				container.Resources.Limits[resourceName] = quantity.DeepCopy()
+			}
+		}
+
+	}
+}
+
+// mergeMultilineArgs merges container args with override args by combining multi-line strings.
+// It handles the case where args are multi-line strings (containing newlines or backslashes) and merges them
+// into a single multi-line string instead of creating separate array elements.
+func MergeMultilineArgs(containerArgs []string, overrideArgs []string) []string {
+	if len(overrideArgs) == 0 {
+		return containerArgs
+	}
+	if len(containerArgs) == 0 {
+		return overrideArgs
+	}
+
+	// Check if the first arg in containerArgs is a multi-line string (contains newlines or backslashes)
+	// Note: The "|" YAML literal block scalar indicator is stripped by K8s during parsing
+	if len(containerArgs) > 0 && (strings.Contains(containerArgs[0], "\n") || strings.Contains(containerArgs[0], "\\")) {
+		// Parse the multi-line string from containerArgs
+		baseArg := containerArgs[0]
+
+		// Ensure base arg ends with backslash continuation if it doesn't already
+		trimmedBase := strings.TrimRight(baseArg, " \t\n")
+		if !strings.HasSuffix(trimmedBase, "\\") {
+			// Add backslash continuation before appending overrides
+			baseArg = trimmedBase + " \\"
+		}
+
+		// Collect all override args content
+		var overrideContent strings.Builder
+		for _, arg := range overrideArgs {
+			trimmed := strings.TrimSpace(arg)
+			if trimmed != "" {
+				overrideContent.WriteString("\n")
+				overrideContent.WriteString(trimmed)
+			}
+		}
+
+		// Merge: append override content to base arg
+		merged := baseArg + overrideContent.String()
+
+		// Return merged arg followed by remaining args
+		result := []string{merged}
+		if len(containerArgs) > 1 {
+			result = append(result, containerArgs[1:]...)
+		}
+		return result
+	}
+
+	// If not multi-line format, just append
+	return append(append([]string{}, containerArgs...), overrideArgs...)
+}
+
+// OverrideIntParam overrides a specific integer parameter in a multiline command string.
+// If the key exists (e.g., "--tp-size=4"), it replaces the value with the new one.
+// Returns the updated args and a boolean indicating whether the key was found and replaced.
+func OverrideIntParam(containerArgs []string, key string, value int64) ([]string, bool) {
+	if len(containerArgs) == 0 {
+		return containerArgs, false
+	}
+
+	arg := containerArgs[0]
+	// Build regex pattern to match the key with its value
+	// Matches: --tp-size=4 or --tp-size 4
+	// Escapes special regex characters in the key
+	escapedKey := regexp.QuoteMeta(key)
+	pattern := regexp.MustCompile(escapedKey + `(?:=|\s+)\d+`)
+
+	// Check if the key exists in the string
+	if !pattern.MatchString(arg) {
+		return containerArgs, false
+	}
+
+	// Replace the existing value
+	replacement := key + "=" + strconv.Itoa(int(value))
+	arg = pattern.ReplaceAllString(arg, replacement)
+	// Update the containerArgs with the modified value
+	containerArgs[0] = arg
+
+	return containerArgs, true
 }

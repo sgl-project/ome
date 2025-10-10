@@ -23,6 +23,7 @@ import (
 )
 
 var _ Component = &Decoder{}
+var _ ComponentConfig = &Decoder{}
 
 // Decoder reconciles resources for the decoder component
 type Decoder struct {
@@ -44,6 +45,9 @@ func NewDecoder(
 	decoderSpec *v1beta1.DecoderSpec,
 	runtime *v1beta1.ServingRuntimeSpec,
 	runtimeName string,
+	supportedModelFormat *v1beta1.SupportedModelFormat,
+	acceleratorClass *v1beta1.AcceleratorClassSpec,
+	acceleratorClassName string,
 ) Component {
 	base := BaseComponentFields{
 		Client:                 client,
@@ -57,6 +61,9 @@ func NewDecoder(
 		RuntimeName:            runtimeName,
 		StatusManager:          status.NewStatusReconciler(),
 		Log:                    ctrl.Log.WithName("DecoderReconciler"),
+		AcceleratorClass:       acceleratorClass,
+		AcceleratorClassName:   acceleratorClassName,
+		SupportedModelFormat:   supportedModelFormat,
 	}
 
 	return &Decoder{
@@ -271,6 +278,8 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 	if runnerSpec != nil {
 		UpdateEnvVariables(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
+		MergeResources(&d.BaseComponentFields, &runnerSpec.Container)
+		MergeRuntimeArgumentsOverride(&d.BaseComponentFields, &runnerSpec.Container)
 		d.setParallelismEnvVarForDecoder(&runnerSpec.Container, d.getWorkerSize())
 	}
 
@@ -301,6 +310,8 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 		if workerRunner != nil {
 			UpdateVolumeMounts(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			UpdateEnvVariables(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
+			MergeResources(&d.BaseComponentFields, &workerRunner.Container)
+			MergeRuntimeArgumentsOverride(&d.BaseComponentFields, &workerRunner.Container)
 			d.setParallelismEnvVarForDecoder(&workerRunner.Container, d.getWorkerSize())
 		}
 	}
@@ -348,4 +359,31 @@ func (d *Decoder) setParallelismEnvVarForDecoder(container *v1.Container, worker
 	} else {
 		d.Log.Info("Conditions not met for parallelism (no GPUs or no leaders/workers)", "containerName", container.Name, "gpus", numGPUsPerPod, "leaders", numLeaders, "workers", numWorkers)
 	}
+}
+
+// GetComponentType implements ComponentConfig interface
+func (d *Decoder) GetComponentType() v1beta1.ComponentType {
+	return v1beta1.DecoderComponent
+}
+
+// GetComponentSpec implements ComponentConfig interface
+func (d *Decoder) GetComponentSpec() *v1beta1.ComponentExtensionSpec {
+	if d.decoderSpec == nil {
+		return nil
+	}
+	return &d.decoderSpec.ComponentExtensionSpec
+}
+
+// GetServiceSuffix implements ComponentConfig interface
+func (d *Decoder) GetServiceSuffix() string {
+	return "-decoder"
+}
+
+// ValidateSpec implements ComponentConfig interface
+func (d *Decoder) ValidateSpec() error {
+	if d.decoderSpec == nil {
+		return errors.New("decoder spec is nil")
+	}
+	// Add more validation logic as needed
+	return nil
 }
