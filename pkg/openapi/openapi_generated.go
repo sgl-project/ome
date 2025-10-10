@@ -1842,7 +1842,7 @@ func schema_pkg_apis_ome_v1beta1_ComponentExtensionSpec(ref common.ReferenceCall
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -2515,7 +2515,7 @@ func schema_pkg_apis_ome_v1beta1_DecoderSpec(ref common.ReferenceCallback) commo
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -3190,7 +3190,7 @@ func schema_pkg_apis_ome_v1beta1_EngineSpec(ref common.ReferenceCallback) common
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -5038,10 +5038,31 @@ func schema_pkg_apis_ome_v1beta1_ModelStatusSpec(ref common.ReferenceCallback) c
 							},
 						},
 					},
+					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Conditions represent the latest available observations of the model's state",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"state"},
 			},
 		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }
 
@@ -6595,7 +6616,7 @@ func schema_pkg_apis_ome_v1beta1_PredictorSpec(ref common.ReferenceCallback) com
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},
@@ -7188,7 +7209,7 @@ func schema_pkg_apis_ome_v1beta1_RouterSpec(ref common.ReferenceCallback) common
 					},
 					"minAvailable": {
 						SchemaProps: spec.SchemaProps{
-							Description: "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+							Description: "MinAvailable specifies how many component pods must still be available after the eviction",
 							Ref:         ref("k8s.io/apimachinery/pkg/util/intstr.IntOrString"),
 						},
 					},

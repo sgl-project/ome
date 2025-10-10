@@ -966,7 +966,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minAvailable": {
-          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
@@ -1207,7 +1207,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minAvailable": {
-          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
@@ -1600,7 +1600,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minAvailable": {
-          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
@@ -2773,6 +2773,15 @@
         "state"
       ],
       "properties": {
+        "conditions": {
+          "description": "Conditions represent the latest available observations of the model's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
         "lifecycle": {
           "description": "LifeCycle is an enum of Deprecated, Experiment, Public, Internal",
           "type": "string"
@@ -3506,7 +3515,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minAvailable": {
-          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {
@@ -3861,7 +3870,7 @@
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minAvailable": {
-          "description": "MinAvailiable specifies how many component pods must still be aviliable after the eviction",
+          "description": "MinAvailable specifies how many component pods must still be available after the eviction",
           "$ref": "#/definitions/k8s.io.apimachinery.pkg.util.intstr.IntOrString"
         },
         "minReplicas": {

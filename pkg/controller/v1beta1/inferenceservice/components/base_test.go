@@ -146,6 +146,158 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 	}
 }
 
+// TestUpdatePodSpecNodeSelector_PVCStorage tests that node selector is skipped for PVC storage
+func TestUpdatePodSpecNodeSelector_PVCStorage(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name                 string
+		storageUri           string
+		expectedNodeSelector map[string]string
+		description          string
+	}{
+		{
+			name:                 "PVC storage - skip node selector",
+			storageUri:           "pvc://model-pvc/models/llama",
+			expectedNodeSelector: nil,
+			description:          "PVC storage should not add node selector",
+		},
+		{
+			name:                 "PVC storage with namespace - skip node selector",
+			storageUri:           "pvc://models:model-pvc/llama-2",
+			expectedNodeSelector: nil,
+			description:          "PVC storage with namespace should not add node selector",
+		},
+		{
+			name:       "S3 storage - add node selector",
+			storageUri: "s3://bucket/model",
+			expectedNodeSelector: map[string]string{
+				"models.ome.io/default.basemodel.test-model": "Ready",
+			},
+			description: "Non-PVC storage should add node selector",
+		},
+		{
+			name:       "OCI storage - add node selector",
+			storageUri: "oci://registry/model:latest",
+			expectedNodeSelector: map[string]string{
+				"models.ome.io/default.basemodel.test-model": "Ready",
+			},
+			description: "OCI storage should add node selector",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &BaseComponentFields{
+				BaseModel: &v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: &tt.storageUri,
+					},
+				},
+				BaseModelMeta: &metav1.ObjectMeta{
+					Name:      "test-model",
+					Namespace: "default",
+				},
+				Log: ctrl.Log.WithName("test"),
+			}
+
+			podSpec := &v1.PodSpec{}
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+			}
+
+			UpdatePodSpecNodeSelector(b, isvc, podSpec)
+
+			g.Expect(podSpec.NodeSelector).To(gomega.Equal(tt.expectedNodeSelector), tt.description)
+		})
+	}
+}
+
+// TestUpdatePodSpecVolumes_PVCStorage tests PVC volume creation
+func TestUpdatePodSpecVolumes_PVCStorage(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name               string
+		storageUri         string
+		expectedVolumeType string
+		expectedPVCName    string
+		expectedReadOnly   bool
+		description        string
+	}{
+		{
+			name:               "PVC storage - create PVC volume",
+			storageUri:         "pvc://model-data-pvc/models/llama-2",
+			expectedVolumeType: "pvc",
+			expectedPVCName:    "model-data-pvc",
+			expectedReadOnly:   true,
+			description:        "PVC storage should create PersistentVolumeClaim volume",
+		},
+		{
+			name:               "PVC storage with namespace",
+			storageUri:         "pvc://models:shared-pvc/mistral",
+			expectedVolumeType: "pvc",
+			expectedPVCName:    "shared-pvc",
+			expectedReadOnly:   true,
+			description:        "PVC with namespace should create PVC volume",
+		},
+		{
+			name:               "HostPath storage for non-PVC",
+			storageUri:         "s3://bucket/model",
+			expectedVolumeType: "hostpath",
+			description:        "Non-PVC storage should create HostPath volume",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			modelPath := "/mnt/models"
+			b := &BaseComponentFields{
+				BaseModel: &v1beta1.BaseModelSpec{
+					Storage: &v1beta1.StorageSpec{
+						StorageUri: &tt.storageUri,
+						Path:       &modelPath, // Only set for non-PVC
+					},
+				},
+				BaseModelMeta: &metav1.ObjectMeta{
+					Name:      "test-model",
+					Namespace: "default",
+				},
+				Log: ctrl.Log.WithName("test"),
+			}
+
+			podSpec := &v1.PodSpec{}
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-isvc",
+				},
+			}
+
+			UpdatePodSpecVolumes(b, isvc, podSpec, &isvc.ObjectMeta)
+
+			if tt.expectedVolumeType == "pvc" {
+				g.Expect(podSpec.Volumes).To(gomega.HaveLen(1), "Should have one volume")
+				volume := podSpec.Volumes[0]
+				g.Expect(volume.Name).To(gomega.Equal("test-model"))
+				g.Expect(volume.PersistentVolumeClaim).ToNot(gomega.BeNil(), tt.description)
+				g.Expect(volume.PersistentVolumeClaim.ClaimName).To(gomega.Equal(tt.expectedPVCName))
+				g.Expect(volume.PersistentVolumeClaim.ReadOnly).To(gomega.Equal(tt.expectedReadOnly))
+				g.Expect(volume.HostPath).To(gomega.BeNil(), "Should not have HostPath for PVC")
+			} else if tt.expectedVolumeType == "hostpath" {
+				if b.BaseModel.Storage.Path != nil {
+					g.Expect(podSpec.Volumes).To(gomega.HaveLen(1), "Should have one volume")
+					volume := podSpec.Volumes[0]
+					g.Expect(volume.HostPath).ToNot(gomega.BeNil(), tt.description)
+					g.Expect(volume.PersistentVolumeClaim).To(gomega.BeNil(), "Should not have PVC for HostPath")
+				}
+			}
+		})
+	}
+}
+
 func TestProcessBaseLabels(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
