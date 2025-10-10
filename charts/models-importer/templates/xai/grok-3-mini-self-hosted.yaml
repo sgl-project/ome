@@ -17,7 +17,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: xai.grok-3-mini-low
+  displayName: xai.grok-3-mini
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "grok-3-mini-low" "osBucket" }}/o/{{ index .Values "grok-3-mini-low" "vendor" }}/{{ index .Values "grok-3-mini-low" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "grok-3-mini-low" "vendor" }}/{{ index .Values "grok-3-mini-low" "osPrefixOverride" }}"
@@ -35,11 +35,6 @@ spec:
     - "CHAT"
   maxTokens: 131072
   additionalMetadata:
-    dacShapeConfigs: |-
-      compatibleDACShapes:
-        - name: LARGE_GENERIC_4
-          quotaUnit: 1
-          default: true
     internalName: "grok-3-mini-low"
     type: "Serving"
 {{- end }}

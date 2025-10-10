@@ -2,7 +2,7 @@
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: grok-3-mini
+  name: grok-3-mini-self-hosted
   namespace: grok-3-mini
 spec:
   predictor:

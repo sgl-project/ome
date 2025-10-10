@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: xai-grok-3-mini-rt
+  name: xai-grok-4-fast-rt
 spec:
   annotations:
     prometheus.io/port: '3001'
@@ -83,9 +83,33 @@ spec:
         - name: OCI_REGION
           value: "{{ .Values.xai.ociRegion }}"
         - name: SIDECAR_MODEL
-          value: "grok-3-mini"
+          value: "grok-4-fast-non-reasoning"
         - name: TP
           value: "8"
+        - name: NODE_RANK
+          value: "0"
+        - name: NNODES
+          value: "1"
+        - name: DIST_INIT_ADDR
+          value: "localhost:29005"
+        - name: XAI_CLUSTER
+          value: "fer"
+        - name: SPECULATIVE_ALGORITHM
+          value: "EAGLE"
+        - name: MEM_FRACTION_STATIC
+          value: "0.73"
+        - name: CONTEXT_LENGTH
+          value: "262144"
+        - name: HOST
+          value: "0.0.0.0"
+        - name: REST_PORT
+          value: "8080"
+        - name: METRICS_PORT
+          value: "3001"
+        - name: GRAMMAR_BACKEND
+          value: "xai_xgrammar"
+        - name: IMAGE_TOKENIZER
+          value: "grok2v-staging"
       resources:
         limits:
           nvidia.com/gpu: "8"
@@ -99,7 +123,7 @@ spec:
         - mountPath: /opt/model
           name: model-empty-dir
       readinessProbe:
-        {{- toYaml .Values.grok_3_mini.readinessProbe | nindent 8 }}
+        {{- toYaml .Values.grok_4_fast_self_hosted.readinessProbe | nindent 8 }}
       livenessProbe:
         {{- toYaml .Values.xai.livenessProbe | nindent 8 }}
       startupProbe:

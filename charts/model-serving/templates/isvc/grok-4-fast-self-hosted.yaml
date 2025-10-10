@@ -1,0 +1,21 @@
+{{- if .Values.grok_4_fast_self_hosted.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: grok-4-fast-self-hosted
+  namespace: grok-4-fast-self-hosted
+spec:
+  predictor:
+    model:
+      baseModel:  grok-4-fast-self-hosted
+      protocolVersion: xAI
+    minReplicas: {{ .Values.grok_4_fast_self_hosted.minReplicas}}
+    maxReplicas: {{ .Values.grok_4_fast_self_hosted.maxReplicas}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grok-4-fast-self-hosted
+
+{{- end }}

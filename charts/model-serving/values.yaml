@@ -1129,12 +1129,39 @@ xai:
   
   grokImage:
     repository: us-chicago-1.ocir.io/idqj093njucb/xai-oci-all
-    tag: "v1.0.0"
+    tag: "v1.0.1"
   
   # Environment variables for XAI containers
   keyId: "ocid1.vaultsecret.oc1.us-chicago-1.amaaaaaaql3powiaduj7uvj35kcszyoqx2b7d7dy6qgl2k5sjmkc5vhbo6ea"  # Will be set by shepherd based on region
   ociRegion: "us-chicago-1"  # Will be set by shepherd based on deployment region
-  
+
+  # Liveness and Startup probes for xAI containers
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 30000
+      scheme: HTTP
+    failureThreshold: 5
+    successThreshold: 1
+    periodSeconds: 10
+    timeoutSeconds: 5
+    initialDelaySeconds: 100
+
+  startupProbe:
+    httpGet:
+      path: /get_model_info
+      port: 30000
+      scheme: HTTP
+    failureThreshold: 120
+    successThreshold: 1
+    periodSeconds: 10
+    timeoutSeconds: 5
+    initialDelaySeconds: 100
+
+grok_3_mini:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
   readinessProbe:
     exec:
       command:
@@ -1148,11 +1175,27 @@ xai:
             --max-time 25
     failureThreshold: 5
     successThreshold: 1
-    periodSeconds: 60
+    periodSeconds: 10
     timeoutSeconds: 30
     initialDelaySeconds: 100
 
-grok_3_mini:
+grok_4_fast_self_hosted:
   enabled: false
   minReplicas: 1
   maxReplicas: 1
+  readinessProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          curl -s -f http://localhost:8080/v1/chat/completions \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"model":"grok-4-fast-reasoning","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
+            --max-time 25
+    failureThreshold: 5
+    successThreshold: 1
+    periodSeconds: 10
+    timeoutSeconds: 30
+    initialDelaySeconds: 100

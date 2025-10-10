@@ -722,10 +722,21 @@ func (p *Predictor) updateEnvVariables(
 	objectMeta *metav1.ObjectMeta) {
 	if !p.fineTunedServing {
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
-			p.Log.Info("Base model serving - adding Model_PATH env variable", "inference service", isvc.Name, "namespace", isvc.Namespace, "base model", isvc.Spec.Predictor.Model.Name)
-			isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
-				{Name: constants.ModelPathEnvVarKey, Value: *baseModel.Storage.Path},
-			})
+			if baseModel.Vendor != nil && *baseModel.Vendor == string(constants.Xai) {
+				// For xAI models, set vendor-specific paths
+				basePath := *baseModel.Storage.Path
+				p.Log.Info("Base model serving - adding xAI-specific env variables", "inference service", isvc.Name, "namespace", isvc.Namespace, "base model", isvc.Spec.Predictor.Model.Name)
+				isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+					{Name: constants.ModelPathEnvVarKey, Value: filepath.Join(basePath, constants.XaiWeightsSubdirectory)},
+					{Name: constants.ImageTokenizerPathEnvVarKey, Value: filepath.Join(basePath, constants.XaiVisionTokenizerFilename)},
+				})
+			} else {
+				// Default behavior for other vendors
+				p.Log.Info("Base model serving - adding Model_PATH env variable", "inference service", isvc.Name, "namespace", isvc.Namespace, "base model", isvc.Spec.Predictor.Model.Name)
+				isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+					{Name: constants.ModelPathEnvVarKey, Value: *baseModel.Storage.Path},
+				})
+			}
 		}
 	} else {
 		if baseModel.Vendor == nil {

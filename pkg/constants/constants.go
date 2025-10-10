@@ -419,6 +419,11 @@ const (
 	// Llama specific
 	ModelPathEnvVarKey       = "MODEL_PATH"
 	ServedModelNameEnvVarKey = "SERVED_MODEL_NAME"
+
+	// xAI specific
+	ImageTokenizerPathEnvVarKey = "IMAGE_TOKENIZER_PATH"
+	XaiWeightsSubdirectory      = "weights"
+	XaiVisionTokenizerFilename  = "extracted_vision.bin"
 )
 
 type InferenceServiceComponent string
@@ -950,6 +955,7 @@ const (
 	Meta   ModelVendor = "meta"
 	Cohere ModelVendor = "cohere"
 	OpenAI ModelVendor = "openai"
+	Xai    ModelVendor = "xai"
 )
 
 var (
