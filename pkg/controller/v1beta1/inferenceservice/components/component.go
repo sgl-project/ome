@@ -13,13 +13,6 @@ type Component interface {
 	Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error)
 }
 
-// ComponentType constants for different component types
-const (
-	ComponentTypePredictor = "predictor"
-	ComponentTypeEngine    = "engine"
-	ComponentTypeDecoder   = "decoder"
-)
-
 // ComponentConfig defines the interface for component-specific configuration
 type ComponentConfig interface {
 	// GetComponentType returns the component type (engine, decoder, etc.)

@@ -585,6 +585,9 @@ func TestEngineReconcile(t *testing.T) {
 				tt.engineSpec,
 				nil, // runtime
 				tt.runtimeName,
+				nil, // supportedModelFormat
+				nil, // acceleratorClass
+				"",  // acceleratorClassName
 			).(*Engine)
 
 			// Set fine-tuned fields if needed
@@ -763,6 +766,9 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 				tt.engineSpec,
 				nil, // runtime
 				tt.runtimeName,
+				nil, // supportedModelFormat
+				nil, // acceleratorClass
+				"",  // acceleratorClassName
 			).(*Engine)
 
 			// Set fine-tuned fields if needed
@@ -899,6 +905,9 @@ func TestEngineWorkerPodSpec(t *testing.T) {
 				tt.engineSpec,
 				nil, // runtime
 				"",  // runtimeName
+				nil, // supportedModelFormat
+				nil, // acceleratorClass
+				"",  // acceleratorClassName
 			).(*Engine)
 
 			podSpec, err := engine.reconcileWorkerPodSpec(isvc, objectMeta)

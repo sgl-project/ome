@@ -27,6 +27,8 @@ type Selector interface {
 	// GetRuntime fetches a specific runtime by name.
 	// Returns the runtime spec and whether it's cluster-scoped.
 	GetRuntime(ctx context.Context, name string, namespace string) (*v1beta1.ServingRuntimeSpec, bool, error)
+
+	GetSupportedModelFormat(ctx context.Context, runtime *v1beta1.ServingRuntimeSpec, model *v1beta1.BaseModelSpec) *v1beta1.SupportedModelFormat
 }
 
 // RuntimeSelection represents the selected runtime with metadata.
@@ -138,6 +140,10 @@ type RuntimeScorer interface {
 	// CompareRuntimes compares two runtimes for a given model.
 	// Returns positive if r1 is better, negative if r2 is better, 0 if equal.
 	CompareRuntimes(r1, r2 RuntimeMatch, model *v1beta1.BaseModelSpec) int
+
+	// CalculateFormatScore calculates the score contribution for a specific model format.
+	// Higher scores indicate better matches.
+	CalculateFormatScore(model *v1beta1.BaseModelSpec, supportedFormat v1beta1.SupportedModelFormat, priority int64) int64
 }
 
 // Config holds configuration for the runtime selector.

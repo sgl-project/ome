@@ -1242,7 +1242,6 @@ spec:
                               x-kubernetes-list-type: atomic
                           type: object
                         policy:
-                          default: BestFit
                           enum:
                             - BestFit
                             - Cheapest
@@ -14181,7 +14180,6 @@ spec:
                               x-kubernetes-list-type: atomic
                           type: object
                         policy:
-                          default: BestFit
                           enum:
                             - BestFit
                             - Cheapest
