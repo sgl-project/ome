@@ -7963,6 +7963,14 @@ func schema_pkg_apis_ome_v1beta1_RateLimitConfig(ref common.ReferenceCallback) c
 			SchemaProps: spec.SchemaProps{
 				Type: []string{"object"},
 				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the rate limit",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"type": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Type is the type of rate limit (e.g., \"requests\", \"tokens\")",
@@ -7988,7 +7996,7 @@ func schema_pkg_apis_ome_v1beta1_RateLimitConfig(ref common.ReferenceCallback) c
 						},
 					},
 				},
-				Required: []string{"type", "limit", "window"},
+				Required: []string{"name", "type", "limit", "window"},
 			},
 		},
 	}

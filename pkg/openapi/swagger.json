@@ -4443,6 +4443,7 @@
     "v1beta1.RateLimitConfig": {
       "type": "object",
       "required": [
+        "name",
         "type",
         "limit",
         "window"
@@ -4453,6 +4454,11 @@
           "type": "integer",
           "format": "int64",
           "default": 0
+        },
+        "name": {
+          "description": "Name is the name of the rate limit",
+          "type": "string",
+          "default": ""
         },
         "type": {
           "description": "Type is the type of rate limit (e.g., \"requests\", \"tokens\")",
