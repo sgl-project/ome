@@ -11,8 +11,8 @@
 # Core Go packages
 /pkg/controller/v1beta1/benchmark   @CatherineSue
 /pkg/runtimeselector @pallasathena92
-/pkg/controller/v1beta1/inferenceservice @slin1237 @CatherineSue @YouNeedCryDear
-/pkg/principals   @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
-/pkg/ociobjectstore @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
-/pkg/vault @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr
-/pkg/modelagent @slin1237 @pallasathena92
+/pkg/controller/v1beta1/inferenceservice @slin1237 @CatherineSue @YouNeedCryDear @pallasathena92 @beiguo218
+/pkg/principals   @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr @beiguo218
+/pkg/ociobjectstore @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr @beiguo218
+/pkg/vault @slin1237 @pallasathena92 @speedmancs @chengjieyao @davidsnahm @heymrbox @frankzhouhr @beiguo218
+/pkg/modelagent @slin1237 @pallasathena92 @beiguo218
