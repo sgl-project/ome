@@ -194,13 +194,14 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 
 	// append env var from runtime spec if it is specified.
 	// runner container is user values, it takes precedence over runtime values.
-	// only append env var that does not exist in runner container.
+	// if the env exists, update its value.
+	// if the env does not exist, append it to the list.
 	if b.SupportedModelFormat != nil && b.SupportedModelFormat.AcceleratorConfig != nil && b.AcceleratorClassName != "" {
 		acceleratorConfig := b.SupportedModelFormat.GetAcceleratorConfig(b.AcceleratorClassName)
 		if acceleratorConfig != nil {
 			envOverride := acceleratorConfig.EnvironmentOverride
 			for envName, envVar := range envOverride {
-				isvcutils.AppendEnvVarIfNotExist(container, &corev1.EnvVar{
+				isvcutils.UpdateEnvVars(container, &corev1.EnvVar{
 					Name: envName, Value: envVar})
 			}
 		}
@@ -317,10 +318,14 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 			// Override tensor parallel size if specified
 			if tensorParallelismConfig.TensorParallelSize != nil && *tensorParallelismConfig.TensorParallelSize > 0 {
 				var updated bool
-				// Check --tp-size first
+				// Check --tp-size first, it is the parameter used in sglang
 				container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--tp-size", *tensorParallelismConfig.TensorParallelSize)
 				if !updated {
-					// If --tp-size doesn't exist, check --tensor-parallel-size
+					// Check --tp next, it is the alias of --tp-size in sglang
+					container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--tp", *tensorParallelismConfig.TensorParallelSize)
+				}
+				if !updated {
+					// If --tp-size doesn't exist, check --tensor-parallel-size, it is the parameter used in vllm
 					container.Args, _ = isvcutils.OverrideIntParam(container.Args, "--tensor-parallel-size", *tensorParallelismConfig.TensorParallelSize)
 				}
 			}
@@ -328,8 +333,12 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 			// Override pipeline parallel size if specified
 			if tensorParallelismConfig.PipelineParallelSize != nil && *tensorParallelismConfig.PipelineParallelSize > 0 {
 				var updated bool
-				// Check --pp-size first
+				// Check --pp-size first, it is the parameter used in sglang
 				container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--pp-size", *tensorParallelismConfig.PipelineParallelSize)
+				if !updated {
+					// Check --pp next, it is the alias of --pp-size in sglang
+					container.Args, updated = isvcutils.OverrideIntParam(container.Args, "--pp", *tensorParallelismConfig.PipelineParallelSize)
+				}
 				if !updated {
 					// If --pp-size doesn't exist, check --pipeline-parallel-size
 					container.Args, _ = isvcutils.OverrideIntParam(container.Args, "--pipeline-parallel-size", *tensorParallelismConfig.PipelineParallelSize)
@@ -340,8 +349,66 @@ func MergeRuntimeArgumentsOverride(b *BaseComponentFields, container *corev1.Con
 
 }
 
+// isResourcesUnspecified checks if the resource requirements are unspecified
+func isResourcesUnspecified(resources corev1.ResourceRequirements) bool {
+	return resources.Limits == nil && resources.Requests == nil && len(resources.Claims) == 0
+}
+
+// MergeResources merges resource requests and limits from the runtime and accelerator class into the container
 func MergeResources(b *BaseComponentFields, container *corev1.Container) {
 	isvcutils.MergeResource(container, b.AcceleratorClass, b.Runtime)
+}
+
+// MergeEngineResources merges resource requests and limits for the engine container.
+// It only merges resources from the runtime and accelerator class when the user has not
+// explicitly specified resources in the InferenceService spec. This ensures user-specified
+// resources are respected and not overridden, while providing sensible defaults from the
+// runtime and accelerator class when resources are not specified.
+func MergeEngineResources(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *corev1.Container) {
+	if isvc.Spec.Engine != nil &&
+		(isvc.Spec.Engine.Runner == nil ||
+			isResourcesUnspecified(isvc.Spec.Engine.Runner.Container.Resources)) {
+		b.Log.Info("Merging resources for engine container as user did not specify resources in InferenceService")
+		MergeResources(b, container)
+	}
+}
+
+// MergeDecoderResources merges resource requests and limits for the decoder container.
+// It only merges resources from the runtime and accelerator class when the user has not
+// explicitly specified resources in the InferenceService spec. This ensures user-specified
+// resources are respected and not overridden, while providing sensible defaults from the
+// runtime and accelerator class when resources are not specified.
+func MergeDecoderResources(b *BaseComponentFields, isvc *v1beta1.InferenceService, container *corev1.Container) {
+	if isvc.Spec.Decoder != nil &&
+		(isvc.Spec.Decoder.Runner == nil ||
+			isResourcesUnspecified(isvc.Spec.Decoder.Runner.Container.Resources)) {
+		b.Log.Info("Merging resources for decoder container as user did not specify resources in InferenceService")
+		MergeResources(b, container)
+	}
+}
+
+// UpdateEngineAffinity merges affinity from the accelerator class into the pod spec
+// It only merges when customer didn't specify affinity in the inference service
+func UpdateEngineAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
+	if isvc.Spec.Engine != nil &&
+		isvc.Spec.Engine.PodSpec.Affinity == nil {
+		if b.AcceleratorClass != nil && b.AcceleratorClass.Discovery.Affinity != nil {
+			b.Log.Info("Merging affinity from accelerator class into engine pod spec as user did not specify affinity in InferenceService")
+			podSpec.Affinity = b.AcceleratorClass.Discovery.Affinity
+		}
+	}
+}
+
+// UpdateDecoderAffinity merges affinity from the accelerator class into the pod spec
+// It only merges when customer didn't specify affinity in the inference service
+func UpdateDecoderAffinity(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
+	if isvc.Spec.Decoder != nil &&
+		isvc.Spec.Decoder.PodSpec.Affinity == nil {
+		if b.AcceleratorClass != nil && b.AcceleratorClass.Discovery.Affinity != nil {
+			b.Log.Info("Merging affinity from accelerator class into decoder pod spec as user did not specify affinity in InferenceService")
+			podSpec.Affinity = b.AcceleratorClass.Discovery.Affinity
+		}
+	}
 }
 
 // ProcessBaseAnnotations processes common annotations

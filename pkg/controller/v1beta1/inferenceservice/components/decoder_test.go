@@ -1044,3 +1044,345 @@ func TestDecoderSetupMocks(t *testing.T) {
 		})
 	}
 }
+
+func TestDecoderResourceMerging(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name                  string
+		decoderSpec           *v1beta1.DecoderSpec
+		runtime               *v1beta1.ServingRuntimeSpec
+		acceleratorClass      *v1beta1.AcceleratorClassSpec
+		expectResourcesMerged bool
+		validateResources     func(*v1.Container)
+	}{
+		{
+			name: "User specified resources - should NOT merge",
+			decoderSpec: &v1beta1.DecoderSpec{
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "decoder",
+						Image: "decoder:latest",
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("2"),
+								v1.ResourceMemory: resource.MustParse("4Gi"),
+							},
+						},
+					},
+				},
+			},
+			runtime: &v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "decoder",
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse("4"),
+									v1.ResourceMemory: resource.MustParse("8Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResourcesMerged: false,
+			validateResources: func(c *v1.Container) {
+				// Should keep user's values (2 CPU, 4Gi memory)
+				cpu := c.Resources.Requests[v1.ResourceCPU]
+				g.Expect(cpu.String()).To(gomega.Equal("2"))
+				memory := c.Resources.Requests[v1.ResourceMemory]
+				g.Expect(memory.String()).To(gomega.Equal("4Gi"))
+			},
+		},
+		{
+			name: "User did NOT specify resources - should merge from runtime",
+			decoderSpec: &v1beta1.DecoderSpec{
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "decoder",
+						Image: "decoder:latest",
+						// No resources specified
+					},
+				},
+			},
+			runtime: &v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "decoder",
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse("4"),
+									v1.ResourceMemory: resource.MustParse("8Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResourcesMerged: true,
+			validateResources: func(c *v1.Container) {
+				// Should use runtime's values (4 CPU, 8Gi memory)
+				cpu := c.Resources.Requests[v1.ResourceCPU]
+				g.Expect(cpu.String()).To(gomega.Equal("4"))
+				memory := c.Resources.Requests[v1.ResourceMemory]
+				g.Expect(memory.String()).To(gomega.Equal("8Gi"))
+			},
+		},
+		{
+			name: "User did NOT specify resources - should merge from AcceleratorClass",
+			decoderSpec: &v1beta1.DecoderSpec{
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "decoder",
+						Image: "decoder:latest",
+						// No resources specified
+					},
+				},
+			},
+			acceleratorClass: &v1beta1.AcceleratorClassSpec{
+				Resources: []v1beta1.AcceleratorResource{
+					{
+						Name:     "nvidia.com/gpu",
+						Quantity: resource.MustParse("2"),
+					},
+				},
+			},
+			expectResourcesMerged: true,
+			validateResources: func(c *v1.Container) {
+				// Should have GPU from AC
+				gpu := c.Resources.Requests[v1.ResourceName("nvidia.com/gpu")]
+				g.Expect(gpu.String()).To(gomega.Equal("2"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model:   &v1beta1.ModelRef{},
+					Decoder: tt.decoderSpec,
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+			clientset := fake.NewClientset()
+			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+			decoder := NewDecoder(
+				c,
+				clientset,
+				scheme,
+				&controllerconfig.InferenceServicesConfig{},
+				constants.RawDeployment,
+				nil, // baseModel
+				nil, // baseModelMeta
+				tt.decoderSpec,
+				tt.runtime,
+				"test-runtime",
+				nil, // supportedModelFormat
+				tt.acceleratorClass,
+				"test-accel-class",
+			).(*Decoder)
+
+			// Call reconcilePodSpec which internally calls MergeDecoderResources
+			objectMeta := &metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			podSpec, err := decoder.reconcilePodSpec(isvc, objectMeta)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			// Find the runner container
+			var runnerContainer *v1.Container
+			for i := range podSpec.Containers {
+				if podSpec.Containers[i].Name == "decoder" {
+					runnerContainer = &podSpec.Containers[i]
+					break
+				}
+			}
+			g.Expect(runnerContainer).NotTo(gomega.BeNil())
+
+			// Validate resources
+			if tt.validateResources != nil {
+				tt.validateResources(runnerContainer)
+			}
+		})
+	}
+}
+
+func TestDecoderAffinityMerging(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name                 string
+		decoderSpec          *v1beta1.DecoderSpec
+		acceleratorClass     *v1beta1.AcceleratorClassSpec
+		expectAffinityMerged bool
+		validateAffinity     func(*v1.Affinity)
+	}{
+		{
+			name: "User specified affinity - should NOT merge",
+			decoderSpec: &v1beta1.DecoderSpec{
+				PodSpec: v1beta1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "custom-key",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"custom-value"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					Containers: []v1.Container{
+						{Name: "decoder", Image: "decoder:latest"},
+					},
+				},
+			},
+			acceleratorClass: &v1beta1.AcceleratorClassSpec{
+				Discovery: v1beta1.AcceleratorDiscovery{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "ac-key",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"ac-value"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectAffinityMerged: false,
+			validateAffinity: func(affinity *v1.Affinity) {
+				// Should keep user's affinity (custom-key)
+				g.Expect(affinity).NotTo(gomega.BeNil())
+				g.Expect(affinity.NodeAffinity).NotTo(gomega.BeNil())
+				terms := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+				g.Expect(terms[0].MatchExpressions[0].Key).To(gomega.Equal("custom-key"))
+			},
+		},
+		{
+			name: "User did NOT specify affinity - should merge from AC",
+			decoderSpec: &v1beta1.DecoderSpec{
+				PodSpec: v1beta1.PodSpec{
+					// No affinity specified
+					Containers: []v1.Container{
+						{Name: "decoder", Image: "decoder:latest"},
+					},
+				},
+			},
+			acceleratorClass: &v1beta1.AcceleratorClassSpec{
+				Discovery: v1beta1.AcceleratorDiscovery{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "ac-key",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"ac-value"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectAffinityMerged: true,
+			validateAffinity: func(affinity *v1.Affinity) {
+				// Should use AC's affinity (ac-key)
+				g.Expect(affinity).NotTo(gomega.BeNil())
+				g.Expect(affinity.NodeAffinity).NotTo(gomega.BeNil())
+				terms := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+				g.Expect(terms[0].MatchExpressions[0].Key).To(gomega.Equal("ac-key"))
+			},
+		},
+		{
+			name: "No affinity from AC - should remain nil",
+			decoderSpec: &v1beta1.DecoderSpec{
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{Name: "decoder", Image: "decoder:latest"},
+					},
+				},
+			},
+			acceleratorClass:     nil,
+			expectAffinityMerged: false,
+			validateAffinity: func(affinity *v1.Affinity) {
+				// Should be nil
+				g.Expect(affinity).To(gomega.BeNil())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model:   &v1beta1.ModelRef{},
+					Decoder: tt.decoderSpec,
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+			clientset := fake.NewClientset()
+			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+			decoder := NewDecoder(
+				c,
+				clientset,
+				scheme,
+				&controllerconfig.InferenceServicesConfig{},
+				constants.RawDeployment,
+				nil, // baseModel
+				nil, // baseModelMeta
+				tt.decoderSpec,
+				nil, // runtime
+				"test-runtime",
+				nil, // supportedModelFormat
+				tt.acceleratorClass,
+				"test-accel-class",
+			).(*Decoder)
+
+			// Call reconcilePodSpec which internally calls UpdateDecoderAffinity
+			objectMeta := &metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			podSpec, err := decoder.reconcilePodSpec(isvc, objectMeta)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			// Validate affinity
+			if tt.validateAffinity != nil {
+				tt.validateAffinity(podSpec.Affinity)
+			}
+		})
+	}
+}

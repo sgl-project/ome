@@ -262,12 +262,10 @@ func (in *AcceleratorDiscovery) DeepCopyInto(out *AcceleratorDiscovery) {
 			(*out)[key] = val
 		}
 	}
-	if in.NodeSelectorTerms != nil {
-		in, out := &in.NodeSelectorTerms, &out.NodeSelectorTerms
-		*out = make([]v1.NodeSelectorTerm, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
+	if in.Affinity != nil {
+		in, out := &in.Affinity, &out.Affinity
+		*out = new(v1.Affinity)
+		(*in).DeepCopyInto(*out)
 	}
 	if in.DeviceIDs != nil {
 		in, out := &in.DeviceIDs, &out.DeviceIDs

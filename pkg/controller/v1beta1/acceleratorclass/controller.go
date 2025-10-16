@@ -147,19 +147,6 @@ func nodePassesDiscovery(ac *v1beta1.AcceleratorClass, node *corev1.Node) bool {
 		}
 	}
 
-	// NodeSelectorTerms: OR between terms, AND within a term
-	if len(ac.Spec.Discovery.NodeSelectorTerms) > 0 {
-		matchedAny := false
-		for _, term := range ac.Spec.Discovery.NodeSelectorTerms {
-			if matchNodeSelectorTerm(node, term) {
-				matchedAny = true
-				break
-			}
-		}
-		if !matchedAny {
-			return false
-		}
-	}
 	return true
 }
 
