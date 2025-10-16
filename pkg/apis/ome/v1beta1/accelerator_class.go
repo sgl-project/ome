@@ -89,10 +89,9 @@ type AcceleratorDiscovery struct {
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
-	// NodeSelectorTerms for more complex node selection
+	// Affinity for more complex node selection
 	// +optional
-	// +listType=atomic
-	NodeSelectorTerms []v1.NodeSelectorTerm `json:"nodeSelectorTerms,omitempty"`
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// PCIVendorID for device discovery (e.g., "10de" for NVIDIA)
 	// +optional

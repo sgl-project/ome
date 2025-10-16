@@ -261,6 +261,10 @@
     "v1beta1.AcceleratorDiscovery": {
       "type": "object",
       "properties": {
+        "affinity": {
+          "description": "Affinity for more complex node selection",
+          "$ref": "#/definitions/v1.Affinity"
+        },
         "deviceIDs": {
           "description": "DeviceIDs list of PCI device IDs",
           "type": "array",
@@ -277,15 +281,6 @@
             "type": "string",
             "default": ""
           }
-        },
-        "nodeSelectorTerms": {
-          "description": "NodeSelectorTerms for more complex node selection",
-          "type": "array",
-          "items": {
-            "default": {},
-            "$ref": "#/definitions/v1.NodeSelectorTerm"
-          },
-          "x-kubernetes-list-type": "atomic"
         },
         "pciVendorID": {
           "description": "PCIVendorID for device discovery (e.g., \"10de\" for NVIDIA)",

@@ -324,7 +324,8 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		r.Log.Info("Creating decoder reconciler",
 			"deploymentMode", decoderDeploymentMode,
 			"namespace", isvc.Namespace,
-			"inferenceService", isvc.Name)
+			"inferenceService", isvc.Name,
+			"acceleratorClass", decoderAcName)
 
 		decoderReconciler := componentBuilderFactory.CreateDecoderComponent(
 			decoderDeploymentMode,

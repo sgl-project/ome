@@ -278,7 +278,7 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 	if runnerSpec != nil {
 		UpdateEnvVariables(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
 		UpdateVolumeMounts(&d.BaseComponentFields, isvc, &runnerSpec.Container, objectMeta)
-		MergeResources(&d.BaseComponentFields, &runnerSpec.Container)
+		MergeDecoderResources(&d.BaseComponentFields, isvc, &runnerSpec.Container)
 		MergeRuntimeArgumentsOverride(&d.BaseComponentFields, &runnerSpec.Container)
 		d.setParallelismEnvVarForDecoder(&runnerSpec.Container, d.getWorkerSize())
 	}
@@ -291,6 +291,7 @@ func (d *Decoder) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *m
 
 	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, podSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&d.BaseComponentFields, isvc, podSpec)
+	UpdateDecoderAffinity(&d.BaseComponentFields, isvc, podSpec)
 
 	d.Log.Info("Decoder PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return podSpec, nil
@@ -310,7 +311,7 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 		if workerRunner != nil {
 			UpdateVolumeMounts(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
 			UpdateEnvVariables(&d.BaseComponentFields, isvc, &workerRunner.Container, objectMeta)
-			MergeResources(&d.BaseComponentFields, &workerRunner.Container)
+			MergeDecoderResources(&d.BaseComponentFields, isvc, &workerRunner.Container)
 			MergeRuntimeArgumentsOverride(&d.BaseComponentFields, &workerRunner.Container)
 			d.setParallelismEnvVarForDecoder(&workerRunner.Container, d.getWorkerSize())
 		}
@@ -323,6 +324,7 @@ func (d *Decoder) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectM
 	}
 	UpdatePodSpecVolumes(&d.BaseComponentFields, isvc, workerPodSpec, objectMeta)
 	UpdatePodSpecNodeSelector(&d.BaseComponentFields, isvc, workerPodSpec)
+	UpdateDecoderAffinity(&d.BaseComponentFields, isvc, workerPodSpec)
 
 	d.Log.Info("Decoder Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
