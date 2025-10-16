@@ -282,9 +282,47 @@ func MergeResource(container *v1.Container, acceleratorClass *v1beta1.Accelerato
 	}
 }
 
+// extractArgKey extracts the key from an argument string for deduplication and override matching.
+// For flags (starting with -), it extracts just the flag name.
+// For non-flags (like "python3 -m server"), it returns the entire string as the key.
+// This allows proper deduplication of both flags and command lines.
+// Examples:
+//   - "--tp-size=4" -> "--tp-size"
+//   - "--tp-size 4" -> "--tp-size"
+//   - "--enable-metrics" -> "--enable-metrics"
+//   - "python3 -m server" -> "python3 -m server" (entire string is the key)
+func extractArgKey(arg string) string {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return ""
+	}
+
+	// If it doesn't start with -, treat the entire string as the key
+	// This handles commands like "python3 -m server"
+	if !strings.HasPrefix(arg, "-") {
+		return arg
+	}
+
+	// For flags, extract just the flag name
+	// Handle --key=value format
+	if idx := strings.Index(arg, "="); idx != -1 {
+		return arg[:idx]
+	}
+
+	// Handle --key value format (space-separated)
+	// Extract just the key part before any space
+	parts := strings.Fields(arg)
+	if len(parts) > 0 {
+		return parts[0]
+	}
+
+	return arg
+}
+
 // mergeMultilineArgs merges container args with override args by combining multi-line strings.
 // It handles the case where args are multi-line strings (containing newlines or backslashes) and merges them
 // into a single multi-line string instead of creating separate array elements.
+// Smart override: if an override has the same key but different value, it replaces the existing value.
 func MergeMultilineArgs(containerArgs []string, overrideArgs []string) []string {
 	if len(overrideArgs) == 0 {
 		return containerArgs
@@ -299,25 +337,128 @@ func MergeMultilineArgs(containerArgs []string, overrideArgs []string) []string 
 		// Parse the multi-line string from containerArgs
 		baseArg := containerArgs[0]
 
-		// Ensure base arg ends with backslash continuation if it doesn't already
-		trimmedBase := strings.TrimRight(baseArg, " \t\n")
-		if !strings.HasSuffix(trimmedBase, "\\") {
-			// Add backslash continuation before appending overrides
-			baseArg = trimmedBase + " \\"
-		}
+		// Parse existing args into a map: key -> full arg string
+		// This enables smart override: if override has same key but different value, replace it
+		existingArgs := make(map[string]string) // key -> full arg (e.g., "--tp-size" -> "--tp-size=4")
+		argKeys := make(map[string]int)         // key -> line index for replacement
+		lines := strings.Split(baseArg, "\n")
 
-		// Collect all override args content
-		var overrideContent strings.Builder
-		for _, arg := range overrideArgs {
-			trimmed := strings.TrimSpace(arg)
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			// Remove trailing backslash for parsing
+			trimmed = strings.TrimRight(trimmed, "\\")
+			trimmed = strings.TrimSpace(trimmed)
 			if trimmed != "" {
-				overrideContent.WriteString("\n")
-				overrideContent.WriteString(trimmed)
+				key := extractArgKey(trimmed)
+				if key != "" {
+					existingArgs[key] = trimmed
+					argKeys[key] = i
+				}
 			}
 		}
 
-		// Merge: append override content to base arg
-		merged := baseArg + overrideContent.String()
+		// Process override args: replace existing keys or add new ones
+		overridesToAdd := make([]string, 0)
+		keysToReplace := make(map[string]string) // key -> new value
+
+		for _, arg := range overrideArgs {
+			// Split multi-line override args into individual lines
+			overrideLines := strings.Split(arg, "\n")
+
+			for _, line := range overrideLines {
+				trimmed := strings.TrimSpace(line)
+				// Remove trailing backslash
+				trimmed = strings.TrimRight(trimmed, "\\")
+				trimmed = strings.TrimSpace(trimmed)
+
+				if trimmed == "" {
+					continue
+				}
+
+				key := extractArgKey(trimmed)
+				if key == "" {
+					// If we can't extract a key, add it as-is
+					overridesToAdd = append(overridesToAdd, trimmed)
+					continue
+				}
+
+				if existingValue, exists := existingArgs[key]; exists {
+					// Key exists - check if value is different
+					if existingValue != trimmed {
+						// Different value - mark for replacement
+						keysToReplace[key] = trimmed
+					}
+					// Same value - do nothing (keep existing)
+				} else {
+					// New key - add it
+					overridesToAdd = append(overridesToAdd, trimmed)
+				}
+			}
+		}
+
+		// Rebuild the args with replacements (only if there are replacements to make)
+		var rebuiltArgs strings.Builder
+		if len(keysToReplace) > 0 {
+			for i, line := range lines {
+				// Preserve leading whitespace
+				leadingWhitespace := ""
+				trimmed := strings.TrimLeft(line, " \t")
+				if len(line) > len(trimmed) {
+					leadingWhitespace = line[:len(line)-len(trimmed)]
+				}
+
+				// Remove trailing backslash for key extraction
+				trimmedNoBackslash := strings.TrimRight(trimmed, " \t\\")
+				trimmedNoBackslash = strings.TrimSpace(trimmedNoBackslash)
+
+				if trimmedNoBackslash != "" {
+					key := extractArgKey(trimmedNoBackslash)
+					if newValue, shouldReplace := keysToReplace[key]; shouldReplace {
+						// Replace this line with the new value (preserve leading whitespace of original)
+						if i > 0 {
+							rebuiltArgs.WriteString("\n")
+						}
+						rebuiltArgs.WriteString(leadingWhitespace)
+						rebuiltArgs.WriteString(newValue)
+						if i < len(lines)-1 || len(overridesToAdd) > 0 {
+							rebuiltArgs.WriteString(" \\")
+						}
+						delete(keysToReplace, key) // Mark as processed
+					} else {
+						// Keep the original line as-is
+						if i > 0 {
+							rebuiltArgs.WriteString("\n")
+						}
+						rebuiltArgs.WriteString(line)
+					}
+				} else if i == 0 {
+					// First line is empty, keep it
+					rebuiltArgs.WriteString(line)
+				}
+			}
+		}
+
+		// Add new args that weren't replacements
+		var overrideContent strings.Builder
+		for _, arg := range overridesToAdd {
+			overrideContent.WriteString("\n")
+			overrideContent.WriteString(arg)
+		}
+
+		// Merge: use rebuilt args if there were replacements, otherwise use baseArg
+		merged := baseArg
+		if rebuiltArgs.Len() > 0 {
+			// We rebuilt the args due to replacements
+			merged = rebuiltArgs.String()
+		}
+		if overrideContent.Len() > 0 {
+			// Add new args that weren't duplicates or replacements
+			trimmedMerged := strings.TrimRight(merged, " \t\n")
+			if !strings.HasSuffix(trimmedMerged, "\\") {
+				merged = trimmedMerged + " \\"
+			}
+			merged = merged + overrideContent.String()
+		}
 
 		// Return merged arg followed by remaining args
 		result := []string{merged}

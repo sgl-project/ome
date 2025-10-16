@@ -923,3 +923,385 @@ func TestEngineWorkerPodSpec(t *testing.T) {
 		})
 	}
 }
+
+// Add these test cases to engine_test.go
+
+func TestEngineResourceMerging(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name                  string
+		engineSpec            *v1beta1.EngineSpec
+		runtime               *v1beta1.ServingRuntimeSpec
+		acceleratorClass      *v1beta1.AcceleratorClassSpec
+		expectResourcesMerged bool
+		validateResources     func(*v1.Container)
+	}{
+		{
+			name: "User specified resources - should NOT merge",
+			engineSpec: &v1beta1.EngineSpec{
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "ome-container",
+						Image: "engine:latest",
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceCPU:    resource.MustParse("2"),
+								v1.ResourceMemory: resource.MustParse("4Gi"),
+							},
+						},
+					},
+				},
+			},
+			runtime: &v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "ome-container",
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse("4"),
+									v1.ResourceMemory: resource.MustParse("8Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResourcesMerged: false,
+			validateResources: func(c *v1.Container) {
+				// Should keep user's values (2 CPU, 4Gi memory)
+				cpu := c.Resources.Requests[v1.ResourceCPU]
+				g.Expect(cpu.String()).To(gomega.Equal("2"))
+				memory := c.Resources.Requests[v1.ResourceMemory]
+				g.Expect(memory.String()).To(gomega.Equal("4Gi"))
+			},
+		},
+		{
+			name: "User did NOT specify resources - should merge from runtime",
+			engineSpec: &v1beta1.EngineSpec{
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "ome-container",
+						Image: "engine:latest",
+						// No resources specified
+					},
+				},
+			},
+			runtime: &v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "ome-container",
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse("4"),
+									v1.ResourceMemory: resource.MustParse("8Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResourcesMerged: true,
+			validateResources: func(c *v1.Container) {
+				// Should use runtime's values (4 CPU, 8Gi memory)
+				cpu := c.Resources.Requests[v1.ResourceCPU]
+				g.Expect(cpu.String()).To(gomega.Equal("4"))
+				memory := c.Resources.Requests[v1.ResourceMemory]
+				g.Expect(memory.String()).To(gomega.Equal("8Gi"))
+			},
+		},
+		{
+			name: "User did NOT specify resources - should merge from AcceleratorClass",
+			engineSpec: &v1beta1.EngineSpec{
+				Runner: &v1beta1.RunnerSpec{
+					Container: v1.Container{
+						Name:  "ome-container",
+						Image: "engine:latest",
+						// No resources specified
+					},
+				},
+			},
+			acceleratorClass: &v1beta1.AcceleratorClassSpec{
+				Resources: []v1beta1.AcceleratorResource{
+					{
+						Name:     "nvidia.com/gpu",
+						Quantity: resource.MustParse("2"),
+					},
+				},
+			},
+			expectResourcesMerged: true,
+			validateResources: func(c *v1.Container) {
+				// Should have GPU from AC
+				gpu := c.Resources.Requests[v1.ResourceName("nvidia.com/gpu")]
+				g.Expect(gpu.String()).To(gomega.Equal("2"))
+			},
+		},
+		{
+			name: "No runner specified - should NOT merge",
+			engineSpec: &v1beta1.EngineSpec{
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "ome-container",
+							Image: "engine:latest",
+						},
+					},
+				},
+			},
+			runtime: &v1beta1.ServingRuntimeSpec{
+				ServingRuntimePodSpec: v1beta1.ServingRuntimePodSpec{
+					Containers: []v1.Container{
+						{
+							Name: "ome-container",
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse("4"),
+									v1.ResourceMemory: resource.MustParse("8Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectResourcesMerged: false,
+			validateResources: func(c *v1.Container) {
+				// Should not have resources merged
+				g.Expect(c.Resources.Requests).To(gomega.BeNil())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model:  &v1beta1.ModelRef{},
+					Engine: tt.engineSpec,
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+			clientset := fake.NewClientset()
+			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+			engine := NewEngine(
+				c,
+				clientset,
+				scheme,
+				&controllerconfig.InferenceServicesConfig{},
+				constants.RawDeployment,
+				nil, // baseModel
+				nil, // baseModelMeta
+				tt.engineSpec,
+				tt.runtime,
+				"test-runtime",
+				nil, // supportedModelFormat
+				tt.acceleratorClass,
+				"test-accel-class",
+			).(*Engine)
+
+			// Call reconcilePodSpec which internally calls MergeEngineResources
+			objectMeta := &metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			podSpec, err := engine.reconcilePodSpec(isvc, objectMeta)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			// Find the runner container
+			var runnerContainer *v1.Container
+			for i := range podSpec.Containers {
+				if podSpec.Containers[i].Name == "ome-container" {
+					runnerContainer = &podSpec.Containers[i]
+					break
+				}
+			}
+			g.Expect(runnerContainer).NotTo(gomega.BeNil())
+
+			// Validate resources
+			if tt.validateResources != nil {
+				tt.validateResources(runnerContainer)
+			}
+		})
+	}
+}
+
+func TestEngineAffinityMerging(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	tests := []struct {
+		name                 string
+		engineSpec           *v1beta1.EngineSpec
+		acceleratorClass     *v1beta1.AcceleratorClassSpec
+		expectAffinityMerged bool
+		validateAffinity     func(*v1.Affinity)
+	}{
+		{
+			name: "User specified affinity - should NOT merge",
+			engineSpec: &v1beta1.EngineSpec{
+				PodSpec: v1beta1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "custom-key",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"custom-value"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					Containers: []v1.Container{
+						{Name: "ome-container", Image: "engine:latest"},
+					},
+				},
+			},
+			acceleratorClass: &v1beta1.AcceleratorClassSpec{
+				Discovery: v1beta1.AcceleratorDiscovery{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "ac-key",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"ac-value"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectAffinityMerged: false,
+			validateAffinity: func(affinity *v1.Affinity) {
+				// Should keep user's affinity (custom-key)
+				g.Expect(affinity).NotTo(gomega.BeNil())
+				g.Expect(affinity.NodeAffinity).NotTo(gomega.BeNil())
+				terms := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+				g.Expect(terms[0].MatchExpressions[0].Key).To(gomega.Equal("custom-key"))
+			},
+		},
+		{
+			name: "User did NOT specify affinity - should merge from AC",
+			engineSpec: &v1beta1.EngineSpec{
+				PodSpec: v1beta1.PodSpec{
+					// No affinity specified
+					Containers: []v1.Container{
+						{Name: "ome-container", Image: "engine:latest"},
+					},
+				},
+			},
+			acceleratorClass: &v1beta1.AcceleratorClassSpec{
+				Discovery: v1beta1.AcceleratorDiscovery{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "ac-key",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"ac-value"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectAffinityMerged: true,
+			validateAffinity: func(affinity *v1.Affinity) {
+				// Should use AC's affinity (ac-key)
+				g.Expect(affinity).NotTo(gomega.BeNil())
+				g.Expect(affinity.NodeAffinity).NotTo(gomega.BeNil())
+				terms := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+				g.Expect(terms[0].MatchExpressions[0].Key).To(gomega.Equal("ac-key"))
+			},
+		},
+		{
+			name: "No affinity from AC - should remain nil",
+			engineSpec: &v1beta1.EngineSpec{
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{Name: "ome-container", Image: "engine:latest"},
+					},
+				},
+			},
+			acceleratorClass:     nil,
+			expectAffinityMerged: false,
+			validateAffinity: func(affinity *v1.Affinity) {
+				// Should be nil
+				g.Expect(affinity).To(gomega.BeNil())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isvc := &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model:  &v1beta1.ModelRef{},
+					Engine: tt.engineSpec,
+				},
+			}
+
+			scheme := runtime.NewScheme()
+			g.Expect(v1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+			clientset := fake.NewClientset()
+			c := ctrlclientfake.NewClientBuilder().WithScheme(scheme).Build()
+
+			engine := NewEngine(
+				c,
+				clientset,
+				scheme,
+				&controllerconfig.InferenceServicesConfig{},
+				constants.RawDeployment,
+				nil, // baseModel
+				nil, // baseModelMeta
+				tt.engineSpec,
+				nil, // runtime
+				"test-runtime",
+				nil, // supportedModelFormat
+				tt.acceleratorClass,
+				"test-accel-class",
+			).(*Engine)
+
+			// Call reconcilePodSpec which internally calls UpdateEngineAffinity
+			objectMeta := &metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			podSpec, err := engine.reconcilePodSpec(isvc, objectMeta)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+
+			// Validate affinity
+			if tt.validateAffinity != nil {
+				tt.validateAffinity(podSpec.Affinity)
+			}
+		})
+	}
+}
+
+// Note: Worker resource and affinity tests are not included because MergeEngineResources and
+// UpdateEngineAffinity check isvc.Spec.Engine.Runner and isvc.Spec.Engine.PodSpec.Affinity,
+// not the worker-specific fields. This means the merging decision is based on the engine/leader
+// spec, not the worker spec. This is the current implementation behavior.

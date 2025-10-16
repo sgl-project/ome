@@ -324,6 +324,9 @@ func (s *defaultSelector) GetSupportedModelFormat(ctx context.Context, runtime *
 	maxScore := int64(0)
 	bestSupportedFormat := v1beta1.SupportedModelFormat{}
 	for _, supportedFormat := range runtime.SupportedModelFormats {
+		if supportedFormat.AutoSelect == nil || !*supportedFormat.AutoSelect {
+			continue
+		}
 		score := s.scorer.CalculateFormatScore(model, supportedFormat, int64(s.config.DefaultPriority))
 		if score > maxScore {
 			maxScore = score

@@ -574,23 +574,10 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref common.ReferenceCallba
 							},
 						},
 					},
-					"nodeSelectorTerms": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "atomic",
-							},
-						},
+					"affinity": {
 						SchemaProps: spec.SchemaProps{
-							Description: "NodeSelectorTerms for more complex node selection",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.NodeSelectorTerm"),
-									},
-								},
-							},
+							Description: "Affinity for more complex node selection",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
 						},
 					},
 					"pciVendorID": {
@@ -624,7 +611,7 @@ func schema_pkg_apis_ome_v1beta1_AcceleratorDiscovery(ref common.ReferenceCallba
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.NodeSelectorTerm"},
+			"k8s.io/api/core/v1.Affinity"},
 	}
 }
 
