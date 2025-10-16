@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
@@ -91,8 +92,9 @@ func NewScout(ctx context.Context, nodeName string,
 
 	for name, informer := range informers {
 		err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
-			// Pipe to the default handler first, which just logs the error
-			cache.DefaultWatchErrorHandler(ctx, r, err)
+			// Use context.Background() instead of the cancellable ctx to prevent premature
+			// informer shutdown when stopCh is closed during initialization
+			cache.DefaultWatchErrorHandler(context.Background(), r, err)
 
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
 				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", name, err.Error())
@@ -138,8 +140,31 @@ func (w *Scout) Run(stopCh <-chan struct{}) error {
 		w.baseModelSynced,
 	}
 
-	if ok := cache.WaitForCacheSync(stopCh, synced...); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+	// Add retry logic with exponential backoff for cache sync
+	// This handles transient API server connectivity issues during node startup
+	maxRetries := 5
+	retryDelay := 2 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		w.logger.Infof("Attempting to sync caches (attempt %d/%d)", attempt, maxRetries)
+
+		if ok := cache.WaitForCacheSync(stopCh, synced...); ok {
+			w.logger.Info("Successfully synced informer caches")
+			break
+		}
+
+		if attempt == maxRetries {
+			return fmt.Errorf("failed to wait for caches to sync after %d attempts", maxRetries)
+		}
+
+		// Log the retry with exponential backoff
+		w.logger.Warnf("Cache sync failed, retrying in %v (attempt %d/%d)", retryDelay, attempt, maxRetries)
+		select {
+		case <-time.After(retryDelay):
+			retryDelay *= 2 // Exponential backoff
+		case <-stopCh:
+			return fmt.Errorf("shutdown requested while retrying cache sync (pod is being terminated)")
+		}
 	}
 
 	// After caches are synced, check for any pending deletions (resources with DeletionTimestamp)
