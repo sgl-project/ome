@@ -87,7 +87,7 @@ func TestExtractModelMetadataFromHF(t *testing.T) {
 					metadata.ModelFormat.Name == "safetensors" &&
 					*metadata.ModelFormat.Version == "1.0.0"
 			},
-			expectedCapability:   string(v1beta1.ModelCapabilityChat),
+			expectedCapability:   string(v1beta1.ModelCapabilityTextToText),
 			expectedQuantization: "", // No quantization
 		},
 		{
@@ -109,7 +109,7 @@ func TestExtractModelMetadataFromHF(t *testing.T) {
 					metadata.ModelParameterSize == "8B" &&
 					metadata.MaxTokens == 32768
 			},
-			expectedCapability:   string(v1beta1.ModelCapabilityChat),
+			expectedCapability:   string(v1beta1.ModelCapabilityTextToText),
 			expectedQuantization: v1beta1.ModelQuantizationINT4,
 		},
 		{
@@ -130,7 +130,7 @@ func TestExtractModelMetadataFromHF(t *testing.T) {
 					metadata.ModelArchitecture == "PhiForCausalLM" &&
 					metadata.ModelParameterSize == "2.8B"
 			},
-			expectedCapability:   string(v1beta1.ModelCapabilityChat),
+			expectedCapability:   string(v1beta1.ModelCapabilityTextToText),
 			expectedQuantization: v1beta1.ModelQuantizationFP8,
 		},
 		{
@@ -151,7 +151,7 @@ func TestExtractModelMetadataFromHF(t *testing.T) {
 					metadata.ModelArchitecture == "CLIPModel" &&
 					metadata.ModelParameterSize == "400M"
 			},
-			expectedCapability:   string(v1beta1.ModelCapabilityVision),
+			expectedCapability:   string(v1beta1.ModelCapabilityImageTextToText),
 			expectedQuantization: "",
 		},
 		{
@@ -173,7 +173,7 @@ func TestExtractModelMetadataFromHF(t *testing.T) {
 					metadata.ModelFramework.Name == "transformers" &&
 					metadata.ModelFramework.Version == nil // Should be nil when missing
 			},
-			expectedCapability:   string(v1beta1.ModelCapabilityTextEmbeddings),
+			expectedCapability:   string(v1beta1.ModelCapabilityEmbedding),
 			expectedQuantization: "",
 		},
 	}
@@ -246,7 +246,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				architecture: "LlamaForCausalLM",
 				hasVision:    false,
 			},
-			expectedCapabilities: []string{string(v1beta1.ModelCapabilityChat)},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityTextToText)},
 		},
 		{
 			name: "Vision Model",
@@ -255,7 +255,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				architecture: "CLIPModel",
 				hasVision:    true,
 			},
-			expectedCapabilities: []string{string(v1beta1.ModelCapabilityVision)},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityImageTextToText)},
 		},
 		{
 			name: "Text Embedding Model",
@@ -264,7 +264,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				architecture: "BertModel",
 				hasVision:    false,
 			},
-			expectedCapabilities: []string{string(v1beta1.ModelCapabilityTextEmbeddings)},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityEmbedding)},
 		},
 		{
 			name: "Sentence Transformer Model",
@@ -273,7 +273,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				architecture: "SentenceTransformerModel",
 				hasVision:    false,
 			},
-			expectedCapabilities: []string{string(v1beta1.ModelCapabilityTextEmbeddings)},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityEmbedding)},
 		},
 		{
 			name: "Special Case Mistral Embedding Model",
@@ -282,7 +282,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				architecture: "MistralModel", // Not MistralForCausalLM
 				hasVision:    false,
 			},
-			expectedCapabilities: []string{string(v1beta1.ModelCapabilityTextEmbeddings)},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityEmbedding)},
 		},
 		{
 			name: "Vision-capable LLM",
@@ -291,7 +291,7 @@ func TestDetermineModelCapabilitiesFromHF(t *testing.T) {
 				architecture: "GemmaForCausalLM",
 				hasVision:    true,
 			},
-			expectedCapabilities: []string{string(v1beta1.ModelCapabilityVision)},
+			expectedCapabilities: []string{string(v1beta1.ModelCapabilityImageTextToText)},
 		},
 	}
 
@@ -455,7 +455,7 @@ func TestUpdateModelSpec(t *testing.T) {
 		ModelType:          "llama",
 		ModelArchitecture:  "LlamaForCausalLM",
 		ModelParameterSize: "7B",
-		ModelCapabilities:  []string{string(v1beta1.ModelCapabilityChat)},
+		ModelCapabilities:  []string{string(v1beta1.ModelCapabilityTextToText)},
 	}
 
 	// Basic test: Empty spec gets fields set
@@ -473,7 +473,7 @@ func TestUpdateModelSpec(t *testing.T) {
 	assert.Equal(t, "7B", *emptySpec.ModelParameterSize)
 
 	// Verify slice
-	assert.Equal(t, []string{string(v1beta1.ModelCapabilityChat)}, emptySpec.ModelCapabilities)
+	assert.Equal(t, []string{string(v1beta1.ModelCapabilityTextToText)}, emptySpec.ModelCapabilities)
 
 	// Test that existing values aren't overwritten
 	existingType := "something-else"
