@@ -45,6 +45,7 @@ type TensorRTLLMShapeFilter struct {
 	ModelType          string
 }
 
+// TODO： need to double check
 func NewScout(ctx context.Context, nodeName string,
 	baseModelInformer omev1beta1.BaseModelInformer,
 	clusterBaseModelInformer omev1beta1.ClusterBaseModelInformer,

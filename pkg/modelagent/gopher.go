@@ -456,6 +456,7 @@ func (s *Gopher) processTask(task *GopherTask) error {
 		case storage.StorageTypeHuggingFace:
 			s.logger.Infof("Removing Hugging Face model %s", modelInfo)
 			// Use getDestPath to get the same path used during download
+			// TODO: Probably require update
 			destPath := getDestPath(&baseModelSpec, s.modelRootDir)
 
 			// Double-check if the path is still referenced by other models
@@ -589,6 +590,7 @@ func (s *Gopher) markModelOnNodeFailed(task *GopherTask) {
 	}
 }
 
+// TODO: need to test, or updates
 // getHuggingFaceToken retrieves authentication token for Hugging Face models.
 // It attempts to get the token from either a Kubernetes secret or direct parameters.
 func (s *Gopher) getHuggingFaceToken(task *GopherTask, baseModelSpec v1beta1.BaseModelSpec, modelInfo string) string {
