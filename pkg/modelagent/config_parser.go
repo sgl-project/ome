@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"go.uber.org/zap"
@@ -395,22 +394,21 @@ func (p *ModelConfigParser) determineModelCapabilitiesFromHF(hfModel modelconfig
 	architecture := hfModel.GetArchitecture()
 	modelType := hfModel.GetModelType()
 
-	// Add vision capability if the model supports it
+	// For vision, only support image text capability right now
 	if hfModel.HasVision() {
-		capabilities = append(capabilities, string(v1beta1.ModelCapabilityVision))
-	} else if strings.Contains(strings.ToLower(architecture), "embedding") ||
+		return append(capabilities, string(v1beta1.ModelCapabilityImageTextToText))
+	}
+
+	// Check for text embedding capability
+	if strings.Contains(strings.ToLower(architecture), "embedding") ||
 		strings.Contains(strings.ToLower(architecture), "sentence") ||
 		strings.Contains(strings.ToLower(modelType), "bert") ||
 		// Special case for known embedding models
 		(strings.Contains(strings.ToLower(modelType), "mistral") &&
 			strings.Contains(strings.ToLower(architecture), "mistralmodel")) {
-		capabilities = append(capabilities, string(v1beta1.ModelCapabilityTextEmbeddings))
-		return capabilities
-	} else if !slices.Contains(capabilities, string(v1beta1.ModelCapabilityChat)) {
-		capabilities = append(capabilities, string(v1beta1.ModelCapabilityChat))
-	} else {
-		capabilities = append(capabilities, string(v1beta1.ModelCapabilityTextGeneration))
+		return append(capabilities, string(v1beta1.ModelCapabilityEmbedding))
 	}
 
-	return capabilities
+	// Default to text-to-text capability
+	return append(capabilities, string(v1beta1.ModelCapabilityTextToText))
 }
