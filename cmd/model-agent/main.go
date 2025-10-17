@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
@@ -239,7 +240,7 @@ func initializeComponents(
 	// Create default Hugging Face hub config
 	// Use log-only mode for cleaner logs in production
 	hfHubConfig, err := hub.NewHubConfig(
-		hub.WithViper(v), // Apply viper config first to set defaults
+		hub.WithViper(v),                                 // Apply viper config first to set defaults
 		hub.WithLogger(logging.ForZap(zapLogger)),        // Then set the logger
 		hub.WithProgressDisplayMode(hub.ProgressModeLog), // Use log mode for clean production logs
 		hub.WithDetailedLogs(false),                      // Disable detailed progress logging to reduce log flooding
@@ -302,6 +303,17 @@ func runCommand(cmd *cobra.Command, args []string) {
 		logger.Fatalf("Failed to setup Kubernetes clients: %v", err)
 	}
 
+	// Test API server connectivity before proceeding
+	logger.Info("Testing API server connectivity...")
+	ctx := context.Background()
+	_, err = kubeClient.CoreV1().Nodes().Get(ctx, cfg.nodeName, metav1.GetOptions{})
+	if err != nil {
+		logger.Warnf("Initial API server connectivity test failed: %v", err)
+		logger.Warnf("Will retry during scout initialization...")
+	} else {
+		logger.Info("API server connectivity test successful")
+	}
+
 	// Setup informers
 	omeInformerFactory, err := setupInformers(omeClient)
 	if err != nil {
@@ -352,6 +364,7 @@ func runCommand(cmd *cobra.Command, args []string) {
 	go gopher.Run(stopCh, cfg.numDownloadWorker)
 
 	// Start scout (watchers)
+	logger.Info("Starting scout - this will block until caches are synced or shutdown is requested")
 	if err := scout.Run(stopCh); err != nil {
 		logger.Fatalf("Error running scout: %v", err)
 	}

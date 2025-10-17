@@ -60,20 +60,30 @@ spec:
         - name: host-models
           readOnly: false
           mountPath: /raid/models
+        startupProbe:
+          httpGet:
+            path: /livez
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
         livenessProbe:
           httpGet:
             path: /livez
             port: 8080
-          initialDelaySeconds: 60
+          initialDelaySeconds: 0
           periodSeconds: 30
           timeoutSeconds: 20
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 60
-          periodSeconds: 30
-          timeoutSeconds: 20
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         resources:
           limits:
             cpu: '10'

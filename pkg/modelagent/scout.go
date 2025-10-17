@@ -54,10 +54,25 @@ func NewScout(ctx context.Context, nodeName string,
 	kubeClient *kubernetes.Clientset,
 	logger *zap.SugaredLogger) (*Scout, error) {
 
-	// Fetch the complete node info
-	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	logger.Infof("Initializing Scout for node: %s", nodeName)
+
+	// Fetch the complete node info with retry for initial connection
+	var nodeInfo *v1.Node
+	var err error
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		nodeInfo, err = kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err == nil {
+			logger.Infof("Successfully fetched node info for %s (attempt %d/%d)", nodeName, attempt, maxRetries)
+			break
+		}
+		if attempt < maxRetries {
+			logger.Warnf("Failed to get node info (attempt %d/%d): %v, retrying in 2s", attempt, maxRetries, err)
+			time.Sleep(2 * time.Second)
+		}
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get node info for node %s: %w", nodeName, err)
+		return nil, fmt.Errorf("failed to get node info for node %s after %d attempts: %w", nodeName, maxRetries, err)
 	}
 	// Try the newer label first, then fallback to the deprecated beta label
 	instanceType, ok := nodeInfo.Labels[constants.NodeInstanceShapeLabel]
@@ -91,13 +106,27 @@ func NewScout(ctx context.Context, nodeName string,
 	}
 
 	for name, informer := range informers {
+		informerName := name // Capture for closure
 		err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
 			// Use context.Background() instead of the cancellable ctx to prevent premature
 			// informer shutdown when stopCh is closed during initialization
 			cache.DefaultWatchErrorHandler(context.Background(), r, err)
 
+			// Log all watch errors for better diagnostics
+			logger.Warnf("Watch error in informer %s: %v (Type: %T)", informerName, err, err)
+
+			// Only fatal on authentication/authorization errors
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
-				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", name, err.Error())
+				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", informerName, err.Error())
+			}
+
+			// Log other error types for diagnostics
+			if errors.IsTimeout(err) {
+				logger.Warnf("Timeout error in informer %s - API server may be slow or unreachable", informerName)
+			} else if errors.IsServerTimeout(err) {
+				logger.Warnf("Server timeout error in informer %s - API server is overloaded", informerName)
+			} else if errors.IsServiceUnavailable(err) {
+				logger.Warnf("Service unavailable error in informer %s - API server is unavailable", informerName)
 			}
 		})
 
@@ -142,30 +171,78 @@ func (w *Scout) Run(stopCh <-chan struct{}) error {
 
 	// Add retry logic with exponential backoff for cache sync
 	// This handles transient API server connectivity issues during node startup
-	maxRetries := 5
+	maxRetries := 10
 	retryDelay := 2 * time.Second
+	maxRetryDelay := 30 * time.Second
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check if shutdown was requested before attempting sync
+		select {
+		case <-stopCh:
+			return fmt.Errorf("shutdown requested before cache sync attempt (pod is being terminated)")
+		default:
+		}
+
 		w.logger.Infof("Attempting to sync caches (attempt %d/%d)", attempt, maxRetries)
 
-		if ok := cache.WaitForCacheSync(stopCh, synced...); ok {
-			w.logger.Info("Successfully synced informer caches")
-			break
+		// Use a separate channel for this sync attempt to distinguish between
+		// timeout and shutdown signal
+		syncStopCh := make(chan struct{})
+		syncResult := make(chan bool, 1)
+
+		go func() {
+			ok := cache.WaitForCacheSync(syncStopCh, synced...)
+			syncResult <- ok
+		}()
+
+		// Wait for sync result with timeout
+		syncTimeout := 30 * time.Second
+		select {
+		case ok := <-syncResult:
+			if ok {
+				w.logger.Info("Successfully synced informer caches")
+				// Cache sync succeeded, proceed with normal operation
+				goto syncComplete
+			}
+			// Cache sync returned false, log and retry
+			w.logger.Warnf("Cache sync returned false (attempt %d/%d) - informers may not be synced yet", attempt, maxRetries)
+		case <-time.After(syncTimeout):
+			w.logger.Warnf("Cache sync timeout after %v (attempt %d/%d)", syncTimeout, attempt, maxRetries)
+			close(syncStopCh) // Stop the sync goroutine
+		case <-stopCh:
+			close(syncStopCh) // Stop the sync goroutine
+			return fmt.Errorf("shutdown requested during cache sync (pod is being terminated)")
 		}
 
 		if attempt == maxRetries {
+			// Log detailed information about what didn't sync
+			w.logger.Errorf("Failed to sync caches after %d attempts", maxRetries)
+			w.logger.Errorf("ClusterBaseModel synced: %v", w.clusterBaseModelSynced())
+			w.logger.Errorf("BaseModel synced: %v", w.baseModelSynced())
 			return fmt.Errorf("failed to wait for caches to sync after %d attempts", maxRetries)
 		}
 
-		// Log the retry with exponential backoff
-		w.logger.Warnf("Cache sync failed, retrying in %v (attempt %d/%d)", retryDelay, attempt, maxRetries)
+		// Calculate next retry delay with exponential backoff and cap
+		nextDelay := retryDelay
+		if nextDelay > maxRetryDelay {
+			nextDelay = maxRetryDelay
+		}
+
+		w.logger.Warnf("Retrying cache sync in %v (attempt %d/%d)", nextDelay, attempt, maxRetries)
+
+		// Sleep before retry, but allow immediate shutdown if requested
+		// We use a timer instead of time.After to avoid blocking shutdown for too long
+		timer := time.NewTimer(nextDelay)
 		select {
-		case <-time.After(retryDelay):
-			retryDelay *= 2 // Exponential backoff
+		case <-timer.C:
+			retryDelay *= 2 // Exponential backoff for next iteration
 		case <-stopCh:
-			return fmt.Errorf("shutdown requested while retrying cache sync (pod is being terminated)")
+			timer.Stop()
+			return fmt.Errorf("shutdown requested while waiting to retry cache sync (pod is being terminated)")
 		}
 	}
+
+syncComplete:
 
 	// After caches are synced, check for any pending deletions (resources with DeletionTimestamp)
 	// This ensures we catch any deletion requests that occurred while the agent was down
