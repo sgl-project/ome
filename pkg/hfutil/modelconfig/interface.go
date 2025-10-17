@@ -38,6 +38,14 @@ type HuggingFaceModel interface {
 	HasVision() bool
 }
 
+// AutoMap defines the mapping of model classes for custom Hugging Face models
+// This is used when models require custom code (e.g., models with "trust_remote_code=True")
+type AutoMap struct {
+	AutoConfig           string `json:"AutoConfig,omitempty"`
+	AutoModel            string `json:"AutoModel,omitempty"`
+	AutoModelForCausalLM string `json:"AutoModelForCausalLM,omitempty"`
+}
+
 // BaseModelConfig defines common fields shared across all Hugging Face model configurations
 type BaseModelConfig struct {
 	// Basic model information
