@@ -12,6 +12,9 @@ var instanceTypeMap = map[string]string{
 	"BM.GPU4.8":        "A100-40G",
 	"BM.GPU.B4.8":      "A100-40G",
 	"BM.GPU.H100.8":    "H100",
+	"BM.GPU.H100-NC.8": "H100",
+	"BM.GPU.H200.8":    "H200",
+	"BM.GPU.H200-NC.8": "H200",
 
 	// AWS instance types
 	"p5.48xlarge": "H100",
