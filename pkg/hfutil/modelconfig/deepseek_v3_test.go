@@ -144,4 +144,23 @@ func TestDeepseekV3ModelMetadata(t *testing.T) {
 		t.Errorf("Incorrect context length, expected 163840, got %d", contextLength)
 	}
 
+	// Check auto_map parsing
+	if config.AutoMap == nil {
+		t.Error("Expected auto_map to be parsed, but it is nil")
+	} else {
+		expectedAutoConfig := "configuration_deepseek.DeepseekV3Config"
+		if config.AutoMap.AutoConfig != expectedAutoConfig {
+			t.Errorf("Expected AutoConfig to be '%s', but got '%s'", expectedAutoConfig, config.AutoMap.AutoConfig)
+		}
+
+		expectedAutoModel := "modeling_deepseek.DeepseekV3ForCausalLM"
+		if config.AutoMap.AutoModelForCausalLM != expectedAutoModel {
+			t.Errorf("Expected AutoModelForCausalLM to be '%s', but got '%s'", expectedAutoModel, config.AutoMap.AutoModelForCausalLM)
+		}
+
+		expectedAutoModelBase := "modeling_deepseek.DeepseekV3Model"
+		if config.AutoMap.AutoModel != expectedAutoModelBase {
+			t.Errorf("Expected AutoModel to be '%s', but got '%s'", expectedAutoModelBase, config.AutoMap.AutoModel)
+		}
+	}
 }

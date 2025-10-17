@@ -7,20 +7,34 @@ import (
 )
 
 // Qwen2VisionConfig defines the vision component configuration for Qwen2-VL models
+// Supports both qwen2_vl and qwen2_5_vl configurations with optional fields
 type Qwen2VisionConfig struct {
-	Depth             int `json:"depth"`
-	EmbedDim          int `json:"embed_dim"`
-	MlpRatio          int `json:"mlp_ratio"`
-	NumHeads          int `json:"num_heads"`
-	InChans           int `json:"in_chans"`
-	HiddenSize        int `json:"hidden_size"`
-	PatchSize         int `json:"patch_size"`
-	SpatialMergeSize  int `json:"spatial_merge_size"`
-	SpatialPatchSize  int `json:"spatial_patch_size"`
-	TemporalPatchSize int `json:"temporal_patch_size,omitempty"`
+	Depth               int    `json:"depth"`
+	EmbedDim            int    `json:"embed_dim,omitempty"` // qwen2_vl only
+	MlpRatio            int    `json:"mlp_ratio,omitempty"` // qwen2_vl only
+	NumHeads            int    `json:"num_heads"`
+	InChans             int    `json:"in_chans"`
+	HiddenSize          int    `json:"hidden_size"`
+	IntermediateSize    int    `json:"intermediate_size,omitempty"` // qwen2_5_vl only
+	OutHiddenSize       int    `json:"out_hidden_size,omitempty"`   // qwen2_5_vl only
+	PatchSize           int    `json:"patch_size"`
+	SpatialMergeSize    int    `json:"spatial_merge_size"`
+	SpatialPatchSize    int    `json:"spatial_patch_size"`
+	WindowSize          int    `json:"window_size,omitempty"`           // qwen2_5_vl only
+	FullattBlockIndexes []int  `json:"fullatt_block_indexes,omitempty"` // qwen2_5_vl only
+	TokensPerSecond     int    `json:"tokens_per_second,omitempty"`     // qwen2_5_vl only
+	TemporalPatchSize   int    `json:"temporal_patch_size,omitempty"`
+	HiddenAct           string `json:"hidden_act,omitempty"` // qwen2_5_vl only
+}
+
+// Qwen2MRopeScaling defines the mrope scaling configuration for Qwen2-VL models
+type Qwen2MRopeScaling struct {
+	Type         string `json:"type"`
+	MropeSection []int  `json:"mrope_section"`
 }
 
 // Qwen2VLConfig defines the configuration for Qwen2-VL multimodal models
+// Supports both qwen2_vl and qwen2_5_vl model types
 type Qwen2VLConfig struct {
 	BaseModelConfig
 
@@ -49,6 +63,10 @@ type Qwen2VLConfig struct {
 	AttentionDropout float64 `json:"attention_dropout"`
 	SlidingWindow    int     `json:"sliding_window"`
 	MaxWindowLayers  int     `json:"max_window_layers"`
+
+	// Initialization and RoPE scaling
+	InitializerRange float64           `json:"initializer_range,omitempty"`
+	RopeScaling      Qwen2MRopeScaling `json:"rope_scaling,omitempty"`
 
 	// Vision configuration
 	VisionConfig Qwen2VisionConfig `json:"vision_config"`
@@ -88,13 +106,13 @@ func (c *Qwen2VLConfig) GetParameterCount() int64 {
 	// Log the error
 	fmt.Printf("Warning: failed to get parameter count from safetensors: %v\n", err)
 
-	// Known Qwen2-VL model sizes
+	// Known Qwen2-VL and Qwen2.5-VL model sizes
 	if c.HiddenSize == 1536 && c.NumHiddenLayers == 28 {
 		return 2_000_000_000 // Qwen2-VL 2B
 	} else if c.HiddenSize == 3584 && c.NumHiddenLayers == 28 {
-		return 7_000_000_000 // Qwen2-VL 7B
+		return 7_000_000_000 // Qwen2-VL 7B / Qwen2.5-VL 7B
 	} else if c.HiddenSize == 8192 && c.NumHiddenLayers == 80 {
-		return 72_000_000_000 // Qwen2-VL 72B
+		return 72_000_000_000 // Qwen2-VL 72B / Qwen2.5-VL 72B
 	}
 
 	// Estimate including vision encoder parameters
@@ -130,9 +148,12 @@ func (c *Qwen2VLConfig) HasVision() bool {
 	return true // Qwen2-VL models have vision capabilities
 }
 
-// Register the Qwen2-VL model handler
+// Register the Qwen2-VL and Qwen2.5-VL model handlers
 func init() {
 	RegisterModelLoader("qwen2_vl", func(configPath string) (HuggingFaceModel, error) {
+		return LoadQwen2VLConfig(configPath)
+	})
+	RegisterModelLoader("qwen2_5_vl", func(configPath string) (HuggingFaceModel, error) {
 		return LoadQwen2VLConfig(configPath)
 	})
 }
