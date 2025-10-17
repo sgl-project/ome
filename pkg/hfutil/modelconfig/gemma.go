@@ -20,9 +20,9 @@ type GemmaConfig struct {
 	VocabSize             int `json:"vocab_size"`
 
 	// Special tokens
-	BosTokenId int `json:"bos_token_id"`
-	EosTokenId int `json:"eos_token_id"`
-	PadTokenId int `json:"pad_token_id"`
+	BosTokenId int         `json:"bos_token_id"`
+	EosTokenId interface{} `json:"eos_token_id"` // Can be int or array
+	PadTokenId int         `json:"pad_token_id"`
 
 	// Attention related
 	HiddenAct          string  `json:"hidden_act"`
@@ -39,6 +39,10 @@ type GemmaConfig struct {
 	FinalLogitSoftcapping float64 `json:"final_logit_softcapping,omitempty"`
 	SlidingWindow         int     `json:"sliding_window,omitempty"`
 	CacheImplementation   string  `json:"cache_implementation,omitempty"`
+
+	// Gemma3_text specific fields
+	RopeLocalBaseFreq    float64 `json:"rope_local_base_freq,omitempty"`
+	SlidingWindowPattern int     `json:"sliding_window_pattern,omitempty"`
 
 	// Misc options
 	InitializerRange float64 `json:"initializer_range"`
@@ -135,11 +139,14 @@ func (c *GemmaConfig) HasVision() bool {
 
 // Register the Gemma model handlers
 func init() {
-	// Register for both "gemma" and "gemma2" model types
+	// Register for "gemma", "gemma2", and "gemma3_text" model types
 	RegisterModelLoader("gemma", func(configPath string) (HuggingFaceModel, error) {
 		return LoadGemmaConfig(configPath)
 	})
 	RegisterModelLoader("gemma2", func(configPath string) (HuggingFaceModel, error) {
+		return LoadGemmaConfig(configPath)
+	})
+	RegisterModelLoader("gemma3_text", func(configPath string) (HuggingFaceModel, error) {
 		return LoadGemmaConfig(configPath)
 	})
 }

@@ -13,6 +13,13 @@ func TestLoadGemmaConfig(t *testing.T) {
 		maxParams    int64
 	}{
 		{
+			name:         "Gemma 7B",
+			configPath:   "testdata/gemma_7b.json",
+			expectedType: "gemma",
+			minParams:    6_500_000_000,
+			maxParams:    8_000_000_000,
+		},
+		{
 			name:         "Gemma2 2B",
 			configPath:   "testdata/gemma_2_2b.json",
 			expectedType: "gemma2",
@@ -25,6 +32,13 @@ func TestLoadGemmaConfig(t *testing.T) {
 			expectedType: "gemma2",
 			minParams:    8_000_000_000,
 			maxParams:    10_000_000_000,
+		},
+		{
+			name:         "Gemma3 Text",
+			configPath:   "testdata/gemma3_text.json",
+			expectedType: "gemma3_text",
+			minParams:    800_000_000,
+			maxParams:    1_500_000_000,
 		},
 	}
 
@@ -67,4 +81,28 @@ func TestLoadGemmaConfig(t *testing.T) {
 func TestGemmaConfigInterface(t *testing.T) {
 	// Test that GemmaConfig implements HuggingFaceModel interface
 	var _ HuggingFaceModel = (*GemmaConfig)(nil)
+}
+
+func TestGemma3TextSpecificFields(t *testing.T) {
+	config, err := LoadGemmaConfig("testdata/gemma3_text.json")
+	if err != nil {
+		t.Fatalf("Failed to load gemma3_text config: %v", err)
+	}
+
+	// Verify gemma3_text-specific fields
+	if config.RopeLocalBaseFreq != 10000 {
+		t.Errorf("Expected rope_local_base_freq to be 10000, got %f", config.RopeLocalBaseFreq)
+	}
+
+	if config.SlidingWindowPattern != 6 {
+		t.Errorf("Expected sliding_window_pattern to be 6, got %d", config.SlidingWindowPattern)
+	}
+
+	if config.SlidingWindow != 512 {
+		t.Errorf("Expected sliding_window to be 512, got %d", config.SlidingWindow)
+	}
+
+	if config.QueryPreAttnScalar != 256 {
+		t.Errorf("Expected query_pre_attn_scalar to be 256, got %d", config.QueryPreAttnScalar)
+	}
 }
