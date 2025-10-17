@@ -199,17 +199,26 @@ const (
 )
 
 // ModelCapability enum
-// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT
+// TODO: Remove legacy capabilities
+//
+// +kubebuilder:validation:Enum=TEXT_GENERATION;TEXT_SUMMARIZATION;TEXT_EMBEDDINGS;TEXT_RERANK;CHAT;VISION;EMBEDDING;RERANK;TEXT_TO_TEXT;IMAGE_TEXT_TO_TEXT
 type ModelCapability string
 
 const (
+	// Legacy capabilities (to be deprecated)
 	ModelCapabilityTextGeneration    ModelCapability = "TEXT_GENERATION"
 	ModelCapabilityTextSummarization ModelCapability = "TEXT_SUMMARIZATION"
 	ModelCapabilityTextEmbeddings    ModelCapability = "TEXT_EMBEDDINGS"
 	ModelCapabilityTextRerank        ModelCapability = "TEXT_RERANK"
 	ModelCapabilityChat              ModelCapability = "CHAT"
 	ModelCapabilityVision            ModelCapability = "VISION"
-	ModelCapabilityUnknown           ModelCapability = ""
+
+	// New capabilities (preferred naming)
+	ModelCapabilityEmbedding       ModelCapability = "EMBEDDING"
+	ModelCapabilityRerank          ModelCapability = "RERANK"
+	ModelCapabilityTextToText      ModelCapability = "TEXT_TO_TEXT"
+	ModelCapabilityImageTextToText ModelCapability = "IMAGE_TEXT_TO_TEXT"
+	ModelCapabilityUnknown         ModelCapability = ""
 )
 
 // ModelWeightStatus enum
