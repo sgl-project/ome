@@ -1,10 +1,10 @@
 module bitbucket.oci.oraclecorp.com/genaicore/ome/hack/internal/tools
 
-go 1.23.0
+go 1.24
 
 require (
 	github.com/gohugoio/hugo v0.142.0
-	github.com/golangci/golangci-lint v1.60.3
+	github.com/golangci/golangci-lint v1.64.8
 	github.com/mikefarah/yq/v4 v4.44.3
 	github.com/norwoodj/helm-docs v1.12.0
 	helm.sh/helm/v3 v3.15.0-rc.1
@@ -20,7 +20,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.2.1 // indirect
+	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/a8m/envsubst v1.4.2 // indirect
 	github.com/alecthomas/assert/v2 v2.11.0 // indirect

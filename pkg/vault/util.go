@@ -50,6 +50,7 @@ func CFBEncrypt(text string, key string) (string, error) {
 		panic(err)
 	}
 
+	//nolint:staticcheck // SA1019: Keeping CFB mode for backward compatibility
 	stream := cipher.NewCFBEncrypter(block, iv)
 	stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(text))
 
@@ -74,6 +75,7 @@ func CFBDecrypt(text string, key string) (string, error) {
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
 
+	//nolint:staticcheck // SA1019: Keeping CFB mode for backward compatibility
 	stream := cipher.NewCFBDecrypter(block, iv)
 
 	// XORKeyStream can work in-place if the two arguments are the same.

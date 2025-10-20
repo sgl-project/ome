@@ -28,7 +28,7 @@ GENREF_VERSION ?= v0.28.0
 fix-tools-gomod: ## 🔧 Fix go.mod file in tools directory
 	@echo "🔧 Fixing tools go.mod file..."
 	@if [ -f "$(TOOLS_DIR)/go.mod" ]; then \
-		sed -i.bak -e 's/^go 1.23.0/go 1.23/' -e '/^toolchain/d' $(TOOLS_DIR)/go.mod && \
+		sed -i.bak -e 's/^go 1.24.0/go 1.24/' -e '/^toolchain/d' $(TOOLS_DIR)/go.mod && \
 		rm -f $(TOOLS_DIR)/go.mod.bak; \
 	fi
 	@echo "✅ go.mod fixed"
@@ -37,7 +37,7 @@ GOLANGCI_LINT = $(PROJECT_DIR)/bin/golangci-lint
 .PHONY: golangci-lint
 golangci-lint: fix-tools-gomod ## 🔍 Download golangci-lint locally if necessary
 	@echo "🔍 Installing golangci-lint..."
-	cd $(TOOLS_DIR) && GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	cd $(TOOLS_DIR) && GOTOOLCHAIN=go$(GO_VERSION) GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on $(GO_CMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	@echo "✅ Installation complete"
 
 CONTROLLER_GEN = $(PROJECT_DIR)/bin/controller-gen

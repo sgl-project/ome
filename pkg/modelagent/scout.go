@@ -85,7 +85,7 @@ func NewScout(nodeName string,
 	for name, informer := range informers {
 		err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
 			// Pipe to the default handler first, which just logs the error
-			cache.DefaultWatchErrorHandler(r, err)
+			cache.DefaultWatchErrorHandler(context.TODO(), r, err)
 
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
 				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", name, err.Error())
