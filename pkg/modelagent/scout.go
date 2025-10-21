@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
@@ -53,6 +54,8 @@ func NewScout(ctx context.Context, nodeName string,
 	kubeClient *kubernetes.Clientset,
 	logger *zap.SugaredLogger) (*Scout, error) {
 
+	logger.Infof("Initializing Scout for node: %s", nodeName)
+
 	// Fetch the complete node info
 	nodeInfo, err := kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -94,9 +97,13 @@ func NewScout(ctx context.Context, nodeName string,
 			// Pipe to the default handler first, which just logs the error
 			cache.DefaultWatchErrorHandler(ctx, r, err)
 
+			// Only fatal on authentication/authorization errors
 			if errors.IsUnauthorized(err) || errors.IsForbidden(err) {
 				logger.Fatalf("Unable to sync cache for informer %s: %s. Requesting scout to exit.", name, err.Error())
 			}
+
+			// Log all watch errors for better diagnostics
+			logger.Warnf("Watch error in informer %s: %v (Type: %T)", name, err, err)
 		})
 
 		if err != nil {
@@ -138,9 +145,77 @@ func (w *Scout) Run(stopCh <-chan struct{}) error {
 		w.baseModelSynced,
 	}
 
-	if ok := cache.WaitForCacheSync(stopCh, synced...); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+	// Add retry logic with exponential backoff for cache sync
+	// This handles transient API server connectivity issues during node startup
+	maxRetries := 5
+	retryDelay := 2 * time.Second
+	maxRetryDelay := 15 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check if shutdown was requested before attempting sync
+		select {
+		case <-stopCh:
+			return fmt.Errorf("shutdown requested before cache sync attempt (pod is being terminated)")
+		default:
+		}
+
+		w.logger.Infof("Attempting to sync caches (attempt %d/%d)", attempt, maxRetries)
+
+		// Use a separate channel for this sync attempt to distinguish between
+		// timeout and shutdown signal
+		syncStopCh := make(chan struct{})
+		syncResult := make(chan bool, 1)
+
+		go func() {
+			ok := cache.WaitForCacheSync(syncStopCh, synced...)
+			syncResult <- ok
+		}()
+
+		// Wait for sync result with timeout
+		syncTimeout := 30 * time.Second
+		select {
+		case ok := <-syncResult:
+			if ok {
+				w.logger.Info("Successfully synced informer caches")
+				// Cache sync succeeded, proceed with normal operation
+				goto syncComplete
+			}
+			// Cache sync returned false, log and retry
+			w.logger.Warnf("Cache sync returned false (attempt %d/%d) - informers may not be synced yet", attempt, maxRetries)
+		case <-time.After(syncTimeout):
+			w.logger.Warnf("Cache sync timeout after %v (attempt %d/%d)", syncTimeout, attempt, maxRetries)
+			close(syncStopCh) // Stop the sync goroutine
+		case <-stopCh:
+			close(syncStopCh) // Stop the sync goroutine
+			return fmt.Errorf("shutdown requested during cache sync (pod is being terminated)")
+		}
+
+		if attempt == maxRetries {
+			// Log detailed information about what didn't sync
+			w.logger.Errorf("Failed to sync caches after %d attempts", maxRetries)
+			w.logger.Errorf("ClusterBaseModel synced: %v", w.clusterBaseModelSynced())
+			w.logger.Errorf("BaseModel synced: %v", w.baseModelSynced())
+			return fmt.Errorf("failed to wait for caches to sync after %d attempts", maxRetries)
+		}
+
+		// Calculate next retry delay with exponential backoff and cap
+		nextDelay := retryDelay
+		if nextDelay > maxRetryDelay {
+			nextDelay = maxRetryDelay
+		}
+
+		// Sleep before retry, but allow immediate shutdown if requested
+		// We use a timer instead of time.After to avoid blocking shutdown for too long
+		timer := time.NewTimer(nextDelay)
+		select {
+		case <-timer.C:
+			retryDelay *= 2 // Exponential backoff for next iteration
+		case <-stopCh:
+			timer.Stop()
+			return fmt.Errorf("shutdown requested while waiting to retry cache sync (pod is being terminated)")
+		}
 	}
+syncComplete:
 
 	// After caches are synced, check for any pending deletions (resources with DeletionTimestamp)
 	// This ensures we catch any deletion requests that occurred while the agent was down

@@ -63,17 +63,24 @@ spec:
         {{- with .Values.modelAgent.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        startupProbe:
+          httpGet:
+            path: /livez
+            port: {{ .Values.modelAgent.health.port }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
         livenessProbe:
           httpGet:
             path: /livez
             port: {{ .Values.modelAgent.health.port }}
-          initialDelaySeconds: 60
-          periodSeconds: 5
+          periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /healthz
             port: {{ .Values.modelAgent.health.port }}
-          initialDelaySeconds: 60
+          periodSeconds: 10
         {{- if .Values.modelAgent.resources }}
         resources:
           {{- toYaml .Values.modelAgent.resources | nindent 10 }}
