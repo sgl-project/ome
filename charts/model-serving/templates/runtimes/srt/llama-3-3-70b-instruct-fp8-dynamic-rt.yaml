@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-3-70b-instruct-fp8-dynamic
+  name: srt-llama-3-3-70b-instruct-fp8-dynamic
 spec:
   disabled: false
   {{- if or .Values.commonAnnotations .Values.llama_3_3_70b_instruct_fp8_dynamic.annotations }}
@@ -53,7 +53,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: LlamaForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
       version: "1.0.0"
   modelSizeRange:
@@ -64,9 +64,9 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_3_70b_instruct_fp8_dynamic.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_3_70b_instruct_fp8_dynamic.image.vllm.tag | default .Values.vllm.latestImage.tag }}
+      image: {{ .Values.llama_3_3_70b_instruct_fp8_dynamic.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_3_70b_instruct_fp8_dynamic.image.srt.tag | default .Values.sglang.commonImage.tag }}
       ports:
-        - containerPort: {{ .Values.vllm.port }}
+        - containerPort: {{ .Values.sglang.port }}
           name: http1
           protocol: TCP
       command:
@@ -75,35 +75,33 @@ spec:
         - --
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
-          --port={{ .Values.vllm.port }} \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name={{ .Values.vllm.serveModelName }} \
-          --tensor-parallel-size=2 \
-          --max-model-len=131072 \
-          --gpu-memory-utilization=0.9 \
-          --enable-chunked-prefill \
-          --enable-auto-tool-choice \
-          --tool-call-parser=llama3_json \
-          --chat-template=./examples/tool_chat_template_llama3.1_json.jinja
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --enable-metrics \
+          --log-requests \
+          --model-path="$MODEL_PATH" \
+          --tp-size=4 \
+          --mem-frac=0.9 \
+          --tool-call-parser=llama3 \
+          --attention-backend=fa3 \
+          --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 30
-          memory: 100Gi
-          nvidia.com/gpu: 2
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 30
-          memory: 100Gi
-          nvidia.com/gpu: 2
+          cpu: 10
+          memory: 160Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -121,7 +119,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 150
         successThreshold: 1
