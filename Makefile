@@ -100,15 +100,33 @@ include Makefile-deps.mk
 .PHONY: manifests
 manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	@echo "\n📦 Kubernetes Manifest Generation Starting..."
-	
+
 	@echo "\n🔧 Step 1: Generating CRD manifests..."
+	@echo "  • Generating CRDs from internal APIs (all resources)..."
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/ome/... output:crd:dir=config/crd/full
-	@echo "✅ CRD manifests generated"
-	
+	@echo "  • Temporarily adding opensource OME dependency for CRD generation..."
+	@cp go.mod go.mod.backup
+	@cp go.sum go.sum.backup
+	@go get github.com/sgl-project/ome@v0.1.3 2>/dev/null || true
+	@echo "  • Generating opensource CRDs to temporary directory..."
+	@mkdir -p config/crd/opensource-temp
+	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=github.com/sgl-project/ome/pkg/apis/ome/v1beta1 output:crd:dir=config/crd/opensource-temp
+	@echo "  • Overwriting only model CRDs with opensource definitions..."
+	@echo "    (BaseModel, ClusterBaseModel, FineTunedWeight)"
+	@if [ -f config/crd/opensource-temp/ome.io_basemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_basemodels.yaml config/crd/full/; fi
+	@if [ -f config/crd/opensource-temp/ome.io_clusterbasemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterbasemodels.yaml config/crd/full/; fi
+	@if [ -f config/crd/opensource-temp/ome.io_finetunedweights.yaml ]; then cp config/crd/opensource-temp/ome.io_finetunedweights.yaml config/crd/full/; fi
+	@echo "  • Cleaning up temporary directory..."
+	@rm -rf config/crd/opensource-temp
+	@echo "  • Restoring go.mod and go.sum..."
+	@mv go.mod.backup go.mod
+	@mv go.sum.backup go.sum
+	@echo "✅ CRD manifests generated (model CRDs from opensource, all others from internal)"
+
 	@echo "\n🔑 Step 2: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
 	@echo "✅ RBAC manifests generated"
-	
+
 	@echo "\n📝 Step 3: Generating object boilerplate..."
 	@$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./pkg/apis/ome/v1beta1
 	@echo "✅ Object boilerplate generated"

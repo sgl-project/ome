@@ -90,8 +90,15 @@ spec:
                 properties:
                   name:
                     type: string
+                  operator:
+                    default: Equal
+                    type: string
                   version:
                     type: string
+                  weight:
+                    default: 1
+                    format: int64
+                    type: integer
                 required:
                 - name
                 type: object
@@ -99,8 +106,15 @@ spec:
                 properties:
                   name:
                     type: string
+                  operator:
+                    default: Equal
+                    type: string
                   version:
                     type: string
+                  weight:
+                    default: 1
+                    format: int64
+                    type: integer
                 required:
                 - name
                 type: object
@@ -233,6 +247,8 @@ spec:
                       type: string
                     type: object
                   path:
+                    type: string
+                  schemaPath:
                     type: string
                   storageUri:
                     type: string
