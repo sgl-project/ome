@@ -56,7 +56,7 @@ type ClusterBaseModelReconciler struct {
 // Reconcile handles BaseModel reconciliation
 func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("basemodel", req.NamespacedName)
-	log.Info("It is OpenSource OME!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+	log.Info("It is OpenSource OME base model reconciler!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
 	// Fetch the BaseModel instance
 	baseModel := &v1beta1.BaseModel{}
@@ -102,6 +102,7 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // Reconcile handles ClusterBaseModel reconciliation
 func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("clusterbasemodel", req.NamespacedName)
+	log.Info("It is OpenSource OME cluster base model reconciler!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
 	// Fetch the ClusterBaseModel instance
 	clusterBaseModel := &v1beta1.ClusterBaseModel{}
