@@ -412,6 +412,16 @@ func TestInferenceServiceReconcile(t *testing.T) {
 								},
 							},
 						},
+						EngineConfig: &v1beta1.EngineSpec{
+							PodSpec: v1beta1.PodSpec{
+								Containers: []v1.Container{
+									{
+										Name:  "ome-container",
+										Image: "sklearn-server:v1",
+									},
+								},
+							},
+						},
 					},
 				}
 				err = c.Create(context.TODO(), rt)
