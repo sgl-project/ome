@@ -80,7 +80,7 @@ func IsPredictorUsed(isvc *v1beta2.InferenceService) bool {
 	}
 
 	// Check if MinReplicas or MaxReplicas are set
-	if predictor.MinReplicas != nil {
+	if predictor.MinReplicas != nil || predictor.MaxReplicas != 0 {
 		return true
 	}
 
@@ -235,6 +235,11 @@ func MigratePredictor(isvc *v1beta2.InferenceService) error {
 				Name:  "PROTOCOL_VERSION",
 				Value: string(*isvc.Spec.Predictor.Model.ProtocolVersion),
 			})
+		}
+
+		// No containers in Model spec, set runnerSpec as nil
+		if runnerSpec.Container.Name == "" {
+			runnerSpec = nil
 		}
 
 		isvc.Spec.Engine.Runner = runnerSpec
