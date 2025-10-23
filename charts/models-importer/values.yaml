@@ -302,14 +302,6 @@ cohere-command-1-v16-0-0-trt:
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "LARGE_COHERE_V2"
 
-cohere-rerank-english-03:
-  enabled: false
-  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
-
-cohere-rerank-multilingual-03:
-  enabled: false
-  lifecyclePhase: "ONDEMAND_SERVING_DISABLED"
-
 cohere-rerank:
   enabled: false
   lifecyclePhase: "ACTIVE"

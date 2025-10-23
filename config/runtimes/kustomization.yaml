@@ -57,4 +57,3 @@ resources:
   - cohere/cohere-embed-v2.yaml
   - cohere/cohere-embed-v3.yaml
   - cohere/cohere-rerank-v1.yaml
-  - cohere/cohere-rerank-v3.yaml
