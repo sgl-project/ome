@@ -17,7 +17,7 @@ metadata:
 spec:
   compartmentID: {{ .Values.compartmentID }}
   disabled: false
-  displayName: xai.grok-4-fast
+  displayName: xai.grok-4-fast-non-reasoning
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "grok-4-fast-self-hosted" "osBucket" }}/o/{{ index .Values "grok-4-fast-self-hosted" "vendor" }}/{{ index .Values "grok-4-fast-self-hosted" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "grok-4-fast-self-hosted" "vendor" }}/{{ index .Values "grok-4-fast-self-hosted" "osPrefixOverride" }}"

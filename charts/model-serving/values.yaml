@@ -1182,7 +1182,7 @@ grok_4_fast_self_hosted:
           curl -s -f http://localhost:8080/v1/chat/completions \
             -X POST \
             -H "Content-Type: application/json" \
-            -d '{"model":"grok-4-fast-reasoning","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
+            -d '{"model":"grok-4-fast-non-reasoning","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
             --max-time 25
     failureThreshold: 5
     successThreshold: 1
