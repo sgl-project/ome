@@ -85,6 +85,7 @@ spec:
           --mem-frac=0.9 \
           --tool-call-parser=llama3 \
           --attention-backend=fa3 \
+          --log-requests-level=1 \
           --chat-template /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama3.1_json.jinja
       volumeMounts:
         - mountPath: /dev/shm
