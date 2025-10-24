@@ -278,12 +278,6 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		r.Log.Info("PD-disaggregated deployment detected", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
 	}
 
-	// Clean up resources for components that no longer exist
-	if err := r.cleanupRemovedComponents(ctx, isvc, mergedEngine, mergedDecoder, mergedRouter); err != nil {
-		r.Log.Error(err, "Failed to cleanup removed components", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
-		// Don't fail reconciliation on cleanup errors
-	}
-
 	// Step 5: Create reconcilers based on merged specs
 	if mergedEngine != nil {
 		engineAC, engineAcName, err := r.AcceleratorClassSelector.GetAcceleratorClass(ctx, isvc, rt, v1beta1.EngineComponent)
@@ -431,6 +425,23 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if mergedRouter != nil {
 			componentList = append(componentList, v1beta1.RouterComponent)
 		}
+	}
+
+	// Clean up old predictor deployment after new components are ready (migration-specific)
+	// This is a temporary migration-specific cleanup function.
+	deploymentReady, err := r.cleanupOldPredictorDeployment(ctx, isvc)
+	if err != nil {
+		r.Log.Error(err, "Failed to cleanup old predictor deployment", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		// Don't fail reconciliation on cleanup errors
+	} else if !deploymentReady {
+		// Requeue until old predictor deployment is fully cleaned up
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Clean up resources for components that no longer exist
+	if err := r.cleanupRemovedComponents(ctx, isvc, mergedEngine, mergedDecoder, mergedRouter); err != nil {
+		r.Log.Error(err, "Failed to cleanup removed components", "namespace", isvc.Namespace, "inferenceService", isvc.Name)
+		// Don't fail reconciliation on cleanup errors
 	}
 
 	// Clean up status for components that no longer exist

@@ -346,7 +346,7 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 		expectError  bool
 	}{
 		{
-			name: "Full migration with deployment deletion",
+			name: "Full migration with spec transformation",
 			isvc: &v1beta2.InferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-isvc",
@@ -385,13 +385,16 @@ func TestMigratePredictorToNewArchitecture(t *testing.T) {
 				g.Expect(isvc.Annotations).NotTo(gomega.BeNil())
 				g.Expect(isvc.Annotations[constants.DeprecationWarning]).To(gomega.ContainSubstring("deprecated"))
 
-				// Check that old deployment was deleted
+				// Note: Old deployment deletion is now handled by cleanupOldPredictorDeployment
+				// in the controller after new component deployments are ready.
+				// The migration function only transforms the spec.
 				deployment := &appsv1.Deployment{}
 				err := c.Get(context.TODO(), types.NamespacedName{
 					Name:      "test-isvc",
 					Namespace: "default",
 				}, deployment)
-				g.Expect(err).To(gomega.HaveOccurred())
+				// Deployment should still exist after migration
+				g.Expect(err).NotTo(gomega.HaveOccurred())
 			},
 		},
 		{
