@@ -11,7 +11,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,11 +53,12 @@ func TestInferenceServiceReconcile(t *testing.T) {
 	g.Expect(policyv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
-		name       string
-		isvc       *v1beta1.InferenceService
-		setupMocks func(client.Client, *fake.Clientset)
-		validate   func(*testing.T, client.Client, *v1beta1.InferenceService)
-		wantErr    bool
+		name        string
+		isvc        *v1beta1.InferenceService
+		setupMocks  func(client.Client, *fake.Clientset)
+		validate    func(*testing.T, client.Client, *v1beta1.InferenceService)
+		wantErr     bool
+		wantRequeue bool
 	}{
 		{
 			name: "New architecture with engine only",
@@ -309,6 +309,8 @@ func TestInferenceServiceReconcile(t *testing.T) {
 					},
 				},
 			},
+			// This test requires multiple reconciliations because cleanup waits for new deployments
+			wantRequeue: true,
 			setupMocks: func(c client.Client, cs *fake.Clientset) {
 				// Create the config in the fake clientset in ome namespace with deploy config
 				omeCm := &v1.ConfigMap{
@@ -448,14 +450,15 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				g.Expect(updatedIsvc.ObjectMeta.Annotations).NotTo(gomega.BeNil())
 				g.Expect(updatedIsvc.ObjectMeta.Annotations[constants.DeprecationWarning]).To(gomega.Equal("The Predictor field is deprecated and will be removed in a future release. Please use Engine and Model fields instead."))
 
-				// Check that old predictor deployment was deleted
+				// Note: Old predictor deployment will NOT be deleted on first reconciliation
+				// because cleanup waits for new engine deployment to be ready.
+				// The old deployment should still exist.
 				deployment := &appsv1.Deployment{}
 				err = c.Get(context.TODO(), types.NamespacedName{
 					Name:      "test-legacy", // predictor deployment uses inference service name
 					Namespace: "default",
 				}, deployment)
-				g.Expect(err).To(gomega.HaveOccurred(), "Expected old predictor deployment to be deleted")
-				g.Expect(apierrors.IsNotFound(err)).To(gomega.BeTrue(), "Expected deployment to not be found")
+				g.Expect(err).NotTo(gomega.HaveOccurred(), "Old deployment should still exist on first reconciliation")
 
 				// Check that new engine deployment was created
 				engineDeployment := &appsv1.Deployment{}
@@ -753,7 +756,11 @@ func TestInferenceServiceReconcile(t *testing.T) {
 				g.Expect(err).To(gomega.HaveOccurred())
 			} else {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
-				g.Expect(result).To(gomega.Equal(ctrl.Result{}))
+				if tt.wantRequeue {
+					g.Expect(result.Requeue).To(gomega.BeTrue(), "Expected requeue for test: %s", tt.name)
+				} else {
+					g.Expect(result).To(gomega.Equal(ctrl.Result{}))
+				}
 
 				// Run validations
 				if tt.validate != nil {
