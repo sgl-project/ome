@@ -39,7 +39,7 @@ jobs:
           gh release upload "$TAG" /tmp/ome-${TAG}.vex.json
 
       - name: Upload VEX as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: vex-${{ github.event.release.tag_name || inputs.tag }}
           path: |
