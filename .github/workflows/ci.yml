@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload coverage reports
         if: matrix.test-suite == 'unit'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-reports
           path: |
@@ -140,7 +140,7 @@ jobs:
         run: make ${{ matrix.component }}
 
       - name: Upload binary artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.component }}-binary
           path: bin/${{ matrix.component }}

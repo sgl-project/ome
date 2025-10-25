@@ -71,7 +71,7 @@ jobs:
             *-sbom.cyclonedx.json
 
       - name: Upload SBOMs as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sbom-${{ github.event.release.tag_name || inputs.tag }}
           path: |
