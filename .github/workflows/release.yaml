@@ -119,7 +119,7 @@ jobs:
           output-file: ${{ matrix.component.image }}-sbom.spdx.json
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sbom-${{ matrix.component.image }}
           path: ${{ matrix.component.image }}-sbom.spdx.json
@@ -186,7 +186,7 @@ jobs:
           helm repo index .charts --url https://github.com/sgl-project/ome/releases/download/${{ needs.prepare.outputs.tag }}
 
       - name: Upload charts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: helm-charts
           path: |
@@ -216,7 +216,7 @@ jobs:
           syft dir:. -o cyclonedx-json > ome-${{ needs.prepare.outputs.tag }}-source-sbom.cyclonedx.json
 
       - name: Upload source SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: source-sbom
           path: |
