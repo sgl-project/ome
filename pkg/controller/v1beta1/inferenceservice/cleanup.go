@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -221,4 +224,116 @@ func getCoreResourceTypes() []schema.GroupVersionKind {
 		{Group: "", Version: "v1", Kind: "ServiceAccount"},
 		{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"},
 	}
+}
+
+// cleanupOldPredictorDeployment deletes the old predictor deployment after migration
+// when all new component deployments (engine, decoder, router) are ready.
+// This is a temporary migration-specific cleanup function.
+func (r *InferenceServiceReconciler) cleanupOldPredictorDeployment(
+	ctx context.Context,
+	isvc *v1beta1.InferenceService,
+) (bool, error) {
+	log := log.FromContext(ctx)
+
+	// Check if old predictor deployment exists (uses the inference service name)
+	// If it doesn't exist, cleanup is already done, return early
+	deployment := &appsv1.Deployment{}
+	deploymentName := isvc.Name
+	err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: isvc.Namespace}, deployment)
+
+	if apierrors.IsNotFound(err) {
+		// Old deployment doesn't exist, cleanup already complete
+		return true, nil
+	} else if err != nil {
+		// Error checking for deployment
+		return false, fmt.Errorf("failed to check for old predictor deployment: %w", err)
+	}
+
+	// Only run if new architecture is being used (Engine/Decoder/Router specs exist)
+	if isvc.Spec.Engine == nil && isvc.Spec.Decoder == nil && isvc.Spec.Router == nil {
+		return true, nil
+	}
+
+	// Check if all new component deployments are ready
+	allReady := true
+
+	// Check engine deployment if it exists
+	if isvc.Spec.Engine != nil {
+		engineName := isvc.Name + "-engine"
+		ready, err := r.isDeploymentReady(ctx, engineName, isvc.Namespace)
+		if err != nil {
+			return false, err
+		}
+		allReady = allReady && ready
+		log.V(1).Info("Engine deployment status", "name", engineName, "ready", ready)
+	}
+
+	// Check decoder deployment if it exists
+	if isvc.Spec.Decoder != nil {
+		decoderName := isvc.Name + "-decoder"
+		ready, err := r.isDeploymentReady(ctx, decoderName, isvc.Namespace)
+		if err != nil {
+			return false, err
+		}
+		allReady = allReady && ready
+		log.V(1).Info("Decoder deployment status", "name", decoderName, "ready", ready)
+	}
+
+	// Check router deployment if it exists
+	if isvc.Spec.Router != nil {
+		routerName := isvc.Name + "-router"
+		ready, err := r.isDeploymentReady(ctx, routerName, isvc.Namespace)
+		if err != nil {
+			return false, err
+		}
+		allReady = allReady && ready
+		log.V(1).Info("Router deployment status", "name", routerName, "ready", ready)
+	}
+
+	// Only delete if all new deployments are ready
+	if !allReady {
+		log.Info("Waiting for new component deployments to be ready before deleting old predictor deployment",
+			"namespace", isvc.Namespace,
+			"inferenceService", isvc.Name)
+		return false, nil
+	}
+
+	// Delete old predictor deployment (uses the inference service name)
+
+	log.Info("Deleting old predictor deployment after successful migration",
+		"deployment", deploymentName,
+		"namespace", isvc.Namespace)
+
+	if err := r.Delete(ctx, deployment); err != nil {
+		return false, fmt.Errorf("failed to delete old predictor deployment: %w", err)
+	}
+
+	log.Info("Successfully deleted old predictor deployment",
+		"deployment", deploymentName,
+		"namespace", isvc.Namespace)
+
+	return true, nil
+}
+
+// isDeploymentReady checks if a deployment is ready by verifying the Available condition
+func (r *InferenceServiceReconciler) isDeploymentReady(ctx context.Context, name, namespace string) (bool, error) {
+	deployment := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, deployment)
+
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Deployment doesn't exist yet, not ready
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get deployment %s: %w", name, err)
+	}
+
+	// Check if deployment is available
+	for _, condition := range deployment.Status.Conditions {
+		if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionTrue {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

@@ -6,10 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1beta2 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
@@ -40,27 +37,8 @@ func MigratePredictorToNewArchitecture(ctx context.Context, c client.Client, log
 			return errors.Wrapf(err, "failed to update InferenceService after predictor migration")
 		}
 
-		// Delete the old predictor deployment if it exists
-		deployment := &appsv1.Deployment{}
-		deploymentName := isvc.Name // predictor deployment uses the inference service name
-		err := c.Get(ctx, types.NamespacedName{
-			Name:      deploymentName,
-			Namespace: isvc.Namespace,
-		}, deployment)
-
-		if err == nil {
-			// Deployment exists, delete it
-			log.Info("Deleting old predictor deployment",
-				"deployment", deploymentName,
-				"namespace", isvc.Namespace)
-
-			if err := c.Delete(ctx, deployment); err != nil {
-				return errors.Wrapf(err, "failed to delete old predictor deployment")
-			}
-		} else if !apierrors.IsNotFound(err) {
-			// Error other than not found
-			return errors.Wrapf(err, "failed to check for old predictor deployment")
-		}
+		// Note: Old predictor deployment cleanup is handled by cleanupOldPredictorDeployment
+		// in the controller after new component deployments are ready
 
 		log.Info("Successfully migrated predictor to new architecture",
 			"namespace", isvc.Namespace,
