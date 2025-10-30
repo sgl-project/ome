@@ -128,8 +128,8 @@ func (c *GptOssConfig) Validate() error {
 
 // GetParameterCount returns the total number of parameters in the model
 func (c *GptOssConfig) GetParameterCount() int64 {
-	// Try to get parameter count from safetensors files
-	count, err := FindAndParseSafetensors(c.ConfigPath)
+	// Try to get parameter count from safetensors files with quantization-aware parsing
+	count, err := FindAndParseSafetensors(c.ConfigPath, c.GetQuantizationType())
 	if err == nil {
 		return count
 	}

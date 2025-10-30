@@ -129,7 +129,7 @@ func (c *DeepseekV3Config) Validate() error {
 // If that fails, it falls back to the official parameter count
 func (c *DeepseekV3Config) GetParameterCount() int64 {
 	// First try to get parameter count from safetensors files
-	count, err := FindAndParseSafetensors(c.ConfigPath)
+	count, err := FindAndParseSafetensors(c.ConfigPath, c.GetQuantizationType())
 	if err == nil {
 		return count
 	}

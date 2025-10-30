@@ -196,6 +196,7 @@ const (
 	ModelQuantizationFP8       ModelQuantization = "fp8"
 	ModelQuantizationFbgemmFP8 ModelQuantization = "fbgemm_fp8"
 	ModelQuantizationINT4      ModelQuantization = "int4"
+	ModelQuantizationMXFP4     ModelQuantization = "mxfp4"
 )
 
 // ModelCapability enum

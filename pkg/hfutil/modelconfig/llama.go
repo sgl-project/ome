@@ -106,7 +106,7 @@ func (c *LlamaConfig) Validate() error {
 // GetParameterCount returns the total number of parameters in the model
 func (c *LlamaConfig) GetParameterCount() int64 {
 	// First try to get parameter count from safetensors files
-	count, err := FindAndParseSafetensors(c.ConfigPath)
+	count, err := FindAndParseSafetensors(c.ConfigPath, c.GetQuantizationType())
 	if err == nil {
 		return count
 	}

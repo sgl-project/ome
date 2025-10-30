@@ -163,7 +163,7 @@ func LoadLlama4Config(configPath string) (*Llama4Config, error) {
 
 func (c *Llama4Config) GetParameterCount() int64 {
 	// First try to get parameter count from safetensors files
-	count, err := FindAndParseSafetensors(c.ConfigPath)
+	count, err := FindAndParseSafetensors(c.ConfigPath, c.GetQuantizationType())
 	if err == nil {
 		return count
 	}
@@ -207,7 +207,7 @@ func (c *Llama4Config) GetTransformerVersion() string {
 
 func (c *Llama4Config) GetQuantizationType() string {
 	if c.QuantizationConfig != nil {
-		return c.QuantizationConfig.Format
+		return c.QuantizationConfig.QuantMethod
 	}
 	return ""
 }

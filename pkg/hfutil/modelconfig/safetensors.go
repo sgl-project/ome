@@ -12,8 +12,10 @@ import (
 )
 
 // FindAndParseSafetensors looks for a safetensors file in the same directory as the config file
-// and parses it to count the total number of parameters
-func FindAndParseSafetensors(configPath string) (int64, error) {
+// and parses it to count the total number of parameters.
+// If quantMethod is provided (e.g., from GetQuantizationType()), it will be used for quantization-aware adjustments.
+// If quantMethod is empty or not provided, no quantization adjustments will be applied.
+func FindAndParseSafetensors(configPath string, quantMethod ...string) (int64, error) {
 	if configPath == "" {
 		return 0, fmt.Errorf("config path cannot be empty")
 	}
@@ -24,10 +26,16 @@ func FindAndParseSafetensors(configPath string) (int64, error) {
 		return 0, fmt.Errorf("failed to list directory '%s': %w", dir, err)
 	}
 
+	// Get quantization method from provided parameter
+	var qt string
+	if len(quantMethod) > 0 {
+		qt = strings.ToLower(quantMethod[0])
+	}
+
 	// Look for index.json file first, which might point to sharded safetensors
 	indexPath := filepath.Join(dir, "model.safetensors.index.json")
 	if _, err := os.Stat(indexPath); err == nil {
-		count, err := ParseSafetensorsIndex(indexPath)
+		count, err := ParseSafetensorsIndexWithQuant(indexPath, qt)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse safetensors index '%s': %w", indexPath, err)
 		}
@@ -41,7 +49,7 @@ func FindAndParseSafetensors(configPath string) (int64, error) {
 	for _, f := range files {
 		if strings.HasSuffix(f.Name(), ".safetensors") {
 			fullPath := filepath.Join(dir, f.Name())
-			params, err := ParseSafetensors(fullPath)
+			params, err := ParseSafetensorsWithQuant(fullPath, qt)
 			if err != nil {
 				return 0, fmt.Errorf("failed to parse safetensors file '%s': %w", fullPath, err)
 			}
@@ -63,8 +71,8 @@ func FindAndParseSafetensors(configPath string) (int64, error) {
 	return totalParams, nil
 }
 
-// ParseSafetensors parses a single safetensors file and counts parameters
-func ParseSafetensors(path string) (int64, error) {
+// ParseSafetensorsWithQuant parses a safetensors file with quantization-aware adjustments
+func ParseSafetensorsWithQuant(path string, quantMethod string) (int64, error) {
 	if path == "" {
 		return 0, fmt.Errorf("safetensors file path cannot be empty")
 	}
@@ -130,6 +138,30 @@ func ParseSafetensors(path string) (int64, error) {
 			count *= dim
 		}
 
+		// Adjustments for quantized weights
+		dtype := strings.ToLower(tensor.Dtype)
+		quantMethodLower := strings.ToLower(quantMethod)
+
+		// 4-bit quantization pack 2 values per byte (mxfp4, int4, gptq, awq variants)
+		if strings.Contains(quantMethodLower, "mxfp4") || strings.Contains(quantMethodLower, "int4") ||
+			strings.Contains(quantMethodLower, "gptq") || strings.Contains(quantMethodLower, "awq") {
+			// Skip obvious auxiliary tensors in quantized checkpoints
+			if isAuxTensor(tensorName) {
+				continue
+			}
+			// In 4-bit quantization, weights are typically packed as uint8 with 2 params per byte
+			if dtype == "u8" || dtype == "uint8" {
+				if isWeightLike(tensorName) {
+					// multiply logical parameter count by 2 (8 bits / 4 bits)
+					if count > math.MaxInt64/2 {
+						return 0, fmt.Errorf("parameter count overflow when adjusting for 4-bit quantization (%s) in '%s'", quantMethodLower, path)
+					}
+					count = count * 2
+				}
+			}
+		}
+		// 8-bit quantization (fp8, fbgemm_fp8) use 1 byte per parameter - no adjustment needed
+
 		// Check for overflow when adding to total
 		if total > math.MaxInt64-count {
 			return 0, fmt.Errorf("parameter count overflow in '%s': total would exceed maximum value", path)
@@ -140,8 +172,8 @@ func ParseSafetensors(path string) (int64, error) {
 	return total, nil
 }
 
-// ParseSafetensorsIndex parses a model.safetensors.index.json file for sharded models
-func ParseSafetensorsIndex(indexPath string) (int64, error) {
+// ParseSafetensorsIndexWithQuant parses a model.safetensors.index.json file for sharded models with quantization-aware adjustments
+func ParseSafetensorsIndexWithQuant(indexPath string, quantMethod string) (int64, error) {
 	if indexPath == "" {
 		return 0, fmt.Errorf("index path cannot be empty")
 	}
@@ -178,7 +210,7 @@ func ParseSafetensorsIndex(indexPath string) (int64, error) {
 	// Parse each shard file
 	for shard := range shardFiles {
 		shardPath := filepath.Join(dir, shard)
-		count, err := ParseSafetensors(shardPath)
+		count, err := ParseSafetensorsWithQuant(shardPath, quantMethod)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse shard '%s' referenced in index '%s': %w",
 				shardPath, indexPath, err)
@@ -192,4 +224,52 @@ func ParseSafetensorsIndex(indexPath string) (int64, error) {
 	}
 
 	return total, nil
+}
+
+// isAuxTensor returns true if the tensor name looks like a quantization auxiliary tensor
+func isAuxTensor(name string) bool {
+	n := strings.ToLower(name)
+
+	// Common aux patterns: per-(group/channel) scales/zeros, grouping, stats, masks, etc.
+	auxNeedles := []string{
+		"scale", "scales", "zero", "zeros", "qscale", "qzeros",
+		"g_idx", "gidx", "group_idx", "group_index",
+		"quant_state", "quantizer",
+		"absmax", "amax", "inv_scale", "ninv",
+		"clip", "saturation",
+		"bits", "bit_width",
+		"bias_mask", "weight_mask",
+		"hist", "histogram",
+	}
+
+	for _, s := range auxNeedles {
+		if strings.Contains(n, s) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isWeightLike returns true for main weight tensors
+func isWeightLike(name string) bool {
+	n := strings.ToLower(name)
+
+	// Explicit inclusions (packed 4-bit weight tensors)
+	if strings.Contains(n, "qweight") || strings.Contains(n, "packed_weight") {
+		return true
+	}
+
+	// Typical HF naming for matmul weights
+	// Note: Must use ".weight" (with dot) to avoid false matches like "weight_mask"
+	if strings.HasSuffix(n, ".weight") {
+		// Exclude common non-matmul params
+		if strings.Contains(n, "norm") || strings.Contains(n, "layernorm") ||
+			strings.Contains(n, "embed") || strings.Contains(n, "embedding") {
+			return false
+		}
+		// Also ensure not aux
+		return !isAuxTensor(n)
+	}
+	return false
 }

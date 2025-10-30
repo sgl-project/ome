@@ -256,6 +256,9 @@ func (p *ModelConfigParser) extractModelMetadataFromHF(hfModel modelconfig.Huggi
 		case strings.Contains(strings.ToLower(quantType), "fp8"):
 			metadata.Quantization = v1beta1.ModelQuantizationFP8
 			p.logger.Infof("Setting quantization to FP8")
+		case strings.Contains(strings.ToLower(quantType), "mxfp4"):
+			metadata.Quantization = v1beta1.ModelQuantizationMXFP4
+			p.logger.Infof("Setting quantization to MXFP4")
 		}
 	}
 
