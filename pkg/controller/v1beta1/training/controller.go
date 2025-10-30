@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
@@ -157,7 +159,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	finetuneWeights := &v1beta1.FineTunedWeight{}
+	finetuneWeights := &opensourcev1beta1.FineTunedWeight{}
 	if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: utils.GetFineTunedModelName(trainJob.Name)}, finetuneWeights); err != nil {
 		if apierr.IsNotFound(err) {
 			// Finetune weights not found, create a new one
@@ -174,7 +176,7 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			} else {
 				r.Log.Info("Finetune weights created", "tjob", trainJob.Name, "model", finetuneWeights.Name)
-				err = r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateCreating)
+				err = r.updateFineTunedWeight(ctx, finetuneWeights, opensourcev1beta1.LifeCycleStateCreating)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -190,13 +192,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.Log.Info("TrainJob has finished, updating FineTuneWeights", "namespace", req.NamespacedName, "name", trainJob.Name, "FineTuneWeights", finetuneWeights)
 		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobFailed) {
 			utils.EmitMetricsWhenFailed(trainJob, string(TrainingJobFailure))
-			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateFailed)
+			err := r.updateFineTunedWeight(ctx, finetuneWeights, opensourcev1beta1.LifeCycleStateFailed)
 			return ctrl.Result{}, err
 		}
 
 		if meta.IsStatusConditionTrue(trainJob.Status.Conditions, v1beta1.TrainJobComplete) {
 			utils.EmitMetricsWhenSucceeded(trainJob)
-			err := r.updateFineTunedWeight(ctx, finetuneWeights, v1beta1.LifeCycleStateReady)
+			err := r.updateFineTunedWeight(ctx, finetuneWeights, opensourcev1beta1.LifeCycleStateReady)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -276,7 +278,7 @@ func (r *TrainingJobReconciler) reconcileObjects(ctx context.Context, runtime tr
 	return CreateObjectSucceeded, nil
 }
 
-func (r *TrainingJobReconciler) updateFineTunedWeight(ctx context.Context, fineTuneWeights *v1beta1.FineTunedWeight, state v1beta1.LifeCycleState) error {
+func (r *TrainingJobReconciler) updateFineTunedWeight(ctx context.Context, fineTuneWeights *opensourcev1beta1.FineTunedWeight, state opensourcev1beta1.LifeCycleState) error {
 	fineTuneWeights.Status.State = state
 
 	r.Log.Info("Updating FineTuneWeights status", "FineTunedWeight", fineTuneWeights)
@@ -372,7 +374,7 @@ func runtimeRefToGroupKind(runtimeRef omev1beta1.RuntimeRef) schema.GroupKind {
 }
 
 // reconcilePVPVC reconciles the PersistentVolume and PersistentVolumeClaim for the training job.
-func (r *TrainingJobReconciler) reconcilePVPVC(trainjob *omev1beta1.TrainingJob, baseModel v1beta1.BaseModelSpec) (ctrl.Result, error) {
+func (r *TrainingJobReconciler) reconcilePVPVC(trainjob *omev1beta1.TrainingJob, baseModel opensourcev1beta1.BaseModelSpec) (ctrl.Result, error) {
 	pvReconciler := trainjobpv.NewTrainingPVReconciler(r.Client, r.Clientset, r.Scheme)
 	pvcReconciler := trainjobpvc.NewTrainingPVCReconciler(r.Client, r.Clientset, r.Scheme)
 
@@ -399,7 +401,7 @@ func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return b.Complete(r)
 }
 
-func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.TrainingJob, baseModel *v1beta1.ClusterBaseModel, trainingRuntime *v1beta1.TrainingRuntimeSpec) error {
+func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.TrainingJob, baseModel *opensourcev1beta1.ClusterBaseModel, trainingRuntime *v1beta1.TrainingRuntimeSpec) error {
 	// We use these 2 annotations for every training job to inject init-container and sidecar container.
 	// The values will be passed into jobset object, then the pod underneath.
 	// Only cohere model needs model init container.
@@ -554,7 +556,7 @@ func (r *TrainingJobReconciler) prepareJobAnnotations(trainJob *v1beta1.Training
 	return nil
 }
 
-func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.TrainingJob, configMap v1.ConfigMap, trainingRuntime *v1beta1.TrainingRuntimeSpec) *v1beta1.FineTunedWeight {
+func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.TrainingJob, configMap v1.ConfigMap, trainingRuntime *v1beta1.TrainingRuntimeSpec) *opensourcev1beta1.FineTunedWeight {
 	strategy, err := utils.GetHyperparameterValueByKey(constants.StrategyConfigKey, trainJob.Spec.HyperParameterTuningConfig.Parameters)
 	if err != nil {
 		strategy = "lora"
@@ -575,7 +577,7 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 	}
 
 	storageUri := "oci://n/" + trainingSidecarConfig.Namespace + "/b/" + trainingSidecarConfig.FineTunedModelBucket + "/o/" + utils.GetFineTunedModelName(trainJob.Name)
-	return &v1beta1.FineTunedWeight{
+	return &opensourcev1beta1.FineTunedWeight{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "FineTunedWeight",
 			APIVersion: constants.OMEAPIGroupName + "/" + v1beta1.APIVersion,
@@ -583,21 +585,21 @@ func (r *TrainingJobReconciler) createFinetuneWeights(trainJob *v1beta1.Training
 		ObjectMeta: metav1.ObjectMeta{
 			Name: utils.GetFineTunedModelName(trainJob.Name),
 		},
-		Spec: v1beta1.FineTunedWeightSpec{
-			BaseModelRef: v1beta1.ObjectReference{
+		Spec: opensourcev1beta1.FineTunedWeightSpec{
+			BaseModelRef: opensourcev1beta1.ObjectReference{
 				Name: trainJob.Spec.ModelConfig.InputModel,
 			},
 			ModelType:       &modelType,
 			HyperParameters: trainJob.Spec.HyperParameterTuningConfig.Parameters,
 			Configuration:   fineTunedWeightConfiguration,
-			Storage: &v1beta1.StorageSpec{
+			Storage: &opensourcev1beta1.StorageSpec{
 				StorageUri: &storageUri,
 			},
-			TrainingJobRef: v1beta1.ObjectReference{
+			TrainingJobRef: opensourcev1beta1.ObjectReference{
 				Name: &trainJob.Name,
 			},
 		},
-		Status: v1beta1.ModelStatusSpec{},
+		Status: opensourcev1beta1.ModelStatusSpec{},
 	}
 }
 

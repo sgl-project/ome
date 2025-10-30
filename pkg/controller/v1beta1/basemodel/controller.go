@@ -68,7 +68,7 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Reconciling BaseModel")
+	log.Info("Reconciling BaseModel by service model controller")
 
 	// Handle deletion
 	if !baseModel.DeletionTimestamp.IsZero() {
@@ -113,7 +113,7 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Reconciling ClusterBaseModel")
+	log.Info("Reconciling ClusterBaseModel by service model controller")
 
 	// Handle deletion
 	if !clusterBaseModel.DeletionTimestamp.IsZero() {

@@ -33,6 +33,13 @@ func TestBaseModelReconcile(t *testing.T) {
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
+	// Explicitly register BaseModel and ClusterBaseModel CRDs from internal package, to keep it bind with internal model CRDs
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.BaseModel{},
+		&v1beta1.ClusterBaseModel{},
+	)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
+
 	tests := []struct {
 		name       string
 		baseModel  *v1beta1.BaseModel
@@ -573,7 +580,7 @@ func TestBaseModelReconcile(t *testing.T) {
 			// Run reconciliation
 			reconciler := &BaseModelReconciler{
 				Client:   c,
-				Scheme:   c.Scheme(),
+				Scheme:   scheme,
 				Recorder: recorder,
 			}
 
@@ -602,6 +609,13 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	// Explicitly register BaseModel and ClusterBaseModel CRDs from internal package, to keep it bind with internal model CRDs
+	scheme.AddKnownTypes(v1beta1.SchemeGroupVersion,
+		&v1beta1.BaseModel{},
+		&v1beta1.ClusterBaseModel{},
+	)
+	metav1.AddToGroupVersion(scheme, v1beta1.SchemeGroupVersion)
 
 	tests := []struct {
 		name             string

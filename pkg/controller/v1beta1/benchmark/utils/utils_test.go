@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/utils/storage"
 	"github.com/stretchr/testify/assert"
@@ -383,7 +385,7 @@ func TestUpdateVolumeMounts(t *testing.T) {
 	tests := []struct {
 		name      string
 		isvc      *v1beta1.InferenceService
-		model     *v1beta1.ClusterBaseModel
+		model     *opensourcev1beta1.ClusterBaseModel
 		container *v1.Container
 		want      *v1.Container
 	}{
@@ -398,9 +400,9 @@ func TestUpdateVolumeMounts(t *testing.T) {
 					},
 				},
 			},
-			model: &v1beta1.ClusterBaseModel{
-				Spec: v1beta1.BaseModelSpec{
-					Storage: &v1beta1.StorageSpec{
+			model: &opensourcev1beta1.ClusterBaseModel{
+				Spec: opensourcev1beta1.BaseModelSpec{
+					Storage: &opensourcev1beta1.StorageSpec{
 						Path: strPtr("/model/test-model"),
 					},
 				},

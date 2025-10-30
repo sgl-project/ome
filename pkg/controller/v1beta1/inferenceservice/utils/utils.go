@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
@@ -52,7 +54,7 @@ func IsOriginalModelVolumeMountNecessary(annotations map[string]string) bool {
 		annotations[constants.FTServingWithMergedWeightsAnnotationKey] != "true"
 }
 
-func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (bool, error) {
+func LoadingMergedFineTunedWeight(fineTunedWeights []*opensourcev1beta1.FineTunedWeight) (bool, error) {
 	mergedFineTunedWeights, err := IsMergedFineTunedWeight(fineTunedWeights[0])
 	if err != nil {
 		return false, err
@@ -60,7 +62,7 @@ func LoadingMergedFineTunedWeight(fineTunedWeights []*v1beta1.FineTunedWeight) (
 	return len(fineTunedWeights) == 1 && mergedFineTunedWeights, nil
 }
 
-func IsMergedFineTunedWeight(fineTunedWeight *v1beta1.FineTunedWeight) (bool, error) {
+func IsMergedFineTunedWeight(fineTunedWeight *opensourcev1beta1.FineTunedWeight) (bool, error) {
 	if fineTunedWeight != nil {
 		var configMap map[string]interface{}
 		if err := json.Unmarshal(fineTunedWeight.Spec.Configuration.Raw, &configMap); err != nil {
@@ -214,8 +216,8 @@ func GetServingRuntime(cl client.Client, name string, namespace string) (*v1beta
 }
 
 // GetFineTunedWeight Get the fine-tuned weight from the given fine-tuned weight name.
-func GetFineTunedWeight(cl client.Client, name string) (*v1beta1.FineTunedWeight, error) {
-	fineTunedWeight := &v1beta1.FineTunedWeight{}
+func GetFineTunedWeight(cl client.Client, name string) (*opensourcev1beta1.FineTunedWeight, error) {
+	fineTunedWeight := &opensourcev1beta1.FineTunedWeight{}
 	err := cl.Get(context.TODO(), client.ObjectKey{Name: name}, fineTunedWeight)
 	if err == nil {
 		return fineTunedWeight, nil
@@ -364,7 +366,7 @@ func GetOmeContainerIndex(containers []v1.Container) int {
 	return -1
 }
 
-func GetBaseModelVendor(baseModel v1beta1.BaseModelSpec) string {
+func GetBaseModelVendor(baseModel opensourcev1beta1.BaseModelSpec) string {
 	baseModelVendor := "Unknown"
 	if baseModel.Vendor != nil {
 		baseModelVendor = *baseModel.Vendor

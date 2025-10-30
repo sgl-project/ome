@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/constants"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
@@ -15,14 +16,14 @@ import (
 func TestIsMergedFineTunedWeight(t *testing.T) {
 	tests := []struct {
 		name            string
-		fineTunedWeight *v1beta1.FineTunedWeight
+		fineTunedWeight *opensourcev1beta1.FineTunedWeight
 		expectedResult  bool
 		expectError     bool
 	}{
 		{
 			name: "merged weights true",
-			fineTunedWeight: &v1beta1.FineTunedWeight{
-				Spec: v1beta1.FineTunedWeightSpec{
+			fineTunedWeight: &opensourcev1beta1.FineTunedWeight{
+				Spec: opensourcev1beta1.FineTunedWeightSpec{
 					Configuration: runtime.RawExtension{
 						Raw: marshalJSONHelper(map[string]interface{}{
 							constants.FineTunedWeightMergedWeightsConfigKey: true,
@@ -35,8 +36,8 @@ func TestIsMergedFineTunedWeight(t *testing.T) {
 		},
 		{
 			name: "merged weights false",
-			fineTunedWeight: &v1beta1.FineTunedWeight{
-				Spec: v1beta1.FineTunedWeightSpec{
+			fineTunedWeight: &opensourcev1beta1.FineTunedWeight{
+				Spec: opensourcev1beta1.FineTunedWeightSpec{
 					Configuration: runtime.RawExtension{
 						Raw: marshalJSONHelper(map[string]interface{}{
 							constants.FineTunedWeightMergedWeightsConfigKey: false,
@@ -49,8 +50,8 @@ func TestIsMergedFineTunedWeight(t *testing.T) {
 		},
 		{
 			name: "merged weights key not present",
-			fineTunedWeight: &v1beta1.FineTunedWeight{
-				Spec: v1beta1.FineTunedWeightSpec{
+			fineTunedWeight: &opensourcev1beta1.FineTunedWeight{
+				Spec: opensourcev1beta1.FineTunedWeightSpec{
 					Configuration: runtime.RawExtension{
 						Raw: marshalJSONHelper(map[string]interface{}{
 							"other_config": "value",
@@ -63,8 +64,8 @@ func TestIsMergedFineTunedWeight(t *testing.T) {
 		},
 		{
 			name: "invalid json configuration",
-			fineTunedWeight: &v1beta1.FineTunedWeight{
-				Spec: v1beta1.FineTunedWeightSpec{
+			fineTunedWeight: &opensourcev1beta1.FineTunedWeight{
+				Spec: opensourcev1beta1.FineTunedWeightSpec{
 					Configuration: runtime.RawExtension{
 						Raw: []byte(`{invalid json`),
 					},

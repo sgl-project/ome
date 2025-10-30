@@ -104,10 +104,6 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@echo "\n🔧 Step 1: Generating CRD manifests..."
 	@echo "  • Generating CRDs from internal APIs (all resources)..."
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=./pkg/apis/ome/... output:crd:dir=config/crd/full
-	@echo "  • Temporarily adding opensource OME dependency for CRD generation..."
-	@cp go.mod go.mod.backup
-	@cp go.sum go.sum.backup
-	@go get github.com/sgl-project/ome@v0.1.3 2>/dev/null || true
 	@echo "  • Generating opensource CRDs to temporary directory..."
 	@mkdir -p config/crd/opensource-temp
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=github.com/sgl-project/ome/pkg/apis/ome/v1beta1 output:crd:dir=config/crd/opensource-temp
@@ -118,9 +114,6 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@if [ -f config/crd/opensource-temp/ome.io_finetunedweights.yaml ]; then cp config/crd/opensource-temp/ome.io_finetunedweights.yaml config/crd/full/; fi
 	@echo "  • Cleaning up temporary directory..."
 	@rm -rf config/crd/opensource-temp
-	@echo "  • Restoring go.mod and go.sum..."
-	@mv go.mod.backup go.mod
-	@mv go.sum.backup go.sum
 	@echo "✅ CRD manifests generated (model CRDs from opensource, all others from internal)"
 
 	@echo "\n🔑 Step 2: Generating RBAC manifests..."

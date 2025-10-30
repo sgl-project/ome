@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	opensourcev1beta1 "github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
+
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/controllerconfig"
 
 	"bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/apis/ome/v1beta1"
@@ -301,6 +303,10 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 	_ = v1beta1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
+	scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
+		&opensourcev1beta1.BaseModel{},
+	)
+	metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
 
 	tests := []struct {
 		name            string
@@ -353,16 +359,16 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 			client := cfake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tt.benchmarkJob).
-				WithObjects(&v1beta1.BaseModel{
+				WithObjects(&opensourcev1beta1.BaseModel{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-model",
 						Namespace: "default",
 					},
-					Spec: v1beta1.BaseModelSpec{
-						ModelFormat: v1beta1.ModelFormat{
+					Spec: opensourcev1beta1.BaseModelSpec{
+						ModelFormat: opensourcev1beta1.ModelFormat{
 							Name: "onnx",
 						},
-						Storage: &v1beta1.StorageSpec{
+						Storage: &opensourcev1beta1.StorageSpec{
 							Path: StringPtr("oci://bucket/model"),
 						},
 					},
@@ -473,14 +479,18 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 			_ = v1beta1.AddToScheme(scheme)
 			_ = batchv1.AddToScheme(scheme)
 			_ = corev1.AddToScheme(scheme)
+			scheme.AddKnownTypes(opensourcev1beta1.SchemeGroupVersion,
+				&opensourcev1beta1.BaseModel{},
+			)
+			metav1.AddToGroupVersion(scheme, opensourcev1beta1.SchemeGroupVersion)
 
-			baseModel := &v1beta1.BaseModel{
+			baseModel := &opensourcev1beta1.BaseModel{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-model",
 					Namespace: "default",
 				},
-				Spec: v1beta1.BaseModelSpec{ // Add storage path needed by the refactored code
-					Storage: &v1beta1.StorageSpec{
+				Spec: opensourcev1beta1.BaseModelSpec{ // Add storage path needed by the refactored code
+					Storage: &opensourcev1beta1.StorageSpec{
 						Path: StringPtr("oci://some-bucket/model/path"),
 					},
 				},

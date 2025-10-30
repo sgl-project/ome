@@ -381,7 +381,11 @@ type FineTunedWeightList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&BaseModel{}, &BaseModelList{})
-	SchemeBuilder.Register(&FineTunedWeight{}, &FineTunedWeightList{})
-	SchemeBuilder.Register(&ClusterBaseModel{}, &ClusterBaseModelList{})
+	// Model types are NOT registered here to avoid double registration.
+	// They are registered from github.com/sgl-project/ome/pkg/apis/ome/v1beta1 in cmd/manager/main.go
+	// to use the opensource model controller implementation.
+
+	//SchemeBuilder.Register(&BaseModel{}, &BaseModelList{})
+	//SchemeBuilder.Register(&FineTunedWeight{}, &FineTunedWeightList{})
+	//SchemeBuilder.Register(&ClusterBaseModel{}, &ClusterBaseModelList{})
 }
