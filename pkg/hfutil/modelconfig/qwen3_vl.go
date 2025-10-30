@@ -106,20 +106,25 @@ func (c *Qwen3VLConfig) GetParameterCount() int64 {
 		return count
 	}
 	fmt.Printf("Warning: failed to get parameter count from safetensors: %v\n", err)
+
 	tc := c.TextConfig
-	if tc.HiddenSize == 4096 && tc.NumHiddenLayers == 94 {
-		return 235_000_000_000 // Qwen3-VL-235B
+	var languageParams int64
+	// Check if this is a MoE model
+	if tc.NumExperts > 0 {
+		// Use MoE-specific parameter estimation
+		languageParams = estimateQwen3VLMoEParams(
+			tc.HiddenSize, tc.NumHiddenLayers, tc.MoeIntermediateSize,
+			tc.NumExperts, tc.VocabSize,
+		)
+	} else {
+		// Standard dense model estimation
+		languageParams = estimateModelParams(
+			tc.HiddenSize, tc.NumHiddenLayers, tc.IntermediateSize, tc.VocabSize,
+		)
 	}
-	// Estimate text model parameters
-	languageParams := estimateModelParams(
-		tc.HiddenSize, tc.NumHiddenLayers, tc.IntermediateSize, tc.VocabSize,
-	)
-	// Rough estimate for vision module (ViT-style)
-	vc := c.VisionConfig
-	visionParams := int64(0)
-	if vc.HiddenSize > 0 && vc.Depth > 0 {
-		visionParams = int64(12) * int64(vc.HiddenSize) * int64(vc.HiddenSize) * int64(vc.Depth)
-	}
+
+	// Estimate vision module parameters
+	visionParams := estimateQwen3VLVisionParams(c.VisionConfig)
 	return languageParams + visionParams
 }
 
@@ -143,8 +148,57 @@ func (c *Qwen3VLConfig) HasVision() bool {
 	return true
 }
 
+// estimateQwen3VLMoEParams estimates parameters for Qwen3-VL MoE models
+func estimateQwen3VLMoEParams(hiddenSize, numLayers, moeIntermediateSize, numExperts, vocabSize int) int64 {
+	// Embeddings
+	params := int64(hiddenSize * vocabSize)
+
+	// For each layer
+	params += int64(numLayers) * (
+	// Self-attention (Q, K, V, O projections + bias)
+	int64(4*hiddenSize*hiddenSize) +
+		// MoE experts (each expert has gate, up, down projections)
+		int64(numExperts*3*hiddenSize*moeIntermediateSize) +
+		// Router (gate network for expert selection)
+		int64(hiddenSize*numExperts) +
+		// Layer norms (2 per layer: attention norm and MLP norm)
+		int64(2*hiddenSize))
+
+	// Output projection (if not tied to embeddings)
+	params += int64(hiddenSize * vocabSize)
+	return params
+}
+
+// estimateQwen3VLVisionParams estimates parameters for Qwen3-VL vision module
+func estimateQwen3VLVisionParams(vc Qwen3VLVisionConfig) int64 {
+	if vc.HiddenSize <= 0 || vc.Depth <= 0 {
+		return 0
+	}
+
+	// Patch embedding: patch_size^2 * in_channels * hidden_size
+	patchEmbedParams := int64(vc.PatchSize * vc.PatchSize * vc.InChannels * vc.HiddenSize)
+	// Position embeddings: num_position_embeddings * hidden_size
+	posEmbedParams := int64(vc.NumPositionEmbeddings * vc.HiddenSize)
+
+	// Transformer layers: each layer has attention + MLP
+	layerParams := int64(vc.Depth) * (
+	// Self-attention (Q, K, V, O projections)
+	int64(4*vc.HiddenSize*vc.HiddenSize) +
+		// MLP (up and down projections)
+		int64(2*vc.HiddenSize*vc.IntermediateSize) +
+		// Layer norms (2 per layer)
+		int64(2*vc.HiddenSize))
+
+	// Output projection to text hidden size
+	outputProjParams := int64(vc.HiddenSize * vc.OutHiddenSize)
+	return patchEmbedParams + posEmbedParams + layerParams + outputProjParams
+}
+
 func init() {
 	RegisterModelLoader("qwen3_vl_moe", func(configPath string) (HuggingFaceModel, error) {
+		return LoadQwen3VLConfig(configPath)
+	})
+	RegisterModelLoader("qwen3_vl", func(configPath string) (HuggingFaceModel, error) {
 		return LoadQwen3VLConfig(configPath)
 	})
 }
