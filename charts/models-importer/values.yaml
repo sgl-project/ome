@@ -582,3 +582,11 @@ grok-4-fast-self-hosted:
 grok-code-fast-1:
   enabled: false
   lifecyclePhase: "ACTIVE"
+
+cohere-command-r-082024-v2-0-tp1-128k:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
+cohere-command-r-082024-v2-0-tp1-128k-fusion:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
