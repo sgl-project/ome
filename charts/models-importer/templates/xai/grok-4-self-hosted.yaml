@@ -1,0 +1,40 @@
+{{- if index .Values "grok-4-self-hosted" "enabled" -}}
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: grok-4-self-hosted
+  labels:
+    genai-managed-base-model-v1beta1: "true"
+    genai-model-deprecated-date: "{{ index .Values "grok-4-self-hosted" "timeDeprecated" }}"
+    genai-model-on-demand-retired-date: "{{ index .Values "grok-4-self-hosted" "timeOnDemandRetired" }}"
+    genai-model-dedicated-retired-date: "{{ index .Values "grok-4-self-hosted" "timeDedicatedRetired" }}"
+  annotations:
+    models.ome.io/runtime: "xai-grok-4-rt"
+    models.ome.io/category: "SMALL"
+    models.ome.io/experimental: "{{ index .Values "grok-4-self-hosted" "isExperimental" }}"
+    models.ome.io/internal: "{{ index .Values "grok-4-self-hosted" "isInternal" }}"
+    models.ome.io/lifecycle-phase: "{{ index .Values "grok-4-self-hosted" "lifecyclePhase" }}"
+spec:
+  compartmentID: {{ .Values.compartmentID }}
+  disabled: false
+  displayName: xai.grok-4
+  storage:
+    storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "grok-4-self-hosted" "osBucket" }}/o/{{ index .Values "grok-4-self-hosted" "vendor" }}/{{ index .Values "grok-4-self-hosted" "osPrefixOverride" }}"
+    path: "/mnt/data/models/{{ index .Values "grok-4-self-hosted" "vendor" }}/{{ index .Values "grok-4-self-hosted" "osPrefixOverride" }}"
+  vendor: {{ index .Values "grok-4-self-hosted" "vendor" }}
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformer
+    version: "1"
+  modelArchitecture: xAiForCausalLM
+  modelParameterSize: 1.7T
+  modelCapabilities:
+  - "CHAT"
+  maxTokens: 256000
+  additionalMetadata:
+    internalName: "grok-4-self-hosted"
+    type: "Serving"
+{{- end }}

@@ -7,6 +7,7 @@ metadata:
 spec:
   predictor:
     model:
+      runtime: xai-grok-4-fast-rt
       baseModel:  grok-4-fast-self-hosted
       protocolVersion: xAI
     minReplicas: {{ .Values.grok_4_fast_self_hosted.minReplicas}}

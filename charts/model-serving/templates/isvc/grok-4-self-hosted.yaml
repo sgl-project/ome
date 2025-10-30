@@ -1,0 +1,24 @@
+{{- if .Values.grok_4_self_hosted.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: grok-4-self-hosted
+  namespace: grok-4-self-hosted
+  annotations:
+    ome.io/deploymentMode: "MultiNode"
+spec:
+  predictor:
+    model:
+      runtime: xai-grok-4-rt
+      baseModel:  grok-4-self-hosted
+      protocolVersion: xAI
+    minReplicas: {{ .Values.grok_4_self_hosted.minReplicas}}
+    maxReplicas: {{ .Values.grok_4_self_hosted.maxReplicas}}
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grok-4-self-hosted
+
+{{- end }}

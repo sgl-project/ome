@@ -1193,3 +1193,30 @@ grok_4_fast_self_hosted:
     periodSeconds: 10
     timeoutSeconds: 30
     initialDelaySeconds: 100
+
+grok_4_self_hosted:
+  enabled: false
+  enableH100: true
+  enableH200: false
+  annotations: {}
+  labels: {}
+  tolerations: []
+  volumes: []
+  topologySpreadConstraints: [ ]
+  minReplicas: 1
+  maxReplicas: 1
+  scaleMetric: {}
+  image:
+    repository:
+    tag:
+  readinessProbe:
+    exec:
+      command:
+      - /bin/sh
+      - -c
+      - |
+        curl -s -f http://localhost:8080/v1/chat/completions \
+          -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"model":"grok-4","messages":[{"role":"user","content":"hi"}],"max_tokens":1000}' \
+          --max-time 25

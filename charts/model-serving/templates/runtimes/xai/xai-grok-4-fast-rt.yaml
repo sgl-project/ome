@@ -78,7 +78,7 @@ spec:
           value: "fp8"
         - name: KEY_SOURCE
           value: "ORACLE"
-        - name: KEY_ID
+        - name: CONTAINER_KEY_ID
           value: "{{ .Values.xai.keyId }}"
         - name: OCI_REGION
           value: "{{ .Values.xai.ociRegion }}"
@@ -93,7 +93,7 @@ spec:
         - name: DIST_INIT_ADDR
           value: "localhost:29005"
         - name: XAI_CLUSTER
-          value: "fer"
+          value: "max"
         - name: SPECULATIVE_ALGORITHM
           value: "EAGLE"
         - name: MEM_FRACTION_STATIC
@@ -110,6 +110,8 @@ spec:
           value: "xai_xgrammar"
         - name: IMAGE_TOKENIZER
           value: "grok2v-staging"
+        - name: TOKENIZER_PATH
+          value: "/opt/sglang-private/dummy_grok3/v6.xtok.json"
       resources:
         limits:
           nvidia.com/gpu: "8"
