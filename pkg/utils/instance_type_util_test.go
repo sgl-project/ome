@@ -73,6 +73,31 @@ func TestGetInstanceTypeShortName(t *testing.T) {
 			expected:     "L40",
 			expectError:  false,
 		},
+		// Nebius tests
+		{
+			name:         "Nebius H100 instance",
+			instanceType: "gpu-h100-sxm",
+			expected:     "H100",
+			expectError:  false,
+		},
+		{
+			name:         "Nebius H200 instance",
+			instanceType: "gpu-h200-sxm",
+			expected:     "H200",
+			expectError:  false,
+		},
+		{
+			name:         "Nebius B200 instance",
+			instanceType: "gpu-b200-sxm",
+			expected:     "B200",
+			expectError:  false,
+		},
+		{
+			name:         "Nebius L40S instance",
+			instanceType: "gpu-l40s",
+			expected:     "L40S",
+			expectError:  false,
+		},
 		// Fallback cases
 		{
 			name:         "Unknown instance type",

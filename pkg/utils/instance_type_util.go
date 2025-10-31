@@ -29,6 +29,12 @@ var instanceTypeMap = map[string]string{
 	"gd-8xh100ib-i128": "H100",
 	"gd-8xh200ib-i128": "H200",
 	"gd-8xl40-i128":    "L40",
+
+	// Nebius instance types
+	"gpu-h100-sxm": "H100",
+	"gpu-h200-sxm": "H200",
+	"gpu-b200-sxm": "B200",
+	"gpu-l40s":     "L40S",
 }
 
 // GetNodeInstanceType retrieves the instance type of the node.
