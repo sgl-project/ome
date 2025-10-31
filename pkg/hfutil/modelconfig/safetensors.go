@@ -150,14 +150,15 @@ func ParseSafetensorsWithQuant(path string, quantMethod string) (int64, error) {
 				continue
 			}
 			// In 4-bit quantization, weights are typically packed as uint8 with 2 params per byte
+			// For 4-bit quantized models, any uint8 tensor that's not aux is likely a weight tensor
+			// We apply the adjustment to all uint8 tensors (except aux) to handle non-standard naming conventions
+			// Note: Some quantization schemes may use different dtypes, so we check for uint8 specifically
 			if dtype == "u8" || dtype == "uint8" {
-				if isWeightLike(tensorName) {
-					// multiply logical parameter count by 2 (8 bits / 4 bits)
-					if count > math.MaxInt64/2 {
-						return 0, fmt.Errorf("parameter count overflow when adjusting for 4-bit quantization (%s) in '%s'", quantMethodLower, path)
-					}
-					count = count * 2
+				// multiply logical parameter count by 2 (8 bits / 4 bits)
+				if count > math.MaxInt64/2 {
+					return 0, fmt.Errorf("parameter count overflow when adjusting for 4-bit quantization (%s) in '%s'", quantMethodLower, path)
 				}
+				count = count * 2
 			}
 		}
 		// 8-bit quantization (fp8, fbgemm_fp8) use 1 byte per parameter - no adjustment needed
