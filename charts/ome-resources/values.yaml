@@ -141,7 +141,14 @@ modelAgent:
 
   health:
     port: 8080
-  
+
+  # Additional environment variables for the model-agent container
+  # Examples:
+  # env:
+  #   LOG_LEVEL: "debug"
+  #   DOWNLOAD_RETRY: "5"
+  env: {}
+
   resources:
     limits:
       cpu: '10'

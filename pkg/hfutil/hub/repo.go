@@ -298,6 +298,14 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 
 		fmt.Printf("Failed files: %v\n", errorFiles)
 
+		// Log detailed error information at debug level
+		if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok && hubConfig.Logger != nil {
+			hubConfig.Logger.
+				WithField("error_count", totalErrors).
+				WithField("errors", errorMessages).
+				Debug("Download error details")
+		}
+
 		// Return error with details but include the local directory
 		return config.LocalDir, fmt.Errorf("failed to download %d out of %d files", totalErrors, fileCount)
 	}
@@ -320,6 +328,17 @@ func downloadWorker(ctx context.Context, workerID int, taskChan <-chan downloadT
 			filePath, err := HfHubDownload(ctx, task.config)
 
 			duration := time.Since(startTime)
+
+			// Log download errors at debug level
+			if err != nil {
+				if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok && hubConfig.Logger != nil {
+					hubConfig.Logger.
+						WithField("worker_id", workerID).
+						WithField("file", task.file.Path).
+						WithError(err).
+						Debug("Worker download failed")
+				}
+			}
 
 			result := downloadResult{
 				index:    task.index,
