@@ -32,13 +32,28 @@ COPY go.sum go.sum
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
-# Copy source code
+# Copy XET dependencies from other pkg subdirectories
+COPY pkg/configutils/ pkg/configutils/
+COPY pkg/logging/ pkg/logging/
+
+# Copy XET package for building with better caching
+COPY pkg/xet/ pkg/xet/
+
+# Download Rust dependencies with cargo cache
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    cd pkg/xet && cargo fetch
+
+# Build the XET library with cargo build cache
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    cd pkg/xet && \
+    cargo build --release
+
+# Copy remaining source code
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 COPY internal/ internal/
-
-# Build the XET library first
-RUN cd pkg/xet && make build
 
 # Build arguments for version info
 ARG VERSION
