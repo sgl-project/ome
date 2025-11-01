@@ -82,3 +82,6 @@ coverage-*.html
 *.a
 
 hack/python-sdk/openapi-generator-cli-*.jar
+
+# Go build cache directories
+.cache/

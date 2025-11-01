@@ -288,9 +288,11 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 	if totalErrors > 0 {
 		// Collect error details
 		var errorFiles []string
+		var errorMessages []string
 		for _, result := range results {
 			if result.err != nil {
 				errorFiles = append(errorFiles, filesToDownload[result.index].Path)
+				errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", filesToDownload[result.index].Path, result.err))
 			}
 		}
 
