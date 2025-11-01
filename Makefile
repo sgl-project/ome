@@ -26,6 +26,15 @@ GO_FMT ?= gofmt
 # Use go.mod go version as a single source of truth for the Go version
 GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod|head -n1)
 
+# Go build cache configuration
+GOCACHE ?= $(shell pwd)/.cache/go-build
+GOMODCACHE ?= $(shell pwd)/.cache/go-mod
+export GOCACHE
+export GOMODCACHE
+
+# Ensure cache directories exist
+$(shell mkdir -p $(GOCACHE) $(GOMODCACHE))
+
 # Determine Docker build command (use nerdctl if available)
 DOCKER_BUILD_CMD ?= docker
 
@@ -35,6 +44,9 @@ ifeq ($(shell command -v nerdctl 2> /dev/null),)
 else
     DOCKER_BUILD_CMD = nerdctl
 endif
+
+# Enable Docker BuildKit for cache mounts
+export DOCKER_BUILDKIT=1
 
 # CRD Options
 CRD_OPTIONS ?= "crd:maxDescLen=0"
@@ -206,6 +218,13 @@ tidy: ## 📦 Run go mod tidy
 	@echo "📦 Tidying Go modules..."
 	@$(GO_CMD) mod tidy
 	@echo "✅ Dependencies cleaned up"
+
+.PHONY: clean-cache
+clean-cache: ## 🧹 Clean Go build cache
+	@echo "🧹 Cleaning Go build cache..."
+	@rm -rf $(GOCACHE) $(GOMODCACHE)
+	@$(GO_CMD) clean -cache -modcache
+	@echo "✅ Cache cleaned"
 
 .PHONY: ci-lint
 ci-lint: golangci-lint ## 🔎 Run golangci-lint against code.
