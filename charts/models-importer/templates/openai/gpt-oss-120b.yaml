@@ -37,6 +37,12 @@ spec:
     - "CHAT"
   maxTokens: 131072
   quantization: mxfp4
+  additionalMetadata:
+    dacShapeConfigs: |-
+      compatibleDACShapes:
+        - name: OAI_H100_X2
+          quotaUnit: 1
+          default: true
   modelConfiguration:
     {
       "architectures": [
