@@ -45,7 +45,7 @@ spec:
     - openAI
   containers:
     - name: ome-container
-      image: fra.ocir.io/idqj093njucb/official-sgl:v0.4.10.post2.6e6f9c7-cu126
+      image: ord.ocir.io/idqj093njucb/official-sgl:v0.5.3.post1.8c4b18c-cu129
       ports:
         - containerPort: 8080
           name: http1
@@ -64,6 +64,7 @@ spec:
           --port=8080 \
           --enable-metrics \
           --log-requests \
+          --log-requests-level=1 \
           --model-path="$MODEL_PATH" \
           --tp=8 \
           --mem-frac=0.82 \
@@ -73,7 +74,8 @@ spec:
           --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
           --attention-backend=fa3 \
           --mm-attention-backend=fa3 \
-          --disable-fast-image-processor
+          --disable-fast-image-processor \
+          --cuda-graph-max-bs=256
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
