@@ -52,7 +52,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: MllamaForConditionalGeneration
-      autoSelect: false
+      autoSelect: true
       priority: 1
   modelSizeRange:
     min: 85B
@@ -62,7 +62,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_2_90b_vision_fp8_dynamic.image.srt.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1

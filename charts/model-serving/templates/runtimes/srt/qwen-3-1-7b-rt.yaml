@@ -1,0 +1,124 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: srt-qwen-3-1-7b
+spec:
+  disabled: false
+  {{- if or .Values.commonAnnotations .Values.qwen_3_1_7b.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.qwen_3_1_7b.annotations }}
+    {{ toYaml .Values.qwen_3_1_7b.annotations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonLabels .Values.qwen_3_1_7b.labels }}
+  labels:
+    {{- if .Values.commonLabels }}
+    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{- end }}
+    {{- if .Values.qwen_3_1_7b.labels }}
+    {{ toYaml .Values.qwen_3_1_7b.labels | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.commonTolerations .Values.qwen_3_1_7b.tolerations }}
+  tolerations:
+    {{- if .Values.commonTolerations }}
+    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{- end }}
+    {{- if .Values.qwen_3_1_7b.tolerations }}
+    {{ toYaml .Values.qwen_3_1_7b.tolerations | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  volumes:
+  - name: dshm
+    emptyDir:
+      medium: Memory
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+  - name: etc-pki
+    hostPath:
+      path: /etc/pki
+      type: Directory
+    {{- end }}
+  {{ with .Values.qwen_3_1_7b }}
+  affinity: {{ .affinity | toYaml | nindent 6 }}
+  {{ end }}
+  supportedModelFormats:
+  - modelFramework:
+      name: transformers
+      version: "4.51.0"
+    modelFormat:
+      name: safetensors
+      version: "1.0.0"
+    autoSelect: true
+    modelArchitecture: Qwen3ForCausalLM
+    version: "1.0.0"
+    priority: 1
+  modelSizeRange:
+    min: 1.53B
+    max: 1.87B
+  protocolVersions:
+  - openAI
+  schedulerName: {{ .Values.commonSchedulerName }}
+  containers:
+  - name: ome-container
+    image: {{ .Values.qwen_3_1_7b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_3_1_7b.image.tag | default .Values.sglang.commonImage.tag }}
+    ports:
+    - containerPort: {{ .Values.sglang.port }}
+      name: http1
+      protocol: TCP
+    command:
+    - /bin/bash
+    - '-lc'
+    - --
+    args:
+    - |
+      python3 -m sglang.launch_server \
+      --host 0.0.0.0 \
+      --port {{ .Values.sglang.port }} \
+      --model-path "$MODEL_PATH" \
+      --tp-size 1 \
+      --mem-fraction-static 0.9 \
+      --log-requests \
+      --enable-metrics
+    volumeMounts:
+    - mountPath: /dev/shm
+      name: dshm
+    resources:
+      requests:
+        cpu: 10
+        memory: 30Gi
+        nvidia.com/gpu: 1
+      limits:
+        cpu: 10
+        memory: 30Gi
+        nvidia.com/gpu: 1
+
+    readinessProbe:
+      httpGet:
+        path: /health_generate
+        port: 8080
+      failureThreshold: 3
+      successThreshold: 1
+      periodSeconds: 60
+      timeoutSeconds: 200
+
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      failureThreshold: 5
+      successThreshold: 1
+      periodSeconds: 60
+      timeoutSeconds: 60
+
+    startupProbe:
+      httpGet:
+        path: /health_generate
+        port: 8080
+      failureThreshold: 150
+      successThreshold: 1
+      periodSeconds: 6
+      initialDelaySeconds: 60
+      timeoutSeconds: 30

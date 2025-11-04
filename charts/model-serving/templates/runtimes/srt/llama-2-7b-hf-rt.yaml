@@ -1,34 +1,34 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-2-11b-vision-instruct
+  name: srt-llama-2-7b-hf
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_2_11b_vision_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.llama_2_7b_hf.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.annotations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.annotations | nindent 6 }}
+    {{- if .Values.llama_2_7b_hf.annotations }}
+    {{ toYaml .Values.llama_2_7b_hf.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.llama_3_2_11b_vision_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.llama_2_7b_hf.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.labels }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.labels | nindent 6 }}
+    {{- if .Values.llama_2_7b_hf.labels }}
+    {{ toYaml .Values.llama_2_7b_hf.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.llama_3_2_11b_vision_instruct.tolerations }}
+  {{- if or .Values.commonTolerations .Values.llama_2_7b_hf.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.tolerations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.tolerations | nindent 6 }}
+    {{- if .Values.llama_2_7b_hf.tolerations }}
+    {{ toYaml .Values.llama_2_7b_hf.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,71 +41,57 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.llama_3_2_11b_vision_instruct }}
+  {{ with .Values.llama_2_7b_hf }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.45.0.dev0"
+        version: "4.31.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: MllamaForConditionalGeneration
-      autoSelect: false
-      priority: 1
+      autoSelect: true
+      modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
+      priority: 1
     - modelFramework:
         name: transformers
-        version: "4.50.0.dev0"
+        version: "4.32.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: MllamaForConditionalGeneration
       autoSelect: true
-      priority: 1
+      modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
+      priority: 1
   modelSizeRange:
-    min: 10B
-    max: 12B
+    min: 6.3B
+    max: 7.7B
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_2_11b_vision_instruct.image.vllm.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_2_11b_vision_instruct.image.vllm.tag | default .Values.vllm.latestImage.tag }}
+      image: {{ .Values.llama_2_7b_hf.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_2_7b_hf.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
-        - containerPort: {{ .Values.vllm.port }}
+        - containerPort: {{ .Values.sglang.port }}
           name: http1
           protocol: TCP
       command:
         - /bin/bash
         - '-lc'
         - --
-      env:
-        - name: VLLM_RPC_TIMEOUT
-          value: '30000'
-        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
-          value: '120'
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
-          --port={{ .Values.vllm.port }} \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name={{ .Values.vllm.serveModelName }} \
-          --tensor-parallel-size=1 \
-          --max-num-seqs=32 \
-          --enforce-eager \
-          --preemption-mode=swap \
-          --limit-mm-per-prompt=image=1 \
-          --max-model-len=131072 \
-          --gpu-memory-utilization=0.99 \
-          --enable-auto-tool-choice \
-          --tool-call-parser=llama3_json \
-          --chat-template=./examples/tool_chat_template_llama3.2_json.jinja \
-          --cuda-graph-sizes=256
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --model-path "$MODEL_PATH" \
+          --tp-size 1 \
+          --mem-fraction-static 0.9 \
+          --log-requests \
+          --enable-metrics 
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -121,7 +107,7 @@ spec:
 
       readinessProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -139,7 +125,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 150
         successThreshold: 1

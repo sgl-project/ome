@@ -1,34 +1,34 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-70b-instruct
+  name: srt-llama-2-70b-hf
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_70b_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.llama_2_70b_hf.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_70b_instruct.annotations }}
-    {{ toYaml .Values.llama_3_70b_instruct.annotations | nindent 6 }}
+    {{- if .Values.llama_2_70b_hf.annotations }}
+    {{ toYaml .Values.llama_2_70b_hf.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.llama_3_70b_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.llama_2_70b_hf.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_70b_instruct.labels }}
-    {{ toYaml .Values.llama_3_70b_instruct.labels | nindent 6 }}
+    {{- if .Values.llama_2_70b_hf.labels }}
+    {{ toYaml .Values.llama_2_70b_hf.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.llama_3_70b_instruct.tolerations }}
+  {{- if or .Values.commonTolerations .Values.llama_2_70b_hf.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_70b_instruct.tolerations }}
-    {{ toYaml .Values.llama_3_70b_instruct.tolerations | nindent 6 }}
+    {{- if .Values.llama_2_70b_hf.tolerations }}
+    {{ toYaml .Values.llama_2_70b_hf.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,72 +41,73 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.llama_3_70b_instruct }}
+  {{ with .Values.llama_2_70b_hf }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.40.0.dev0"
+        version: "4.32.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      autoSelect: false
+      autoSelect: true
+      modelArchitecture: LlamaForCausalLM
+      version: "1.0.0"
+      priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.31.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      autoSelect: true
       modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
       priority: 1
   modelSizeRange:
-    min: 60B
-    max: 75B
+    min: 63B
+    max: 77B
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_70b_instruct.image.repository | default .Values.vllm.commonImage.repository }}:{{ .Values.llama_3_70b_instruct.image.tag | default .Values.vllm.commonImage.tag}}
+      image: {{ .Values.llama_2_70b_hf.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_2_70b_hf.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
-        - containerPort: {{ .Values.vllm.port }}
+        - containerPort: {{ .Values.sglang.port }}
           name: http1
           protocol: TCP
       command:
         - /bin/bash
         - '-lc'
         - --
-      env:
-        - name: VLLM_RPC_TIMEOUT
-          value: '30000'
-        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
-          value: '120'
-        - name: SERVED_MODEL_NAME # Pass it as env var for the case where model supports Fine-Tuning
-          value: {{ .Values.vllm.serveModelName }}
       args:
         - |
-          python3 -m vllm.entrypoints.openai.api_server \
-          --port={{ .Values.vllm.port }} \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name="$SERVED_MODEL_NAME" \
-          --tensor-parallel-size=4 \
-          --max-model-len=8192 \
-          --gpu-memory-utilization=0.9 \
-          --enable-chunked-prefill
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --model-path "$MODEL_PATH" \
+          --tp-size 4 \
+          --mem-fraction-static 0.9 \
+          --log-requests \
+          --enable-metrics 
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 30
-          memory: 100Gi
+          cpu: 10
+          memory: 160Gi
           nvidia.com/gpu: 4
         limits:
-          cpu: 30
-          memory: 100Gi
+          cpu: 10
+          memory: 160Gi
           nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -124,7 +125,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health
+          path: /health_generate
           port: 8080
         failureThreshold: 150
         successThreshold: 1

@@ -52,7 +52,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: MistralModel
-      autoSelect: false
+      autoSelect: true
       priority: 10
   modelSizeRange:
     min: 5B
@@ -62,7 +62,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.e5_mistral_7b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.e5_mistral_7b_instruct.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.e5_mistral_7b_instruct.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.e5_mistral_7b_instruct.image.srt.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1

@@ -51,7 +51,7 @@ spec:
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      autoSelect: true
+      autoSelect: false
       modelArchitecture: LlamaForCausalLM
       version: "1.0.0"
       priority: 1

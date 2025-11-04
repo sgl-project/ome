@@ -1,34 +1,34 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-2-11b-vision-instruct
+  name: srt-gemma-3-270m-it
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_2_11b_vision_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.gemma_3_270m_it.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.annotations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.annotations | nindent 6 }}
+    {{- if .Values.gemma_3_270m_it.annotations }}
+    {{ toYaml .Values.gemma_3_270m_it.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.llama_3_2_11b_vision_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.gemma_3_270m_it.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.labels }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.labels | nindent 6 }}
+    {{- if .Values.gemma_3_270m_it.labels }}
+    {{ toYaml .Values.gemma_3_270m_it.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.llama_3_2_11b_vision_instruct.tolerations }}
+  {{- if or .Values.commonTolerations .Values.gemma_3_270m_it.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.tolerations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.tolerations | nindent 6 }}
+    {{- if .Values.gemma_3_270m_it.tolerations }}
+    {{ toYaml .Values.gemma_3_270m_it.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,28 +41,29 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.llama_3_2_11b_vision_instruct }}
+  {{ with .Values.gemma_3_270m_it }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.45.0.dev0"
+        version: "4.55.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: MllamaForConditionalGeneration
       autoSelect: true
+      modelArchitecture: Gemma3ForCausalLM
+      version: "1.0.0"
       priority: 1
   modelSizeRange:
-    min: 10B
-    max: 12B
+    min: 0.2B
+    max: 0.3B
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_2_11b_vision_instruct.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_2_11b_vision_instruct.image.srt.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.gemma_3_270m_it.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gemma_3_270m_it.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -76,12 +77,13 @@ spec:
           python3 -m sglang.launch_server \
           --host=0.0.0.0 \
           --port={{ .Values.sglang.port }} \
-          --enable-metrics \
+          --model-path "$MODEL_PATH" \
+          --tp-size 1 \
+          --mem-fraction-static 0.9 \
           --log-requests \
-          --model-path="$MODEL_PATH" \
-          --tp 1 \
-          --mem-frac=0.9 \
-          --chat-template llama_3_vision
+          --attention-backend=triton \
+          --sampling-backend=pytorch \
+          --enable-metrics
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

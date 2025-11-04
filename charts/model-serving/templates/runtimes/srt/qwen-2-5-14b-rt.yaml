@@ -1,34 +1,34 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-2-11b-vision-instruct
+  name: srt-qwen-2-5-14b
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_2_11b_vision_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.qwen_2_5_14b.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.annotations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.annotations | nindent 6 }}
+    {{- if .Values.qwen_2_5_14b.annotations }}
+    {{ toYaml .Values.qwen_2_5_14b.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.llama_3_2_11b_vision_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.qwen_2_5_14b.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.labels }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.labels | nindent 6 }}
+    {{- if .Values.qwen_2_5_14b.labels }}
+    {{ toYaml .Values.qwen_2_5_14b.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.llama_3_2_11b_vision_instruct.tolerations }}
+  {{- if or .Values.commonTolerations .Values.qwen_2_5_14b.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.tolerations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.tolerations | nindent 6 }}
+    {{- if .Values.qwen_2_5_14b.tolerations }}
+    {{ toYaml .Values.qwen_2_5_14b.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,28 +41,29 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.llama_3_2_11b_vision_instruct }}
+  {{ with .Values.qwen_2_5_14b }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.45.0.dev0"
+        version: "4.43.1"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: MllamaForConditionalGeneration
       autoSelect: true
+      modelArchitecture: Qwen2ForCausalLM
+      version: "1.0.0"
       priority: 1
   modelSizeRange:
-    min: 10B
-    max: 12B
+    min: 12.6B
+    max: 15.4B
   protocolVersions:
     - openAI
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_2_11b_vision_instruct.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_2_11b_vision_instruct.image.srt.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.qwen_2_5_14b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_2_5_14b.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -76,12 +77,11 @@ spec:
           python3 -m sglang.launch_server \
           --host=0.0.0.0 \
           --port={{ .Values.sglang.port }} \
+          --model-path "$MODEL_PATH" \
+          --tp-size 1 \
+          --mem-fraction-static 0.9 \
           --enable-metrics \
-          --log-requests \
-          --model-path="$MODEL_PATH" \
-          --tp 1 \
-          --mem-frac=0.9 \
-          --chat-template llama_3_vision
+          --log-requests
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -94,7 +94,6 @@ spec:
           cpu: 10
           memory: 30Gi
           nvidia.com/gpu: 1
-
       readinessProbe:
         httpGet:
           path: /health_generate
@@ -103,7 +102,6 @@ spec:
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 200
-
       livenessProbe:
         httpGet:
           path: /health
@@ -112,7 +110,6 @@ spec:
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
-
       startupProbe:
         httpGet:
           path: /health_generate

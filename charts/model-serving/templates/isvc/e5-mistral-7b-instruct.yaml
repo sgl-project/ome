@@ -12,6 +12,7 @@ spec:
     model:
       baseModel: e5-mistral-7b-instruct
       protocolVersion: openAI
+      runtime: vllm-e5-mistral-7b-instruct
     minReplicas: {{ .Values.e5_mistral_7b_instruct.minReplicas}}
     maxReplicas: {{ .Values.e5_mistral_7b_instruct.maxReplicas}}
     {{- with .Values.e5_mistral_7b_instruct.affinity }}

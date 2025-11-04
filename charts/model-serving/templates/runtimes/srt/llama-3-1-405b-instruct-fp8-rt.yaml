@@ -52,7 +52,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: LlamaForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
   modelSizeRange:
     min: 400B

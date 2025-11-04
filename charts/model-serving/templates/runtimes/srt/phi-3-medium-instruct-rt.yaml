@@ -1,34 +1,34 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-3-2-11b-vision-instruct
+  name: srt-phi-3-medium-instruct
 spec:
   disabled: false
-  {{- if or .Values.commonAnnotations .Values.llama_3_2_11b_vision_instruct.annotations }}
+  {{- if or .Values.commonAnnotations .Values.phi_3_medium_instruct.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
     {{ toYaml .Values.commonAnnotations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.annotations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.annotations | nindent 6 }}
+    {{- if .Values.phi_3_medium_instruct.annotations }}
+    {{ toYaml .Values.phi_3_medium_instruct.annotations | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonLabels .Values.llama_3_2_11b_vision_instruct.labels }}
+  {{- if or .Values.commonLabels .Values.phi_3_medium_instruct.labels }}
   labels:
     {{- if .Values.commonLabels }}
     {{ toYaml .Values.commonLabels | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.labels }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.labels | nindent 6 }}
+    {{- if .Values.phi_3_medium_instruct.labels }}
+    {{ toYaml .Values.phi_3_medium_instruct.labels | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if or .Values.commonTolerations .Values.llama_3_2_11b_vision_instruct.tolerations }}
+  {{- if or .Values.commonTolerations .Values.phi_3_medium_instruct.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
     {{ toYaml .Values.commonTolerations | nindent 6 }}
     {{- end }}
-    {{- if .Values.llama_3_2_11b_vision_instruct.tolerations }}
-    {{ toYaml .Values.llama_3_2_11b_vision_instruct.tolerations | nindent 6 }}
+    {{- if .Values.phi_3_medium_instruct.tolerations }}
+    {{ toYaml .Values.phi_3_medium_instruct.tolerations | nindent 6 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -41,28 +41,28 @@ spec:
         path: /etc/pki
         type: Directory
     {{- end }}
-  {{ with .Values.llama_3_2_11b_vision_instruct }}
+  {{ with .Values.phi_3_medium_instruct }}
   affinity: {{ .affinity | toYaml | nindent 6 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.45.0.dev0"
+        version: "4.39.3"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: MllamaForConditionalGeneration
+      modelArchitecture: Phi3ForCausalLM
       autoSelect: true
       priority: 1
-  modelSizeRange:
-    min: 10B
-    max: 12B
   protocolVersions:
     - openAI
+  modelSizeRange:
+    min: 12.6B
+    max: 15.4B
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.llama_3_2_11b_vision_instruct.image.srt.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.llama_3_2_11b_vision_instruct.image.srt.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.phi_3_medium_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.phi_3_medium_instruct.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -76,12 +76,11 @@ spec:
           python3 -m sglang.launch_server \
           --host=0.0.0.0 \
           --port={{ .Values.sglang.port }} \
-          --enable-metrics \
+          --model-path "$MODEL_PATH" \
+          --tp-size 1 \
           --log-requests \
-          --model-path="$MODEL_PATH" \
-          --tp 1 \
-          --mem-frac=0.9 \
-          --chat-template llama_3_vision
+          --trust-remote-code \
+          --enable-metrics
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

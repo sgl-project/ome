@@ -12,6 +12,7 @@ spec:
     model:
       baseModel: llama-3-2-11b-vision-instruct
       protocolVersion: openAI
+      runtime: vllm-llama-3-2-11b-vision-instruct
     minReplicas: {{ .Values.llama_3_2_11b_vision_instruct.minReplicas}}
     maxReplicas: {{ .Values.llama_3_2_11b_vision_instruct.maxReplicas}}
     {{- with .Values.llama_3_2_11b_vision_instruct.affinity }}
