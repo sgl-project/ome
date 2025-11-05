@@ -152,6 +152,8 @@ A Helm chart for importing ome base models
 | gpt-4o-search-preview.lifecyclePhase                                | string | `"ACTIVE"`                                   |             |
 | gpt-4o.enabled                                                      | bool   | `false`                                      |             |
 | gpt-4o.lifecyclePhase                                               | string | `"ACTIVE"`                                   |             |
+| gpt-5-codex.enabled                                                 | bool   | `false`                                      |             |
+| gpt-5-codex.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
 | grok-3-0404.enabled                                                 | bool   | `false`                                      |             |
 | grok-3-0404.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
 | grok-3-fast.enabled                                                 | bool   | `false`                                      |             |
@@ -232,4 +234,3 @@ A Helm chart for importing ome base models
 | phi-3-vision-128k-instruct-chat.lifecyclePhase                      | string | `"ACTIVE"`                                   |             |
 | phi-3-vision-128k-instruct-ft-v1.enabled                            | bool   | `false`                                      |             |
 | phi-3-vision-128k-instruct-ft-v1.lifecyclePhase                     | string | `"ACTIVE"`                                   |             |
-
