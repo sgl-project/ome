@@ -12,7 +12,6 @@ import (
 
 	"github.com/sgl-project/ome/pkg/configutils"
 	"github.com/sgl-project/ome/pkg/logging"
-	"github.com/sgl-project/ome/pkg/xet"
 )
 
 // ProgressDisplayMode defines how download progress is displayed
@@ -344,20 +343,6 @@ func (c *HubConfig) ToDownloadConfig() *DownloadConfig {
 		Endpoint:    c.Endpoint,
 		EtagTimeout: c.EtagTimeout,
 		Headers:     BuildHeaders(c.Token, c.UserAgent, nil),
-		MaxWorkers:  c.MaxWorkers,
-		// Set sensible defaults for common fields
-		Revision: "main",        // Default git branch
-		RepoType: RepoTypeModel, // Most common repository type
-	}
-}
-
-// ToXetDownloadConfig converts HubConfig to XetDownloadConfig for backward compatibility
-func (c *HubConfig) ToXetDownloadConfig() *xet.DownloadConfig {
-	return &xet.DownloadConfig{
-		Token:       c.Token,
-		CacheDir:    c.CacheDir,
-		Endpoint:    c.Endpoint,
-		EtagTimeout: int(c.EtagTimeout),
 		MaxWorkers:  c.MaxWorkers,
 		// Set sensible defaults for common fields
 		Revision: "main",        // Default git branch
