@@ -132,7 +132,7 @@ cohere:
 
   embedv4Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
-    tag: "v0.8.1-04092025"
+    tag: "v0.10.9-09282025"
 
   embedv3Image:
     repository: us-chicago-1.ocir.io/idqj093njucb/cohere-oci-all
