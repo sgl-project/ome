@@ -26,6 +26,7 @@ import (
 	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/utils/storage"
+	"github.com/sgl-project/ome/pkg/xet"
 )
 
 type GopherTaskType string
@@ -928,31 +929,29 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	s.logger.Infof("Downloading HuggingFace model %s (revision: %s) to %s",
 		hfComponents.ModelID, hfComponents.Branch, destPath)
 
-	// Build download options for the hub client
-	var downloadOptions []hub.DownloadOption
+	// Init the xet download config
+	config := s.hubClient.GetConfig().ToXetDownloadConfig()
+	config.RepoID = hfComponents.ModelID
+	config.LocalDir = destPath
+	config.RepoType = hub.RepoTypeModel
 
 	// Set revision if specified
 	if hfComponents.Branch != "" {
-		downloadOptions = append(downloadOptions, hub.WithRevision(hfComponents.Branch))
+		config.Revision = hfComponents.Branch
 	}
-
-	// Set repository type (always model for HuggingFace)
-	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
 	// If we have a token, pass it as a download option
 	if hfToken != "" {
 		s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
-		downloadOptions = append(downloadOptions, hub.WithDownloadToken(hfToken))
+		config.Token = hfToken
 	}
+
+	// Add hub config to context for progress reporting
+	ctx = context.WithValue(ctx, hub.HubConfigKey, config)
 
 	// Perform snapshot download - the hub client already has built-in retry logic
 	// with exponential backoff and proper 429 handling
-	downloadPath, err := s.hubClient.SnapshotDownload(
-		ctx,
-		hfComponents.ModelID,
-		destPath,
-		downloadOptions...,
-	)
+	downloadPath, err := xet.SnapshotDownload(ctx, config)
 	if err != nil {
 		// Check error type for better handling
 		var rateLimitErr *hub.RateLimitError

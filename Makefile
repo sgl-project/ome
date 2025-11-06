@@ -256,7 +256,7 @@ ome-manager: ## 🏗️  Build ome-manager binary.
 	@echo "✅ Build complete"
 
 .PHONY: model-agent
-model-agent: ## 🤖 Build model-agent binary.
+model-agent: xet-build ## 🤖 Build model-agent binary.
 	@echo "🤖 Building model-agent..."
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/model-agent ./cmd/model-agent
 	@echo "✅ Build complete"
