@@ -156,6 +156,16 @@ llama-3-2-11b-vision-ft-chat:
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "SMALL_GENERIC_V2"
 
+thought-action-llama-v3-2-3b-instruct-ft-v1-0:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SMALL_GENERIC_V2"
+
+nl2sql-llama-3-1-8b-ft:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "SMALL_GENERIC_V2"
+
 command-a-032025:
   enabled: false
   lifecyclePhase: "ACTIVE"
