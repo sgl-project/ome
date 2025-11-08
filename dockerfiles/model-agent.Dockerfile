@@ -38,7 +38,7 @@ ARG VERSION
 ARG GIT_TAG
 ARG GIT_COMMIT
 
-# Build the ome-agent binary (CGO must be enabled for XET library)
+# Build the model-agent binary (CGO must be enabled for XET library)
 RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \

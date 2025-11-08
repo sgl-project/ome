@@ -250,7 +250,7 @@ helm-version-update: yq ## 🔄 Update Helm chart version
 ##@ 🛠️  Build
 
 .PHONY: ome-manager
-ome-manager: ## 🏗️  Build ome-manager binary.
+ome-manager: xet-build ## 🏗️  Build ome-manager binary.
 	@echo "🏗️  Building ome-manager..."
 	$(GO_BUILD_ENV) $(GO_CMD) build -ldflags="$(LD_FLAGS)" -o bin/manager ./cmd/manager
 	@echo "✅ Build complete"

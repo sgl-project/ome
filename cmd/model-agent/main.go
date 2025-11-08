@@ -248,7 +248,7 @@ func initializeComponents(
 		return nil, nil, fmt.Errorf("failed to create HuggingFace hub config: %w", err)
 	}
 
-	logger.Infof("Configured Hugging Face hub client with max concurrent downloads: %d", xetHubConfig.MaxConcurrentDownloads)
+	logger.Infof("Configured Xet Hugging Face hub client with max concurrent downloads: %d", xetHubConfig.MaxConcurrentDownloads)
 
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
