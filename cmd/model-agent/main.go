@@ -239,7 +239,8 @@ func initializeComponents(
 	// Create default Hugging Face hub config
 	// Use log-only mode for cleaner logs in production
 	xetHubConfig, err := xet.NewConfig(
-		xet.WithViper(v), // Apply viper config first to set defaults
+		xet.WithDefaults(),
+		xet.WithViper(v),                          // Apply viper config first to set defaults
 		xet.WithLogger(logging.ForZap(zapLogger)), // Then set the logger
 		xet.WithEnableProgressReporting(true),     // Enable progress reporting
 	)
