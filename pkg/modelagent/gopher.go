@@ -2,7 +2,6 @@ package modelagent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,12 +19,12 @@ import (
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	omev1beta1lister "github.com/sgl-project/ome/pkg/client/listers/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/ociobjectstore"
 	"github.com/sgl-project/ome/pkg/principals"
 	"github.com/sgl-project/ome/pkg/utils"
 	"github.com/sgl-project/ome/pkg/utils/storage"
+	"github.com/sgl-project/ome/pkg/xet"
 )
 
 type GopherTaskType string
@@ -50,7 +49,7 @@ type Gopher struct {
 	concurrency            int
 	multipartConcurrency   int
 	modelRootDir           string
-	hubClient              *hub.HubClient
+	xetConfig              *xet.Config
 	kubeClient             kubernetes.Interface
 	gopherChan             <-chan *GopherTask
 	nodeLabelReconciler    *NodeLabelReconciler
@@ -72,7 +71,7 @@ const (
 func NewGopher(
 	modelConfigParser *ModelConfigParser,
 	configMapReconciler *ConfigMapReconciler,
-	hubClient *hub.HubClient,
+	xetConfig *xet.Config,
 	kubeClient kubernetes.Interface,
 	concurrency int,
 	multipartConcurrency int,
@@ -85,8 +84,8 @@ func NewGopher(
 	baseModelLister omev1beta1lister.BaseModelLister,
 	clusterBaseModelLister omev1beta1lister.ClusterBaseModelLister) (*Gopher, error) {
 
-	if hubClient == nil {
-		return nil, fmt.Errorf("hugging face hub client cannot be nil")
+	if xetConfig == nil {
+		return nil, fmt.Errorf("xet hugging face config cannot be nil")
 	}
 
 	return &Gopher{
@@ -96,7 +95,7 @@ func NewGopher(
 		concurrency:            concurrency,
 		multipartConcurrency:   multipartConcurrency,
 		modelRootDir:           modelRootDir,
-		hubClient:              hubClient,
+		xetConfig:              xetConfig,
 		kubeClient:             kubeClient,
 		gopherChan:             gopherChan,
 		nodeLabelReconciler:    nodeLabelReconciler,
@@ -928,60 +927,32 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	s.logger.Infof("Downloading HuggingFace model %s (revision: %s) to %s",
 		hfComponents.ModelID, hfComponents.Branch, destPath)
 
-	// Build download options for the hub client
-	var downloadOptions []hub.DownloadOption
+	// Init xet HF download config
+	config := s.xetConfig.ToDownloadConfig()
+	config.LocalDir = destPath
+	config.RepoID = hfComponents.ModelID
 
 	// Set revision if specified
 	if hfComponents.Branch != "" {
-		downloadOptions = append(downloadOptions, hub.WithRevision(hfComponents.Branch))
+		config.Revision = hfComponents.Branch
 	}
-
-	// Set repository type (always model for HuggingFace)
-	downloadOptions = append(downloadOptions, hub.WithRepoType(hub.RepoTypeModel))
 
 	// If we have a token, pass it as a download option
 	if hfToken != "" {
 		s.logger.Infof("Using authentication token for HuggingFace model %s", modelInfo)
-		downloadOptions = append(downloadOptions, hub.WithDownloadToken(hfToken))
+		config.Token = hfToken
 	}
 
 	// Perform snapshot download - the hub client already has built-in retry logic
 	// with exponential backoff and proper 429 handling
-	downloadPath, err := s.hubClient.SnapshotDownload(
-		ctx,
-		hfComponents.ModelID,
-		destPath,
-		downloadOptions...,
-	)
+	downloadPath, err := xet.SnapshotDownload(ctx, config)
 	if err != nil {
 		// Check error type for better handling
-		var rateLimitErr *hub.RateLimitError
-		var httpErr *hub.HTTPError
-
-		switch {
-		case errors.As(err, &rateLimitErr):
-			// Proper rate limit error with retry-after information
-			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
-			if rateLimitErr.RetryAfter > 0 {
-				s.metrics.RecordRateLimit(modelType, namespace, name, rateLimitErr.RetryAfter)
-			} else {
-				s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Default estimate
-			}
-			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
-
-		case errors.As(err, &httpErr) && httpErr.StatusCode == 429:
-			// HTTP 429 without proper RateLimitError type
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
 			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
 			s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Estimate
 			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
-
-		case strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit"):
-			// Fallback string matching for backwards compatibility
-			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
-			s.metrics.RecordRateLimit(modelType, namespace, name, 30*time.Second) // Estimate
-			s.metrics.RecordFailedDownload(modelType, namespace, name, "rate_limit_error")
-
-		default:
+		} else {
 			s.logger.Errorf("Failed to download HuggingFace model %s: %v", modelInfo, err)
 			s.metrics.RecordFailedDownload(modelType, namespace, name, "hf_download_error")
 		}
