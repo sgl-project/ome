@@ -23,8 +23,9 @@ WORKDIR /workspace
 COPY go.mod go.mod
 COPY go.sum go.sum
 
-# Download dependencies
-RUN go mod download
+# Download dependencies with Go module cache
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy source code
 COPY cmd/ cmd/
@@ -38,8 +39,10 @@ ARG VERSION
 ARG GIT_TAG
 ARG GIT_COMMIT
 
-# Build the manager binary (CGO must be enabled for XET library)
-RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+# Build the manager binary with Go build cache (CGO must be enabled for XET library)
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -a \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o manager ./cmd/manager

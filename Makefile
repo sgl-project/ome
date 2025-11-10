@@ -26,6 +26,18 @@ GO_FMT ?= gofmt
 # Use go.mod go version as a single source of truth for the Go version
 GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod|head -n1)
 
+# Go build cache configuration
+# Only use custom cache when CUSTOM_GO_CACHE is set to avoid conflicts with CI caching
+ifdef CUSTOM_GO_CACHE
+GOCACHE ?= $(shell pwd)/.cache/go-build
+GOMODCACHE ?= $(shell pwd)/.cache/go-mod
+export GOCACHE
+export GOMODCACHE
+
+# Ensure cache directories exist
+$(shell mkdir -p $(GOCACHE) $(GOMODCACHE))
+endif
+
 # Determine Docker build command (use nerdctl if available)
 DOCKER_BUILD_CMD ?= docker
 
@@ -35,6 +47,9 @@ ifeq ($(shell command -v nerdctl 2> /dev/null),)
 else
     DOCKER_BUILD_CMD = nerdctl
 endif
+
+# Enable Docker BuildKit for cache mounts
+export DOCKER_BUILDKIT=1
 
 # CRD Options
 CRD_OPTIONS ?= "crd:maxDescLen=0"
@@ -192,7 +207,7 @@ fmt: install-goimports ## 🧹 Run go fmt and goimports against code
 	@echo "🧹 Formatting Go code..."
 	@$(GO_CMD) fmt ./...
 	@echo "🧹 Organizing imports in Go files..."
-	@find . -name '*.go' -not -path '*/vendor/*' -not -exec grep -q '// Code generated' {} \; -exec $(GOIMPORTS) -w {} +
+	@find . -name '*.go' -not -path '*/vendor/*' -not -path '*/.cache/*' -not -exec grep -q '// Code generated' {} \; -exec $(GOIMPORTS) -w {} +
 	@echo "✅ Formatting complete"
 
 .PHONY: vet
@@ -206,6 +221,15 @@ tidy: ## 📦 Run go mod tidy
 	@echo "📦 Tidying Go modules..."
 	@$(GO_CMD) mod tidy
 	@echo "✅ Dependencies cleaned up"
+
+.PHONY: clean-cache
+clean-cache: ## 🧹 Clean Go build cache
+	@echo "🧹 Cleaning Go build cache..."
+ifdef CUSTOM_GO_CACHE
+	@rm -rf .cache/go-build .cache/go-mod
+endif
+	@$(GO_CMD) clean -cache -modcache
+	@echo "✅ Cache cleaned"
 
 .PHONY: ci-lint
 ci-lint: golangci-lint ## 🔎 Run golangci-lint against code.
