@@ -22,10 +22,10 @@ import (
 
 	omev1beta1client "github.com/sgl-project/ome/pkg/client/clientset/versioned"
 	omev1beta1informers "github.com/sgl-project/ome/pkg/client/informers/externalversions"
-	"github.com/sgl-project/ome/pkg/hfutil/hub"
 	"github.com/sgl-project/ome/pkg/logging"
 	"github.com/sgl-project/ome/pkg/modelagent"
 	"github.com/sgl-project/ome/pkg/version"
+	"github.com/sgl-project/ome/pkg/xet"
 )
 
 // config holds all configuration parameters for the model agent
@@ -238,30 +238,23 @@ func initializeComponents(
 
 	// Create default Hugging Face hub config
 	// Use log-only mode for cleaner logs in production
-	hfHubConfig, err := hub.NewHubConfig(
-		hub.WithViper(v), // Apply viper config first to set defaults
-		hub.WithLogger(logging.ForZap(zapLogger)),        // Then set the logger
-		hub.WithProgressDisplayMode(hub.ProgressModeLog), // Use log mode for clean production logs
-		hub.WithDetailedLogs(false),                      // Disable detailed progress logging to reduce log flooding
+	xetHubConfig, err := xet.NewConfig(
+		xet.WithDefaults(),
+		xet.WithViper(v),                          // Apply viper config first to set defaults
+		xet.WithLogger(logging.ForZap(zapLogger)), // Then set the logger
+		xet.WithEnableProgressReporting(true),     // Enable progress reporting
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create HuggingFace hub config: %w", err)
 	}
 
-	// Create hub client
-	hfHubClient, err := hub.NewHubClient(hfHubConfig)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create HuggingFace hub client: %w", err)
-	}
-
-	logger.Infof("Configured Hugging Face hub client with max retries: %d, max workers: %d",
-		hfHubConfig.MaxRetries, hfHubConfig.MaxWorkers)
+	logger.Infof("Configured Xet Hugging Face hub client with max concurrent downloads: %d", xetHubConfig.MaxConcurrentDownloads)
 
 	// Create a Gopher instance for downloading models
 	gopher, err := modelagent.NewGopher(
 		modelConfigParser,
 		configMapReconciler,
-		hfHubClient,
+		xetHubConfig,
 		kubeClient, // Pass the Kubernetes client for secret access
 		cfg.concurrency,
 		cfg.multipartConcurrency,

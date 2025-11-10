@@ -15,6 +15,7 @@ const (
 	DefaultHFCacheDir             = "/tmp/.cache/huggingface"
 	DefaultMaxConcurrentDownloads = 4
 	DefaultLogLevel               = "info"
+	RepoTypeModel                 = "model"
 )
 
 // Config holds configuration for the xet client
@@ -100,6 +101,14 @@ func WithAppParams(params HubParams) Option {
 	}
 }
 
+// WithEnableProgressReporting specifies if enable progress reporting
+func WithEnableProgressReporting(enableProgressReporting bool) Option {
+	return func(c *Config) error {
+		c.EnableProgressReporting = enableProgressReporting
+		return nil
+	}
+}
+
 // WithDefaults specifies the default values for the configuration if not already set
 func WithDefaults() Option {
 	return func(c *Config) error {
@@ -125,5 +134,30 @@ func (c *Config) Validate() error {
 	if err := validate.Struct(c); err != nil {
 		return fmt.Errorf("config validation failed: %w", err)
 	}
+
+	// Additional custom validations
+	if c.Endpoint == "" {
+		return errors.New("endpoint is required")
+	}
+	if c.CacheDir == "" {
+		return errors.New("cache directory is required")
+	}
+	if c.MaxConcurrentDownloads <= 0 {
+		return errors.New("max workers must be positive")
+	}
+
 	return nil
+}
+
+// ToDownloadConfig converts Config to DownloadConfig
+func (c *Config) ToDownloadConfig() *DownloadConfig {
+	return &DownloadConfig{
+		Token:      c.Token,
+		CacheDir:   c.CacheDir,
+		Endpoint:   c.Endpoint,
+		MaxWorkers: int(c.MaxConcurrentDownloads),
+		// Set sensible defaults for common fields
+		Revision: "main",        // Default git branch
+		RepoType: RepoTypeModel, // Most common repository type
+	}
 }
