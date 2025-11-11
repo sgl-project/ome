@@ -1,0 +1,20 @@
+{{- if .Values.command_a_reasoning.enabled }}
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: command-a-reasoning
+  namespace: command-a-reasoning
+spec:
+  predictor:
+    model:
+      runtime: cohere-command-a-reasoning
+      baseModel: command-a-reasoning
+      protocolVersion: cohere
+    minReplicas: {{ .Values.command_a_reasoning.minReplicas}}
+    maxReplicas: {{ .Values.command_a_reasoning.maxReplicas}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: command-a-reasoning
+{{- end }}

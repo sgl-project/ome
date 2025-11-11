@@ -40,6 +40,11 @@ command_a_vision_drcc:
   minReplicas: 1
   maxReplicas: 1
 
+command_a_reasoning:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+
 cohere_rerank:
   enabled: false
   minReplicas: 1
