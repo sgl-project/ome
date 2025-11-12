@@ -83,18 +83,81 @@ spec:
         - --
       args:
         - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port={{ .Values.sglang.port }} \
-          --enable-metrics \
-          --log-requests \
-          --model-path="$MODEL_PATH" \
-          --tp 1 \
-          --mem-frac=0.9 \
-          --log-requests-level=1 \
-          --tool-call-parser=gpt-oss \
-          --reasoning-parser=gpt-oss \
-          --context-length=131072
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+
+          # --- Config ---
+          DELAY="${DELAY:-120}"   # seconds to wait after starting process 1
+
+          # Track child PIDs so we can stop them cleanly
+          pid1=""
+          pid2=""
+
+          # Forward signals to both children and wait
+          _term() {
+            [ -n "$pid2" ] && kill -TERM "$pid2" 2>/dev/null || true
+            [ -n "$pid1" ] && kill -TERM "$pid1" 2>/dev/null || true
+            wait || true
+          }
+          trap _term SIGINT SIGTERM
+
+          # --------------------------
+          # Process 1: sglang server
+          # --------------------------
+          PYTHONUNBUFFERED=1 python3 -u -m sglang.launch_server \
+            --host=127.0.0.1 \
+            --port=18080 \
+            --enable-metrics \
+            --log-requests \
+            --log-requests-level=1 \
+            --model-path=/mnt/data/models/openai/gpt-oss-20b \
+            --tp 1 \
+            --reasoning-parser=gpt-oss \
+            --context-length=131072 \
+            --grpc-mode \
+            2>&1 &
+
+          pid1=$!
+          printf '[%s] started sglang-server pid=%s\n' "$(date -Is)" "$pid1" >&2
+
+          # --- Delay, then Process 2 ---
+          sleep "$DELAY"
+
+          # If process 1 died during the delay, exit with its status instead of starting 2
+          if ! kill -0 "$pid1" 2>/dev/null; then
+            status=0
+            wait "$pid1" || status=$?
+            printf '[%s] sglang-server exited during delay; not starting router (status=%s)\n' \
+              "$(date -Is)" "${status:-1}" >&2
+            exit "${status:-1}"
+          fi
+
+          # --------------------------
+          # Process 2: sglang router
+          # --------------------------
+          PYTHONUNBUFFERED=1 python3 -u -m sglang_router.launch_router \
+            --host "0.0.0.0" \
+            --port "8080" \
+            --policy cache_aware \
+            --worker-urls "grpc://127.0.0.1:18080" \
+            --model-path "/mnt/data/models/openai/gpt-oss-20b" \
+            --log-level "debug" \
+            --health-check-endpoint "/HealthCheck" \
+            2>&1 &
+
+          pid2=$!
+          printf '[%s] started sglang-router pid=%s\n' "$(date -Is)" "$pid2" >&2
+
+          # --- Exit when the first of the two exits; stop the other cleanly ---
+          status=0
+          wait -n || status=$?
+
+          # Whichever is still running, stop it
+          if kill -0 "${pid1:-0}" 2>/dev/null; then kill -TERM "$pid1" 2>/dev/null || true; fi
+          if kill -0 "${pid2:-0}" 2>/dev/null; then kill -TERM "$pid2" 2>/dev/null || true; fi
+
+          wait || true
+          exit "$status"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -110,7 +173,7 @@ spec:
 
       readinessProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 3
         successThreshold: 1
@@ -128,7 +191,7 @@ spec:
 
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /health
           port: 8080
         failureThreshold: 150
         successThreshold: 1
