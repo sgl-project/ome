@@ -92,9 +92,25 @@ modelAgent:
   priorityClassName: system-node-critical
   serviceAccountName: ome-model-agent
   image:
+    # Docker registry hub. If set, overrides global.hub for model-agent.
+    # If repository contains '/', hub is ignored.
+    # Leave empty to use global.hub
+    hub: ""
     repository: model-agent
     pullPolicy: Always
     tag: *defaultVersion
+
+  # When enabled, the model agent will only run on nodes with GPU
+  gpuNodesOnly: false
+
+  # GPU node label selector (used when gpuNodesOnly is true)
+  # Examples:
+  #   For NVIDIA GPU operator: nvidia.com/gpu.present: "true"
+  #   For Nebius: nebius.com/gpu: "true"
+  #   For AWS: node.kubernetes.io/instance-type: g4dn.xlarge
+  gpuNodeLabel:
+    key: nvidia.com/gpu.present
+    value: "true"
 
   nodeSelector: {}
 
@@ -125,7 +141,14 @@ modelAgent:
 
   health:
     port: 8080
-  
+
+  # Additional environment variables for the model-agent container
+  # Examples:
+  # env:
+  #   LOG_LEVEL: "debug"
+  #   DOWNLOAD_RETRY: "5"
+  env: {}
+
   resources:
     limits:
       cpu: '10'

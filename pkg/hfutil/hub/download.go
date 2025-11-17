@@ -304,6 +304,18 @@ func downloadToTmpAndMove(ctx context.Context, config *DownloadConfig, metadata 
 		return err
 	}
 
+	// Log file size after download for debugging
+	if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok && hubConfig.Logger != nil {
+		if fileInfo, err := os.Stat(incompletePath); err == nil {
+			hubConfig.Logger.
+				WithField("filename", config.Filename).
+				WithField("size", fileInfo.Size()).
+				WithField("expected_size", metadata.Size).
+				WithField("expected_etag", metadata.Etag).
+				Debug("Downloaded file details")
+		}
+	}
+
 	// Validate ETag if available (SHA256 hash)
 	if metadata.Etag != "" && IsSHA256(metadata.Etag) {
 		if err := VerifyChecksum(incompletePath, metadata.Etag); err != nil {
@@ -413,6 +425,13 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
+		// Log download URL for debugging (only on initial download, not resume)
+		if resumeSize == 0 {
+			if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok && hubConfig.Logger != nil {
+				hubConfig.Logger.WithField("url", metadata.Location).Debug("Starting download from URL")
+			}
+		}
+
 		// Add headers
 		headers := BuildHeaders(config.Token, "huggingface-hub-go/1.0.0", config.Headers)
 		for k, v := range headers {
@@ -450,6 +469,17 @@ func httpDownload(ctx context.Context, config *DownloadConfig, metadata *FileMet
 				resp.Body.Close()
 			}
 		}()
+
+		// Log response details for debugging (only on initial download, not resume)
+		if resumeSize == 0 {
+			if hubConfig, ok := ctx.Value(HubConfigKey).(*HubConfig); ok && hubConfig.Logger != nil {
+				hubConfig.Logger.
+					WithField("url", resp.Request.URL.String()).
+					WithField("status", resp.StatusCode).
+					WithField("etag", resp.Header.Get("ETag")).
+					Debug("HTTP response received")
+			}
+		}
 
 		// Check status code
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {

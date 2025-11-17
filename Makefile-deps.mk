@@ -41,7 +41,7 @@ golangci-lint: fix-tools-gomod ## 🔍 Download golangci-lint locally if necessa
 	@echo "✅ Installation complete"
 
 
-GOIMPORTS = $(PROJECT_DIR)/bin/staticcheck
+STATICCHECK = $(PROJECT_DIR)/bin/staticcheck
 .PHONY: staticcheck
 staticcheck: fix-tools-gomod ## 🔎 Download staticcheck locally if necessary
 	@echo "🔎 Installing staticcheck..."
