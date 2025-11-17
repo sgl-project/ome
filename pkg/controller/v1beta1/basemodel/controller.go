@@ -564,129 +564,107 @@ func (r *BaseModelReconciler) updateModelSpecWithRetry(ctx context.Context, base
 		})
 }
 
+// retryUpdate is a shared utility function for retrying updates with conflict resolution
+func retryUpdate(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, updateType string, updateFunc func(context.Context, client.Client, client.Object) error) error {
+	const maxRetries = 3
+
+	for i := 0; i < maxRetries; i++ {
+		// Get the latest version
+		latest := obj.DeepCopyObject().(client.Object)
+		if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(obj), latest); err != nil {
+			return fmt.Errorf("failed to get latest object version: %w", err)
+		}
+
+		// Execute the update function
+		if err := updateFunc(ctx, kubeClient, latest); err != nil {
+			if errors.IsConflict(err) && i < maxRetries-1 {
+				// Exponential backoff: wait 100ms, 200ms, 400ms
+				backoff := time.Millisecond * time.Duration(100<<uint(i))
+				log.V(1).Info("Resource conflict during update, retrying with backoff",
+					"updateType", updateType, "retry", i+1, "backoff", backoff, "object", client.ObjectKeyFromObject(obj))
+				time.Sleep(backoff)
+				continue
+			}
+			if errors.IsConflict(err) {
+				return fmt.Errorf("failed to update %s after %d retries due to conflicts", updateType, maxRetries)
+			}
+			return fmt.Errorf("failed to update %s: %w", updateType, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("failed to update %s after %d retries", updateType, maxRetries)
+}
+
 // updateModelStatusWithRetry is a shared utility function for updating model status with retry logic
 func updateModelStatusWithRetry(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, nodesReady, nodesFailed []string, modelType string) error {
-	return retryStatusUpdate(ctx, kubeClient, log, obj, nodesReady, nodesFailed,
-		func(ctx context.Context, client client.Client, obj client.Object, nodesReady, nodesFailed []string) error {
-			// Get current status and update it
-			var currentNodesReady, currentNodesFailed []string
-			var currentState v1beta1.LifeCycleState
+	updateFunc := func(ctx context.Context, client client.Client, obj client.Object) error {
+		// Get current status and update it
+		var currentNodesReady, currentNodesFailed []string
+		var currentState v1beta1.LifeCycleState
 
-			// Type switch to handle both BaseModel and ClusterBaseModel
+		// Type switch to handle both BaseModel and ClusterBaseModel
+		switch model := obj.(type) {
+		case *v1beta1.BaseModel:
+			currentNodesReady = model.Status.NodesReady
+			currentNodesFailed = model.Status.NodesFailed
+			currentState = model.Status.State
+		case *v1beta1.ClusterBaseModel:
+			currentNodesReady = model.Status.NodesReady
+			currentNodesFailed = model.Status.NodesFailed
+			currentState = model.Status.State
+		default:
+			return fmt.Errorf("unsupported model type: %T", obj)
+		}
+
+		// Check if status needs update
+		updated := false
+		if !slices.Equal(currentNodesReady, nodesReady) {
+			updated = true
+		}
+		if !slices.Equal(currentNodesFailed, nodesFailed) {
+			updated = true
+		}
+
+		// Update lifecycle state
+		newState := calculateLifecycleState(nodesReady, nodesFailed)
+		if currentState != newState {
+			updated = true
+		}
+
+		// Update status if changed
+		if updated {
+			// Apply the updates based on type
 			switch model := obj.(type) {
 			case *v1beta1.BaseModel:
-				currentNodesReady = model.Status.NodesReady
-				currentNodesFailed = model.Status.NodesFailed
-				currentState = model.Status.State
+				model.Status.NodesReady = nodesReady
+				model.Status.NodesFailed = nodesFailed
+				model.Status.State = newState
 			case *v1beta1.ClusterBaseModel:
-				currentNodesReady = model.Status.NodesReady
-				currentNodesFailed = model.Status.NodesFailed
-				currentState = model.Status.State
-			default:
-				return fmt.Errorf("unsupported model type: %T", obj)
+				model.Status.NodesReady = nodesReady
+				model.Status.NodesFailed = nodesFailed
+				model.Status.State = newState
 			}
 
-			// Check if status needs update
-			updated := false
-			if !slices.Equal(currentNodesReady, nodesReady) {
-				updated = true
+			if err := client.Status().Update(ctx, obj); err != nil {
+				return err
 			}
-			if !slices.Equal(currentNodesFailed, nodesFailed) {
-				updated = true
-			}
+			log.Info(fmt.Sprintf("Updated %s status", modelType),
+				"nodesReady", len(nodesReady),
+				"nodesFailed", len(nodesFailed),
+				"state", newState)
+		}
+		return nil
+	}
 
-			// Update lifecycle state
-			newState := calculateLifecycleState(nodesReady, nodesFailed)
-			if currentState != newState {
-				updated = true
-			}
-
-			// Update status if changed
-			if updated {
-				// Apply the updates based on type
-				switch model := obj.(type) {
-				case *v1beta1.BaseModel:
-					model.Status.NodesReady = nodesReady
-					model.Status.NodesFailed = nodesFailed
-					model.Status.State = newState
-				case *v1beta1.ClusterBaseModel:
-					model.Status.NodesReady = nodesReady
-					model.Status.NodesFailed = nodesFailed
-					model.Status.State = newState
-				}
-
-				if err := client.Status().Update(ctx, obj); err != nil {
-					return err
-				}
-				log.Info(fmt.Sprintf("Updated %s status", modelType),
-					"nodesReady", len(nodesReady),
-					"nodesFailed", len(nodesFailed),
-					"state", newState)
-			}
-			return nil
-		})
+	return retryUpdate(ctx, kubeClient, log, obj, "status", updateFunc)
 }
 
 // retrySpecUpdate is a shared utility function for retrying spec updates with conflict resolution
 func retrySpecUpdate(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, config *modelagent.ModelConfig, updateFunc func(context.Context, client.Client, client.Object, *modelagent.ModelConfig) error) error {
-	const maxRetries = 3
-
-	for i := 0; i < maxRetries; i++ {
-		// Get the latest version
-		latest := obj.DeepCopyObject().(client.Object)
-		if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(obj), latest); err != nil {
-			return fmt.Errorf("failed to get latest object version: %w", err)
-		}
-
-		// Update the spec
-		if err := updateFunc(ctx, kubeClient, latest, config); err != nil {
-			if errors.IsConflict(err) && i < maxRetries-1 {
-				// Exponential backoff: wait 100ms, 200ms, 400ms
-				backoff := time.Millisecond * time.Duration(100<<uint(i))
-				log.V(1).Info("Resource conflict updating spec, retrying with backoff",
-					"retry", i+1, "backoff", backoff, "object", client.ObjectKeyFromObject(obj))
-				time.Sleep(backoff)
-				continue
-			}
-			if errors.IsConflict(err) {
-				return fmt.Errorf("failed to update spec after %d retries due to conflicts", maxRetries)
-			}
-			return fmt.Errorf("failed to update spec: %w", err)
-		}
-		return nil
+	wrappedUpdateFunc := func(ctx context.Context, client client.Client, obj client.Object) error {
+		return updateFunc(ctx, client, obj, config)
 	}
-	return fmt.Errorf("failed to update spec after %d retries", maxRetries)
-}
-
-// retryStatusUpdate is a shared utility function for retrying status updates with conflict resolution
-func retryStatusUpdate(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object, nodesReady, nodesFailed []string, updateFunc func(context.Context, client.Client, client.Object, []string, []string) error) error {
-	const maxRetries = 3
-
-	for i := 0; i < maxRetries; i++ {
-		// Get the latest version
-		latest := obj.DeepCopyObject().(client.Object)
-		if err := kubeClient.Get(ctx, client.ObjectKeyFromObject(obj), latest); err != nil {
-			return fmt.Errorf("failed to get latest object version: %w", err)
-		}
-
-		// Update the status
-		if err := updateFunc(ctx, kubeClient, latest, nodesReady, nodesFailed); err != nil {
-			if errors.IsConflict(err) && i < maxRetries-1 {
-				// Exponential backoff: wait 100ms, 200ms, 400ms
-				backoff := time.Millisecond * time.Duration(100<<uint(i))
-				log.V(1).Info("Resource conflict updating status, retrying with backoff",
-					"retry", i+1, "backoff", backoff, "object", client.ObjectKeyFromObject(obj))
-				time.Sleep(backoff)
-				continue
-			}
-			if errors.IsConflict(err) {
-				return fmt.Errorf("failed to update status after %d retries due to conflicts", maxRetries)
-			}
-			return fmt.Errorf("failed to update status: %w", err)
-		}
-		return nil
-	}
-	return fmt.Errorf("failed to update status after %d retries", maxRetries)
+	return retryUpdate(ctx, kubeClient, log, obj, "spec", wrappedUpdateFunc)
 }
 
 // updateSpecWithConfig updates model spec fields with configuration from ConfigMap
