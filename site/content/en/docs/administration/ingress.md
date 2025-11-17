@@ -15,7 +15,7 @@ OME supports the following ingress solutions:
 ### Standard Kubernetes Ingress Controllers
 - **NGINX Ingress Controller** - [Installation Guide](https://kubernetes.github.io/ingress-nginx/deploy/)
 - **Traefik** - [Installation Guide](https://doc.traefik.io/traefik/getting-started/install-traefik/)
-- **Kong Ingress Controller** - [Installation Guide](https://docs.konghq.com/kubernetes-ingress-controller/latest/install/)
+- **Kong Ingress Controller** - [Installation Guide](https://developer.konghq.com/kubernetes-ingress-controller/install/)
 - **HAProxy Ingress** - [Installation Guide](https://haproxy-ingress.github.io/docs/getting-started/)
 - **Contour** - [Installation Guide](https://projectcontour.io/getting-started/)
 
