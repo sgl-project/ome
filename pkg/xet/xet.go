@@ -1,7 +1,7 @@
 package xet
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/target/release -lxet -ldl -lm -lstdc++
+#cgo LDFLAGS: -L${SRCDIR}/target/release -Wl,-Bstatic -lxet -Wl,-Bdynamic -lssl -lcrypto -ldl -lm -lstdc++
 #cgo darwin LDFLAGS: -framework CoreFoundation -framework Security
 #include <stdlib.h>
 #include "xet.h"
