@@ -102,6 +102,7 @@ spec:
             --log-requests \
             --log-requests-level=1 \
             --model-path=/mnt/data/models/openai/gpt-oss-120b \
+            --served-model-name=gpt-oss-120b \
             --tp 2 \
             --reasoning-parser=gpt-oss \
             --context-length=131072 \
