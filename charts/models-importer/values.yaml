@@ -445,10 +445,12 @@ gpt-5-nano-2025-08-07:
 gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "OAI_H100_X2"
 
 gpt-oss-20b:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  compatibleDACShapes: "OAI_H100_X1"
 
 gpt-oss-120b-bf16:
   enabled: false
