@@ -52,7 +52,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: MllamaForConditionalGeneration
-      autoSelect: true
+      autoSelect: false
       priority: 1
   modelSizeRange:
     min: 85B

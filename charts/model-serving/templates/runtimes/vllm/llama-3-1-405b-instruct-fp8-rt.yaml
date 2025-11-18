@@ -42,7 +42,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: LlamaForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
       version: "1.0.0"
       quantization: fp8

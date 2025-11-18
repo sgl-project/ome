@@ -43,6 +43,17 @@ spec:
       priority: 2
       version: "1.0.0"
       quantization: fp8
+    - modelFramework:
+        name: transformers
+        version: "4.51.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: Llama4ForConditionalGeneration
+      autoSelect: true
+      priority: 2
+      version: "1.0.0"
+      quantization: compressed-tensors
   volumes:
     - name: dshm
       emptyDir:
