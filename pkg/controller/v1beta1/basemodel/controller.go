@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -197,8 +198,33 @@ func handleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 		// Check if any ConfigMap still has an entry for this model
 		var modelsNotDeleted []string
 		nodesWithModel := 0
+		var orphanedConfigMaps []string
 
 		for _, configMap := range configMaps.Items {
+			// Verify the node still exists with retry logic for network errors
+			exists, isNotFound, err := checkNodeExistsWithRetry(ctx, kubeClient, configMap.Name, log)
+			if err != nil {
+				// Couldn't determine after retries - be conservative and consider the model not deleted
+				log.V(1).Info("Could not verify node existence during deletion check, treating as existing",
+					"node", configMap.Name,
+					"configMap", configMap.Name,
+					"error", err)
+				if _, hasModel := configMap.Data[modelKey]; hasModel {
+					modelsNotDeleted = append(modelsNotDeleted, configMap.Name)
+				}
+				continue
+			}
+
+			if !exists && isNotFound {
+				// Node was deleted, mark ConfigMap as orphaned and skip it
+				// We'll treat it as if the model is already deleted from this ConfigMap
+				log.V(1).Info("Skipping ConfigMap for non-existent node", "node", configMap.Name, "configMap", configMap.Name)
+				orphanedConfigMaps = append(orphanedConfigMaps, configMap.Name)
+				continue
+			}
+
+			// Node exists, continue processing
+
 			// Check if the model exists in this ConfigMap
 			if data, exists := configMap.Data[modelKey]; exists {
 				nodesWithModel++
@@ -220,6 +246,14 @@ func handleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 		modelInfo := modelName
 		if !isClusterScope {
 			modelInfo = modelNamespace + "/" + modelName
+		}
+
+		// Log orphaned ConfigMaps for visibility (but don't block deletion)
+		if len(orphanedConfigMaps) > 0 {
+			log.Info("Found ConfigMaps for non-existent nodes (will be ignored)",
+				"model", modelInfo,
+				"orphanedConfigMaps", len(orphanedConfigMaps),
+				"nodes", orphanedConfigMaps)
 		}
 
 		// If models are still present in ConfigMaps and not deleted, requeue
@@ -362,6 +396,9 @@ func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.
 	slices.Sort(nodesReady)
 	slices.Sort(nodesFailed)
 
+	// Clean up orphaned ConfigMaps for non-existent nodes
+	cleanupOrphanedConfigMaps(ctx, kubeClient, log, configMaps.Items)
+
 	// Log summary - important for observability
 	log.Info("Model status summary",
 		"readyNodes", readyNodes,
@@ -376,6 +413,108 @@ func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.
 
 	// Update the model status with retry logic
 	return statusUpdateFunc(ctx, nodesReady, nodesFailed)
+}
+
+// checkNodeExistsWithRetry checks if a node exists with retry logic for network errors
+// Returns: (exists bool, isNotFound bool, err error)
+// - exists: true if node exists
+// - isNotFound: true if node definitely doesn't exist (after retries)
+// - err: error if we couldn't determine after retries
+func checkNodeExistsWithRetry(ctx context.Context, kubeClient client.Client, nodeName string, log logr.Logger) (exists bool, isNotFound bool, err error) {
+	const maxRetries = 3
+	const initialBackoff = 100 * time.Millisecond
+
+	node := &corev1.Node{}
+	backoff := initialBackoff
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := kubeClient.Get(ctx, types.NamespacedName{Name: nodeName}, node)
+		if err == nil {
+			// Node exists
+			return true, false, nil
+		}
+
+		if errors.IsNotFound(err) {
+			// Node definitely doesn't exist - no need to retry
+			return false, true, nil
+		}
+
+		// Network or other transient error - retry with backoff
+		if attempt < maxRetries-1 {
+			log.V(1).Info("Transient error checking node existence, retrying",
+				"node", nodeName,
+				"attempt", attempt+1,
+				"maxRetries", maxRetries,
+				"error", err,
+				"backoff", backoff)
+
+			select {
+			case <-time.After(backoff):
+				backoff = backoff * 2
+			case <-ctx.Done():
+				return false, false, ctx.Err()
+			}
+		}
+	}
+
+	// After all retries, we still couldn't determine - be conservative
+	log.V(1).Info("Could not determine node existence after retries, skipping ConfigMap",
+		"node", nodeName,
+		"error", err)
+	return false, false, err
+}
+
+// cleanupOrphanedConfigMaps removes ConfigMaps that belong to nodes that no longer exist
+// This prevents accumulation of orphaned ConfigMaps when nodes are removed from the cluster
+func cleanupOrphanedConfigMaps(ctx context.Context, kubeClient client.Client, log logr.Logger, configMaps []corev1.ConfigMap) {
+	var orphanedConfigMaps []string
+
+	for _, configMap := range configMaps {
+		// Check if the node still exists with retry logic for network errors
+		exists, isNotFound, err := checkNodeExistsWithRetry(ctx, kubeClient, configMap.Name, log)
+		if err != nil {
+			// Couldn't determine after retries - skip this ConfigMap (conservative approach)
+			log.V(1).Info("Skipping ConfigMap due to transient error checking node",
+				"configMap", configMap.Name,
+				"node", configMap.Name,
+				"error", err)
+			continue
+		}
+
+		if exists {
+			// Node exists, ConfigMap is valid - no action needed
+			continue
+		}
+
+		if isNotFound {
+			// Node definitely doesn't exist, mark ConfigMap for deletion
+			orphanedConfigMaps = append(orphanedConfigMaps, configMap.Name)
+		}
+	}
+
+	// Delete orphaned ConfigMaps
+	if len(orphanedConfigMaps) > 0 {
+		log.Info("Cleaning up orphaned ConfigMaps for non-existent nodes",
+			"count", len(orphanedConfigMaps),
+			"configMaps", orphanedConfigMaps)
+
+		for _, configMapName := range orphanedConfigMaps {
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: constants.OMENamespace,
+				},
+			}
+			if err := kubeClient.Delete(ctx, configMap); err != nil {
+				if !errors.IsNotFound(err) {
+					log.Error(err, "Failed to delete orphaned ConfigMap", "configMap", configMapName)
+				}
+				// If already deleted, that's fine - continue
+			} else {
+				log.Info("Deleted orphaned ConfigMap for non-existent node", "configMap", configMapName)
+			}
+		}
+	}
 }
 
 // updateModelSpec updates BaseModel spec with configuration from ConfigMap
