@@ -442,6 +442,25 @@ gpt-5-nano-2025-08-07:
   enableImageInput: true
   lifecyclePhase: "ACTIVE"
 
+gpt-5-1:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-1-2025-11-13:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-1-codex:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
+
+gpt-5-1-codex-mini:
+  enabled: false
+  enableImageInput: true
+  lifecyclePhase: "ACTIVE"
 gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"

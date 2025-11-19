@@ -154,6 +154,14 @@ A Helm chart for importing ome base models
 | gpt-4o.lifecyclePhase                                               | string | `"ACTIVE"`                                   |             |
 | gpt-5-codex.enabled                                                 | bool   | `false`                                      |             |
 | gpt-5-codex.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
+| gpt-5-1.enabled                                                     | bool   | `false`                                      |             |
+| gpt-5-1.lifecyclePhase                                              | string | `"ACTIVE"`                                   |             |
+| gpt-5-1-2025-11-13.enabled                                          | bool   | `false`                                      |             |
+| gpt-5-1-2025-11-13.lifecyclePhase                                   | string | `"ACTIVE"`                                   |             |
+| gpt-5-1-codex.enabled                                               | bool   | `false`                                      |             |
+| gpt-5-1-codex.lifecyclePhase                                        | string | `"ACTIVE"`                                   |             |
+| gpt-5-1-codex-mini.enabled                                          | bool   | `false`                                      |             |
+| gpt-5-1-codex-mini.lifecyclePhase                                   | string | `"ACTIVE"`                                   |             |
 | grok-3-0404.enabled                                                 | bool   | `false`                                      |             |
 | grok-3-0404.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
 | grok-3-fast.enabled                                                 | bool   | `false`                                      |             |
