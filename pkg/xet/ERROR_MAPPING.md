@@ -4,10 +4,10 @@
 | --- | --- | --- | --- |
 | `XetErrorCode::Ok` (`error.rs:11`) | `code = 0` | Not surfaced (success path) | Reserved for completeness; no `XetError` returned.
 | `XetErrorCode::InvalidConfig` (`error.rs:12`) | `code = 1` | `*xet.XetError` with `Code=1` | Used in `ffi.rs` when required pointers or UTF-8 strings are missing.
-| `XetErrorCode::AuthFailed` (`error.rs:14`) | `code = 2` | Currently unused | Add when Hugging Face auth failures need distinct reporting.
+| `XetErrorCode::AuthFailed` (`error.rs:14`) | `code = 2` | `*xet.XetError` with `Code=2` | Used when HTTP 401 (Unauthorized) responses are detected. Can be checked via `xet.IsAuthFailedError()` or `xetErr.IsAuthFailed()`.
 | `XetErrorCode::NetworkError` (`error.rs:16`) | `code = 3` | Currently unused | Prefer for transport errors once classified.
-| `XetErrorCode::NotFound` (`error.rs:17`) | `code = 4` | Currently unused | Map 404/410 responses here.
-| `XetErrorCode::PermissionDenied` (`error.rs:18`) | `code = 5` | Currently unused | Map 403 responses here.
+| `XetErrorCode::NotFound` (`error.rs:17`) | `code = 4` | `*xet.XetError` with `Code=4` | Used when HTTP 404 (Not Found) responses are detected.
+| `XetErrorCode::PermissionDenied` (`error.rs:18`) | `code = 5` | `*xet.XetError` with `Code=5` | Used when HTTP 403 (Forbidden) responses are detected.
 | `XetErrorCode::ChecksumMismatch` (`error.rs:19`) | `code = 6` | Currently unused | Intended for CAS integrity mismatches.
 | `XetErrorCode::Cancelled` (`error.rs:20`) | `code = 7` | Currently unused | Use when cancellation propagates through FFI.
 | `XetErrorCode::IoError` (`error.rs:21`) | `code = 8` | Currently unused | Map filesystem errors (e.g., disk full) once detected.
