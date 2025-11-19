@@ -111,8 +111,10 @@ spec:
           --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
           --attention-backend=fa3 \
           --log-requests \
+          --log-requests-level=1 \
           --mm-attention-backend=fa3 \
-          --disable-fast-image-processor
+          --disable-fast-image-processor \
+          --cuda-graph-max-bs=256
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
