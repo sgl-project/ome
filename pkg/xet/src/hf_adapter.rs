@@ -3,6 +3,7 @@ use crate::xet_integration::{parse_xet_file_data_from_headers, XetFileData, XetT
 use anyhow::{anyhow, Result};
 use futures::stream::{self, StreamExt};
 use serde::Deserialize;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -46,6 +47,27 @@ struct HfTreeItem {
 const MAX_HTTP_RETRIES: usize = 3;
 const RETRY_BACKOFF_MS: u64 = 200;
 
+/// HttpError represents an HTTP error with status code
+#[derive(Debug)]
+pub struct HttpError {
+    pub status: u16,
+    pub message: String,
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "HTTP {}: {}", self.status, self.message)
+    }
+}
+
+impl std::error::Error for HttpError {}
+
+impl HttpError {
+    pub fn new(status: u16, message: String) -> Self {
+        Self { status, message }
+    }
+}
+
 impl HfAdapter {
     async fn send_with_retry<F, S>(
         &self,
@@ -64,20 +86,20 @@ impl HfAdapter {
                         return Ok(resp);
                     }
 
+                    let status = resp.status();
                     debug!(
                         "[RETRY] {} attempt {} failed with HTTP {}",
                         description,
                         attempt + 1,
-                        resp.status()
+                        status
                     );
 
                     if attempt == MAX_HTTP_RETRIES {
-                        return Err(anyhow!(
-                            "{} failed after {} attempts: HTTP {}",
-                            description,
-                            attempt + 1,
-                            resp.status()
-                        ));
+                        // Create structured error with status code for reliable error classification
+                        let status_code = status.as_u16();
+                        let error_msg = format!("{} failed after {} attempts", description, attempt + 1);
+                        return Err(anyhow!(HttpError::new(status_code, error_msg))
+                            .context(format!("HTTP {}", status_code)));
                     }
                 }
                 Err(err) => {

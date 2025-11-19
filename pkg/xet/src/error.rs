@@ -1,3 +1,4 @@
+use crate::hf_adapter::HttpError;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
@@ -40,7 +41,21 @@ impl XetError {
     pub fn from_anyhow(err: anyhow::Error) -> *mut XetError {
         let message = format!("{}", err);
         let details = format!("{:?}", err);
-        Self::new(XetErrorCode::Unknown, message, Some(details))
+        
+        // Map specific HTTP status codes to error types
+        let code = if let Some(http_err) = err.downcast_ref::<HttpError>() {
+            match http_err.status {
+                401 => XetErrorCode::AuthFailed, // Note: HF returns 401 for invalid model IDs too
+                403 => XetErrorCode::PermissionDenied,
+                404 => XetErrorCode::NotFound,
+                _ => XetErrorCode::Unknown, // All other HTTP status codes (500, etc.)
+            }
+        } else {
+            // Non-HTTP errors (network, cancellation, etc.) all map to Unknown
+            XetErrorCode::Unknown
+        };
+        
+        Self::new(code, message, Some(details))
     }
 }
 

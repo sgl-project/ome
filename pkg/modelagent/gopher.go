@@ -1028,6 +1028,67 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	downloadPath, err := xet.SnapshotDownloadWithProgress(ctx, config, progressHandler, progressThrottle)
 
 	if err != nil {
+		// Check for fatal errors (401, 403, 404) that should cause process termination
+		// These errors indicate configuration or access issues that require operator attention
+		if xet.IsFatalError(err) {
+			// Extract XetError to get the error code and full details
+			var xetErr *xet.XetError
+			var exitCode int
+			var errorType string
+			var httpStatus string
+
+			if xetError, ok := err.(*xet.XetError); ok {
+				xetErr = xetError
+				exitCode = xetErr.Code
+			} else {
+				// Fallback if error is not XetError (shouldn't happen, but be safe)
+				exitCode = 1
+				xetErr = &xet.XetError{
+					Code:    exitCode,
+					Message: err.Error(),
+					Details: "",
+				}
+			}
+
+			// Determine error type and HTTP status for logging
+			if xet.IsAuthFailedError(err) {
+				errorType = "authentication_failed"
+				httpStatus = "401"
+			} else if xet.IsPermissionDeniedError(err) {
+				errorType = "permission_denied"
+				httpStatus = "403"
+			} else if xet.IsNotFoundError(err) {
+				errorType = "not_found"
+				httpStatus = "404"
+			}
+
+			// Build full error message with all details
+			terminationMsg := fmt.Sprintf("FATAL: XetErrorCode=%d, HTTP %s error downloading HuggingFace model %s\n"+
+				"Error Type: %s\n"+
+				"Model Type: %s\n"+
+				"Namespace: %s\n"+
+				"Name: %s\n"+
+				"Error Message: %s\n"+
+				"Error Details: %s\n"+
+				"Process will exit with code %d.",
+				exitCode, httpStatus, modelInfo, errorType, modelType, namespace, name,
+				xetErr.Message, xetErr.Details, exitCode)
+
+			// Write entire error message to /dev/termination-log for Kubernetes termination message
+			if terminationLogErr := writeTerminationLog(terminationMsg); terminationLogErr != nil {
+				// Log the error but don't fail - termination log is best effort
+				s.logger.Warnf("Failed to write to termination log: %v", terminationLogErr)
+			}
+
+			// Log fatal error with full details
+			s.logger.Errorf("FATAL: Exiting with code %d - %s", exitCode, terminationMsg)
+
+			// Exit with XetErrorCode as the exit code
+			os.Exit(exitCode)
+			// This return is unreachable but included for completeness
+			return err
+		}
+
 		// Check error type for better handling
 		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
 			s.logger.Warnf("Rate limited while downloading HuggingFace model %s: %v", modelInfo, err)
@@ -1060,6 +1121,29 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 	if err := s.safeParseAndUpdateModelConfig(destPath, baseModel, clusterBaseModel); err != nil {
 		s.logger.Errorf("Failed to parse and update model config: %v", err)
 	}
+	return nil
+}
+
+// writeTerminationLog writes a message to /dev/termination-log for Kubernetes termination messages
+func writeTerminationLog(message string) error {
+	// Try to write to termination log file
+	// This is a best-effort operation - if it fails, we still want to exit
+	file, err := os.OpenFile(constants.TerminationLogPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open termination log: %w", err)
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(message)
+	if err != nil {
+		return fmt.Errorf("failed to write termination log: %w", err)
+	}
+
+	// Ensure the message is flushed to disk
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("failed to sync termination log: %w", err)
+	}
+
 	return nil
 }
 

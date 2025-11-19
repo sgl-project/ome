@@ -41,6 +41,12 @@ var (
 	AcceleratorClassFinalizer     = "acceleratorclasses.ome.io/finalizer"
 )
 
+// Kubernetes Container Constants
+const (
+	// TerminationLogPath is the path where Kubernetes reads container termination messages
+	TerminationLogPath = "/dev/termination-log"
+)
+
 // OME Agent Constants
 var (
 	AgentName                         = "ome-agent"
