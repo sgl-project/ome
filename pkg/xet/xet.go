@@ -1,7 +1,11 @@
 package xet
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/target/release -Wl,-Bstatic -lxet -Wl,-Bdynamic -lssl -lcrypto -ldl -lm -lstdc++
+// macOS (darwin) – no -Bstatic/-Bdynamic
+#cgo darwin LDFLAGS: -L${SRCDIR}/target/release -lxet -ldl -lm -lstdc++
+
+// Linux – keep your existing static/dynamic behavior
+#cgo linux LDFLAGS: -L${SRCDIR}/target/release -Wl,-Bstatic -lxet -Wl,-Bdynamic -lssl -lcrypto -ldl -lm -lstdc++
 #cgo darwin LDFLAGS: -framework CoreFoundation -framework Security
 #include <stdlib.h>
 #include "xet.h"

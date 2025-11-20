@@ -179,7 +179,8 @@ func TestProcessBaseLabels(t *testing.T) {
 		"custom-label": "custom-value",
 	}
 
-	labels := ProcessBaseLabels(b, isvc, v1beta1.EngineComponent, existingLabels)
+	labels, err := ProcessBaseLabels(b, isvc, v1beta1.EngineComponent, existingLabels)
+	g.Expect(err).To(gomega.BeNil())
 
 	// Check expected labels
 	g.Expect(labels).To(gomega.HaveKeyWithValue("custom-label", "custom-value"))
