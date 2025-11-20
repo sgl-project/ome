@@ -29,7 +29,7 @@ require (
 	github.com/ray-project/kuberay/ray-operator v1.2.2
 	github.com/satori/go.uuid v1.2.0
 	github.com/schollz/progressbar/v3 v3.18.0
-	github.com/sgl-project/ome v0.1.3
+	github.com/sgl-project/ome v0.1.4-0.20251031103124-93e8c92815b1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.1
