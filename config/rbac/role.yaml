@@ -285,6 +285,7 @@ rules:
   - clustercapacityreservations
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
+  - dbclusters
   - dedicatedaiclusters
   - finetunedweights
   - finetunedweights/finalizers
@@ -315,6 +316,7 @@ rules:
   - clusterbasemodels/status
   - clustercapacityreservations/status
   - clusterservingruntimes/status
+  - dbclusters/status
   - dedicatedaiclusters/status
   - finetunedweights/status
   - inferenceservices/status
@@ -339,6 +341,7 @@ rules:
   - capacityreservations/finalizers
   - clusterbasemodels/finalizers
   - clustercapacityreservations/finalizers
+  - dbclusters/finalizers
   - dedicatedaiclusters/finalizers
   verbs:
   - update

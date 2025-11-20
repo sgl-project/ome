@@ -904,6 +904,42 @@
         }
       }
     },
+    "v1beta1.DbSystemNetworkDetails": {
+      "type": "object",
+      "required": [
+        "subnetId"
+      ],
+      "properties": {
+        "nsgIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "primaryDbEndpointPrivateIp": {
+          "type": "string"
+        },
+        "subnetId": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.DbSystemStorageDetails": {
+      "type": "object",
+      "properties": {
+        "availabilityDomain": {
+          "type": "string"
+        },
+        "isRegionallyDurable": {
+          "description": "choose regional (true) or AD-local (false)",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
     "v1beta1.DecoderSpec": {
       "description": "DecoderSpec defines the configuration for the Decoder component (token generation in PD-disaggregated deployment) Used specifically for prefill-decode disaggregated deployments to handle the token generation phase. Similar to EngineSpec in structure, it allows for detailed pod and container configuration, but is specifically used for the decode phase when separating prefill and decode processes.",
       "type": "object",
@@ -3310,6 +3346,147 @@
         },
         "namespace": {
           "description": "Namespace of the referenced object",
+          "type": "string"
+        }
+      }
+    },
+    "v1beta1.OciPostgresCluster": {
+      "description": "OCIPostgresDBCluster is the Schema for the PostgresDBCluster API",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciPostgresClusterSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciPostgresClusterStatus"
+        }
+      }
+    },
+    "v1beta1.OciPostgresClusterList": {
+      "description": "PostgresDBClusterList contains a list of PostgresDBCluster",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.OciPostgresCluster"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.OciPostgresClusterSpec": {
+      "type": "object",
+      "required": [
+        "compartmentId",
+        "networkDetails"
+      ],
+      "properties": {
+        "authType": {
+          "description": "AuthType selects how we authenticate to OCI.",
+          "type": "string"
+        },
+        "compartmentId": {
+          "type": "string",
+          "default": ""
+        },
+        "dbVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "description": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "instanceCount": {
+          "description": "# of nodes (writer + replicas). Size must match InstancesDetails if provided.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "instanceMemorySizeInGbs": {
+          "description": "per-node memory (GiB) for Flex shapes.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "instanceOcpuCount": {
+          "description": "per-node OCPU for Flex shapes.",
+          "type": "integer",
+          "format": "int32"
+        },
+        "networkDetails": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.DbSystemNetworkDetails"
+        },
+        "shape": {
+          "type": "string",
+          "default": ""
+        },
+        "storageDetails": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.DbSystemStorageDetails"
+        }
+      }
+    },
+    "v1beta1.OciPostgresClusterStatus": {
+      "type": "object",
+      "properties": {
+        "adminSecretName": {
+          "type": "string"
+        },
+        "adminSecretNamespace": {
+          "type": "string"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "dbSystemId": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "lifecycleState": {
+          "description": "LifecycleState represents the current lifecycle state of the ocipostgres_cluster (e.g., READY, CREATING)",
           "type": "string"
         }
       }

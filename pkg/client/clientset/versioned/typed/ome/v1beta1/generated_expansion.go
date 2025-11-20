@@ -26,6 +26,8 @@ type InferenceGraphExpansion interface{}
 
 type InferenceServiceExpansion interface{}
 
+type OciPostgresClusterExpansion interface{}
+
 type OrganizationExpansion interface{}
 
 type ProjectExpansion interface{}
