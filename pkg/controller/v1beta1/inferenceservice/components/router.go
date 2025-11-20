@@ -176,7 +176,15 @@ func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 		}, err
 	}
 
-	labels := r.processLabels(isvc)
+	labels, err := r.processLabels(isvc)
+
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:        routerName,
+			Namespace:   isvc.Namespace,
+			Annotations: annotations,
+		}, err
+	}
 
 	return metav1.ObjectMeta{
 		Name:        routerName,
@@ -209,7 +217,7 @@ func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 }
 
 // processLabels processes the labels for the router
-func (r *Router) processLabels(isvc *v1beta1.InferenceService) map[string]string {
+func (r *Router) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
 	mergedLabels := isvc.Labels
 	if r.routerSpec != nil {
 		routerLabels := r.routerSpec.Labels

@@ -190,7 +190,14 @@ func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 		}, err
 	}
 
-	labels := e.processLabels(isvc)
+	labels, err := e.processLabels(isvc)
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:        engineName,
+			Namespace:   isvc.Namespace,
+			Annotations: annotations,
+		}, err
+	}
 
 	return metav1.ObjectMeta{
 		Name:        engineName,
@@ -223,7 +230,7 @@ func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]
 }
 
 // processLabels processes the labels for the engine
-func (e *Engine) processLabels(isvc *v1beta1.InferenceService) map[string]string {
+func (e *Engine) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
 	mergedLabels := isvc.Labels
 	if e.engineSpec != nil {
 		engineLabels := e.engineSpec.Labels

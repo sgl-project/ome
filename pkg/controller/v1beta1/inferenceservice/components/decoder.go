@@ -189,7 +189,15 @@ func (d *Decoder) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Ob
 		}, err
 	}
 
-	labels := d.processLabels(isvc)
+	labels, err := d.processLabels(isvc)
+
+	if err != nil {
+		return metav1.ObjectMeta{
+			Name:        decoderName,
+			Namespace:   isvc.Namespace,
+			Annotations: annotations,
+		}, err
+	}
 
 	return metav1.ObjectMeta{
 		Name:        decoderName,
@@ -222,7 +230,7 @@ func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string
 }
 
 // processLabels processes the labels for the decoder
-func (d *Decoder) processLabels(isvc *v1beta1.InferenceService) map[string]string {
+func (d *Decoder) processLabels(isvc *v1beta1.InferenceService) (map[string]string, error) {
 	mergedLabels := isvc.Labels
 	if d.decoderSpec != nil {
 		decoderLabels := d.decoderSpec.Labels
