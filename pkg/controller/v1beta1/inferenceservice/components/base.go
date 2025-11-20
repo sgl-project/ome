@@ -463,7 +463,7 @@ func ProcessBaseAnnotations(b *BaseComponentFields, isvc *v1beta1.InferenceServi
 }
 
 // ProcessBaseLabels processes common labels
-func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, labels map[string]string) map[string]string {
+func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, componentType v1beta1.ComponentType, labels map[string]string) (map[string]string, error) {
 	baseModelCategory := "SMALL"
 	if b.BaseModelMeta != nil {
 		if category, ok := b.BaseModelMeta.Annotations[constants.ModelCategoryAnnotation]; ok {
@@ -501,17 +501,19 @@ func ProcessBaseLabels(b *BaseComponentFields, isvc *v1beta1.InferenceService, c
 		ftStrategyParameter, err := isvcutils.GetValueFromRawExtension(b.FineTunedWeights[0].Spec.HyperParameters, constants.StrategyConfigKey)
 		if err != nil {
 			b.Log.Error(err, "Error getting hyper-parameter strategy from FineTunedWeight", "FineTunedWeight", b.FineTunedWeights[0].Name, "namespace", isvc.Namespace)
-		} else {
-			fineTunedWeightFTStrategy := ""
-			if ftStrategyParameter != nil {
-				fineTunedWeightFTStrategy = ftStrategyParameter.(string)
-			}
-			labels[constants.FineTunedWeightFTStrategyLabelKey] = fineTunedWeightFTStrategy
+			return nil, err
 		}
+
+		fineTunedWeightFTStrategy := ""
+		if ftStrategyParameter != nil {
+			fineTunedWeightFTStrategy = ftStrategyParameter.(string)
+		}
+		labels[constants.FineTunedWeightFTStrategyLabelKey] = fineTunedWeightFTStrategy
+
 		labels[constants.FTServingWithMergedWeightsLabelKey] = strconv.FormatBool(b.FineTunedServingWithMergedWeights)
 	}
 
-	return labels
+	return labels, nil
 }
 
 // UpdateComponentStatus updates component status based on deployment mode
