@@ -3491,6 +3491,126 @@
         }
       }
     },
+    "v1beta1.OciPostgresDBInstance": {
+      "description": "OciPostgresDBInstance is the Schema for the PostgresDBInstance API",
+      "type": "object",
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciPostgresDBInstanceSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciPostgresDBInstanceStatus"
+        }
+      }
+    },
+    "v1beta1.OciPostgresDBInstanceList": {
+      "description": "OciPostgresDBInstanceList contains a list of PostgresDBInstance",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.OciPostgresDBInstance"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.OciPostgresDBInstanceSpec": {
+      "type": "object",
+      "required": [
+        "dbClusterId",
+        "adminSecretName",
+        "adminSecretNamespace"
+      ],
+      "properties": {
+        "adminSecretName": {
+          "description": "AdminSecreteName used to fetch admin credential for the cluster to provision db instance",
+          "type": "string",
+          "default": ""
+        },
+        "adminSecretNamespace": {
+          "type": "string",
+          "default": ""
+        },
+        "authType": {
+          "description": "AuthType selects how we authenticate to OCI.",
+          "type": "string"
+        },
+        "dbClusterId": {
+          "description": "Reference to owning cluster ID",
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.OciPostgresDBInstanceStatus": {
+      "type": "object",
+      "required": [
+        "isReady"
+      ],
+      "properties": {
+        "appUserSecretName": {
+          "type": "string"
+        },
+        "appUserSecretNamespace": {
+          "type": "string"
+        },
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "databaseName": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "isReady": {
+          "description": "IsReady indicates whether the storage is ready for use.",
+          "type": "boolean",
+          "default": false
+        },
+        "lifecycleState": {
+          "description": "LifecycleState represents the current lifecycle state of the PostgreSQLStatus (e.g., READY, CREATING)",
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.Organization": {
       "description": "Organization represents an AI platform organization configuration",
       "type": "object",

@@ -34,6 +34,8 @@ type Interface interface {
 	InferenceServices() InferenceServiceInformer
 	// OciPostgresClusters returns a OciPostgresClusterInformer.
 	OciPostgresClusters() OciPostgresClusterInformer
+	// OciPostgresDBInstances returns a OciPostgresDBInstanceInformer.
+	OciPostgresDBInstances() OciPostgresDBInstanceInformer
 	// Organizations returns a OrganizationInformer.
 	Organizations() OrganizationInformer
 	// Projects returns a ProjectInformer.
@@ -128,6 +130,11 @@ func (v *version) InferenceServices() InferenceServiceInformer {
 // OciPostgresClusters returns a OciPostgresClusterInformer.
 func (v *version) OciPostgresClusters() OciPostgresClusterInformer {
 	return &ociPostgresClusterInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// OciPostgresDBInstances returns a OciPostgresDBInstanceInformer.
+func (v *version) OciPostgresDBInstances() OciPostgresDBInstanceInformer {
+	return &ociPostgresDBInstanceInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Organizations returns a OrganizationInformer.

@@ -28,6 +28,8 @@ type InferenceServiceExpansion interface{}
 
 type OciPostgresClusterExpansion interface{}
 
+type OciPostgresDBInstanceExpansion interface{}
+
 type OrganizationExpansion interface{}
 
 type ProjectExpansion interface{}

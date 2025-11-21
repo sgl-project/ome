@@ -78,6 +78,10 @@ type OciPostgresClusterListerExpansion interface{}
 // OciPostgresClusterNamespaceLister.
 type OciPostgresClusterNamespaceListerExpansion interface{}
 
+// OciPostgresDBInstanceListerExpansion allows custom methods to be added to
+// OciPostgresDBInstanceLister.
+type OciPostgresDBInstanceListerExpansion interface{}
+
 // OrganizationListerExpansion allows custom methods to be added to
 // OrganizationLister.
 type OrganizationListerExpansion interface{}

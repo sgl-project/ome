@@ -64,6 +64,10 @@ func (c *FakeOmeV1beta1) OciPostgresClusters(namespace string) v1beta1.OciPostgr
 	return &FakeOciPostgresClusters{c, namespace}
 }
 
+func (c *FakeOmeV1beta1) OciPostgresDBInstances() v1beta1.OciPostgresDBInstanceInterface {
+	return &FakeOciPostgresDBInstances{c}
+}
+
 func (c *FakeOmeV1beta1) Organizations() v1beta1.OrganizationInterface {
 	return &FakeOrganizations{c}
 }
