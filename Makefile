@@ -108,15 +108,16 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@mkdir -p config/crd/opensource-temp
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=github.com/sgl-project/ome/pkg/apis/ome/v1beta1 output:crd:dir=config/crd/opensource-temp
 	@echo "  • Overwriting model and runtime CRDs with opensource definitions..."
-	@echo "    (BaseModel, ClusterBaseModel, FineTunedWeight, ServingRuntime, ClusterServingRuntime)"
+	@echo "    (BaseModel, ClusterBaseModel, FineTunedWeight, ServingRuntime, ClusterServingRuntime, AcceleratorClass)"
 	@if [ -f config/crd/opensource-temp/ome.io_basemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_basemodels.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_clusterbasemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterbasemodels.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_finetunedweights.yaml ]; then cp config/crd/opensource-temp/ome.io_finetunedweights.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_servingruntimes.yaml ]; then cp config/crd/opensource-temp/ome.io_servingruntimes.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_clusterservingruntimes.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterservingruntimes.yaml config/crd/full/; fi
+	@if [ -f config/crd/opensource-temp/ome.io_acceleratorclasses.yaml ]; then cp config/crd/opensource-temp/ome.io_acceleratorclasses.yaml config/crd/full/; fi
 	@echo "  • Cleaning up temporary directory..."
 	@rm -rf config/crd/opensource-temp
-	@echo "✅ CRD manifests generated (model and runtime CRDs from opensource, all others from internal)"
+	@echo "✅ CRD manifests generated (model, runtime and acceleratorClass CRDs from opensource, all others from internal)"
 
 	@echo "\n🔑 Step 2: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
