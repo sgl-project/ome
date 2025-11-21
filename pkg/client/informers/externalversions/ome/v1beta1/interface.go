@@ -36,6 +36,8 @@ type Interface interface {
 	OciPostgresClusters() OciPostgresClusterInformer
 	// OciPostgresDBInstances returns a OciPostgresDBInstanceInformer.
 	OciPostgresDBInstances() OciPostgresDBInstanceInformer
+	// OciRedisClusters returns a OciRedisClusterInformer.
+	OciRedisClusters() OciRedisClusterInformer
 	// Organizations returns a OrganizationInformer.
 	Organizations() OrganizationInformer
 	// Projects returns a ProjectInformer.
@@ -135,6 +137,11 @@ func (v *version) OciPostgresClusters() OciPostgresClusterInformer {
 // OciPostgresDBInstances returns a OciPostgresDBInstanceInformer.
 func (v *version) OciPostgresDBInstances() OciPostgresDBInstanceInformer {
 	return &ociPostgresDBInstanceInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// OciRedisClusters returns a OciRedisClusterInformer.
+func (v *version) OciRedisClusters() OciRedisClusterInformer {
+	return &ociRedisClusterInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Organizations returns a OrganizationInformer.

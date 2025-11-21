@@ -30,6 +30,8 @@ type OciPostgresClusterExpansion interface{}
 
 type OciPostgresDBInstanceExpansion interface{}
 
+type OciRedisClusterExpansion interface{}
+
 type OrganizationExpansion interface{}
 
 type ProjectExpansion interface{}

@@ -3611,6 +3611,133 @@
         }
       }
     },
+    "v1beta1.OciRedisCluster": {
+      "description": "OCIRedisCluster is the Schema for the RedisCluster API",
+      "type": "object",
+      "required": [
+        "spec"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ObjectMeta"
+        },
+        "spec": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciRedisClusterSpec"
+        },
+        "status": {
+          "default": {},
+          "$ref": "#/definitions/v1beta1.OciRedisClusterStatus"
+        }
+      }
+    },
+    "v1beta1.OciRedisClusterList": {
+      "description": "OCIRedisClusterList contains a list of Redis Cluster",
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "apiVersion": {
+          "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1beta1.OciRedisCluster"
+          }
+        },
+        "kind": {
+          "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+          "type": "string"
+        },
+        "metadata": {
+          "default": {},
+          "$ref": "#/definitions/v1.ListMeta"
+        }
+      }
+    },
+    "v1beta1.OciRedisClusterSpec": {
+      "type": "object",
+      "required": [
+        "compartmentId",
+        "subnetId"
+      ],
+      "properties": {
+        "authType": {
+          "description": "AuthType selects how we authenticate to OCI.",
+          "type": "string"
+        },
+        "compartmentId": {
+          "type": "string",
+          "default": ""
+        },
+        "displayName": {
+          "type": "string",
+          "default": ""
+        },
+        "nodeCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "nodeMemoryInGBs": {
+          "type": "string"
+        },
+        "nsgIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "softwareVersion": {
+          "type": "string"
+        },
+        "subnetId": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "v1beta1.OciRedisClusterStatus": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "description": "Conditions represent the latest available observations of an object's state",
+          "type": "array",
+          "items": {
+            "default": {},
+            "$ref": "#/definitions/v1.Condition"
+          },
+          "x-kubernetes-list-type": "atomic"
+        },
+        "lifecycleState": {
+          "description": "LifecycleState represents the current lifecycle state of the oci_redis_cluster (e.g., READY, CREATING)",
+          "type": "string"
+        },
+        "redisClusterId": {
+          "type": "string"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "secretNamespace": {
+          "type": "string"
+        }
+      }
+    },
     "v1beta1.Organization": {
       "description": "Organization represents an AI platform organization configuration",
       "type": "object",

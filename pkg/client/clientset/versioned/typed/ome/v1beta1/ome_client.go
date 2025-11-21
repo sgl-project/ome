@@ -26,6 +26,7 @@ type OmeV1beta1Interface interface {
 	InferenceServicesGetter
 	OciPostgresClustersGetter
 	OciPostgresDBInstancesGetter
+	OciRedisClustersGetter
 	OrganizationsGetter
 	ProjectsGetter
 	RateLimitsGetter
@@ -96,6 +97,10 @@ func (c *OmeV1beta1Client) OciPostgresClusters(namespace string) OciPostgresClus
 
 func (c *OmeV1beta1Client) OciPostgresDBInstances() OciPostgresDBInstanceInterface {
 	return newOciPostgresDBInstances(c)
+}
+
+func (c *OmeV1beta1Client) OciRedisClusters(namespace string) OciRedisClusterInterface {
+	return newOciRedisClusters(c, namespace)
 }
 
 func (c *OmeV1beta1Client) Organizations() OrganizationInterface {
