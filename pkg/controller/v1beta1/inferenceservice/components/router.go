@@ -19,7 +19,6 @@ import (
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/common"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/reconcilers/rbac"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/status"
-	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	"github.com/sgl-project/ome/pkg/utils"
 )
 
@@ -141,16 +140,7 @@ func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 
 // updateRouterStatus updates the status of the router component
 func (r *Router) updateRouterStatus(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta) error {
-	rawDeployment := r.DeploymentMode == constants.RawDeployment
-	statusSpec := isvc.Status.Components[v1beta1.RouterComponent]
-	podLabelKey, podLabelValue := r.getPodLabelInfo(rawDeployment, objectMeta, statusSpec)
-
-	routerPods, err := isvcutils.ListPodsByLabel(r.Client, isvc.ObjectMeta.Namespace, podLabelKey, podLabelValue)
-	if err != nil {
-		return errors.Wrapf(err, "failed to list router pods by label")
-	}
-	r.StatusManager.PropagateModelStatus(&isvc.Status, statusSpec, routerPods, rawDeployment)
-	return nil
+	return UpdateComponentStatus(&r.BaseComponentFields, isvc, v1beta1.RouterComponent, objectMeta, r.getPodLabelInfo)
 }
 
 // getPodLabelInfo returns the pod label key and value based on the deployment mode
