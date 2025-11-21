@@ -56,9 +56,9 @@ var (
 	}
 )
 
-// +kubebuilder:rbac:groups=ome.io,resources=dbclusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ome.io,resources=dbclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ome.io,resources=dbclusters/finalizers,verbs=update
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgresclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgresclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=ome.io,resources=ocipostgresclusters/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;create;update;patch;watch
 
 type DBClusterReconciler struct {

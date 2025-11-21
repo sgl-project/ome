@@ -285,12 +285,12 @@ rules:
   - clustercapacityreservations
   - clusterservingruntimes
   - clusterservingruntimes/finalizers
-  - dbclusters
   - dedicatedaiclusters
   - finetunedweights
   - finetunedweights/finalizers
   - inferenceservices
   - inferenceservices/finalizers
+  - ocipostgresclusters
   - projects
   - ratelimits
   - replicationjobs
@@ -316,10 +316,10 @@ rules:
   - clusterbasemodels/status
   - clustercapacityreservations/status
   - clusterservingruntimes/status
-  - dbclusters/status
   - dedicatedaiclusters/status
   - finetunedweights/status
   - inferenceservices/status
+  - ocipostgresclusters/status
   - projects/finalizers
   - projects/status
   - ratelimits/finalizers
@@ -341,8 +341,8 @@ rules:
   - capacityreservations/finalizers
   - clusterbasemodels/finalizers
   - clustercapacityreservations/finalizers
-  - dbclusters/finalizers
   - dedicatedaiclusters/finalizers
+  - ocipostgresclusters/finalizers
   verbs:
   - update
 - apiGroups:
