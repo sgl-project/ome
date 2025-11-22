@@ -2152,7 +2152,7 @@ func TestValidateAcceleratorClasses(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "unknown accelerator class 'unknown-accelerator'",
+			errorMsg:    "unknown accelerator classes",
 		},
 		{
 			name: "Multiple accelerator classes - all valid",
@@ -2171,7 +2171,7 @@ func TestValidateAcceleratorClasses(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "invalid-class",
+			errorMsg:    "unknown accelerator classes",
 		},
 		{
 			name: "Multiple accelerator classes - all invalid",

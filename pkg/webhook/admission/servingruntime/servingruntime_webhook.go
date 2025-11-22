@@ -28,7 +28,7 @@ const (
 	InvalidConfigurationError                   = "invalid configuration: %s"
 	MultiNodeConfigurationError                 = "for MultiNode deployment, both leader and worker must be defined and worker.size must be greater than 0"
 	RawDeploymentConfigurationError             = "for RawDeployment, leader and worker must not be defined"
-	UnknownAcceleratorClassError                = "unknown accelerator class '%s' referenced in AcceleratorRequirements"
+	UnknownAcceleratorClassError                = "unknown accelerator classes referenced in AcceleratorRequirements: %v"
 )
 
 // +kubebuilder:webhook:verbs=create;update,path=/validate-ome-io-v1beta1-clusterservingruntime,mutating=false,failurePolicy=fail,groups=ome.io,resources=clusterservingruntimes,versions=v1beta1,name=clusterservingruntime.ome-webhook-server.validator
@@ -345,10 +345,7 @@ func validateAcceleratorClasses(ctx context.Context, c client.Client, spec *v1be
 	}
 
 	if len(missingClasses) > 0 {
-		if len(missingClasses) == 1 {
-			return fmt.Errorf(UnknownAcceleratorClassError, missingClasses[0])
-		}
-		return fmt.Errorf("unknown accelerator classes referenced in AcceleratorRequirements: %v", missingClasses)
+		return fmt.Errorf(UnknownAcceleratorClassError, missingClasses)
 	}
 
 	return nil
