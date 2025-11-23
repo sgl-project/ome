@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
@@ -162,5 +164,60 @@ func (h *RuntimesHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Runtime deleted successfully",
 		"name": name,
+	})
+}
+
+// FetchYAML handles GET /api/v1/runtimes/fetch-yaml?url=<url>
+func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
+	url := c.Query("url")
+	if url == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "URL parameter is required",
+		})
+		return
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Fetch the URL
+	resp, err := client.Get(url)
+	if err != nil {
+		h.logger.Error("Failed to fetch URL", zap.String("url", url), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch URL",
+			"details": err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		h.logger.Error("URL returned non-200 status",
+			zap.String("url", url),
+			zap.Int("status", resp.StatusCode))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to fetch URL",
+			"details": "HTTP status: " + resp.Status,
+		})
+		return
+	}
+
+	// Read the content
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.logger.Error("Failed to read response body", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to read response",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Successfully fetched YAML from URL", zap.String("url", url))
+	c.JSON(http.StatusOK, gin.H{
+		"content": string(content),
 	})
 }

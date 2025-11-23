@@ -90,6 +90,7 @@ func (s *Server) SetupRoutes() *gin.Engine {
 		runtimes := v1.Group("/runtimes")
 		{
 			runtimes.GET("", runtimesHandler.List)
+			runtimes.GET("/fetch-yaml", runtimesHandler.FetchYAML)
 			runtimes.GET("/:name", runtimesHandler.Get)
 			runtimes.POST("", runtimesHandler.Create)
 			runtimes.PUT("/:name", runtimesHandler.Update)

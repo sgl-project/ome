@@ -36,12 +36,20 @@ export default function RuntimesPage() {
                 Manage your ClusterServingRuntime resources
               </p>
             </div>
-            <Link
-              href="/runtimes/new"
-              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
-            >
-              Create Runtime
-            </Link>
+            <div className="flex gap-3">
+              <Link
+                href="/runtimes/import"
+                className="rounded-lg border border-purple-600 px-4 py-2 text-sm font-medium text-purple-600 hover:bg-purple-50"
+              >
+                Import Runtime
+              </Link>
+              <Link
+                href="/runtimes/new"
+                className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+              >
+                Create Runtime
+              </Link>
+            </div>
           </div>
         </div>
       </header>
