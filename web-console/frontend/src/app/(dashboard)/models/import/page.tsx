@@ -27,6 +27,7 @@ export default function ImportModelPage() {
   const [modelScope, setModelScope] = useState<ModelScope>(ModelScope.Cluster)
   const [namespace, setNamespace] = useState('default')
   const [modelName, setModelName] = useState('')
+  const [huggingfaceToken, setHuggingfaceToken] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   // API hooks
@@ -112,7 +113,10 @@ export default function ImportModelPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(modelData),
+        body: JSON.stringify({
+          model: modelData,
+          huggingfaceToken: huggingfaceToken || undefined,
+        }),
       })
 
       if (!response.ok) {
@@ -295,6 +299,33 @@ export default function ImportModelPage() {
                 />
                 <p className="mt-1 text-sm text-gray-500">
                   Must be lowercase alphanumeric with dashes
+                </p>
+              </div>
+
+              {/* HuggingFace Token */}
+              <div>
+                <label htmlFor="hfToken" className="block text-sm font-medium text-gray-700">
+                  HuggingFace Token
+                  {selectedModel?.gated && selectedModel.gated !== false && (
+                    <span className="ml-1 text-red-600">*</span>
+                  )}
+                </label>
+                <input
+                  type="password"
+                  id="hfToken"
+                  value={huggingfaceToken}
+                  onChange={(e) => setHuggingfaceToken(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  placeholder="hf_..."
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  {selectedModel?.gated && selectedModel.gated !== false ? (
+                    <span className="text-amber-600">
+                      ⚠️ This model is gated and requires a HuggingFace token
+                    </span>
+                  ) : (
+                    'Optional. Required for gated models or private repos'
+                  )}
                 </p>
               </div>
             </div>

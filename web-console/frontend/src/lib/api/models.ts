@@ -23,8 +23,8 @@ export const modelsApi = {
     return response.data
   },
 
-  create: async (model: Partial<ClusterBaseModel>): Promise<ClusterBaseModel> => {
-    const response = await apiClient.post<ClusterBaseModel>('/models', model)
+  create: async (requestBody: { model: Partial<ClusterBaseModel>; huggingfaceToken?: string }): Promise<ClusterBaseModel> => {
+    const response = await apiClient.post<ClusterBaseModel>('/models', requestBody)
     return response.data
   },
 
@@ -55,8 +55,8 @@ export const baseModelsApi = {
     return response.data
   },
 
-  create: async (namespace: string, model: Partial<BaseModel>): Promise<BaseModel> => {
-    const response = await apiClient.post<BaseModel>(`/namespaces/${namespace}/models`, model)
+  create: async (namespace: string, requestBody: { model: Partial<BaseModel>; huggingfaceToken?: string }): Promise<BaseModel> => {
+    const response = await apiClient.post<BaseModel>(`/namespaces/${namespace}/models`, requestBody)
     return response.data
   },
 

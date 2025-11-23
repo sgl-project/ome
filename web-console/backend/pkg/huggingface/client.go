@@ -33,19 +33,19 @@ func NewClient() *Client {
 
 // ModelSearchResult represents a model search result from HuggingFace
 type ModelSearchResult struct {
-	ID            string   `json:"id"`
-	ModelID       string   `json:"modelId"`
-	Author        string   `json:"author"`
-	SHA           string   `json:"sha"`
-	LastModified  string   `json:"lastModified"`
-	Private       bool     `json:"private"`
-	Gated         bool     `json:"gated"`
-	Disabled      bool     `json:"disabled"`
-	Downloads     int      `json:"downloads"`
-	Likes         int      `json:"likes"`
-	Tags          []string `json:"tags"`
-	Pipeline      string   `json:"pipeline_tag,omitempty"`
-	Library       string   `json:"library_name,omitempty"`
+	ID            string      `json:"id"`
+	ModelID       string      `json:"modelId"`
+	Author        string      `json:"author"`
+	SHA           string      `json:"sha"`
+	LastModified  string      `json:"lastModified"`
+	Private       bool        `json:"private"`
+	Gated         interface{} `json:"gated"` // Can be false (bool) or "auto"/"manual" (string)
+	Disabled      bool        `json:"disabled"`
+	Downloads     int         `json:"downloads"`
+	Likes         int         `json:"likes"`
+	Tags          []string    `json:"tags"`
+	Pipeline      string      `json:"pipeline_tag,omitempty"`
+	Library       string      `json:"library_name,omitempty"`
 }
 
 // ModelInfo represents detailed model information
@@ -56,7 +56,7 @@ type ModelInfo struct {
 	SHA           string                 `json:"sha"`
 	LastModified  string                 `json:"lastModified"`
 	Private       bool                   `json:"private"`
-	Gated         bool                   `json:"gated"`
+	Gated         interface{}            `json:"gated"` // Can be false (bool) or "auto"/"manual" (string)
 	Disabled      bool                   `json:"disabled"`
 	Downloads     int                    `json:"downloads"`
 	Likes         int                    `json:"likes"`
@@ -117,8 +117,11 @@ func (c *Client) SearchModels(ctx context.Context, params SearchModelsParams) ([
 	if params.Sort != "" {
 		queryParams.Add("sort", params.Sort)
 	}
-	if params.Direction != "" {
-		queryParams.Add("direction", params.Direction)
+	// HuggingFace API expects direction as "-1" (desc) or "1" (asc)
+	if params.Direction == "desc" {
+		queryParams.Add("direction", "-1")
+	} else if params.Direction == "asc" {
+		queryParams.Add("direction", "1")
 	}
 	if params.Limit > 0 {
 		queryParams.Add("limit", fmt.Sprintf("%d", params.Limit))

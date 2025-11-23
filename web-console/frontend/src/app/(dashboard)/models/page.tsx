@@ -1,10 +1,26 @@
 'use client'
 
 import { useModels } from '@/lib/hooks/useModels'
+import { useServerEvents } from '@/hooks/useServerEvents'
+import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 
 export default function ModelsPage() {
   const { data, isLoading, error } = useModels()
+  const queryClient = useQueryClient()
+
+  // Connect to SSE for real-time updates
+  useServerEvents({
+    onEvent: (event) => {
+      if (event.resource === 'models') {
+        // Invalidate models query to trigger refetch
+        queryClient.invalidateQueries({ queryKey: ['models'] })
+      }
+    },
+    onConnected: () => {
+      console.log('Connected to real-time updates')
+    },
+  })
 
   if (isLoading) {
     return (

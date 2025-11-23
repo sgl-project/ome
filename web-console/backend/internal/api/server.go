@@ -135,6 +135,10 @@ func (s *Server) SetupRoutes() *gin.Engine {
 			hf.GET("/models/:modelId/config", hfHandler.GetModelConfig)
 			hf.GET("/models/:modelId/:modelName/config", hfHandler.GetModelConfig)
 		}
+
+		// Server-Sent Events endpoint for real-time updates
+		eventsHandler := handlers.NewEventsHandler(s.k8sClient, s.logger)
+		v1.GET("/events", eventsHandler.Stream)
 	}
 
 	s.logger.Info("API routes configured successfully")

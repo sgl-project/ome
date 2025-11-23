@@ -65,12 +65,23 @@ func (h *ModelsHandler) Get(c *gin.Context) {
 func (h *ModelsHandler) Create(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var modelData map[string]interface{}
-	if err := c.ShouldBindJSON(&modelData); err != nil {
+	var requestBody struct {
+		Model            map[string]interface{} `json:"model"`
+		HuggingfaceToken string                 `json:"huggingfaceToken,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request body",
 			"details": err.Error(),
+		})
+		return
+	}
+
+	modelData := requestBody.Model
+	if modelData == nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Missing 'model' field in request body",
 		})
 		return
 	}
@@ -84,6 +95,43 @@ func (h *ModelsHandler) Create(c *gin.Context) {
 	}
 	if model.GetKind() == "" {
 		model.SetKind("ClusterBaseModel")
+	}
+
+	// If HuggingFace token provided, create secret and set storageKey
+	if requestBody.HuggingfaceToken != "" {
+		secretName := model.GetName() + "-hf-token"
+		namespace := "ome" // ClusterBaseModels use ome namespace
+
+		if err := h.k8sClient.CreateHuggingFaceTokenSecret(ctx, secretName, namespace, requestBody.HuggingfaceToken); err != nil {
+			h.logger.Error("Failed to create HuggingFace token secret",
+				zap.String("secretName", secretName),
+				zap.String("namespace", namespace),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create HuggingFace token secret",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		// Set storage.storageKey to reference the secret
+		spec, found, err := unstructured.NestedMap(model.Object, "spec")
+		if err != nil || !found {
+			spec = make(map[string]interface{})
+		}
+
+		storage, found, err := unstructured.NestedMap(spec, "storage")
+		if err != nil || !found {
+			storage = make(map[string]interface{})
+		}
+
+		storage["storageKey"] = secretName
+		spec["storage"] = storage
+		model.Object["spec"] = spec
+
+		h.logger.Info("Created HuggingFace token secret",
+			zap.String("secretName", secretName),
+			zap.String("namespace", namespace))
 	}
 
 	created, err := h.k8sClient.CreateClusterBaseModel(ctx, model)

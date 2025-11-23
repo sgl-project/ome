@@ -30,6 +30,16 @@ func main() {
 		logger.Fatal("Failed to create Kubernetes client", zap.Error(err))
 	}
 
+	// Setup informers with event handlers
+	k8sClient.SetupInformers()
+
+	// Start informers and wait for cache sync before accepting requests
+	logger.Info("Starting informers and waiting for cache sync...")
+	if err := k8sClient.StartInformers(); err != nil {
+		logger.Fatal("Failed to start informers", zap.Error(err))
+	}
+	logger.Info("Informers started and caches synced successfully")
+
 	// Create API server
 	server := api.NewServer(k8sClient, logger)
 
@@ -65,6 +75,10 @@ func main() {
 	<-quit
 
 	logger.Info("Server shutting down...")
+
+	// Stop informers
+	logger.Info("Stopping informers...")
+	k8sClient.Stop()
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
