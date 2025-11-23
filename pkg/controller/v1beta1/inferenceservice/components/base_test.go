@@ -138,7 +138,7 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 			}
 
 			// Call the function
-			UpdatePodSpecNodeSelector(b, isvc, podSpec)
+			UpdatePodSpecNodeSelector(b, isvc, podSpec, "")
 
 			// Verify the result
 			g.Expect(podSpec.NodeSelector).To(gomega.Equal(tt.expectedNodeSelector))

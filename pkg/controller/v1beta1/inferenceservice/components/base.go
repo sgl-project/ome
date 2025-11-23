@@ -209,7 +209,7 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 }
 
 // UpdatePodSpecNodeSelector updates pod spec with node selector for model scheduling
-func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec) {
+func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceService, podSpec *corev1.PodSpec, componentType v1beta1.ComponentType) {
 	// Only add node selector if we have a base model
 	if b.BaseModel == nil || b.BaseModelMeta == nil {
 		return
@@ -245,7 +245,7 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
-	mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, v1beta1.EngineComponent)
+	mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, componentType)
 	if len(mergedNodeSelector) > 0 {
 		for k, v := range mergedNodeSelector {
 			podSpec.NodeSelector[k] = v
