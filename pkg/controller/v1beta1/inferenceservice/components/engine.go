@@ -301,7 +301,7 @@ func (e *Engine) reconcilePodSpec(isvc *v1beta1.InferenceService, objectMeta *me
 		return nil, err
 	}
 	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, podSpec, objectMeta)
-	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, podSpec)
+	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, podSpec, v1beta1.EngineComponent)
 	UpdateEngineAffinity(&e.BaseComponentFields, isvc, podSpec)
 
 	e.Log.Info("Engine PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
@@ -334,7 +334,7 @@ func (e *Engine) reconcileWorkerPodSpec(isvc *v1beta1.InferenceService, objectMe
 		return nil, err
 	}
 	UpdatePodSpecVolumes(&e.BaseComponentFields, isvc, workerPodSpec, objectMeta)
-	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, workerPodSpec)
+	UpdatePodSpecNodeSelector(&e.BaseComponentFields, isvc, workerPodSpec, v1beta1.EngineComponent)
 	UpdateEngineAffinity(&e.BaseComponentFields, isvc, workerPodSpec)
 	e.Log.Info("Engine Worker PodSpec updated", "inference service", isvc.Name, "namespace", isvc.Namespace)
 	return workerPodSpec, nil
