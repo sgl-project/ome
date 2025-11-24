@@ -7,32 +7,14 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StatCard } from '@/components/ui/StatCard'
 import { Button, ButtonIcons } from '@/components/ui/Button'
+import { StatIcons } from '@/components/ui/Icons'
 import { useSortedData } from '@/hooks/useSortedData'
 import { SortableHeader } from '@/components/ui/SortableHeader'
 import Link from 'next/link'
 import { useState } from 'react'
-import type { ClusterServingRuntime } from '@/types/runtime'
+import type { ClusterServingRuntime } from '@/lib/types/runtime'
 
 type SortField = 'name' | 'accelerators' | 'protocol' | 'status' | 'created'
-
-// Icons for stat cards
-const Icons = {
-  total: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
-    </svg>
-  ),
-  autoSelect: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-    </svg>
-  ),
-  disabled: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-    </svg>
-  ),
-}
 
 export default function RuntimesPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('')
@@ -56,11 +38,12 @@ export default function RuntimesPage() {
     }
   }
 
-  const { sortedData: sortedRuntimes, sortField, sortDirection, handleSort } = useSortedData(
-    data?.items,
-    'name' as SortField,
-    getValue
-  )
+  const {
+    sortedData: sortedRuntimes,
+    sortField,
+    sortDirection,
+    handleSort,
+  } = useSortedData(data?.items, 'name' as SortField, getValue)
 
   if (isLoading) {
     return <LoadingState message="Loading runtimes..." />
@@ -70,7 +53,8 @@ export default function RuntimesPage() {
     return <ErrorState error={error} />
   }
 
-  const autoSelectCount = data?.items.filter((r) => r.spec.supportedModelFormats?.some(f => f.autoSelect)).length || 0
+  const autoSelectCount =
+    data?.items.filter((r) => r.spec.supportedModelFormats?.some((f) => f.autoSelect)).length || 0
   const disabledCount = data?.items.filter((r) => r.spec.disabled).length || 0
 
   return (
@@ -80,9 +64,7 @@ export default function RuntimesPage() {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex items-start justify-between gap-8">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-                Runtimes
-              </h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Runtimes</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Manage ClusterServingRuntime configurations for model deployment and inference
               </p>
@@ -106,21 +88,21 @@ export default function RuntimesPage() {
           <StatCard
             label="Total Runtimes"
             value={data?.total || 0}
-            icon={Icons.total}
+            icon={StatIcons.runtimes}
             variant="primary"
             delay={0}
           />
           <StatCard
             label="Auto-Select"
             value={autoSelectCount}
-            icon={Icons.autoSelect}
+            icon={StatIcons.autoSelect}
             variant="accent"
             delay={1}
           />
           <StatCard
             label="Disabled"
             value={disabledCount}
-            icon={Icons.disabled}
+            icon={StatIcons.disabled}
             variant="muted"
             delay={2}
           />
@@ -153,11 +135,46 @@ export default function RuntimesPage() {
             <table className="min-w-full divide-y divide-border">
               <thead className="bg-muted/50">
                 <tr>
-                  <SortableHeader field="name" currentField={sortField} direction={sortDirection} onSort={handleSort}>Name</SortableHeader>
-                  <SortableHeader field="accelerators" currentField={sortField} direction={sortDirection} onSort={handleSort}>Accelerators</SortableHeader>
-                  <SortableHeader field="protocol" currentField={sortField} direction={sortDirection} onSort={handleSort}>Protocol</SortableHeader>
-                  <SortableHeader field="status" currentField={sortField} direction={sortDirection} onSort={handleSort}>Status</SortableHeader>
-                  <SortableHeader field="created" currentField={sortField} direction={sortDirection} onSort={handleSort}>Created</SortableHeader>
+                  <SortableHeader
+                    field="name"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Name
+                  </SortableHeader>
+                  <SortableHeader
+                    field="accelerators"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Accelerators
+                  </SortableHeader>
+                  <SortableHeader
+                    field="protocol"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Protocol
+                  </SortableHeader>
+                  <SortableHeader
+                    field="status"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Status
+                  </SortableHeader>
+                  <SortableHeader
+                    field="created"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Created
+                  </SortableHeader>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
@@ -165,11 +182,26 @@ export default function RuntimesPage() {
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <svg className="h-12 w-12 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                        <svg
+                          className="h-12 w-12 text-muted-foreground/40"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={1}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
+                          />
                         </svg>
                         <p className="text-sm text-muted-foreground">No runtimes found</p>
-                        <Button href="/runtimes/new" variant="outline" size="sm" icon={ButtonIcons.plus}>
+                        <Button
+                          href="/runtimes/new"
+                          variant="outline"
+                          size="sm"
+                          icon={ButtonIcons.plus}
+                        >
                           Create your first runtime
                         </Button>
                       </div>
@@ -188,20 +220,38 @@ export default function RuntimesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
-                          {runtime.spec.acceleratorRequirements?.acceleratorClasses?.map((acc, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-1 rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium">
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                              </svg>
-                              {acc}
-                            </span>
-                          )) || <span className="text-xs text-muted-foreground">Any</span>}
+                          {runtime.spec.acceleratorRequirements?.acceleratorClasses?.map(
+                            (acc, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium"
+                              >
+                                <svg
+                                  className="w-3 h-3"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+                                  />
+                                </svg>
+                                {acc}
+                              </span>
+                            )
+                          ) || <span className="text-xs text-muted-foreground">Any</span>}
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           {runtime.spec.protocolVersions?.map((protocol, idx) => (
-                            <span key={idx} className="inline-flex items-center rounded-md bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
+                            <span
+                              key={idx}
+                              className="inline-flex items-center rounded-md bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium"
+                            >
                               {protocol}
                             </span>
                           )) || <span className="text-xs text-muted-foreground">-</span>}

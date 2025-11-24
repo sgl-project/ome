@@ -7,7 +7,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useModels } from '@/lib/hooks/useModels'
 import { useNamespaces } from '@/lib/hooks/useNamespaces'
-import { useRuntimes, useCompatibleRuntimes, useRuntimeRecommendation } from '@/lib/hooks/useRuntimes'
+import {
+  useRuntimes,
+  useCompatibleRuntimes,
+  useRuntimeRecommendation,
+} from '@/lib/hooks/useRuntimes'
 import { useCreateService } from '@/lib/hooks/useServices'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { LoadingState } from '@/components/ui/LoadingState'
@@ -17,7 +21,10 @@ import type { ClusterBaseModel } from '@/lib/types/model'
 import type { RuntimeMatch } from '@/lib/types/runtime'
 
 const deploySchema = z.object({
-  name: z.string().min(1, 'Name is required').regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Must be a valid Kubernetes name'),
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Must be a valid Kubernetes name'),
   namespace: z.string().min(1, 'Namespace is required'),
   model: z.string().min(1, 'Model is required'),
   runtime: z.string().min(1, 'Runtime is required'),
@@ -45,7 +52,9 @@ function ScoreBadge({ score }: { score: number }) {
   }
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${getScoreColor(score)}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border ${getScoreColor(score)}`}
+    >
       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
       </svg>
@@ -84,16 +93,24 @@ function RuntimeCard({
             </span>
             {isRecommended && (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
                 Recommended
               </span>
             )}
           </div>
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {match.recommendation}
-          </p>
+          <p className="text-sm text-muted-foreground line-clamp-2">{match.recommendation}</p>
         </div>
         <ScoreBadge score={match.score} />
       </div>
@@ -106,7 +123,13 @@ function RuntimeCard({
               key={idx}
               className="inline-flex items-center rounded-md bg-success/10 text-success px-2 py-0.5 text-xs"
             >
-              <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg
+                className="w-3 h-3 mr-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
               {reason}
@@ -123,8 +146,18 @@ function RuntimeCard({
               key={idx}
               className="inline-flex items-center rounded-md bg-warning/10 text-warning px-2 py-0.5 text-xs"
             >
-              <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <svg
+                className="w-3 h-3 mr-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
               </svg>
               {warning}
             </span>
@@ -133,13 +166,25 @@ function RuntimeCard({
       )}
 
       {/* Selection indicator */}
-      <div className={`mt-3 flex items-center justify-end ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+      <div
+        className={`mt-3 flex items-center justify-end ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}
+      >
         {isSelected ? (
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+              clipRule="evenodd"
+            />
           </svg>
         ) : (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
             <circle cx="12" cy="12" r="10" />
           </svg>
         )}
@@ -162,7 +207,10 @@ export default function DeployServicePage() {
   const modelFramework = selectedModel?.spec.modelFramework?.name
 
   // Smart selection queries - only enabled when a model is selected
-  const { data: compatibleData, isLoading: compatibleLoading } = useCompatibleRuntimes(modelFormat, modelFramework)
+  const { data: compatibleData, isLoading: compatibleLoading } = useCompatibleRuntimes(
+    modelFormat,
+    modelFramework
+  )
   const { data: recommendedRuntime } = useRuntimeRecommendation(modelFormat, modelFramework)
 
   const {
@@ -194,14 +242,15 @@ export default function DeployServicePage() {
   // Get all runtimes (compatible ones first, then others)
   const sortedRuntimes = useMemo(() => {
     if (!runtimesData?.items) return []
-    if (!compatibleData?.matches) return runtimesData.items.map((r) => ({
-      runtime: r,
-      score: 0,
-      compatibleWith: [],
-      reasons: [],
-      warnings: [],
-      recommendation: 'Select a model to see compatibility',
-    }))
+    if (!compatibleData?.matches)
+      return runtimesData.items.map((r) => ({
+        runtime: r,
+        score: 0,
+        compatibleWith: [],
+        reasons: [],
+        warnings: [],
+        recommendation: 'Select a model to see compatibility',
+      }))
 
     const compatibleNames = new Set(compatibleData.matches.map((m) => m.runtime.metadata.name))
     const incompatible = runtimesData.items
@@ -257,7 +306,13 @@ export default function DeployServicePage() {
               href="/services"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
               Back to Services
@@ -265,8 +320,18 @@ export default function DeployServicePage() {
           </div>
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/25">
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+              <svg
+                className="w-6 h-6 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"
+                />
               </svg>
             </div>
             <div>
@@ -367,8 +432,18 @@ export default function DeployServicePage() {
                 <div className="mt-4 p-4 rounded-lg bg-muted/30 border border-border">
                   <div className="flex items-start gap-4">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                      <svg
+                        className="w-5 h-5 text-primary"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                        />
                       </svg>
                     </div>
                     <div className="flex-1">
@@ -409,8 +484,18 @@ export default function DeployServicePage() {
                     Runtime Selection
                     {selectedModel && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        <svg
+                          className="w-3 h-3"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                          />
                         </svg>
                         Smart Selection Active
                       </span>
@@ -424,7 +509,8 @@ export default function DeployServicePage() {
                 </div>
                 {compatibleData?.matches && (
                   <div className="text-sm text-muted-foreground">
-                    {compatibleData.matches.length} compatible runtime{compatibleData.matches.length !== 1 ? 's' : ''}
+                    {compatibleData.matches.length} compatible runtime
+                    {compatibleData.matches.length !== 1 ? 's' : ''}
                   </div>
                 )}
               </div>
@@ -436,11 +522,27 @@ export default function DeployServicePage() {
                 </div>
               ) : sortedRuntimes.length === 0 ? (
                 <div className="text-center py-12">
-                  <svg className="mx-auto h-12 w-12 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                  <svg
+                    className="mx-auto h-12 w-12 text-muted-foreground/40"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
+                    />
                   </svg>
                   <p className="mt-4 text-sm text-muted-foreground">No runtimes available</p>
-                  <Button href="/runtimes/new" variant="outline" size="sm" className="mt-4" icon={ButtonIcons.plus}>
+                  <Button
+                    href="/runtimes/new"
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    icon={ButtonIcons.plus}
+                  >
                     Create Runtime
                   </Button>
                 </div>
@@ -451,7 +553,9 @@ export default function DeployServicePage() {
                       key={match.runtime.metadata.name}
                       match={match}
                       isSelected={watchedRuntime === match.runtime.metadata.name}
-                      isRecommended={recommendedRuntime?.runtime.metadata.name === match.runtime.metadata.name}
+                      isRecommended={
+                        recommendedRuntime?.runtime.metadata.name === match.runtime.metadata.name
+                      }
                       onSelect={() => setValue('runtime', match.runtime.metadata.name)}
                     />
                   ))}

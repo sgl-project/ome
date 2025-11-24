@@ -48,7 +48,10 @@ export default function ModelDetailPage() {
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
-              <Link href="/models" className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block">
+              <Link
+                href="/models"
+                className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block"
+              >
                 ← Back to Models
               </Link>
               <h1 className="text-3xl font-bold text-gray-900">{model.metadata.name}</h1>
@@ -138,9 +141,7 @@ export default function ModelDetailPage() {
             </div>
             <div>
               <dt className="text-sm font-medium text-gray-500">Parameter Size</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {model.spec.modelParameterSize || '-'}
-              </dd>
+              <dd className="mt-1 text-sm text-gray-900">{model.spec.modelParameterSize || '-'}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-gray-500">Framework</dt>
@@ -248,7 +249,12 @@ export default function ModelDetailPage() {
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
           {showRawSpec && (

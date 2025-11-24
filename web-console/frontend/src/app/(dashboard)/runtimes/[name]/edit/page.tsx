@@ -52,45 +52,77 @@ export default function EditRuntimePage() {
   })
 
   // Field arrays for dynamic lists
-  const { fields: formatFields, append: appendFormat, remove: removeFormat } = useFieldArray({
+  const {
+    fields: formatFields,
+    append: appendFormat,
+    remove: removeFormat,
+  } = useFieldArray({
     control,
     name: 'spec.supportedModelFormats',
   })
 
-  const { fields: protocolFields, append: appendProtocol, remove: removeProtocol } = useFieldArray({
+  const {
+    fields: protocolFields,
+    append: appendProtocol,
+    remove: removeProtocol,
+  } = useFieldArray({
     control,
     name: 'spec.protocolVersions',
   })
 
   // Field arrays for Engine init containers and sidecars
-  const { fields: engineInitContainerFields, append: appendEngineInitContainer, remove: removeEngineInitContainer } = useFieldArray({
+  const {
+    fields: engineInitContainerFields,
+    append: appendEngineInitContainer,
+    remove: removeEngineInitContainer,
+  } = useFieldArray({
     control,
     name: 'spec.engineConfig.initContainers',
   })
 
-  const { fields: engineSidecarFields, append: appendEngineSidecar, remove: removeEngineSidecar } = useFieldArray({
+  const {
+    fields: engineSidecarFields,
+    append: appendEngineSidecar,
+    remove: removeEngineSidecar,
+  } = useFieldArray({
     control,
     name: 'spec.engineConfig.sidecars',
   })
 
   // Field arrays for Decoder init containers and sidecars
-  const { fields: decoderInitContainerFields, append: appendDecoderInitContainer, remove: removeDecoderInitContainer } = useFieldArray({
+  const {
+    fields: decoderInitContainerFields,
+    append: appendDecoderInitContainer,
+    remove: removeDecoderInitContainer,
+  } = useFieldArray({
     control,
     name: 'spec.decoderConfig.initContainers',
   })
 
-  const { fields: decoderSidecarFields, append: appendDecoderSidecar, remove: removeDecoderSidecar } = useFieldArray({
+  const {
+    fields: decoderSidecarFields,
+    append: appendDecoderSidecar,
+    remove: removeDecoderSidecar,
+  } = useFieldArray({
     control,
     name: 'spec.decoderConfig.sidecars',
   })
 
   // Field arrays for Router init containers and sidecars
-  const { fields: routerInitContainerFields, append: appendRouterInitContainer, remove: removeRouterInitContainer } = useFieldArray({
+  const {
+    fields: routerInitContainerFields,
+    append: appendRouterInitContainer,
+    remove: removeRouterInitContainer,
+  } = useFieldArray({
     control,
     name: 'spec.routerConfig.initContainers',
   })
 
-  const { fields: routerSidecarFields, append: appendRouterSidecar, remove: removeRouterSidecar } = useFieldArray({
+  const {
+    fields: routerSidecarFields,
+    append: appendRouterSidecar,
+    remove: removeRouterSidecar,
+  } = useFieldArray({
     control,
     name: 'spec.routerConfig.sidecars',
   })
@@ -129,7 +161,7 @@ export default function EditRuntimePage() {
   }, [runtime, reset])
 
   const toggleSection = (sectionId: string) => {
-    setExpandedSections(prev => ({
+    setExpandedSections((prev) => ({
       ...prev,
       [sectionId]: !prev[sectionId],
     }))
@@ -161,7 +193,10 @@ export default function EditRuntimePage() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
           <div className="mb-4 text-xl font-semibold text-red-600">Runtime not found</div>
-          <Link href="/runtimes" className="text-purple-600 hover:text-purple-800 transition-colors">
+          <Link
+            href="/runtimes"
+            className="text-purple-600 hover:text-purple-800 transition-colors"
+          >
             ← Back to Runtimes
           </Link>
         </div>
@@ -229,10 +264,16 @@ export default function EditRuntimePage() {
         }
 
         .section-card {
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+          background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.9) 0%,
+            rgba(255, 255, 255, 0.95) 100%
+          );
           backdrop-filter: blur(10px);
           border: 1px solid rgba(148, 163, 184, 0.1);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(148, 163, 184, 0.05);
+          box-shadow:
+            0 2px 8px rgba(0, 0, 0, 0.04),
+            0 0 0 1px rgba(148, 163, 184, 0.05);
         }
 
         .field-label {
@@ -285,11 +326,16 @@ export default function EditRuntimePage() {
                     className="input-focus w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-mono text-slate-500 cursor-not-allowed"
                     placeholder="my-runtime"
                   />
-                  <p className="mt-1.5 text-xs text-slate-500">Name cannot be changed after creation</p>
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    Name cannot be changed after creation
+                  </p>
                 </div>
 
                 <div>
-                  <label htmlFor="namespace" className="field-label block text-sm text-slate-700 mb-2">
+                  <label
+                    htmlFor="namespace"
+                    className="field-label block text-sm text-slate-700 mb-2"
+                  >
                     Namespace
                   </label>
                   <input
@@ -312,13 +358,17 @@ export default function EditRuntimePage() {
                   />
                   <label htmlFor="disabled" className="flex-1">
                     <span className="field-label text-sm text-slate-700 block">Disabled</span>
-                    <span className="text-xs text-slate-500">Disable this runtime from being selected</span>
+                    <span className="text-xs text-slate-500">
+                      Disable this runtime from being selected
+                    </span>
                   </label>
                 </div>
               </div>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Model Size Range</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Model Size Range
+                </h3>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                   <div>
                     <label className="field-label block text-sm text-slate-700 mb-2">
@@ -347,7 +397,9 @@ export default function EditRuntimePage() {
 
               <div>
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-base font-display font-semibold text-slate-700">Protocol Versions</h3>
+                  <h3 className="text-base font-display font-semibold text-slate-700">
+                    Protocol Versions
+                  </h3>
                   <button
                     type="button"
                     onClick={() => appendProtocol('')}
@@ -386,7 +438,9 @@ export default function EditRuntimePage() {
           <AccordionSection id="model-formats" title="Supported Model Formats">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">Define the model formats this runtime can execute</p>
+                <p className="text-sm text-slate-600">
+                  Define the model formats this runtime can execute
+                </p>
                 <button
                   type="button"
                   onClick={() => appendFormat({ name: '' })}
@@ -398,9 +452,14 @@ export default function EditRuntimePage() {
 
               <div className="space-y-4">
                 {formatFields.map((field, index) => (
-                  <div key={field.id} className="rounded-xl border border-slate-200 bg-white/50 p-5">
+                  <div
+                    key={field.id}
+                    className="rounded-xl border border-slate-200 bg-white/50 p-5"
+                  >
                     <div className="mb-4 flex items-center justify-between">
-                      <h4 className="text-sm font-display font-semibold text-slate-700">Format {index + 1}</h4>
+                      <h4 className="text-sm font-display font-semibold text-slate-700">
+                        Format {index + 1}
+                      </h4>
                       {formatFields.length > 1 && (
                         <button
                           type="button"
@@ -460,7 +519,9 @@ export default function EditRuntimePage() {
                         </label>
                         <input
                           type="text"
-                          {...register(`spec.supportedModelFormats.${index}.modelArchitecture` as const)}
+                          {...register(
+                            `spec.supportedModelFormats.${index}.modelArchitecture` as const
+                          )}
                           className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                           placeholder="LlamaForCausalLM"
                         />
@@ -517,10 +578,14 @@ export default function EditRuntimePage() {
 
               {/* Scaling Configuration */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Scaling Configuration
+                </h3>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Min Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.minReplicas', { valueAsNumber: true })}
@@ -529,7 +594,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Max Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.maxReplicas', { valueAsNumber: true })}
@@ -538,7 +605,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Target
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.scaleTarget', { valueAsNumber: true })}
@@ -547,7 +616,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Metric
+                    </label>
                     <select
                       {...register('spec.engineConfig.scaleMetric')}
                       className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -564,7 +635,9 @@ export default function EditRuntimePage() {
 
               {/* Runner (Main Container) - USING ContainerForm */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Runner (Main Container)
+                </h3>
                 <ContainerForm
                   basePath="spec.engineConfig.runner"
                   register={register}
@@ -582,8 +655,12 @@ export default function EditRuntimePage() {
                     className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                   />
                   <div>
-                    <span className="field-label text-sm text-slate-700 block">Enable Multi-Node Deployment</span>
-                    <span className="text-xs text-slate-600">Configure leader and worker nodes for distributed inference</span>
+                    <span className="field-label text-sm text-slate-700 block">
+                      Enable Multi-Node Deployment
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      Configure leader and worker nodes for distributed inference
+                    </span>
                   </div>
                 </label>
               </div>
@@ -591,8 +668,12 @@ export default function EditRuntimePage() {
               {/* Leader Configuration - CONDITIONAL */}
               {engineMultiNode && (
                 <div>
-                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Leader Node Configuration</h3>
-                  <p className="text-xs text-slate-500 mb-4">Coordinates distributed inference across worker nodes</p>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                    Leader Node Configuration
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Coordinates distributed inference across worker nodes
+                  </p>
                   <ContainerForm
                     basePath="spec.engineConfig.leader.runner"
                     register={register}
@@ -604,10 +685,16 @@ export default function EditRuntimePage() {
               {/* Worker Configuration - CONDITIONAL */}
               {engineMultiNode && (
                 <div>
-                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Worker Node Configuration</h3>
-                  <p className="text-xs text-slate-500 mb-4">Performs distributed processing tasks</p>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                    Worker Node Configuration
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Performs distributed processing tasks
+                  </p>
                   <div className="mb-4">
-                    <label className="field-label block text-sm text-slate-700 mb-2">Worker Size (Number of Pods)</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Worker Size (Number of Pods)
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.worker.size', { valueAsNumber: true })}
@@ -634,8 +721,12 @@ export default function EditRuntimePage() {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Init Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run before the main container starts
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -667,8 +758,12 @@ export default function EditRuntimePage() {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Sidecar Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run alongside the main container
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -701,14 +796,20 @@ export default function EditRuntimePage() {
           {/* Decoder Configuration - SAME PATTERN AS ENGINE */}
           <AccordionSection id="decoder" title="Decoder Configuration">
             <div className="space-y-8">
-              <p className="text-sm text-slate-600">Configure the decoder component for prefill-decode disaggregated deployments</p>
+              <p className="text-sm text-slate-600">
+                Configure the decoder component for prefill-decode disaggregated deployments
+              </p>
 
               {/* Scaling Configuration */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Scaling Configuration
+                </h3>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Min Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.minReplicas', { valueAsNumber: true })}
@@ -717,7 +818,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Max Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.maxReplicas', { valueAsNumber: true })}
@@ -726,7 +829,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Target
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.scaleTarget', { valueAsNumber: true })}
@@ -735,7 +840,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Metric
+                    </label>
                     <select
                       {...register('spec.decoderConfig.scaleMetric')}
                       className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -752,7 +859,9 @@ export default function EditRuntimePage() {
 
               {/* Runner (Main Container) */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Runner (Main Container)
+                </h3>
                 <ContainerForm
                   basePath="spec.decoderConfig.runner"
                   register={register}
@@ -770,8 +879,12 @@ export default function EditRuntimePage() {
                     className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                   />
                   <div>
-                    <span className="field-label text-sm text-slate-700 block">Enable Multi-Node Deployment</span>
-                    <span className="text-xs text-slate-600">Configure leader and worker nodes for distributed token generation</span>
+                    <span className="field-label text-sm text-slate-700 block">
+                      Enable Multi-Node Deployment
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      Configure leader and worker nodes for distributed token generation
+                    </span>
                   </div>
                 </label>
               </div>
@@ -779,8 +892,12 @@ export default function EditRuntimePage() {
               {/* Leader Configuration - CONDITIONAL */}
               {decoderMultiNode && (
                 <div>
-                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Leader Node Configuration</h3>
-                  <p className="text-xs text-slate-500 mb-4">Coordinates distributed token generation across worker nodes</p>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                    Leader Node Configuration
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Coordinates distributed token generation across worker nodes
+                  </p>
                   <ContainerForm
                     basePath="spec.decoderConfig.leader.runner"
                     register={register}
@@ -792,10 +909,16 @@ export default function EditRuntimePage() {
               {/* Worker Configuration - CONDITIONAL */}
               {decoderMultiNode && (
                 <div>
-                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Worker Node Configuration</h3>
-                  <p className="text-xs text-slate-500 mb-4">Performs distributed token generation tasks</p>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                    Worker Node Configuration
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Performs distributed token generation tasks
+                  </p>
                   <div className="mb-4">
-                    <label className="field-label block text-sm text-slate-700 mb-2">Worker Size (Number of Pods)</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Worker Size (Number of Pods)
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.worker.size', { valueAsNumber: true })}
@@ -822,8 +945,12 @@ export default function EditRuntimePage() {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Init Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run before the main container starts
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -855,8 +982,12 @@ export default function EditRuntimePage() {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Sidecar Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run alongside the main container
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -889,14 +1020,20 @@ export default function EditRuntimePage() {
           {/* Router Configuration - SIMPLIFIED (no multi-node) */}
           <AccordionSection id="router" title="Router Configuration">
             <div className="space-y-8">
-              <p className="text-sm text-slate-600">Configure the router component for request routing and load balancing</p>
+              <p className="text-sm text-slate-600">
+                Configure the router component for request routing and load balancing
+              </p>
 
               {/* Scaling Configuration */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Scaling Configuration
+                </h3>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Min Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.routerConfig.minReplicas', { valueAsNumber: true })}
@@ -905,7 +1042,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Max Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.routerConfig.maxReplicas', { valueAsNumber: true })}
@@ -914,7 +1053,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Target
+                    </label>
                     <input
                       type="number"
                       {...register('spec.routerConfig.scaleTarget', { valueAsNumber: true })}
@@ -923,7 +1064,9 @@ export default function EditRuntimePage() {
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Metric
+                    </label>
                     <select
                       {...register('spec.routerConfig.scaleMetric')}
                       className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -940,7 +1083,9 @@ export default function EditRuntimePage() {
 
               {/* Runner (Main Container) */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Runner (Main Container)
+                </h3>
                 <ContainerForm
                   basePath="spec.routerConfig.runner"
                   register={register}
@@ -950,8 +1095,12 @@ export default function EditRuntimePage() {
 
               {/* Router Config Map - KEEPING JSON FOR THIS ONE */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Router Configuration Parameters</h3>
-                <p className="text-xs text-slate-500 mb-3">Additional configuration parameters as key-value pairs (JSON format)</p>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Router Configuration Parameters
+                </h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  Additional configuration parameters as key-value pairs (JSON format)
+                </p>
                 <textarea
                   {...register('spec.routerConfig.config')}
                   className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 min-h-[100px]"
@@ -970,8 +1119,12 @@ export default function EditRuntimePage() {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Init Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run before the main container starts
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -1003,8 +1156,12 @@ export default function EditRuntimePage() {
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Sidecar Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run alongside the main container
+                    </p>
                   </div>
                   <button
                     type="button"

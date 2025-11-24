@@ -39,12 +39,8 @@ export default function AcceleratorsPage() {
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-1">
-                  <dt className="truncate text-sm font-medium text-gray-500">
-                    Total Accelerators
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold text-gray-900">
-                    {data?.total || 0}
-                  </dd>
+                  <dt className="truncate text-sm font-medium text-gray-500">Total Accelerators</dt>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">{data?.total || 0}</dd>
                 </div>
               </div>
             </div>
@@ -54,9 +50,7 @@ export default function AcceleratorsPage() {
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-1">
-                  <dt className="truncate text-sm font-medium text-gray-500">
-                    Accelerator Types
-                  </dt>
+                  <dt className="truncate text-sm font-medium text-gray-500">Accelerator Types</dt>
                   <dd className="mt-1 text-3xl font-semibold text-blue-600">
                     {new Set(data?.items.map((a) => a.spec.acceleratorType)).size || 0}
                   </dd>
@@ -75,17 +69,13 @@ export default function AcceleratorsPage() {
             >
               <div className="p-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    {accelerator.metadata.name}
-                  </h3>
+                  <h3 className="text-lg font-medium text-gray-900">{accelerator.metadata.name}</h3>
                   <span className="text-2xl">⚡</span>
                 </div>
 
                 <dl className="mt-4 space-y-3">
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase">
-                      Type
-                    </dt>
+                    <dt className="text-xs font-medium text-gray-500 uppercase">Type</dt>
                     <dd className="mt-1 text-sm text-gray-900">
                       {accelerator.spec.acceleratorType || 'Unknown'}
                     </dd>
@@ -93,9 +83,7 @@ export default function AcceleratorsPage() {
 
                   {accelerator.spec.acceleratorCount && (
                     <div>
-                      <dt className="text-xs font-medium text-gray-500 uppercase">
-                        Count
-                      </dt>
+                      <dt className="text-xs font-medium text-gray-500 uppercase">Count</dt>
                       <dd className="mt-1 text-sm text-gray-900">
                         {accelerator.spec.acceleratorCount}
                       </dd>
@@ -104,19 +92,13 @@ export default function AcceleratorsPage() {
 
                   {accelerator.spec.memoryGB && (
                     <div>
-                      <dt className="text-xs font-medium text-gray-500 uppercase">
-                        Memory
-                      </dt>
-                      <dd className="mt-1 text-sm text-gray-900">
-                        {accelerator.spec.memoryGB} GB
-                      </dd>
+                      <dt className="text-xs font-medium text-gray-500 uppercase">Memory</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{accelerator.spec.memoryGB} GB</dd>
                     </div>
                   )}
 
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase">
-                      Created
-                    </dt>
+                    <dt className="text-xs font-medium text-gray-500 uppercase">Created</dt>
                     <dd className="mt-1 text-sm text-gray-900">
                       {accelerator.metadata.creationTimestamp
                         ? new Date(accelerator.metadata.creationTimestamp).toLocaleDateString()

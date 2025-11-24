@@ -6,12 +6,12 @@ import Link from 'next/link'
 import {
   useHuggingFaceSearch,
   useHuggingFaceModelInfo,
-  useHuggingFaceModelConfig
+  useHuggingFaceModelConfig,
 } from '@/lib/hooks/useHuggingFace'
 import {
   ModelScope,
   type HuggingFaceModelSearchResult,
-  type HuggingFaceSearchParams
+  type HuggingFaceSearchParams,
 } from '@/lib/types/model'
 
 type WizardStep = 'search' | 'scope' | 'review' | 'importing'
@@ -132,9 +132,10 @@ export default function ImportModelPage() {
       }
 
       // Call appropriate API endpoint
-      const apiUrl = modelScope === ModelScope.Cluster
-        ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/models`
-        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/namespaces/${namespace}/models`
+      const apiUrl =
+        modelScope === ModelScope.Cluster
+          ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/models`
+          : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/namespaces/${namespace}/models`
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -165,7 +166,10 @@ export default function ImportModelPage() {
       {/* Header */}
       <header className="bg-white shadow">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <Link href="/models" className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block">
+          <Link
+            href="/models"
+            className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block"
+          >
             ← Back to Models
           </Link>
           <h1 className="text-3xl font-bold text-gray-900">Import Model from HuggingFace</h1>
@@ -462,7 +466,9 @@ export default function ImportModelPage() {
                     {modelConfig?.architectures && modelConfig.architectures.length > 0 && (
                       <div>
                         <dt className="text-gray-500">Architecture</dt>
-                        <dd className="font-medium text-gray-900">{modelConfig.architectures[0]}</dd>
+                        <dd className="font-medium text-gray-900">
+                          {modelConfig.architectures[0]}
+                        </dd>
                       </div>
                     )}
                   </dl>
@@ -488,19 +494,25 @@ export default function ImportModelPage() {
                       {modelConfig.num_hidden_layers && (
                         <div>
                           <dt className="text-gray-500">Layers</dt>
-                          <dd className="font-medium text-gray-900">{modelConfig.num_hidden_layers}</dd>
+                          <dd className="font-medium text-gray-900">
+                            {modelConfig.num_hidden_layers}
+                          </dd>
                         </div>
                       )}
                       {modelConfig.num_attention_heads && (
                         <div>
                           <dt className="text-gray-500">Attention Heads</dt>
-                          <dd className="font-medium text-gray-900">{modelConfig.num_attention_heads}</dd>
+                          <dd className="font-medium text-gray-900">
+                            {modelConfig.num_attention_heads}
+                          </dd>
                         </div>
                       )}
                       {modelConfig.vocab_size && (
                         <div>
                           <dt className="text-gray-500">Vocab Size</dt>
-                          <dd className="font-medium text-gray-900">{modelConfig.vocab_size.toLocaleString()}</dd>
+                          <dd className="font-medium text-gray-900">
+                            {modelConfig.vocab_size.toLocaleString()}
+                          </dd>
                         </div>
                       )}
                       {modelConfig.torch_dtype && (
@@ -541,7 +553,8 @@ export default function ImportModelPage() {
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
             </div>
             <p className="mt-4 text-sm text-gray-500">
-              Creating {modelScope === ModelScope.Cluster ? 'ClusterBaseModel' : 'BaseModel'} resource...
+              Creating {modelScope === ModelScope.Cluster ? 'ClusterBaseModel' : 'BaseModel'}{' '}
+              resource...
             </p>
           </div>
         )}

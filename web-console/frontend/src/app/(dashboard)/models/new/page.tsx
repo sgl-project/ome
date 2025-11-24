@@ -6,7 +6,7 @@ import {
   clusterBaseModelSchema,
   baseModelSchema,
   type ClusterBaseModelFormData,
-  type BaseModelFormData
+  type BaseModelFormData,
 } from '@/lib/validation/model-schema'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -172,9 +172,32 @@ export default function CreateModelPage() {
         break
     }
     setValue('spec.storage.storageUri', uri)
-  }, [storageType, ociNamespace, ociBucket, ociPrefix, pvcName, pvcSubPath, hfModelId, hfBranch,
-      s3Bucket, s3Prefix, s3Region, azAccount, azContainer, azBlobPath, gcsBucket, gcsObject,
-      githubOwner, githubRepo, githubTag, localPath, vendorName, vendorResourceType, vendorResourcePath, setValue])
+  }, [
+    storageType,
+    ociNamespace,
+    ociBucket,
+    ociPrefix,
+    pvcName,
+    pvcSubPath,
+    hfModelId,
+    hfBranch,
+    s3Bucket,
+    s3Prefix,
+    s3Region,
+    azAccount,
+    azContainer,
+    azBlobPath,
+    gcsBucket,
+    gcsObject,
+    githubOwner,
+    githubRepo,
+    githubTag,
+    localPath,
+    vendorName,
+    vendorResourceType,
+    vendorResourcePath,
+    setValue,
+  ])
 
   const onSubmit = async (data: ClusterBaseModelFormData | BaseModelFormData) => {
     try {
@@ -233,12 +256,19 @@ export default function CreateModelPage() {
       {/* Header */}
       <header className="bg-white shadow">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <Link href="/models" className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block">
+          <Link
+            href="/models"
+            className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block"
+          >
             ← Back to Models
           </Link>
           <h1 className="text-3xl font-bold text-gray-900">Create New Model</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Define a new {modelScope === 'cluster' ? 'ClusterBaseModel (cluster-scoped)' : 'BaseModel (namespace-scoped)'} resource
+            Define a new{' '}
+            {modelScope === 'cluster'
+              ? 'ClusterBaseModel (cluster-scoped)'
+              : 'BaseModel (namespace-scoped)'}{' '}
+            resource
           </p>
         </div>
       </header>
@@ -257,9 +287,7 @@ export default function CreateModelPage() {
             <h2 className="mb-4 text-lg font-medium text-gray-900">Model Scope</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Scope *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Scope *</label>
                 <div className="space-y-2">
                   <label className="flex items-center">
                     <input
@@ -270,7 +298,8 @@ export default function CreateModelPage() {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="ml-2 text-sm text-gray-700">
-                      <span className="font-medium">Cluster-scoped</span> - Available to all namespaces (ClusterBaseModel)
+                      <span className="font-medium">Cluster-scoped</span> - Available to all
+                      namespaces (ClusterBaseModel)
                     </span>
                   </label>
                   <label className="flex items-center">
@@ -282,7 +311,8 @@ export default function CreateModelPage() {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="ml-2 text-sm text-gray-700">
-                      <span className="font-medium">Namespace-scoped</span> - Only available in specified namespace (BaseModel)
+                      <span className="font-medium">Namespace-scoped</span> - Only available in
+                      specified namespace (BaseModel)
                     </span>
                   </label>
                 </div>
@@ -312,7 +342,9 @@ export default function CreateModelPage() {
                     </select>
                   )}
                   {errors.metadata?.namespace && (
-                    <p className="mt-1 text-sm text-red-600">{(errors.metadata.namespace as any).message}</p>
+                    <p className="mt-1 text-sm text-red-600">
+                      {(errors.metadata.namespace as any).message}
+                    </p>
                   )}
                   <p className="mt-1 text-xs text-gray-500">
                     Select an existing namespace. This does not create a new namespace.
@@ -360,7 +392,10 @@ export default function CreateModelPage() {
             </div>
 
             <div className="mt-6">
-              <label htmlFor="modelParameterSize" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="modelParameterSize"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Model Parameter Size
               </label>
               <input
@@ -488,9 +523,7 @@ export default function CreateModelPage() {
               {/* Local Storage Fields */}
               {storageType === 'local' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Local Path *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700">Local Path *</label>
                   <input
                     type="text"
                     value={localPath}
@@ -508,9 +541,7 @@ export default function CreateModelPage() {
               {storageType === 'vendor' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Vendor Name *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Vendor Name *</label>
                     <input
                       type="text"
                       value={vendorName}
@@ -549,7 +580,10 @@ export default function CreateModelPage() {
               {/* Storage Path - REQUIRED */}
               <div>
                 <label htmlFor="storagePath" className="block text-sm font-medium text-gray-700">
-                  Storage Path * <span className="text-gray-500 text-xs">(e.g., /raid/models/microsoft/phi-4-gguf)</span>
+                  Storage Path *{' '}
+                  <span className="text-gray-500 text-xs">
+                    (e.g., /raid/models/microsoft/phi-4-gguf)
+                  </span>
                 </label>
                 <input
                   type="text"
@@ -605,7 +639,12 @@ export default function CreateModelPage() {
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
             {showModelFormat && (
@@ -628,12 +667,17 @@ export default function CreateModelPage() {
                       <option value="tensorflow">TensorFlow</option>
                     </select>
                     {errors.spec?.modelFormat?.name && (
-                      <p className="mt-1 text-sm text-red-600">{errors.spec.modelFormat.name.message}</p>
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.spec.modelFormat.name.message}
+                      </p>
                     )}
                   </div>
 
                   <div>
-                    <label htmlFor="formatVersion" className="block text-sm font-medium text-gray-700">
+                    <label
+                      htmlFor="formatVersion"
+                      className="block text-sm font-medium text-gray-700"
+                    >
                       Format Version
                     </label>
                     <input
@@ -658,7 +702,8 @@ export default function CreateModelPage() {
             >
               <div>
                 <h2 className="text-lg font-medium text-gray-900">
-                  Model Framework <span className="text-sm text-gray-500 font-normal">(Optional)</span>
+                  Model Framework{' '}
+                  <span className="text-sm text-gray-500 font-normal">(Optional)</span>
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">Specify the ML framework used</p>
               </div>
@@ -668,14 +713,22 @@ export default function CreateModelPage() {
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
             {showModelFramework && (
               <div className="px-6 pb-6 border-t border-gray-200">
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-4">
                   <div>
-                    <label htmlFor="frameworkName" className="block text-sm font-medium text-gray-700">
+                    <label
+                      htmlFor="frameworkName"
+                      className="block text-sm font-medium text-gray-700"
+                    >
                       Framework Name
                     </label>
                     <select
@@ -691,12 +744,17 @@ export default function CreateModelPage() {
                       <option value="tensorflow">TensorFlow</option>
                     </select>
                     {errors.spec?.modelFramework?.name && (
-                      <p className="mt-1 text-sm text-red-600">{errors.spec.modelFramework.name.message}</p>
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.spec.modelFramework.name.message}
+                      </p>
                     )}
                   </div>
 
                   <div>
-                    <label htmlFor="frameworkVersion" className="block text-sm font-medium text-gray-700">
+                    <label
+                      htmlFor="frameworkVersion"
+                      className="block text-sm font-medium text-gray-700"
+                    >
                       Framework Version
                     </label>
                     <input
@@ -723,7 +781,9 @@ export default function CreateModelPage() {
                 <h2 className="text-lg font-medium text-gray-900">
                   Labels <span className="text-sm text-gray-500 font-normal">(Optional)</span>
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">Key-value pairs for organizing and categorizing</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Key-value pairs for organizing and categorizing
+                </p>
               </div>
               <svg
                 className={`w-5 h-5 text-gray-500 transition-transform ${showLabels ? 'rotate-180' : ''}`}
@@ -731,7 +791,12 @@ export default function CreateModelPage() {
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
             {showLabels && (
@@ -800,7 +865,9 @@ export default function CreateModelPage() {
                 <h2 className="text-lg font-medium text-gray-900">
                   Annotations <span className="text-sm text-gray-500 font-normal">(Optional)</span>
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">Key-value pairs for storing additional metadata</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Key-value pairs for storing additional metadata
+                </p>
               </div>
               <svg
                 className={`w-5 h-5 text-gray-500 transition-transform ${showAnnotations ? 'rotate-180' : ''}`}
@@ -808,7 +875,12 @@ export default function CreateModelPage() {
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
             {showAnnotations && (

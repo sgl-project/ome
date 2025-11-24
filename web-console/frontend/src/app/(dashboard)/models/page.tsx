@@ -11,35 +11,12 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StatCard } from '@/components/ui/StatCard'
 import { Button, ButtonIcons } from '@/components/ui/Button'
+import { StatIcons } from '@/components/ui/Icons'
 import { useSortedData } from '@/hooks/useSortedData'
 import { SortableHeader } from '@/components/ui/SortableHeader'
-import type { BaseModel } from '@/types/model'
+import type { BaseModel } from '@/lib/types/model'
 
 type SortField = 'name' | 'vendor' | 'framework' | 'size' | 'status' | 'created'
-
-// Icons for stat cards
-const Icons = {
-  total: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-    </svg>
-  ),
-  ready: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  transit: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  failed: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-    </svg>
-  ),
-}
 
 export default function ModelsPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('')
@@ -78,11 +55,12 @@ export default function ModelsPage() {
     }
   }
 
-  const { sortedData: sortedModels, sortField, sortDirection, handleSort } = useSortedData(
-    data?.items,
-    'name' as SortField,
-    getValue
-  )
+  const {
+    sortedData: sortedModels,
+    sortField,
+    sortDirection,
+    handleSort,
+  } = useSortedData(data?.items, 'name' as SortField, getValue)
 
   if (isLoading) {
     return <LoadingState message="Loading models..." />
@@ -103,9 +81,7 @@ export default function ModelsPage() {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex items-start justify-between gap-8">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-                Models
-              </h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Models</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Manage your ClusterBaseModel and BaseModel resources
               </p>
@@ -129,28 +105,28 @@ export default function ModelsPage() {
           <StatCard
             label="Total Models"
             value={data?.total || 0}
-            icon={Icons.total}
+            icon={StatIcons.total}
             variant="primary"
             delay={0}
           />
           <StatCard
             label="Ready"
             value={readyCount}
-            icon={Icons.ready}
+            icon={StatIcons.ready}
             variant="success"
             delay={1}
           />
           <StatCard
             label="In Transit"
             value={transitCount}
-            icon={Icons.transit}
+            icon={StatIcons.pending}
             variant="warning"
             delay={2}
           />
           <StatCard
             label="Failed"
             value={failedCount}
-            icon={Icons.failed}
+            icon={StatIcons.failed}
             variant="destructive"
             delay={3}
           />
@@ -183,12 +159,54 @@ export default function ModelsPage() {
             <table className="min-w-full divide-y divide-border">
               <thead className="bg-muted/50">
                 <tr>
-                  <SortableHeader field="name" currentField={sortField} direction={sortDirection} onSort={handleSort}>Name</SortableHeader>
-                  <SortableHeader field="vendor" currentField={sortField} direction={sortDirection} onSort={handleSort}>Vendor</SortableHeader>
-                  <SortableHeader field="framework" currentField={sortField} direction={sortDirection} onSort={handleSort}>Framework</SortableHeader>
-                  <SortableHeader field="size" currentField={sortField} direction={sortDirection} onSort={handleSort}>Size</SortableHeader>
-                  <SortableHeader field="status" currentField={sortField} direction={sortDirection} onSort={handleSort}>Status</SortableHeader>
-                  <SortableHeader field="created" currentField={sortField} direction={sortDirection} onSort={handleSort}>Created</SortableHeader>
+                  <SortableHeader
+                    field="name"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Name
+                  </SortableHeader>
+                  <SortableHeader
+                    field="vendor"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Vendor
+                  </SortableHeader>
+                  <SortableHeader
+                    field="framework"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Framework
+                  </SortableHeader>
+                  <SortableHeader
+                    field="size"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Size
+                  </SortableHeader>
+                  <SortableHeader
+                    field="status"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Status
+                  </SortableHeader>
+                  <SortableHeader
+                    field="created"
+                    currentField={sortField}
+                    direction={sortDirection}
+                    onSort={handleSort}
+                  >
+                    Created
+                  </SortableHeader>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
@@ -196,11 +214,26 @@ export default function ModelsPage() {
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <svg className="h-12 w-12 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                        <svg
+                          className="h-12 w-12 text-muted-foreground/40"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={1}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                          />
                         </svg>
                         <p className="text-sm text-muted-foreground">No models found</p>
-                        <Button href="/models/import" variant="outline" size="sm" icon={ButtonIcons.import}>
+                        <Button
+                          href="/models/import"
+                          variant="outline"
+                          size="sm"
+                          icon={ButtonIcons.import}
+                        >
                           Import your first model
                         </Button>
                       </div>

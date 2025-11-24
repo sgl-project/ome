@@ -75,13 +75,33 @@ install-backend: ## Download Go modules
 
 lint: lint-frontend lint-backend ## Run all linters
 
-lint-frontend: ## Run frontend linter
+lint-frontend: ## Run frontend linter (ESLint)
 	@echo "$(CYAN)Linting frontend...$(RESET)"
 	@cd $(FRONTEND_DIR) && npm run lint
 
 lint-backend: ## Run backend linter
 	@echo "$(CYAN)Linting backend...$(RESET)"
 	@cd $(BACKEND_DIR) && go vet ./...
+
+format: format-frontend format-backend ## Format all code
+
+format-frontend: ## Format frontend code (Prettier)
+	@echo "$(CYAN)Formatting frontend...$(RESET)"
+	@cd $(FRONTEND_DIR) && npm run format
+	@echo "$(GREEN)Frontend formatted$(RESET)"
+
+format-backend: ## Format backend code (gofmt)
+	@echo "$(CYAN)Formatting backend...$(RESET)"
+	@cd $(BACKEND_DIR) && go fmt ./...
+	@echo "$(GREEN)Backend formatted$(RESET)"
+
+format-check: ## Check formatting without making changes
+	@echo "$(CYAN)Checking frontend formatting...$(RESET)"
+	@cd $(FRONTEND_DIR) && npm run format:check
+
+typecheck: ## Run TypeScript type checking
+	@echo "$(CYAN)Type checking frontend...$(RESET)"
+	@cd $(FRONTEND_DIR) && npm run typecheck
 
 test: test-backend ## Run all tests
 

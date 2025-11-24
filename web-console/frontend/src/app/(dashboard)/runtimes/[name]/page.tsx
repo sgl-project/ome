@@ -88,17 +88,25 @@ export default function RuntimeDetailPage() {
             href="/runtimes"
             className="group inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors mb-4"
           >
-            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-4 h-4 transition-transform group-hover:-translate-x-1"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             Back to Runtimes
           </Link>
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-4xl font-bold tracking-tight">{runtime.metadata.name}</h1>
-              <p className="mt-2 text-muted-foreground max-w-2xl">
-                Runtime configuration details
-              </p>
+              <p className="mt-2 text-muted-foreground max-w-2xl">Runtime configuration details</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -137,11 +145,13 @@ export default function RuntimeDetailPage() {
               DECODER ONLY
             </span>
           )}
-          {runtime.spec?.containers && !runtime.spec?.engineConfig && !runtime.spec?.decoderConfig && (
-            <span className="inline-flex items-center rounded-md bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-900 ring-1 ring-inset ring-gray-600/20">
-              STANDARD RUNTIME
-            </span>
-          )}
+          {runtime.spec?.containers &&
+            !runtime.spec?.engineConfig &&
+            !runtime.spec?.decoderConfig && (
+              <span className="inline-flex items-center rounded-md bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-900 ring-1 ring-inset ring-gray-600/20">
+                STANDARD RUNTIME
+              </span>
+            )}
         </div>
 
         {/* Runtime Details */}
@@ -171,9 +181,13 @@ export default function RuntimeDetailPage() {
                   <div>
                     <dt className="text-xs font-medium text-gray-500">Status</dt>
                     <dd className="mt-1">
-                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                        runtime.spec.disabled ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'
-                      }`}>
+                      <span
+                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                          runtime.spec.disabled
+                            ? 'bg-gray-100 text-gray-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}
+                      >
                         {runtime.spec.disabled ? 'Disabled' : 'Active'}
                       </span>
                     </dd>
@@ -183,9 +197,13 @@ export default function RuntimeDetailPage() {
                   <div>
                     <dt className="text-xs font-medium text-gray-500">Multi-Model</dt>
                     <dd className="mt-1">
-                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                        runtime.spec.multiModel ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span
+                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                          runtime.spec.multiModel
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
                         {runtime.spec.multiModel ? 'Enabled' : 'Disabled'}
                       </span>
                     </dd>
@@ -235,19 +253,28 @@ export default function RuntimeDetailPage() {
                 <div className="space-y-3">
                   {runtime.spec.routerConfig.runner && (
                     <div className="bg-white rounded-lg p-3 border border-accent/20">
-                      <p className="text-xs font-medium text-gray-700 mb-2">Container: {runtime.spec.routerConfig.runner.name || 'router-container'}</p>
-                      <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.routerConfig.runner.image}</p>
+                      <p className="text-xs font-medium text-gray-700 mb-2">
+                        Container: {runtime.spec.routerConfig.runner.name || 'router-container'}
+                      </p>
+                      <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                        Image: {runtime.spec.routerConfig.runner.image}
+                      </p>
                       <ResourceDisplay resources={runtime.spec.routerConfig.runner.resources} />
-                      {runtime.spec.routerConfig.runner.env && runtime.spec.routerConfig.runner.env.length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">Environment Variables ({runtime.spec.routerConfig.runner.env.length})</summary>
-                          <div className="mt-1 space-y-1 pl-2">
-                            {runtime.spec.routerConfig.runner.env.map((env: any, i: number) => (
-                              <p key={i} className="text-xs text-gray-600 font-mono">{env.name}={env.value}</p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
+                      {runtime.spec.routerConfig.runner.env &&
+                        runtime.spec.routerConfig.runner.env.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              Environment Variables ({runtime.spec.routerConfig.runner.env.length})
+                            </summary>
+                            <div className="mt-1 space-y-1 pl-2">
+                              {runtime.spec.routerConfig.runner.env.map((env: any, i: number) => (
+                                <p key={i} className="text-xs text-gray-600 font-mono">
+                                  {env.name}={env.value}
+                                </p>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                     </div>
                   )}
                 </div>
@@ -257,37 +284,67 @@ export default function RuntimeDetailPage() {
             {/* Engine Config */}
             {runtime.spec?.engineConfig && (
               <div className="border-l-4 border-accent bg-accent/10 p-4">
-                <h4 className="text-sm font-medium text-accent mb-3">⚡ Engine Configuration (Prefill)</h4>
+                <h4 className="text-sm font-medium text-accent mb-3">
+                  ⚡ Engine Configuration (Prefill)
+                </h4>
                 <div className="space-y-3">
                   {/* Single-node: Direct runner */}
                   {runtime.spec.engineConfig.runner && !runtime.spec.engineConfig.leader && (
                     <div className="bg-white rounded-lg p-3 border border-accent/20">
                       <p className="text-xs font-bold text-accent/90 mb-2">🖥️ Single Node</p>
-                      <p className="text-xs font-medium text-gray-700 mb-1">Container: {runtime.spec.engineConfig.runner.name || 'N/A'}</p>
-                      <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.engineConfig.runner.image || 'N/A'}</p>
+                      <p className="text-xs font-medium text-gray-700 mb-1">
+                        Container: {runtime.spec.engineConfig.runner.name || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                        Image: {runtime.spec.engineConfig.runner.image || 'N/A'}
+                      </p>
                       <ResourceDisplay resources={runtime.spec.engineConfig.runner.resources} />
-                      {runtime.spec.engineConfig.runner.env && Array.isArray(runtime.spec.engineConfig.runner.env) && runtime.spec.engineConfig.runner.env.length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({runtime.spec.engineConfig.runner.env.length})</summary>
-                          <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
-                            {runtime.spec.engineConfig.runner.env.map((env: any, i: number) => (
-                              <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || (env.valueFrom ? '[from field]' : '')}</p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                      {runtime.spec.engineConfig.runner.command && Array.isArray(runtime.spec.engineConfig.runner.command) && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({runtime.spec.engineConfig.runner.command.length} args)</summary>
-                          <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.engineConfig.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                        </details>
-                      )}
-                      {runtime.spec.engineConfig.runner.args && Array.isArray(runtime.spec.engineConfig.runner.args) && runtime.spec.engineConfig.runner.args.length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">📝 Args ({runtime.spec.engineConfig.runner.args.length})</summary>
-                          <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.engineConfig.runner.args.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                        </details>
-                      )}
+                      {runtime.spec.engineConfig.runner.env &&
+                        Array.isArray(runtime.spec.engineConfig.runner.env) &&
+                        runtime.spec.engineConfig.runner.env.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              🔧 Environment Variables (
+                              {runtime.spec.engineConfig.runner.env.length})
+                            </summary>
+                            <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
+                              {runtime.spec.engineConfig.runner.env.map((env: any, i: number) => (
+                                <p key={i} className="text-xs text-gray-600 font-mono break-all">
+                                  {env.name}={env.value || (env.valueFrom ? '[from field]' : '')}
+                                </p>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      {runtime.spec.engineConfig.runner.command &&
+                        Array.isArray(runtime.spec.engineConfig.runner.command) && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              💻 Command ({runtime.spec.engineConfig.runner.command.length} args)
+                            </summary>
+                            <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                              {runtime.spec.engineConfig.runner.command
+                                .join(' ')
+                                .replace(/--/g, '\n  --')
+                                .replace(/^\s+/, '')}
+                            </pre>
+                          </details>
+                        )}
+                      {runtime.spec.engineConfig.runner.args &&
+                        Array.isArray(runtime.spec.engineConfig.runner.args) &&
+                        runtime.spec.engineConfig.runner.args.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              📝 Args ({runtime.spec.engineConfig.runner.args.length})
+                            </summary>
+                            <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                              {runtime.spec.engineConfig.runner.args
+                                .join(' ')
+                                .replace(/--/g, '\n  --')
+                                .replace(/^\s+/, '')}
+                            </pre>
+                          </details>
+                        )}
                     </div>
                   )}
 
@@ -297,39 +354,76 @@ export default function RuntimeDetailPage() {
                       <p className="text-xs font-bold text-accent/90 mb-2">👑 Leader Node</p>
                       {runtime.spec.engineConfig.leader.runner ? (
                         <>
-                          <p className="text-xs font-medium text-gray-700 mb-1">Container: {runtime.spec.engineConfig.leader.runner.name || 'N/A'}</p>
-                          <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.engineConfig.leader.runner.image || 'N/A'}</p>
-                          <ResourceDisplay resources={runtime.spec.engineConfig.leader.runner.resources} />
-                          {runtime.spec.engineConfig.leader.runner.env && Array.isArray(runtime.spec.engineConfig.leader.runner.env) && runtime.spec.engineConfig.leader.runner.env.length > 0 && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({runtime.spec.engineConfig.leader.runner.env.length})</summary>
-                              <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
-                                {runtime.spec.engineConfig.leader.runner.env.map((env: any, i: number) => (
-                                  <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          {runtime.spec.engineConfig.leader.runner.command && Array.isArray(runtime.spec.engineConfig.leader.runner.command) && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({runtime.spec.engineConfig.leader.runner.command.length} args)</summary>
-                              <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.engineConfig.leader.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                            </details>
-                          )}
+                          <p className="text-xs font-medium text-gray-700 mb-1">
+                            Container: {runtime.spec.engineConfig.leader.runner.name || 'N/A'}
+                          </p>
+                          <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                            Image: {runtime.spec.engineConfig.leader.runner.image || 'N/A'}
+                          </p>
+                          <ResourceDisplay
+                            resources={runtime.spec.engineConfig.leader.runner.resources}
+                          />
+                          {runtime.spec.engineConfig.leader.runner.env &&
+                            Array.isArray(runtime.spec.engineConfig.leader.runner.env) &&
+                            runtime.spec.engineConfig.leader.runner.env.length > 0 && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  🔧 Environment Variables (
+                                  {runtime.spec.engineConfig.leader.runner.env.length})
+                                </summary>
+                                <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
+                                  {runtime.spec.engineConfig.leader.runner.env.map(
+                                    (env: any, i: number) => (
+                                      <p
+                                        key={i}
+                                        className="text-xs text-gray-600 font-mono break-all"
+                                      >
+                                        {env.name}=
+                                        {env.value || env.valueFrom ? '[from field]' : ''}
+                                      </p>
+                                    )
+                                  )}
+                                </div>
+                              </details>
+                            )}
+                          {runtime.spec.engineConfig.leader.runner.command &&
+                            Array.isArray(runtime.spec.engineConfig.leader.runner.command) && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  💻 Command (
+                                  {runtime.spec.engineConfig.leader.runner.command.length} args)
+                                </summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                                  {runtime.spec.engineConfig.leader.runner.command
+                                    .join(' ')
+                                    .replace(/--/g, '\n  --')
+                                    .replace(/^\s+/, '')}
+                                </pre>
+                              </details>
+                            )}
                         </>
                       ) : (
                         <p className="text-xs text-gray-500 italic">No runner configuration</p>
                       )}
-                      {runtime.spec.engineConfig.leader.nodeSelector && Object.keys(runtime.spec.engineConfig.leader.nodeSelector).length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">🎯 Node Selector ({Object.keys(runtime.spec.engineConfig.leader.nodeSelector).length} rules)</summary>
-                          <div className="mt-1 space-y-1 pl-2">
-                            {Object.entries(runtime.spec.engineConfig.leader.nodeSelector).map(([key, value]: [string, any], i: number) => (
-                              <p key={i} className="text-xs text-gray-600 font-mono break-all">{key}: {String(value)}</p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
+                      {runtime.spec.engineConfig.leader.nodeSelector &&
+                        Object.keys(runtime.spec.engineConfig.leader.nodeSelector).length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              🎯 Node Selector (
+                              {Object.keys(runtime.spec.engineConfig.leader.nodeSelector).length}{' '}
+                              rules)
+                            </summary>
+                            <div className="mt-1 space-y-1 pl-2">
+                              {Object.entries(runtime.spec.engineConfig.leader.nodeSelector).map(
+                                ([key, value]: [string, any], i: number) => (
+                                  <p key={i} className="text-xs text-gray-600 font-mono break-all">
+                                    {key}: {String(value)}
+                                  </p>
+                                )
+                              )}
+                            </div>
+                          </details>
+                        )}
                     </div>
                   )}
 
@@ -339,30 +433,59 @@ export default function RuntimeDetailPage() {
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-bold text-accent/90">👥 Worker Nodes</p>
                         <span className="inline-flex items-center rounded-md bg-accent/20 px-2 py-1 text-xs font-medium text-accent">
-                          {runtime.spec.engineConfig.worker.size || 1} node{(runtime.spec.engineConfig.worker.size || 1) > 1 ? 's' : ''}
+                          {runtime.spec.engineConfig.worker.size || 1} node
+                          {(runtime.spec.engineConfig.worker.size || 1) > 1 ? 's' : ''}
                         </span>
                       </div>
                       {runtime.spec.engineConfig.worker.runner ? (
                         <>
-                          <p className="text-xs font-medium text-gray-700 mb-1">Container: {runtime.spec.engineConfig.worker.runner.name || 'N/A'}</p>
-                          <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.engineConfig.worker.runner.image || 'N/A'}</p>
-                          <ResourceDisplay resources={runtime.spec.engineConfig.worker.runner.resources} />
-                          {runtime.spec.engineConfig.worker.runner.env && Array.isArray(runtime.spec.engineConfig.worker.runner.env) && runtime.spec.engineConfig.worker.runner.env.length > 0 && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({runtime.spec.engineConfig.worker.runner.env.length})</summary>
-                              <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
-                                {runtime.spec.engineConfig.worker.runner.env.map((env: any, i: number) => (
-                                  <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          {runtime.spec.engineConfig.worker.runner.command && Array.isArray(runtime.spec.engineConfig.worker.runner.command) && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({runtime.spec.engineConfig.worker.runner.command.length} args)</summary>
-                              <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.engineConfig.worker.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                            </details>
-                          )}
+                          <p className="text-xs font-medium text-gray-700 mb-1">
+                            Container: {runtime.spec.engineConfig.worker.runner.name || 'N/A'}
+                          </p>
+                          <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                            Image: {runtime.spec.engineConfig.worker.runner.image || 'N/A'}
+                          </p>
+                          <ResourceDisplay
+                            resources={runtime.spec.engineConfig.worker.runner.resources}
+                          />
+                          {runtime.spec.engineConfig.worker.runner.env &&
+                            Array.isArray(runtime.spec.engineConfig.worker.runner.env) &&
+                            runtime.spec.engineConfig.worker.runner.env.length > 0 && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  🔧 Environment Variables (
+                                  {runtime.spec.engineConfig.worker.runner.env.length})
+                                </summary>
+                                <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
+                                  {runtime.spec.engineConfig.worker.runner.env.map(
+                                    (env: any, i: number) => (
+                                      <p
+                                        key={i}
+                                        className="text-xs text-gray-600 font-mono break-all"
+                                      >
+                                        {env.name}=
+                                        {env.value || env.valueFrom ? '[from field]' : ''}
+                                      </p>
+                                    )
+                                  )}
+                                </div>
+                              </details>
+                            )}
+                          {runtime.spec.engineConfig.worker.runner.command &&
+                            Array.isArray(runtime.spec.engineConfig.worker.runner.command) && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  💻 Command (
+                                  {runtime.spec.engineConfig.worker.runner.command.length} args)
+                                </summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                                  {runtime.spec.engineConfig.worker.runner.command
+                                    .join(' ')
+                                    .replace(/--/g, '\n  --')
+                                    .replace(/^\s+/, '')}
+                                </pre>
+                              </details>
+                            )}
                         </>
                       ) : (
                         <p className="text-xs text-gray-500 italic">No runner configuration</p>
@@ -376,37 +499,64 @@ export default function RuntimeDetailPage() {
             {/* Decoder Config */}
             {runtime.spec?.decoderConfig && (
               <div className="border-l-4 border-accent bg-accent/10 p-4">
-                <h4 className="text-sm font-medium text-accent mb-3">🔄 Decoder Configuration (Decode)</h4>
+                <h4 className="text-sm font-medium text-accent mb-3">
+                  🔄 Decoder Configuration (Decode)
+                </h4>
                 <div className="space-y-3">
                   {/* Single-node: Direct runner */}
                   {runtime.spec.decoderConfig.runner && !runtime.spec.decoderConfig.leader && (
                     <div className="bg-white rounded-lg p-3 border border-accent/20">
                       <p className="text-xs font-bold text-accent/90 mb-2">🖥️ Single Node</p>
-                      <p className="text-xs font-medium text-gray-700 mb-1">Container: {runtime.spec.decoderConfig.runner.name || 'N/A'}</p>
-                      <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.decoderConfig.runner.image || 'N/A'}</p>
+                      <p className="text-xs font-medium text-gray-700 mb-1">
+                        Container: {runtime.spec.decoderConfig.runner.name || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                        Image: {runtime.spec.decoderConfig.runner.image || 'N/A'}
+                      </p>
                       <ResourceDisplay resources={runtime.spec.decoderConfig.runner.resources} />
-                      {runtime.spec.decoderConfig.runner.env && Array.isArray(runtime.spec.decoderConfig.runner.env) && runtime.spec.decoderConfig.runner.env.length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({runtime.spec.decoderConfig.runner.env.length})</summary>
-                          <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
-                            {runtime.spec.decoderConfig.runner.env.map((env: any, i: number) => (
-                              <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || (env.valueFrom ? '[from field]' : '')}</p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                      {runtime.spec.decoderConfig.runner.command && Array.isArray(runtime.spec.decoderConfig.runner.command) && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({runtime.spec.decoderConfig.runner.command.length} args)</summary>
-                          <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.decoderConfig.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                        </details>
-                      )}
-                      {runtime.spec.decoderConfig.runner.args && Array.isArray(runtime.spec.decoderConfig.runner.args) && runtime.spec.decoderConfig.runner.args.length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">📝 Args ({runtime.spec.decoderConfig.runner.args.length})</summary>
-                          <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{runtime.spec.decoderConfig.runner.args.join(' ')}</pre>
-                        </details>
-                      )}
+                      {runtime.spec.decoderConfig.runner.env &&
+                        Array.isArray(runtime.spec.decoderConfig.runner.env) &&
+                        runtime.spec.decoderConfig.runner.env.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              🔧 Environment Variables (
+                              {runtime.spec.decoderConfig.runner.env.length})
+                            </summary>
+                            <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
+                              {runtime.spec.decoderConfig.runner.env.map((env: any, i: number) => (
+                                <p key={i} className="text-xs text-gray-600 font-mono break-all">
+                                  {env.name}={env.value || (env.valueFrom ? '[from field]' : '')}
+                                </p>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      {runtime.spec.decoderConfig.runner.command &&
+                        Array.isArray(runtime.spec.decoderConfig.runner.command) && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              💻 Command ({runtime.spec.decoderConfig.runner.command.length} args)
+                            </summary>
+                            <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                              {runtime.spec.decoderConfig.runner.command
+                                .join(' ')
+                                .replace(/--/g, '\n  --')
+                                .replace(/^\s+/, '')}
+                            </pre>
+                          </details>
+                        )}
+                      {runtime.spec.decoderConfig.runner.args &&
+                        Array.isArray(runtime.spec.decoderConfig.runner.args) &&
+                        runtime.spec.decoderConfig.runner.args.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              📝 Args ({runtime.spec.decoderConfig.runner.args.length})
+                            </summary>
+                            <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">
+                              {runtime.spec.decoderConfig.runner.args.join(' ')}
+                            </pre>
+                          </details>
+                        )}
                     </div>
                   )}
 
@@ -416,39 +566,76 @@ export default function RuntimeDetailPage() {
                       <p className="text-xs font-bold text-accent/90 mb-2">👑 Leader Node</p>
                       {runtime.spec.decoderConfig.leader.runner ? (
                         <>
-                          <p className="text-xs font-medium text-gray-700 mb-1">Container: {runtime.spec.decoderConfig.leader.runner.name || 'N/A'}</p>
-                          <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.decoderConfig.leader.runner.image || 'N/A'}</p>
-                          <ResourceDisplay resources={runtime.spec.decoderConfig.leader.runner.resources} />
-                          {runtime.spec.decoderConfig.leader.runner.env && Array.isArray(runtime.spec.decoderConfig.leader.runner.env) && runtime.spec.decoderConfig.leader.runner.env.length > 0 && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({runtime.spec.decoderConfig.leader.runner.env.length})</summary>
-                              <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
-                                {runtime.spec.decoderConfig.leader.runner.env.map((env: any, i: number) => (
-                                  <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          {runtime.spec.decoderConfig.leader.runner.command && Array.isArray(runtime.spec.decoderConfig.leader.runner.command) && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({runtime.spec.decoderConfig.leader.runner.command.length} args)</summary>
-                              <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.decoderConfig.leader.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                            </details>
-                          )}
+                          <p className="text-xs font-medium text-gray-700 mb-1">
+                            Container: {runtime.spec.decoderConfig.leader.runner.name || 'N/A'}
+                          </p>
+                          <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                            Image: {runtime.spec.decoderConfig.leader.runner.image || 'N/A'}
+                          </p>
+                          <ResourceDisplay
+                            resources={runtime.spec.decoderConfig.leader.runner.resources}
+                          />
+                          {runtime.spec.decoderConfig.leader.runner.env &&
+                            Array.isArray(runtime.spec.decoderConfig.leader.runner.env) &&
+                            runtime.spec.decoderConfig.leader.runner.env.length > 0 && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  🔧 Environment Variables (
+                                  {runtime.spec.decoderConfig.leader.runner.env.length})
+                                </summary>
+                                <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
+                                  {runtime.spec.decoderConfig.leader.runner.env.map(
+                                    (env: any, i: number) => (
+                                      <p
+                                        key={i}
+                                        className="text-xs text-gray-600 font-mono break-all"
+                                      >
+                                        {env.name}=
+                                        {env.value || env.valueFrom ? '[from field]' : ''}
+                                      </p>
+                                    )
+                                  )}
+                                </div>
+                              </details>
+                            )}
+                          {runtime.spec.decoderConfig.leader.runner.command &&
+                            Array.isArray(runtime.spec.decoderConfig.leader.runner.command) && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  💻 Command (
+                                  {runtime.spec.decoderConfig.leader.runner.command.length} args)
+                                </summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                                  {runtime.spec.decoderConfig.leader.runner.command
+                                    .join(' ')
+                                    .replace(/--/g, '\n  --')
+                                    .replace(/^\s+/, '')}
+                                </pre>
+                              </details>
+                            )}
                         </>
                       ) : (
                         <p className="text-xs text-gray-500 italic">No runner configuration</p>
                       )}
-                      {runtime.spec.decoderConfig.leader.nodeSelector && Object.keys(runtime.spec.decoderConfig.leader.nodeSelector).length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-accent cursor-pointer">🎯 Node Selector ({Object.keys(runtime.spec.decoderConfig.leader.nodeSelector).length} rules)</summary>
-                          <div className="mt-1 space-y-1 pl-2">
-                            {Object.entries(runtime.spec.decoderConfig.leader.nodeSelector).map(([key, value]: [string, any], i: number) => (
-                              <p key={i} className="text-xs text-gray-600 font-mono break-all">{key}: {String(value)}</p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
+                      {runtime.spec.decoderConfig.leader.nodeSelector &&
+                        Object.keys(runtime.spec.decoderConfig.leader.nodeSelector).length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-accent cursor-pointer">
+                              🎯 Node Selector (
+                              {Object.keys(runtime.spec.decoderConfig.leader.nodeSelector).length}{' '}
+                              rules)
+                            </summary>
+                            <div className="mt-1 space-y-1 pl-2">
+                              {Object.entries(runtime.spec.decoderConfig.leader.nodeSelector).map(
+                                ([key, value]: [string, any], i: number) => (
+                                  <p key={i} className="text-xs text-gray-600 font-mono break-all">
+                                    {key}: {String(value)}
+                                  </p>
+                                )
+                              )}
+                            </div>
+                          </details>
+                        )}
                     </div>
                   )}
 
@@ -458,30 +645,59 @@ export default function RuntimeDetailPage() {
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-bold text-accent/90">👥 Worker Nodes</p>
                         <span className="inline-flex items-center rounded-md bg-accent/20 px-2 py-1 text-xs font-medium text-accent">
-                          {runtime.spec.decoderConfig.worker.size || 1} node{(runtime.spec.decoderConfig.worker.size || 1) > 1 ? 's' : ''}
+                          {runtime.spec.decoderConfig.worker.size || 1} node
+                          {(runtime.spec.decoderConfig.worker.size || 1) > 1 ? 's' : ''}
                         </span>
                       </div>
                       {runtime.spec.decoderConfig.worker.runner ? (
                         <>
-                          <p className="text-xs font-medium text-gray-700 mb-1">Container: {runtime.spec.decoderConfig.worker.runner.name || 'N/A'}</p>
-                          <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {runtime.spec.decoderConfig.worker.runner.image || 'N/A'}</p>
-                          <ResourceDisplay resources={runtime.spec.decoderConfig.worker.runner.resources} />
-                          {runtime.spec.decoderConfig.worker.runner.env && Array.isArray(runtime.spec.decoderConfig.worker.runner.env) && runtime.spec.decoderConfig.worker.runner.env.length > 0 && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({runtime.spec.decoderConfig.worker.runner.env.length})</summary>
-                              <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
-                                {runtime.spec.decoderConfig.worker.runner.env.map((env: any, i: number) => (
-                                  <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          {runtime.spec.decoderConfig.worker.runner.command && Array.isArray(runtime.spec.decoderConfig.worker.runner.command) && (
-                            <details className="mt-2">
-                              <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({runtime.spec.decoderConfig.worker.runner.command.length} args)</summary>
-                              <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{runtime.spec.decoderConfig.worker.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
-                            </details>
-                          )}
+                          <p className="text-xs font-medium text-gray-700 mb-1">
+                            Container: {runtime.spec.decoderConfig.worker.runner.name || 'N/A'}
+                          </p>
+                          <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                            Image: {runtime.spec.decoderConfig.worker.runner.image || 'N/A'}
+                          </p>
+                          <ResourceDisplay
+                            resources={runtime.spec.decoderConfig.worker.runner.resources}
+                          />
+                          {runtime.spec.decoderConfig.worker.runner.env &&
+                            Array.isArray(runtime.spec.decoderConfig.worker.runner.env) &&
+                            runtime.spec.decoderConfig.worker.runner.env.length > 0 && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  🔧 Environment Variables (
+                                  {runtime.spec.decoderConfig.worker.runner.env.length})
+                                </summary>
+                                <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
+                                  {runtime.spec.decoderConfig.worker.runner.env.map(
+                                    (env: any, i: number) => (
+                                      <p
+                                        key={i}
+                                        className="text-xs text-gray-600 font-mono break-all"
+                                      >
+                                        {env.name}=
+                                        {env.value || env.valueFrom ? '[from field]' : ''}
+                                      </p>
+                                    )
+                                  )}
+                                </div>
+                              </details>
+                            )}
+                          {runtime.spec.decoderConfig.worker.runner.command &&
+                            Array.isArray(runtime.spec.decoderConfig.worker.runner.command) && (
+                              <details className="mt-2">
+                                <summary className="text-xs font-medium text-accent cursor-pointer">
+                                  💻 Command (
+                                  {runtime.spec.decoderConfig.worker.runner.command.length} args)
+                                </summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">
+                                  {runtime.spec.decoderConfig.worker.runner.command
+                                    .join(' ')
+                                    .replace(/--/g, '\n  --')
+                                    .replace(/^\s+/, '')}
+                                </pre>
+                              </details>
+                            )}
                         </>
                       ) : (
                         <p className="text-xs text-gray-500 italic">No runner configuration</p>
@@ -493,30 +709,40 @@ export default function RuntimeDetailPage() {
             )}
 
             {/* Standard Containers (if no engine/decoder config) */}
-            {runtime.spec?.containers && !runtime.spec?.engineConfig && !runtime.spec?.decoderConfig && (
-              <div className="border-l-4 border-gray-500 bg-gray-50 p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">📦 Containers ({runtime.spec.containers.length})</h4>
-                <div className="space-y-3">
-                  {runtime.spec.containers.map((container: any, idx: number) => (
-                    <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
-                      <p className="text-xs font-medium text-gray-700 mb-1">{container.name}</p>
-                      <p className="text-xs text-gray-600 font-mono break-all mb-2">{container.image}</p>
-                      <ResourceDisplay resources={container.resources} />
-                      {container.env && container.env.length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs font-medium text-gray-700 cursor-pointer">🔧 Environment Variables ({container.env.length})</summary>
-                          <div className="mt-1 space-y-1 pl-2">
-                            {container.env.map((env: any, i: number) => (
-                              <p key={i} className="text-xs text-gray-600 font-mono">{env.name}={env.value}</p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  ))}
+            {runtime.spec?.containers &&
+              !runtime.spec?.engineConfig &&
+              !runtime.spec?.decoderConfig && (
+                <div className="border-l-4 border-gray-500 bg-gray-50 p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">
+                    📦 Containers ({runtime.spec.containers.length})
+                  </h4>
+                  <div className="space-y-3">
+                    {runtime.spec.containers.map((container: any, idx: number) => (
+                      <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                        <p className="text-xs font-medium text-gray-700 mb-1">{container.name}</p>
+                        <p className="text-xs text-gray-600 font-mono break-all mb-2">
+                          {container.image}
+                        </p>
+                        <ResourceDisplay resources={container.resources} />
+                        {container.env && container.env.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="text-xs font-medium text-gray-700 cursor-pointer">
+                              🔧 Environment Variables ({container.env.length})
+                            </summary>
+                            <div className="mt-1 space-y-1 pl-2">
+                              {container.env.map((env: any, i: number) => (
+                                <p key={i} className="text-xs text-gray-600 font-mono">
+                                  {env.name}={env.value}
+                                </p>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         </div>
       </main>

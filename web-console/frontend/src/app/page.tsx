@@ -15,17 +15,25 @@ export default function LandingPage() {
           <div className="text-center">
             {/* Logo */}
             <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/25 animate-in">
-              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+              <svg
+                className="w-8 h-8 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                />
               </svg>
             </div>
 
             {/* Main heading */}
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl animate-in">
               <span className="block text-foreground">OME Web Console</span>
-              <span className="block mt-2 text-primary">
-                Model Orchestration Made Simple
-              </span>
+              <span className="block mt-2 text-primary">Model Orchestration Made Simple</span>
             </h1>
 
             {/* Description */}
@@ -36,7 +44,12 @@ export default function LandingPage() {
 
             {/* CTA Button */}
             <div className="mt-10 flex items-center justify-center gap-4 animate-in animate-in-delay-2">
-              <Button href="/dashboard" size="lg" icon={ButtonIcons.arrowRight} iconPosition="right">
+              <Button
+                href="/dashboard"
+                size="lg"
+                icon={ButtonIcons.arrowRight}
+                iconPosition="right"
+              >
                 Get Started
               </Button>
               <Button href="/models" variant="outline" size="lg">
@@ -70,17 +83,38 @@ export default function LandingPage() {
               <div className="relative p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                    <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                    <svg
+                      className="h-6 w-6 text-primary"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                      />
                     </svg>
                   </div>
-                  <svg className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  <svg
+                    className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-150"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
                   </svg>
                 </div>
                 <h3 className="text-lg font-semibold mb-2 text-foreground">Models</h3>
                 <p className="text-sm text-muted-foreground">
-                  Manage ClusterBaseModel and BaseModel resources. Import from HuggingFace or create custom models.
+                  Manage ClusterBaseModel and BaseModel resources. Import from HuggingFace or create
+                  custom models.
                 </p>
               </div>
             </Link>
@@ -94,17 +128,38 @@ export default function LandingPage() {
               <div className="relative p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10">
-                    <svg className="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                    <svg
+                      className="h-6 w-6 text-accent"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
+                      />
                     </svg>
                   </div>
-                  <svg className="w-5 h-5 text-muted-foreground group-hover:text-accent group-hover:translate-x-1 transition-all duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  <svg
+                    className="w-5 h-5 text-muted-foreground group-hover:text-accent group-hover:translate-x-1 transition-all duration-150"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
                   </svg>
                 </div>
                 <h3 className="text-lg font-semibold mb-2 text-foreground">Runtimes</h3>
                 <p className="text-sm text-muted-foreground">
-                  Configure serving runtimes with custom containers, accelerators, and resource requirements.
+                  Configure serving runtimes with custom containers, accelerators, and resource
+                  requirements.
                 </p>
               </div>
             </Link>
@@ -118,17 +173,38 @@ export default function LandingPage() {
               <div className="relative p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-success/10">
-                    <svg className="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+                    <svg
+                      className="h-6 w-6 text-success"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"
+                      />
                     </svg>
                   </div>
-                  <svg className="w-5 h-5 text-muted-foreground group-hover:text-success group-hover:translate-x-1 transition-all duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  <svg
+                    className="w-5 h-5 text-muted-foreground group-hover:text-success group-hover:translate-x-1 transition-all duration-150"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
                   </svg>
                 </div>
                 <h3 className="text-lg font-semibold mb-2 text-foreground">Inference Services</h3>
                 <p className="text-sm text-muted-foreground">
-                  Deploy and manage InferenceService resources. Monitor status and scale deployments.
+                  Deploy and manage InferenceService resources. Monitor status and scale
+                  deployments.
                 </p>
               </div>
             </Link>
@@ -169,7 +245,12 @@ export default function LandingPage() {
                 Access your dashboard and start managing your ML infrastructure today.
               </p>
               <div className="mt-8">
-                <Button href="/dashboard" size="lg" icon={ButtonIcons.arrowRight} iconPosition="right">
+                <Button
+                  href="/dashboard"
+                  size="lg"
+                  icon={ButtonIcons.arrowRight}
+                  iconPosition="right"
+                >
                   Open Dashboard
                 </Button>
               </div>

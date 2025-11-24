@@ -20,9 +20,7 @@ export function GitHubStorage({
   return (
     <>
       <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Owner *
-        </label>
+        <label className="block text-sm font-medium text-gray-700">Owner *</label>
         <input
           type="text"
           value={owner}
@@ -32,9 +30,7 @@ export function GitHubStorage({
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Repository *
-        </label>
+        <label className="block text-sm font-medium text-gray-700">Repository *</label>
         <input
           type="text"
           value={repo}

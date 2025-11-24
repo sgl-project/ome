@@ -11,33 +11,60 @@ interface ContainerFormProps {
   title?: string
 }
 
-export function ContainerForm({ basePath, register, control, onRemove, showRemove = false, title }: ContainerFormProps) {
+export function ContainerForm({
+  basePath,
+  register,
+  control,
+  onRemove,
+  showRemove = false,
+  title,
+}: ContainerFormProps) {
   // Environment variables
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
+  const {
+    fields: envFields,
+    append: appendEnv,
+    remove: removeEnv,
+  } = useFieldArray({
     control,
     name: `${basePath}.env`,
   })
 
   // Arguments
-  const { fields: argsFields, append: appendArg, remove: removeArg } = useFieldArray({
+  const {
+    fields: argsFields,
+    append: appendArg,
+    remove: removeArg,
+  } = useFieldArray({
     control,
     name: `${basePath}.args`,
   })
 
   // Command
-  const { fields: commandFields, append: appendCommand, remove: removeCommand } = useFieldArray({
+  const {
+    fields: commandFields,
+    append: appendCommand,
+    remove: removeCommand,
+  } = useFieldArray({
     control,
     name: `${basePath}.command`,
   })
 
   // Volume Mounts
-  const { fields: volumeMountFields, append: appendVolumeMount, remove: removeVolumeMount } = useFieldArray({
+  const {
+    fields: volumeMountFields,
+    append: appendVolumeMount,
+    remove: removeVolumeMount,
+  } = useFieldArray({
     control,
     name: `${basePath}.volumeMounts`,
   })
 
   // Ports
-  const { fields: portFields, append: appendPort, remove: removePort } = useFieldArray({
+  const {
+    fields: portFields,
+    append: appendPort,
+    remove: removePort,
+  } = useFieldArray({
     control,
     name: `${basePath}.ports`,
   })
@@ -46,7 +73,9 @@ export function ContainerForm({ basePath, register, control, onRemove, showRemov
     <div className="space-y-6 rounded-xl border border-slate-200 bg-white/50 p-6">
       {(title || showRemove) && (
         <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-          {title && <h4 className="text-base font-display font-semibold text-slate-700">{title}</h4>}
+          {title && (
+            <h4 className="text-base font-display font-semibold text-slate-700">{title}</h4>
+          )}
           {showRemove && onRemove && (
             <button
               type="button"
@@ -61,10 +90,14 @@ export function ContainerForm({ basePath, register, control, onRemove, showRemov
 
       {/* Basic Container Info */}
       <div>
-        <h5 className="text-sm font-display font-semibold text-slate-700 mb-3">Basic Configuration</h5>
+        <h5 className="text-sm font-display font-semibold text-slate-700 mb-3">
+          Basic Configuration
+        </h5>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="field-label block text-sm text-slate-700 mb-2">Container Name *</label>
+            <label className="field-label block text-sm text-slate-700 mb-2">
+              Container Name *
+            </label>
             <input
               type="text"
               {...register(`${basePath}.name`)}
@@ -115,7 +148,9 @@ export function ContainerForm({ basePath, register, control, onRemove, showRemov
             </div>
           ))}
           {commandFields.length === 0 && (
-            <p className="text-xs text-slate-500 italic">No command specified (uses image default)</p>
+            <p className="text-xs text-slate-500 italic">
+              No command specified (uses image default)
+            </p>
           )}
         </div>
       </div>
@@ -159,7 +194,9 @@ export function ContainerForm({ basePath, register, control, onRemove, showRemov
       {/* Environment Variables */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h5 className="text-sm font-display font-semibold text-slate-700">Environment Variables</h5>
+          <h5 className="text-sm font-display font-semibold text-slate-700">
+            Environment Variables
+          </h5>
           <button
             type="button"
             onClick={() => appendEnv({ name: '', value: '' })}

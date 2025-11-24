@@ -8,32 +8,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StatCard } from '@/components/ui/StatCard'
 import { DataTable, TableLink, TableText } from '@/components/ui/DataTable'
 import { Button, ButtonIcons } from '@/components/ui/Button'
+import { StatIcons } from '@/components/ui/Icons'
 import Link from 'next/link'
-import type { BaseModel } from '@/types/model'
-
-// Icons for stat cards
-const Icons = {
-  models: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-    </svg>
-  ),
-  ready: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  runtimes: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
-    </svg>
-  ),
-  services: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
-    </svg>
-  ),
-}
+import type { BaseModel } from '@/lib/types/model'
 
 export default function DashboardPage() {
   const { data: modelsData, isLoading: modelsLoading } = useModels()
@@ -51,17 +28,13 @@ export default function DashboardPage() {
       key: 'name',
       header: 'Name',
       cell: (model: BaseModel) => (
-        <TableLink href={`/models/${model.metadata.name}`}>
-          {model.metadata.name}
-        </TableLink>
+        <TableLink href={`/models/${model.metadata.name}`}>{model.metadata.name}</TableLink>
       ),
     },
     {
       key: 'vendor',
       header: 'Vendor',
-      cell: (model: BaseModel) => (
-        <TableText muted>{model.spec.vendor || '-'}</TableText>
-      ),
+      cell: (model: BaseModel) => <TableText muted>{model.spec.vendor || '-'}</TableText>,
     },
     {
       key: 'framework',
@@ -73,9 +46,7 @@ export default function DashboardPage() {
     {
       key: 'status',
       header: 'Status',
-      cell: (model: BaseModel) => (
-        <StatusBadge state={model.status?.state} size="sm" />
-      ),
+      cell: (model: BaseModel) => <StatusBadge state={model.status?.state} size="sm" />,
     },
   ]
 
@@ -86,12 +57,8 @@ export default function DashboardPage() {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex items-start justify-between gap-8">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-                Dashboard
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Overview of your OME resources
-              </p>
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Overview of your OME resources</p>
             </div>
             <Button href="/models/import" icon={ButtonIcons.import}>
               Quick Import
@@ -107,7 +74,7 @@ export default function DashboardPage() {
           <StatCard
             label="Total Models"
             value={modelsData?.total || 0}
-            icon={Icons.models}
+            icon={StatIcons.models}
             href="/models"
             variant="primary"
             delay={0}
@@ -115,7 +82,7 @@ export default function DashboardPage() {
           <StatCard
             label="Ready Models"
             value={modelsData?.items.filter((m) => m.status?.state === 'Ready').length || 0}
-            icon={Icons.ready}
+            icon={StatIcons.ready}
             href="/models"
             variant="success"
             delay={1}
@@ -123,7 +90,7 @@ export default function DashboardPage() {
           <StatCard
             label="Runtimes"
             value={runtimesData?.total || 0}
-            icon={Icons.runtimes}
+            icon={StatIcons.runtimes}
             href="/runtimes"
             variant="accent"
             delay={2}
@@ -131,7 +98,7 @@ export default function DashboardPage() {
           <StatCard
             label="Services"
             value={servicesData?.total || 0}
-            icon={Icons.services}
+            icon={StatIcons.services}
             href="/services"
             variant="warning"
             delay={3}
@@ -150,15 +117,31 @@ export default function DashboardPage() {
               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors group"
             >
               View all
-              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg
+                className="w-4 h-4 group-hover:translate-x-0.5 transition-transform"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </Link>
           }
           emptyState={
             <div className="flex flex-col items-center gap-3 py-4">
-              <svg className="h-12 w-12 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+              <svg
+                className="h-12 w-12 text-muted-foreground/40"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
+                />
               </svg>
               <p className="text-sm text-muted-foreground">No models yet</p>
               <Button href="/models/import" variant="outline" size="sm" icon={ButtonIcons.import}>

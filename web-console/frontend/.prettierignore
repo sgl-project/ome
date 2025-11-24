@@ -1,0 +1,6 @@
+.next
+node_modules
+coverage
+out
+build
+*.min.js
