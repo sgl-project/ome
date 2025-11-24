@@ -6,8 +6,49 @@ import Link from 'next/link'
 import { runtimesApi } from '@/lib/api/runtimes'
 import { useQueryClient } from '@tanstack/react-query'
 import * as yaml from 'js-yaml'
+import { ModelFormatsDisplay } from '@/components/runtime/ModelFormatsDisplay'
+import { MetadataCollapsible } from '@/components/runtime/MetadataCollapsible'
 
 type ImportMethod = 'upload' | 'url'
+
+// Reusable component for displaying K8s resources
+function ResourceDisplay({ resources }: { resources: any }) {
+  if (!resources) return null
+
+  return (
+    <div className="mt-2 bg-gray-50 border border-gray-200 rounded p-2">
+      <p className="text-xs font-semibold text-gray-700 mb-1.5">Resources</p>
+      <div className="space-y-1.5 text-xs">
+        {resources.requests && (
+          <div>
+            <span className="font-medium text-gray-600">Requests:</span>
+            <div className="ml-3 space-y-0.5">
+              {Object.entries(resources.requests).map(([key, value]: [string, any]) => (
+                <div key={key} className="flex">
+                  <span className="text-gray-500 w-32">{key}:</span>
+                  <span className="font-mono text-gray-900">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {resources.limits && (
+          <div>
+            <span className="font-medium text-gray-600">Limits:</span>
+            <div className="ml-3 space-y-0.5">
+              {Object.entries(resources.limits).map(([key, value]: [string, any]) => (
+                <div key={key} className="flex">
+                  <span className="text-gray-500 w-32">{key}:</span>
+                  <span className="font-mono text-gray-900">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function ImportRuntimePage() {
   const router = useRouter()
@@ -140,54 +181,72 @@ export default function ImportRuntimePage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-12">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <Link href="/runtimes" className="text-sm text-purple-600 hover:text-purple-800 mb-2 inline-block">
-            ← Back to Runtimes
+      <header className="relative border-b border-border/50 bg-card/50 backdrop-blur-sm animate-in">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <Link
+            href="/runtimes"
+            className="group inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors mb-4"
+          >
+            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Runtimes
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Import Runtime</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Import a ClusterServingRuntime from YAML file or GitHub URL
+          <h1 className="text-4xl font-bold tracking-tight">Import Runtime</h1>
+          <p className="mt-2 text-muted-foreground max-w-2xl">
+            Import a ClusterServingRuntime configuration from a local YAML file or remote GitHub repository
           </p>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 p-4 animate-in">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <p className="text-sm text-destructive font-medium">{error}</p>
+            </div>
           </div>
         )}
 
-        <div className="rounded-lg bg-white p-6 shadow">
+        <div className="rounded-xl border border-border bg-card shadow-lg animate-in-delay-1">
           {/* Method Tabs */}
-          <div className="mb-6 border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
+          <div className="border-b border-border/50 px-6">
+            <nav className="-mb-px flex gap-8">
               <button
                 onClick={() => setMethod('upload')}
-                className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
+                className={`relative py-4 px-1 text-sm font-medium transition-colors ${
                   method === 'upload'
-                    ? 'border-purple-600 text-purple-600'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Upload YAML
+                {method === 'upload' && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent rounded-full" />
+                )}
               </button>
               <button
                 onClick={() => setMethod('url')}
-                className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
+                className={`relative py-4 px-1 text-sm font-medium transition-colors ${
                   method === 'url'
-                    ? 'border-purple-600 text-purple-600'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 GitHub URL
+                {method === 'url' && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent rounded-full" />
+                )}
               </button>
             </nav>
           </div>
+          <div className="p-6">
 
           {/* Upload YAML Tab */}
           {method === 'upload' && (
@@ -196,8 +255,9 @@ export default function ImportRuntimePage() {
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-purple-500 transition-colors cursor-pointer"
+                className="group relative border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 cursor-pointer overflow-hidden"
               >
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <input
                   type="file"
                   accept=".yaml,.yml"
@@ -205,42 +265,49 @@ export default function ImportRuntimePage() {
                   className="hidden"
                   id="file-upload"
                 />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <p className="mt-2 text-sm text-gray-600">
-                    <span className="font-medium text-purple-600">Click to upload</span> or drag and drop
+                <label htmlFor="file-upload" className="relative cursor-pointer">
+                  <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                    <svg
+                      className="h-8 w-8 text-primary"
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                  <p className="mt-4 text-sm font-medium">
+                    <span className="text-primary">Click to upload</span> or drag and drop
                   </p>
-                  <p className="mt-1 text-xs text-gray-500">YAML files only (.yaml, .yml)</p>
+                  <p className="mt-1 text-xs text-muted-foreground font-mono">YAML files only (.yaml, .yml)</p>
                 </label>
               </div>
 
               {/* Simple YAML status */}
               {yamlContent && (
-                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                  <div className="flex items-center">
-                    <svg className="h-5 w-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm text-blue-800">YAML loaded successfully ({yamlContent.split('\n').length} lines)</span>
+                <div className="rounded-lg bg-accent/10 border border-accent/20 p-4 animate-in">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+                      <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">YAML loaded successfully</p>
+                      <p className="text-xs text-muted-foreground font-mono">{yamlContent.split('\n').length} lines</p>
+                    </div>
                   </div>
                 </div>
               )}
               {!yamlContent && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    or paste YAML directly
+                  <label className="block text-sm font-medium mb-3">
+                    Or paste YAML directly
                   </label>
                   <textarea
                     value={yamlContent}
@@ -248,9 +315,14 @@ export default function ImportRuntimePage() {
                       setYamlContent(e.target.value)
                       validateYAML(e.target.value)
                     }}
-                    rows={10}
-                    className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500 font-mono text-sm"
-                    placeholder="Paste your YAML content here..."
+                    rows={12}
+                    className="block w-full rounded-lg border border-border bg-background px-4 py-3 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono text-sm transition-all"
+                    placeholder="apiVersion: ome.io/v1beta1
+kind: ClusterServingRuntime
+metadata:
+  name: my-runtime
+spec:
+  ..."
                   />
                 </div>
               )}
@@ -287,12 +359,12 @@ export default function ImportRuntimePage() {
 
               {/* YAML Status */}
               {yamlContent && (
-                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                <div className="rounded-lg bg-blue-50 border border-accent/20 p-3">
                   <div className="flex items-center">
                     <svg className="h-5 w-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-sm text-blue-800">YAML fetched successfully ({yamlContent.split('\n').length} lines)</span>
+                    <span className="text-sm text-accent/90">YAML fetched successfully ({yamlContent.split('\n').length} lines)</span>
                   </div>
                 </div>
               )}
@@ -324,12 +396,12 @@ export default function ImportRuntimePage() {
                       </span>
                     )}
                     {parsedRuntime.spec?.engineConfig && !parsedRuntime.spec?.decoderConfig && (
-                      <span className="inline-flex items-center rounded-md bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-900 ring-1 ring-inset ring-blue-600/20">
+                      <span className="inline-flex items-center rounded-md bg-accent/20 px-3 py-1.5 text-xs font-bold text-blue-900 ring-1 ring-inset ring-blue-600/20">
                         ENGINE ONLY
                       </span>
                     )}
                     {!parsedRuntime.spec?.engineConfig && parsedRuntime.spec?.decoderConfig && (
-                      <span className="inline-flex items-center rounded-md bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-900 ring-1 ring-inset ring-orange-600/20">
+                      <span className="inline-flex items-center rounded-md bg-accent/20 px-3 py-1.5 text-xs font-bold text-orange-900 ring-1 ring-inset ring-orange-600/20">
                         DECODER ONLY
                       </span>
                     )}
@@ -392,23 +464,14 @@ export default function ImportRuntimePage() {
                     </dl>
                   </div>
 
+                  {/* Metadata - Labels and Annotations */}
+                  <MetadataCollapsible
+                    labels={parsedRuntime.metadata?.labels}
+                    annotations={parsedRuntime.metadata?.annotations}
+                  />
+
                   {/* Supported Model Formats */}
-                  {parsedRuntime.spec?.supportedModelFormats && parsedRuntime.spec.supportedModelFormats.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-900 mb-3">Supported Model Formats</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {parsedRuntime.spec.supportedModelFormats.map((format: any, idx: number) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center rounded-md bg-purple-50 px-3 py-1 text-sm font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10"
-                          >
-                            {format.name}
-                            {format.version && ` (v${format.version})`}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <ModelFormatsDisplay formats={parsedRuntime.spec?.supportedModelFormats || []} />
 
                   {/* Protocol Versions */}
                   {parsedRuntime.spec?.protocolVersions && parsedRuntime.spec.protocolVersions.length > 0 && (
@@ -418,7 +481,7 @@ export default function ImportRuntimePage() {
                         {parsedRuntime.spec.protocolVersions.map((version: string, idx: number) => (
                           <span
                             key={idx}
-                            className="inline-flex items-center rounded-md bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                            className="inline-flex items-center rounded-md bg-blue-50 px-3 py-1 text-sm font-medium text-accent ring-1 ring-inset ring-blue-700/10"
                           >
                             {version}
                           </span>
@@ -429,26 +492,49 @@ export default function ImportRuntimePage() {
 
                   {/* Router Config */}
                   {parsedRuntime.spec?.routerConfig && (
-                    <div className="border-l-4 border-indigo-500 bg-indigo-50 p-4">
-                      <h4 className="text-sm font-medium text-indigo-900 mb-3">🔀 Router Configuration</h4>
+                    <div className="border-l-4 border-accent bg-accent/10 p-4">
+                      <h4 className="text-sm font-medium text-accent mb-3">🔀 Router Configuration</h4>
                       <div className="space-y-3">
                         {parsedRuntime.spec.routerConfig.runner && (
-                          <div className="bg-white rounded-lg p-3 border border-indigo-200">
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
                             <p className="text-xs font-medium text-gray-700 mb-2">Container: {parsedRuntime.spec.routerConfig.runner.name || 'router-container'}</p>
                             <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.routerConfig.runner.image}</p>
                             {parsedRuntime.spec.routerConfig.runner.resources && (
-                              <div className="mt-2 text-xs">
-                                {parsedRuntime.spec.routerConfig.runner.resources.requests && (
-                                  <p className="text-gray-600">Requests: GPU={parsedRuntime.spec.routerConfig.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
-                                {parsedRuntime.spec.routerConfig.runner.resources.limits && (
-                                  <p className="text-gray-600">Limits: GPU={parsedRuntime.spec.routerConfig.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
+                              <div className="mt-2 bg-gray-50 border border-gray-200 rounded p-2">
+                                <p className="text-xs font-semibold text-gray-700 mb-1.5">Resources</p>
+                                <div className="space-y-1.5 text-xs">
+                                  {parsedRuntime.spec.routerConfig.runner.resources.requests && (
+                                    <div>
+                                      <span className="font-medium text-gray-600">Requests:</span>
+                                      <div className="ml-3 space-y-0.5">
+                                        {Object.entries(parsedRuntime.spec.routerConfig.runner.resources.requests).map(([key, value]: [string, any]) => (
+                                          <div key={key} className="flex">
+                                            <span className="text-gray-500 w-32">{key}:</span>
+                                            <span className="font-mono text-gray-900">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {parsedRuntime.spec.routerConfig.runner.resources.limits && (
+                                    <div>
+                                      <span className="font-medium text-gray-600">Limits:</span>
+                                      <div className="ml-3 space-y-0.5">
+                                        {Object.entries(parsedRuntime.spec.routerConfig.runner.resources.limits).map(([key, value]: [string, any]) => (
+                                          <div key={key} className="flex">
+                                            <span className="text-gray-500 w-32">{key}:</span>
+                                            <span className="font-mono text-gray-900">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                             {parsedRuntime.spec.routerConfig.runner.env && parsedRuntime.spec.routerConfig.runner.env.length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-indigo-700 cursor-pointer">Environment Variables ({parsedRuntime.spec.routerConfig.runner.env.length})</summary>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">Environment Variables ({parsedRuntime.spec.routerConfig.runner.env.length})</summary>
                                 <div className="mt-1 space-y-1 pl-2">
                                   {parsedRuntime.spec.routerConfig.runner.env.map((env: any, i: number) => (
                                     <p key={i} className="text-xs text-gray-600 font-mono">{env.name}={env.value}</p>
@@ -464,28 +550,51 @@ export default function ImportRuntimePage() {
 
                   {/* Engine Config */}
                   {parsedRuntime.spec?.engineConfig && (
-                    <div className="border-l-4 border-blue-500 bg-blue-50 p-4">
-                      <h4 className="text-sm font-medium text-blue-900 mb-3">⚡ Engine Configuration (Prefill)</h4>
+                    <div className="border-l-4 border-accent bg-accent/10 p-4">
+                      <h4 className="text-sm font-medium text-accent mb-3">⚡ Engine Configuration (Prefill)</h4>
                       <div className="space-y-3">
                         {/* Single-node: Direct runner */}
                         {parsedRuntime.spec.engineConfig.runner && !parsedRuntime.spec.engineConfig.leader && (
-                          <div className="bg-white rounded-lg p-3 border border-blue-200">
-                            <p className="text-xs font-bold text-blue-800 mb-2">🖥️ Single Node</p>
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
+                            <p className="text-xs font-bold text-accent/90 mb-2">🖥️ Single Node</p>
                             <p className="text-xs font-medium text-gray-700 mb-1">Container: {parsedRuntime.spec.engineConfig.runner.name || 'N/A'}</p>
                             <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.engineConfig.runner.image || 'N/A'}</p>
                             {parsedRuntime.spec.engineConfig.runner.resources && (
-                              <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                {parsedRuntime.spec.engineConfig.runner.resources.requests && (
-                                  <p className="text-gray-700 font-medium">📊 Requests: GPU={parsedRuntime.spec.engineConfig.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
-                                {parsedRuntime.spec.engineConfig.runner.resources.limits && (
-                                  <p className="text-gray-700 font-medium">⚡ Limits: GPU={parsedRuntime.spec.engineConfig.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
+                              <div className="mt-2 bg-gray-50 border border-gray-200 rounded p-2">
+                                <p className="text-xs font-semibold text-gray-700 mb-1.5">Resources</p>
+                                <div className="space-y-1.5 text-xs">
+                                  {parsedRuntime.spec.engineConfig.runner.resources.requests && (
+                                    <div>
+                                      <span className="font-medium text-gray-600">Requests:</span>
+                                      <div className="ml-3 space-y-0.5">
+                                        {Object.entries(parsedRuntime.spec.engineConfig.runner.resources.requests).map(([key, value]: [string, any]) => (
+                                          <div key={key} className="flex">
+                                            <span className="text-gray-500 w-32">{key}:</span>
+                                            <span className="font-mono text-gray-900">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {parsedRuntime.spec.engineConfig.runner.resources.limits && (
+                                    <div>
+                                      <span className="font-medium text-gray-600">Limits:</span>
+                                      <div className="ml-3 space-y-0.5">
+                                        {Object.entries(parsedRuntime.spec.engineConfig.runner.resources.limits).map(([key, value]: [string, any]) => (
+                                          <div key={key} className="flex">
+                                            <span className="text-gray-500 w-32">{key}:</span>
+                                            <span className="font-mono text-gray-900">{value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                             {parsedRuntime.spec.engineConfig.runner.env && Array.isArray(parsedRuntime.spec.engineConfig.runner.env) && parsedRuntime.spec.engineConfig.runner.env.length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-blue-700 cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.engineConfig.runner.env.length})</summary>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.engineConfig.runner.env.length})</summary>
                                 <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
                                   {parsedRuntime.spec.engineConfig.runner.env.map((env: any, i: number) => (
                                     <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || (env.valueFrom ? '[from field]' : '')}</p>
@@ -495,14 +604,14 @@ export default function ImportRuntimePage() {
                             )}
                             {parsedRuntime.spec.engineConfig.runner.command && Array.isArray(parsedRuntime.spec.engineConfig.runner.command) && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-blue-700 cursor-pointer">💻 Command ({parsedRuntime.spec.engineConfig.runner.command.length} args)</summary>
-                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.engineConfig.runner.command.join(' ')}</pre>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({parsedRuntime.spec.engineConfig.runner.command.length} args)</summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.engineConfig.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                               </details>
                             )}
                             {parsedRuntime.spec.engineConfig.runner.args && Array.isArray(parsedRuntime.spec.engineConfig.runner.args) && parsedRuntime.spec.engineConfig.runner.args.length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-blue-700 cursor-pointer">📝 Args ({parsedRuntime.spec.engineConfig.runner.args.length})</summary>
-                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.engineConfig.runner.args.join(' ')}</pre>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">📝 Args ({parsedRuntime.spec.engineConfig.runner.args.length})</summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.engineConfig.runner.args.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                               </details>
                             )}
                           </div>
@@ -510,25 +619,16 @@ export default function ImportRuntimePage() {
 
                         {/* Multi-node: Leader */}
                         {parsedRuntime.spec.engineConfig.leader && (
-                          <div className="bg-white rounded-lg p-3 border border-blue-200">
-                            <p className="text-xs font-bold text-blue-800 mb-2">👑 Leader Node</p>
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
+                            <p className="text-xs font-bold text-accent/90 mb-2">👑 Leader Node</p>
                             {parsedRuntime.spec.engineConfig.leader.runner ? (
                               <>
                                 <p className="text-xs font-medium text-gray-700 mb-1">Container: {parsedRuntime.spec.engineConfig.leader.runner.name || 'N/A'}</p>
                                 <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.engineConfig.leader.runner.image || 'N/A'}</p>
-                                {parsedRuntime.spec.engineConfig.leader.runner.resources && (
-                                  <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                    {parsedRuntime.spec.engineConfig.leader.runner.resources.requests && (
-                                      <p className="text-gray-700 font-medium">📊 Requests: GPU={parsedRuntime.spec.engineConfig.leader.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                    {parsedRuntime.spec.engineConfig.leader.runner.resources.limits && (
-                                      <p className="text-gray-700 font-medium">⚡ Limits: GPU={parsedRuntime.spec.engineConfig.leader.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                  </div>
-                                )}
+                                <ResourceDisplay resources={parsedRuntime.spec.engineConfig.leader.runner.resources} />
                                 {parsedRuntime.spec.engineConfig.leader.runner.env && Array.isArray(parsedRuntime.spec.engineConfig.leader.runner.env) && parsedRuntime.spec.engineConfig.leader.runner.env.length > 0 && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-blue-700 cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.engineConfig.leader.runner.env.length})</summary>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.engineConfig.leader.runner.env.length})</summary>
                                     <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
                                       {parsedRuntime.spec.engineConfig.leader.runner.env.map((env: any, i: number) => (
                                         <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
@@ -538,8 +638,8 @@ export default function ImportRuntimePage() {
                                 )}
                                 {parsedRuntime.spec.engineConfig.leader.runner.command && Array.isArray(parsedRuntime.spec.engineConfig.leader.runner.command) && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-blue-700 cursor-pointer">💻 Command ({parsedRuntime.spec.engineConfig.leader.runner.command.length} args)</summary>
-                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.engineConfig.leader.runner.command.join(' ')}</pre>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({parsedRuntime.spec.engineConfig.leader.runner.command.length} args)</summary>
+                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.engineConfig.leader.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                                   </details>
                                 )}
                               </>
@@ -548,7 +648,7 @@ export default function ImportRuntimePage() {
                             )}
                             {parsedRuntime.spec.engineConfig.leader.nodeSelector && Object.keys(parsedRuntime.spec.engineConfig.leader.nodeSelector).length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-blue-700 cursor-pointer">🎯 Node Selector ({Object.keys(parsedRuntime.spec.engineConfig.leader.nodeSelector).length} rules)</summary>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">🎯 Node Selector ({Object.keys(parsedRuntime.spec.engineConfig.leader.nodeSelector).length} rules)</summary>
                                 <div className="mt-1 space-y-1 pl-2">
                                   {Object.entries(parsedRuntime.spec.engineConfig.leader.nodeSelector).map(([key, value]: [string, any], i: number) => (
                                     <p key={i} className="text-xs text-gray-600 font-mono break-all">{key}: {String(value)}</p>
@@ -561,10 +661,10 @@ export default function ImportRuntimePage() {
 
                         {/* Worker */}
                         {parsedRuntime.spec.engineConfig.worker && (
-                          <div className="bg-white rounded-lg p-3 border border-blue-200">
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-bold text-blue-800">👥 Worker Nodes</p>
-                              <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+                              <p className="text-xs font-bold text-accent/90">👥 Worker Nodes</p>
+                              <span className="inline-flex items-center rounded-md bg-accent/20 px-2 py-1 text-xs font-medium text-accent">
                                 {parsedRuntime.spec.engineConfig.worker.size || 1} node{(parsedRuntime.spec.engineConfig.worker.size || 1) > 1 ? 's' : ''}
                               </span>
                             </div>
@@ -572,19 +672,10 @@ export default function ImportRuntimePage() {
                               <>
                                 <p className="text-xs font-medium text-gray-700 mb-1">Container: {parsedRuntime.spec.engineConfig.worker.runner.name || 'N/A'}</p>
                                 <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.engineConfig.worker.runner.image || 'N/A'}</p>
-                                {parsedRuntime.spec.engineConfig.worker.runner.resources && (
-                                  <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                    {parsedRuntime.spec.engineConfig.worker.runner.resources.requests && (
-                                      <p className="text-gray-700 font-medium">📊 Requests: GPU={parsedRuntime.spec.engineConfig.worker.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                    {parsedRuntime.spec.engineConfig.worker.runner.resources.limits && (
-                                      <p className="text-gray-700 font-medium">⚡ Limits: GPU={parsedRuntime.spec.engineConfig.worker.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                  </div>
-                                )}
+                                <ResourceDisplay resources={parsedRuntime.spec.engineConfig.worker.runner.resources} />
                                 {parsedRuntime.spec.engineConfig.worker.runner.env && Array.isArray(parsedRuntime.spec.engineConfig.worker.runner.env) && parsedRuntime.spec.engineConfig.worker.runner.env.length > 0 && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-blue-700 cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.engineConfig.worker.runner.env.length})</summary>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.engineConfig.worker.runner.env.length})</summary>
                                     <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
                                       {parsedRuntime.spec.engineConfig.worker.runner.env.map((env: any, i: number) => (
                                         <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
@@ -594,8 +685,8 @@ export default function ImportRuntimePage() {
                                 )}
                                 {parsedRuntime.spec.engineConfig.worker.runner.command && Array.isArray(parsedRuntime.spec.engineConfig.worker.runner.command) && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-blue-700 cursor-pointer">💻 Command ({parsedRuntime.spec.engineConfig.worker.runner.command.length} args)</summary>
-                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.engineConfig.worker.runner.command.join(' ')}</pre>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({parsedRuntime.spec.engineConfig.worker.runner.command.length} args)</summary>
+                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.engineConfig.worker.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                                   </details>
                                 )}
                               </>
@@ -610,28 +701,19 @@ export default function ImportRuntimePage() {
 
                   {/* Decoder Config */}
                   {parsedRuntime.spec?.decoderConfig && (
-                    <div className="border-l-4 border-orange-500 bg-orange-50 p-4">
-                      <h4 className="text-sm font-medium text-orange-900 mb-3">🔄 Decoder Configuration (Decode)</h4>
+                    <div className="border-l-4 border-accent bg-accent/10 p-4">
+                      <h4 className="text-sm font-medium text-accent mb-3">🔄 Decoder Configuration (Decode)</h4>
                       <div className="space-y-3">
                         {/* Single-node: Direct runner */}
                         {parsedRuntime.spec.decoderConfig.runner && !parsedRuntime.spec.decoderConfig.leader && (
-                          <div className="bg-white rounded-lg p-3 border border-orange-200">
-                            <p className="text-xs font-bold text-orange-800 mb-2">🖥️ Single Node</p>
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
+                            <p className="text-xs font-bold text-accent/90 mb-2">🖥️ Single Node</p>
                             <p className="text-xs font-medium text-gray-700 mb-1">Container: {parsedRuntime.spec.decoderConfig.runner.name || 'N/A'}</p>
                             <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.decoderConfig.runner.image || 'N/A'}</p>
-                            {parsedRuntime.spec.decoderConfig.runner.resources && (
-                              <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                {parsedRuntime.spec.decoderConfig.runner.resources.requests && (
-                                  <p className="text-gray-700 font-medium">📊 Requests: GPU={parsedRuntime.spec.decoderConfig.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
-                                {parsedRuntime.spec.decoderConfig.runner.resources.limits && (
-                                  <p className="text-gray-700 font-medium">⚡ Limits: GPU={parsedRuntime.spec.decoderConfig.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
-                              </div>
-                            )}
+                            <ResourceDisplay resources={parsedRuntime.spec.decoderConfig.runner.resources} />
                             {parsedRuntime.spec.decoderConfig.runner.env && Array.isArray(parsedRuntime.spec.decoderConfig.runner.env) && parsedRuntime.spec.decoderConfig.runner.env.length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-orange-700 cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.decoderConfig.runner.env.length})</summary>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.decoderConfig.runner.env.length})</summary>
                                 <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
                                   {parsedRuntime.spec.decoderConfig.runner.env.map((env: any, i: number) => (
                                     <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || (env.valueFrom ? '[from field]' : '')}</p>
@@ -641,13 +723,13 @@ export default function ImportRuntimePage() {
                             )}
                             {parsedRuntime.spec.decoderConfig.runner.command && Array.isArray(parsedRuntime.spec.decoderConfig.runner.command) && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-orange-700 cursor-pointer">💻 Command ({parsedRuntime.spec.decoderConfig.runner.command.length} args)</summary>
-                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.decoderConfig.runner.command.join(' ')}</pre>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({parsedRuntime.spec.decoderConfig.runner.command.length} args)</summary>
+                                <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.decoderConfig.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                               </details>
                             )}
                             {parsedRuntime.spec.decoderConfig.runner.args && Array.isArray(parsedRuntime.spec.decoderConfig.runner.args) && parsedRuntime.spec.decoderConfig.runner.args.length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-orange-700 cursor-pointer">📝 Args ({parsedRuntime.spec.decoderConfig.runner.args.length})</summary>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">📝 Args ({parsedRuntime.spec.decoderConfig.runner.args.length})</summary>
                                 <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.decoderConfig.runner.args.join(' ')}</pre>
                               </details>
                             )}
@@ -656,25 +738,16 @@ export default function ImportRuntimePage() {
 
                         {/* Multi-node: Leader */}
                         {parsedRuntime.spec.decoderConfig.leader && (
-                          <div className="bg-white rounded-lg p-3 border border-orange-200">
-                            <p className="text-xs font-bold text-orange-800 mb-2">👑 Leader Node</p>
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
+                            <p className="text-xs font-bold text-accent/90 mb-2">👑 Leader Node</p>
                             {parsedRuntime.spec.decoderConfig.leader.runner ? (
                               <>
                                 <p className="text-xs font-medium text-gray-700 mb-1">Container: {parsedRuntime.spec.decoderConfig.leader.runner.name || 'N/A'}</p>
                                 <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.decoderConfig.leader.runner.image || 'N/A'}</p>
-                                {parsedRuntime.spec.decoderConfig.leader.runner.resources && (
-                                  <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                    {parsedRuntime.spec.decoderConfig.leader.runner.resources.requests && (
-                                      <p className="text-gray-700 font-medium">📊 Requests: GPU={parsedRuntime.spec.decoderConfig.leader.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                    {parsedRuntime.spec.decoderConfig.leader.runner.resources.limits && (
-                                      <p className="text-gray-700 font-medium">⚡ Limits: GPU={parsedRuntime.spec.decoderConfig.leader.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                  </div>
-                                )}
+                                <ResourceDisplay resources={parsedRuntime.spec.decoderConfig.leader.runner.resources} />
                                 {parsedRuntime.spec.decoderConfig.leader.runner.env && Array.isArray(parsedRuntime.spec.decoderConfig.leader.runner.env) && parsedRuntime.spec.decoderConfig.leader.runner.env.length > 0 && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-orange-700 cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.decoderConfig.leader.runner.env.length})</summary>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.decoderConfig.leader.runner.env.length})</summary>
                                     <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
                                       {parsedRuntime.spec.decoderConfig.leader.runner.env.map((env: any, i: number) => (
                                         <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
@@ -684,8 +757,8 @@ export default function ImportRuntimePage() {
                                 )}
                                 {parsedRuntime.spec.decoderConfig.leader.runner.command && Array.isArray(parsedRuntime.spec.decoderConfig.leader.runner.command) && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-orange-700 cursor-pointer">💻 Command ({parsedRuntime.spec.decoderConfig.leader.runner.command.length} args)</summary>
-                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.decoderConfig.leader.runner.command.join(' ')}</pre>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({parsedRuntime.spec.decoderConfig.leader.runner.command.length} args)</summary>
+                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.decoderConfig.leader.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                                   </details>
                                 )}
                               </>
@@ -694,7 +767,7 @@ export default function ImportRuntimePage() {
                             )}
                             {parsedRuntime.spec.decoderConfig.leader.nodeSelector && Object.keys(parsedRuntime.spec.decoderConfig.leader.nodeSelector).length > 0 && (
                               <details className="mt-2">
-                                <summary className="text-xs font-medium text-orange-700 cursor-pointer">🎯 Node Selector ({Object.keys(parsedRuntime.spec.decoderConfig.leader.nodeSelector).length} rules)</summary>
+                                <summary className="text-xs font-medium text-accent cursor-pointer">🎯 Node Selector ({Object.keys(parsedRuntime.spec.decoderConfig.leader.nodeSelector).length} rules)</summary>
                                 <div className="mt-1 space-y-1 pl-2">
                                   {Object.entries(parsedRuntime.spec.decoderConfig.leader.nodeSelector).map(([key, value]: [string, any], i: number) => (
                                     <p key={i} className="text-xs text-gray-600 font-mono break-all">{key}: {String(value)}</p>
@@ -707,10 +780,10 @@ export default function ImportRuntimePage() {
 
                         {/* Worker */}
                         {parsedRuntime.spec.decoderConfig.worker && (
-                          <div className="bg-white rounded-lg p-3 border border-orange-200">
+                          <div className="bg-white rounded-lg p-3 border border-accent/20">
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-bold text-orange-800">👥 Worker Nodes</p>
-                              <span className="inline-flex items-center rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
+                              <p className="text-xs font-bold text-accent/90">👥 Worker Nodes</p>
+                              <span className="inline-flex items-center rounded-md bg-accent/20 px-2 py-1 text-xs font-medium text-accent">
                                 {parsedRuntime.spec.decoderConfig.worker.size || 1} node{(parsedRuntime.spec.decoderConfig.worker.size || 1) > 1 ? 's' : ''}
                               </span>
                             </div>
@@ -718,19 +791,10 @@ export default function ImportRuntimePage() {
                               <>
                                 <p className="text-xs font-medium text-gray-700 mb-1">Container: {parsedRuntime.spec.decoderConfig.worker.runner.name || 'N/A'}</p>
                                 <p className="text-xs text-gray-600 font-mono break-all mb-2">Image: {parsedRuntime.spec.decoderConfig.worker.runner.image || 'N/A'}</p>
-                                {parsedRuntime.spec.decoderConfig.worker.runner.resources && (
-                                  <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                    {parsedRuntime.spec.decoderConfig.worker.runner.resources.requests && (
-                                      <p className="text-gray-700 font-medium">📊 Requests: GPU={parsedRuntime.spec.decoderConfig.worker.runner.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                    {parsedRuntime.spec.decoderConfig.worker.runner.resources.limits && (
-                                      <p className="text-gray-700 font-medium">⚡ Limits: GPU={parsedRuntime.spec.decoderConfig.worker.runner.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                    )}
-                                  </div>
-                                )}
+                                <ResourceDisplay resources={parsedRuntime.spec.decoderConfig.worker.runner.resources} />
                                 {parsedRuntime.spec.decoderConfig.worker.runner.env && Array.isArray(parsedRuntime.spec.decoderConfig.worker.runner.env) && parsedRuntime.spec.decoderConfig.worker.runner.env.length > 0 && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-orange-700 cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.decoderConfig.worker.runner.env.length})</summary>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">🔧 Environment Variables ({parsedRuntime.spec.decoderConfig.worker.runner.env.length})</summary>
                                     <div className="mt-1 space-y-1 pl-2 max-h-40 overflow-y-auto">
                                       {parsedRuntime.spec.decoderConfig.worker.runner.env.map((env: any, i: number) => (
                                         <p key={i} className="text-xs text-gray-600 font-mono break-all">{env.name}={env.value || env.valueFrom ? '[from field]' : ''}</p>
@@ -740,8 +804,8 @@ export default function ImportRuntimePage() {
                                 )}
                                 {parsedRuntime.spec.decoderConfig.worker.runner.command && Array.isArray(parsedRuntime.spec.decoderConfig.worker.runner.command) && (
                                   <details className="mt-2">
-                                    <summary className="text-xs font-medium text-orange-700 cursor-pointer">💻 Command ({parsedRuntime.spec.decoderConfig.worker.runner.command.length} args)</summary>
-                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-2 rounded overflow-x-auto max-h-60">{parsedRuntime.spec.decoderConfig.worker.runner.command.join(' ')}</pre>
+                                    <summary className="text-xs font-medium text-accent cursor-pointer">💻 Command ({parsedRuntime.spec.decoderConfig.worker.runner.command.length} args)</summary>
+                                    <pre className="mt-1 text-xs text-gray-600 font-mono bg-gray-50 p-3 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-all leading-relaxed">{parsedRuntime.spec.decoderConfig.worker.runner.command.join(' ').replace(/--/g, '\n  --').replace(/^\s+/, '')}</pre>
                                   </details>
                                 )}
                               </>
@@ -763,16 +827,7 @@ export default function ImportRuntimePage() {
                           <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
                             <p className="text-xs font-medium text-gray-700 mb-1">{container.name}</p>
                             <p className="text-xs text-gray-600 font-mono break-all mb-2">{container.image}</p>
-                            {container.resources && (
-                              <div className="mt-2 text-xs bg-gray-50 p-2 rounded">
-                                {container.resources.requests && (
-                                  <p className="text-gray-700">📊 Requests: GPU={container.resources.requests['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
-                                {container.resources.limits && (
-                                  <p className="text-gray-700">⚡ Limits: GPU={container.resources.limits['nvidia.com/gpu'] || 'N/A'}</p>
-                                )}
-                              </div>
-                            )}
+                            <ResourceDisplay resources={container.resources} />
                             {container.env && container.env.length > 0 && (
                               <details className="mt-2">
                                 <summary className="text-xs font-medium text-gray-700 cursor-pointer">🔧 Environment Variables ({container.env.length})</summary>
@@ -843,6 +898,7 @@ export default function ImportRuntimePage() {
               {isImporting ? 'Importing...' : 'Import Runtime'}
             </button>
           </div>
+        </div>
         </div>
       </main>
     </div>
