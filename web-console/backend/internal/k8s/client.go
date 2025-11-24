@@ -23,22 +23,22 @@ type EventBroadcaster struct {
 
 // ResourceEvent represents a change to a Kubernetes resource
 type ResourceEvent struct {
-	Type     string `json:"type"`     // "add", "update", "delete"
-	Resource string `json:"resource"` // "models", "runtimes", "services", etc.
-	Name     string `json:"name"`
+	Type     string      `json:"type"`     // "add", "update", "delete"
+	Resource string      `json:"resource"` // "models", "runtimes", "services", etc.
+	Name     string      `json:"name"`
 	Data     interface{} `json:"data,omitempty"`
 }
 
 // Client wraps Kubernetes client functionality with informers
 type Client struct {
-	Clientset            *kubernetes.Clientset
-	DynamicClient        dynamic.Interface
-	Config               *rest.Config
-	Logger               *zap.Logger
+	Clientset              *kubernetes.Clientset
+	DynamicClient          dynamic.Interface
+	Config                 *rest.Config
+	Logger                 *zap.Logger
 	DynamicInformerFactory dynamicinformer.DynamicSharedInformerFactory
-	InformerFactory      informers.SharedInformerFactory
-	Broadcaster          *EventBroadcaster
-	stopCh               chan struct{}
+	InformerFactory        informers.SharedInformerFactory
+	Broadcaster            *EventBroadcaster
+	stopCh                 chan struct{}
 }
 
 // NewClient creates a new Kubernetes client

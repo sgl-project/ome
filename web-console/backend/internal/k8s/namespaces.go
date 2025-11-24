@@ -3,8 +3,8 @@ package k8s
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/labels"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 // ListNamespaces returns all namespaces in the cluster from cache

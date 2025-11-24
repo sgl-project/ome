@@ -26,9 +26,9 @@ var allowedHosts = []string{
 
 // RuntimesHandler handles HTTP requests for ClusterServingRuntime resources
 type RuntimesHandler struct {
-	k8sClient      *k8s.Client
-	logger         *zap.Logger
-	intelligence   *services.RuntimeIntelligenceService
+	k8sClient    *k8s.Client
+	logger       *zap.Logger
+	intelligence *services.RuntimeIntelligenceService
 }
 
 // NewRuntimesHandler creates a new RuntimesHandler
@@ -56,15 +56,15 @@ func (h *RuntimesHandler) List(c *gin.Context) {
 				zap.String("namespace", namespace),
 				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to list serving runtimes",
+				"error":   "Failed to list serving runtimes",
 				"details": err.Error(),
 			})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"items": runtimes.Items,
-			"total": len(runtimes.Items),
+			"items":     runtimes.Items,
+			"total":     len(runtimes.Items),
 			"namespace": namespace,
 		})
 		return
@@ -75,7 +75,7 @@ func (h *RuntimesHandler) List(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to list runtimes", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list runtimes",
+			"error":   "Failed to list runtimes",
 			"details": err.Error(),
 		})
 		return
@@ -96,7 +96,7 @@ func (h *RuntimesHandler) Get(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get runtime", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Runtime not found",
+			"error":   "Runtime not found",
 			"details": err.Error(),
 		})
 		return
@@ -113,7 +113,7 @@ func (h *RuntimesHandler) Create(c *gin.Context) {
 	if err := c.ShouldBindJSON(&runtimeData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -134,7 +134,7 @@ func (h *RuntimesHandler) Create(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to create runtime", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create runtime",
+			"error":   "Failed to create runtime",
 			"details": err.Error(),
 		})
 		return
@@ -153,7 +153,7 @@ func (h *RuntimesHandler) Update(c *gin.Context) {
 	if err := c.ShouldBindJSON(&runtimeData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -177,7 +177,7 @@ func (h *RuntimesHandler) Update(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to update runtime", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update runtime",
+			"error":   "Failed to update runtime",
 			"details": err.Error(),
 		})
 		return
@@ -196,7 +196,7 @@ func (h *RuntimesHandler) Delete(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to delete runtime", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete runtime",
+			"error":   "Failed to delete runtime",
 			"details": err.Error(),
 		})
 		return
@@ -205,7 +205,7 @@ func (h *RuntimesHandler) Delete(c *gin.Context) {
 	h.logger.Info("Runtime deleted successfully", zap.String("name", name))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Runtime deleted successfully",
-		"name": name,
+		"name":    name,
 	})
 }
 
@@ -269,7 +269,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to fetch URL", zap.String("url", urlStr), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch URL",
+			"error":   "Failed to fetch URL",
 			"details": err.Error(),
 		})
 		return
@@ -281,7 +281,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 			zap.String("url", urlStr),
 			zap.Int("status", resp.StatusCode))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to fetch URL",
+			"error":   "Failed to fetch URL",
 			"details": "HTTP status: " + resp.Status,
 		})
 		return
@@ -292,7 +292,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to read response body", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to read response",
+			"error":   "Failed to read response",
 			"details": err.Error(),
 		})
 		return

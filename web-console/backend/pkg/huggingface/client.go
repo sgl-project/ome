@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultAPIURL = "https://huggingface.co/api"
+	defaultAPIURL  = "https://huggingface.co/api"
 	defaultTimeout = 30 * time.Second
 )
 
@@ -33,39 +33,39 @@ func NewClient() *Client {
 
 // ModelSearchResult represents a model search result from HuggingFace
 type ModelSearchResult struct {
-	ID            string      `json:"id"`
-	ModelID       string      `json:"modelId"`
-	Author        string      `json:"author"`
-	SHA           string      `json:"sha"`
-	LastModified  string      `json:"lastModified"`
-	Private       bool        `json:"private"`
-	Gated         interface{} `json:"gated"` // Can be false (bool) or "auto"/"manual" (string)
-	Disabled      bool        `json:"disabled"`
-	Downloads     int         `json:"downloads"`
-	Likes         int         `json:"likes"`
-	Tags          []string    `json:"tags"`
-	Pipeline      string      `json:"pipeline_tag,omitempty"`
-	Library       string      `json:"library_name,omitempty"`
+	ID           string      `json:"id"`
+	ModelID      string      `json:"modelId"`
+	Author       string      `json:"author"`
+	SHA          string      `json:"sha"`
+	LastModified string      `json:"lastModified"`
+	Private      bool        `json:"private"`
+	Gated        interface{} `json:"gated"` // Can be false (bool) or "auto"/"manual" (string)
+	Disabled     bool        `json:"disabled"`
+	Downloads    int         `json:"downloads"`
+	Likes        int         `json:"likes"`
+	Tags         []string    `json:"tags"`
+	Pipeline     string      `json:"pipeline_tag,omitempty"`
+	Library      string      `json:"library_name,omitempty"`
 }
 
 // ModelInfo represents detailed model information
 type ModelInfo struct {
-	ID            string                 `json:"id"`
-	ModelID       string                 `json:"modelId"`
-	Author        string                 `json:"author"`
-	SHA           string                 `json:"sha"`
-	LastModified  string                 `json:"lastModified"`
-	Private       bool                   `json:"private"`
-	Gated         interface{}            `json:"gated"` // Can be false (bool) or "auto"/"manual" (string)
-	Disabled      bool                   `json:"disabled"`
-	Downloads     int                    `json:"downloads"`
-	Likes         int                    `json:"likes"`
-	Tags          []string               `json:"tags"`
-	Pipeline      string                 `json:"pipeline_tag,omitempty"`
-	Library       string                 `json:"library_name,omitempty"`
-	Siblings      []FileSibling          `json:"siblings,omitempty"`
-	Config        map[string]interface{} `json:"config,omitempty"`
-	CardData      map[string]interface{} `json:"cardData,omitempty"`
+	ID           string                 `json:"id"`
+	ModelID      string                 `json:"modelId"`
+	Author       string                 `json:"author"`
+	SHA          string                 `json:"sha"`
+	LastModified string                 `json:"lastModified"`
+	Private      bool                   `json:"private"`
+	Gated        interface{}            `json:"gated"` // Can be false (bool) or "auto"/"manual" (string)
+	Disabled     bool                   `json:"disabled"`
+	Downloads    int                    `json:"downloads"`
+	Likes        int                    `json:"likes"`
+	Tags         []string               `json:"tags"`
+	Pipeline     string                 `json:"pipeline_tag,omitempty"`
+	Library      string                 `json:"library_name,omitempty"`
+	Siblings     []FileSibling          `json:"siblings,omitempty"`
+	Config       map[string]interface{} `json:"config,omitempty"`
+	CardData     map[string]interface{} `json:"cardData,omitempty"`
 }
 
 // FileSibling represents a file in the model repository
@@ -90,13 +90,13 @@ type ModelConfig struct {
 
 // SearchModelsParams represents search parameters for model search
 type SearchModelsParams struct {
-	Query    string   // Search query
-	Author   string   // Filter by author
-	Filter   string   // Filter by tag/library
-	Sort     string   // Sort field (e.g., "downloads", "likes", "lastModified")
-	Direction string  // Sort direction ("asc" or "desc")
-	Limit    int      // Max number of results
-	Tags     []string // Filter by tags
+	Query     string   // Search query
+	Author    string   // Filter by author
+	Filter    string   // Filter by tag/library
+	Sort      string   // Sort field (e.g., "downloads", "likes", "lastModified")
+	Direction string   // Sort direction ("asc" or "desc")
+	Limit     int      // Max number of results
+	Tags      []string // Filter by tags
 }
 
 // SearchModels searches for models on HuggingFace

@@ -32,7 +32,7 @@ func (h *ServicesHandler) List(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to list services", zap.String("namespace", namespace), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list services",
+			"error":   "Failed to list services",
 			"details": err.Error(),
 		})
 		return
@@ -61,7 +61,7 @@ func (h *ServicesHandler) Get(c *gin.Context) {
 			zap.String("namespace", namespace),
 			zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Service not found",
+			"error":   "Service not found",
 			"details": err.Error(),
 		})
 		return
@@ -78,7 +78,7 @@ func (h *ServicesHandler) Create(c *gin.Context) {
 	if err := c.ShouldBindJSON(&serviceData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -106,7 +106,7 @@ func (h *ServicesHandler) Create(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to create service", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create service",
+			"error":   "Failed to create service",
 			"details": err.Error(),
 		})
 		return
@@ -127,7 +127,7 @@ func (h *ServicesHandler) Update(c *gin.Context) {
 	if err := c.ShouldBindJSON(&serviceData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -161,7 +161,7 @@ func (h *ServicesHandler) Update(c *gin.Context) {
 			zap.String("namespace", namespace),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update service",
+			"error":   "Failed to update service",
 			"details": err.Error(),
 		})
 		return
@@ -190,7 +190,7 @@ func (h *ServicesHandler) Delete(c *gin.Context) {
 			zap.String("namespace", namespace),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete service",
+			"error":   "Failed to delete service",
 			"details": err.Error(),
 		})
 		return
@@ -200,8 +200,8 @@ func (h *ServicesHandler) Delete(c *gin.Context) {
 		zap.String("name", name),
 		zap.String("namespace", namespace))
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Service deleted successfully",
-		"name": name,
+		"message":   "Service deleted successfully",
+		"name":      name,
 		"namespace": namespace,
 	})
 }
@@ -223,7 +223,7 @@ func (h *ServicesHandler) GetStatus(c *gin.Context) {
 			zap.String("namespace", namespace),
 			zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Service not found",
+			"error":   "Service not found",
 			"details": err.Error(),
 		})
 		return

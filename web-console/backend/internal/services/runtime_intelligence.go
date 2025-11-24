@@ -27,12 +27,12 @@ func NewRuntimeIntelligenceService(k8sClient *k8s.Client, logger *zap.Logger) *R
 
 // RuntimeMatch represents a runtime that matches a model with a compatibility score
 type RuntimeMatch struct {
-	Runtime         *unstructured.Unstructured `json:"runtime"`
-	Score           int                        `json:"score"`
-	CompatibleWith  []string                   `json:"compatibleWith"`
-	Reasons         []string                   `json:"reasons"`
-	Warnings        []string                   `json:"warnings,omitempty"`
-	Recommendation  string                     `json:"recommendation"`
+	Runtime        *unstructured.Unstructured `json:"runtime"`
+	Score          int                        `json:"score"`
+	CompatibleWith []string                   `json:"compatibleWith"`
+	Reasons        []string                   `json:"reasons"`
+	Warnings       []string                   `json:"warnings,omitempty"`
+	Recommendation string                     `json:"recommendation"`
 }
 
 // CompatibilityCheck represents the result of a compatibility check

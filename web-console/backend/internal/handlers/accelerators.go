@@ -30,7 +30,7 @@ func (h *AcceleratorsHandler) List(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to list accelerators", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list accelerators",
+			"error":   "Failed to list accelerators",
 			"details": err.Error(),
 		})
 		return
@@ -51,7 +51,7 @@ func (h *AcceleratorsHandler) Get(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get accelerator", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Accelerator not found",
+			"error":   "Accelerator not found",
 			"details": err.Error(),
 		})
 		return

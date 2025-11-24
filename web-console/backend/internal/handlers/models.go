@@ -39,15 +39,15 @@ func (h *ModelsHandler) List(c *gin.Context) {
 				zap.String("namespace", namespace),
 				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to list base models",
+				"error":   "Failed to list base models",
 				"details": err.Error(),
 			})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"items": models.Items,
-			"total": len(models.Items),
+			"items":     models.Items,
+			"total":     len(models.Items),
 			"namespace": namespace,
 		})
 		return
@@ -58,7 +58,7 @@ func (h *ModelsHandler) List(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to list models", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list models",
+			"error":   "Failed to list models",
 			"details": err.Error(),
 		})
 		return
@@ -79,7 +79,7 @@ func (h *ModelsHandler) Get(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get model", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Model not found",
+			"error":   "Model not found",
 			"details": err.Error(),
 		})
 		return
@@ -99,7 +99,7 @@ func (h *ModelsHandler) Create(c *gin.Context) {
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -135,7 +135,7 @@ func (h *ModelsHandler) Create(c *gin.Context) {
 				zap.String("namespace", namespace),
 				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create HuggingFace token secret",
+				"error":   "Failed to create HuggingFace token secret",
 				"details": err.Error(),
 			})
 			return
@@ -165,7 +165,7 @@ func (h *ModelsHandler) Create(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to create model", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create model",
+			"error":   "Failed to create model",
 			"details": err.Error(),
 		})
 		return
@@ -184,7 +184,7 @@ func (h *ModelsHandler) Update(c *gin.Context) {
 	if err := c.ShouldBindJSON(&modelData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -208,7 +208,7 @@ func (h *ModelsHandler) Update(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to update model", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update model",
+			"error":   "Failed to update model",
 			"details": err.Error(),
 		})
 		return
@@ -227,7 +227,7 @@ func (h *ModelsHandler) Delete(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to delete model", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete model",
+			"error":   "Failed to delete model",
 			"details": err.Error(),
 		})
 		return
@@ -236,7 +236,7 @@ func (h *ModelsHandler) Delete(c *gin.Context) {
 	h.logger.Info("Model deleted successfully", zap.String("name", name))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Model deleted successfully",
-		"name": name,
+		"name":    name,
 	})
 }
 
@@ -249,7 +249,7 @@ func (h *ModelsHandler) GetStatus(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get model status", zap.String("name", name), zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Model not found",
+			"error":   "Model not found",
 			"details": err.Error(),
 		})
 		return
@@ -280,7 +280,7 @@ func (h *ModelsHandler) ListBaseModels(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to list base models", zap.String("namespace", namespace), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list base models",
+			"error":   "Failed to list base models",
 			"details": err.Error(),
 		})
 		return
@@ -305,7 +305,7 @@ func (h *ModelsHandler) GetBaseModel(c *gin.Context) {
 			zap.String("name", name),
 			zap.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Base model not found",
+			"error":   "Base model not found",
 			"details": err.Error(),
 		})
 		return
@@ -323,7 +323,7 @@ func (h *ModelsHandler) CreateBaseModel(c *gin.Context) {
 	if err := c.ShouldBindJSON(&modelData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -349,7 +349,7 @@ func (h *ModelsHandler) CreateBaseModel(c *gin.Context) {
 			zap.String("namespace", namespace),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create base model",
+			"error":   "Failed to create base model",
 			"details": err.Error(),
 		})
 		return
@@ -371,7 +371,7 @@ func (h *ModelsHandler) UpdateBaseModel(c *gin.Context) {
 	if err := c.ShouldBindJSON(&modelData); err != nil {
 		h.logger.Error("Failed to parse request body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -399,7 +399,7 @@ func (h *ModelsHandler) UpdateBaseModel(c *gin.Context) {
 			zap.String("name", name),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update base model",
+			"error":   "Failed to update base model",
 			"details": err.Error(),
 		})
 		return
@@ -424,7 +424,7 @@ func (h *ModelsHandler) DeleteBaseModel(c *gin.Context) {
 			zap.String("name", name),
 			zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete base model",
+			"error":   "Failed to delete base model",
 			"details": err.Error(),
 		})
 		return
@@ -434,8 +434,8 @@ func (h *ModelsHandler) DeleteBaseModel(c *gin.Context) {
 		zap.String("namespace", namespace),
 		zap.String("name", name))
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Base model deleted successfully",
-		"name": name,
+		"message":   "Base model deleted successfully",
+		"name":      name,
 		"namespace": namespace,
 	})
 }

@@ -33,8 +33,8 @@ func (h *ValidationHandler) ValidateYAML(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"valid": false,
-			"error": "Invalid request body",
+			"valid":   false,
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -44,8 +44,8 @@ func (h *ValidationHandler) ValidateYAML(c *gin.Context) {
 	var data map[string]interface{}
 	if err := yaml.Unmarshal([]byte(req.YAML), &data); err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"valid": false,
-			"error": "Invalid YAML syntax",
+			"valid":   false,
+			"error":   "Invalid YAML syntax",
 			"details": err.Error(),
 		})
 		return
@@ -80,10 +80,10 @@ func (h *ValidationHandler) ValidateYAML(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"valid": true,
+		"valid":   true,
 		"message": "YAML is valid",
-		"kind": obj.GetKind(),
-		"name": obj.GetName(),
+		"kind":    obj.GetKind(),
+		"name":    obj.GetName(),
 	})
 }
 
@@ -92,8 +92,8 @@ func (h *ValidationHandler) ValidateModel(c *gin.Context) {
 	var modelData map[string]interface{}
 	if err := c.ShouldBindJSON(&modelData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"valid": false,
-			"error": "Invalid request body",
+			"valid":   false,
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -122,7 +122,7 @@ func (h *ValidationHandler) ValidateModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"valid": true,
+		"valid":   true,
 		"message": "Model configuration is valid",
 	})
 }
@@ -132,8 +132,8 @@ func (h *ValidationHandler) ValidateRuntime(c *gin.Context) {
 	var runtimeData map[string]interface{}
 	if err := c.ShouldBindJSON(&runtimeData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"valid": false,
-			"error": "Invalid request body",
+			"valid":   false,
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -162,7 +162,7 @@ func (h *ValidationHandler) ValidateRuntime(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"valid": true,
+		"valid":   true,
 		"message": "Runtime configuration is valid",
 	})
 }

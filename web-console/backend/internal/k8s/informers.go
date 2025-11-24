@@ -1,9 +1,9 @@
 package k8s
 
 import (
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/cache"
-	"go.uber.org/zap"
 )
 
 // SetupInformers configures informers for all resources with event handlers
