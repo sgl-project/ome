@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { runtimesApi } from '../api/runtimes'
 import { ClusterServingRuntime } from '../types/runtime'
 
-export function useRuntimes() {
+export function useRuntimes(namespace?: string) {
   return useQuery({
-    queryKey: ['runtimes'],
-    queryFn: runtimesApi.list,
+    queryKey: namespace ? ['runtimes', { namespace }] : ['runtimes'],
+    queryFn: () => runtimesApi.list(namespace),
   })
 }
 

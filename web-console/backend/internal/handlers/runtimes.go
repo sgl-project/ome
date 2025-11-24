@@ -26,9 +26,36 @@ func NewRuntimesHandler(k8sClient *k8s.Client, logger *zap.Logger) *RuntimesHand
 }
 
 // List handles GET /api/v1/runtimes
+// Supports optional ?namespace= query parameter
+// - No namespace: returns ClusterServingRuntime resources
+// - namespace=<name>: returns ServingRuntime resources from that namespace
 func (h *RuntimesHandler) List(c *gin.Context) {
 	ctx := c.Request.Context()
+	namespace := c.Query("namespace")
 
+	// If namespace is specified, list namespace-scoped ServingRuntimes
+	if namespace != "" {
+		runtimes, err := h.k8sClient.ListServingRuntimes(ctx, namespace)
+		if err != nil {
+			h.logger.Error("Failed to list serving runtimes",
+				zap.String("namespace", namespace),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to list serving runtimes",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"items": runtimes.Items,
+			"total": len(runtimes.Items),
+			"namespace": namespace,
+		})
+		return
+	}
+
+	// Otherwise, list cluster-scoped ClusterServingRuntimes
 	runtimes, err := h.k8sClient.ListClusterServingRuntimes(ctx)
 	if err != nil {
 		h.logger.Error("Failed to list runtimes", zap.Error(err))

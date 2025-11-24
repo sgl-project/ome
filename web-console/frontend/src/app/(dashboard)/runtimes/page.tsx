@@ -1,6 +1,7 @@
 'use client'
 
 import { useRuntimes } from '@/lib/hooks/useRuntimes'
+import { useNamespaces } from '@/lib/hooks/useNamespaces'
 import Link from 'next/link'
 import { useState, useMemo } from 'react'
 
@@ -8,7 +9,9 @@ type SortField = 'name' | 'accelerators' | 'protocol' | 'status' | 'created'
 type SortDirection = 'asc' | 'desc'
 
 export default function RuntimesPage() {
-  const { data, isLoading, error } = useRuntimes()
+  const [selectedNamespace, setSelectedNamespace] = useState<string>('')
+  const { data, isLoading, error } = useRuntimes(selectedNamespace || undefined)
+  const { data: namespacesData } = useNamespaces()
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
@@ -220,9 +223,30 @@ export default function RuntimesPage() {
         {/* Runtimes Table */}
         <div className="overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm animate-in-delay-3">
           <div className="border-b border-border/50 px-6 py-5 bg-muted/30">
-            <h3 className="text-lg font-semibold tracking-tight">
-              All Runtimes
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold tracking-tight">
+                All Runtimes
+              </h3>
+              {/* Namespace Selector */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="namespace" className="text-sm font-medium text-gray-700">
+                  Scope:
+                </label>
+                <select
+                  id="namespace"
+                  value={selectedNamespace}
+                  onChange={(e) => setSelectedNamespace(e.target.value)}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                >
+                  <option value="">Cluster-scoped</option>
+                  {namespacesData?.items.map((ns) => (
+                    <option key={ns} value={ns}>
+                      Namespace: {ns}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border/50">

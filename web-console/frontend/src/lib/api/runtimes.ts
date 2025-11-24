@@ -7,8 +7,9 @@ export interface RuntimeListResponse {
 }
 
 export const runtimesApi = {
-  list: async (): Promise<RuntimeListResponse> => {
-    const response = await apiClient.get<RuntimeListResponse>('/runtimes')
+  list: async (namespace?: string): Promise<RuntimeListResponse> => {
+    const params = namespace ? { namespace } : {}
+    const response = await apiClient.get<RuntimeListResponse>('/runtimes', { params })
     return response.data
   },
 
