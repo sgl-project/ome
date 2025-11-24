@@ -7,21 +7,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
+	"github.com/sgl-project/ome/web-console/backend/internal/services"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // RuntimesHandler handles HTTP requests for ClusterServingRuntime resources
 type RuntimesHandler struct {
-	k8sClient *k8s.Client
-	logger    *zap.Logger
+	k8sClient      *k8s.Client
+	logger         *zap.Logger
+	intelligence   *services.RuntimeIntelligenceService
 }
 
 // NewRuntimesHandler creates a new RuntimesHandler
 func NewRuntimesHandler(k8sClient *k8s.Client, logger *zap.Logger) *RuntimesHandler {
 	return &RuntimesHandler{
-		k8sClient: k8sClient,
-		logger:    logger,
+		k8sClient:    k8sClient,
+		logger:       logger,
+		intelligence: services.NewRuntimeIntelligenceService(k8sClient, logger),
 	}
 }
 
@@ -247,4 +251,189 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"content": string(content),
 	})
+}
+
+// FindCompatibleRuntimes handles GET /api/v1/runtimes/compatible?format=<format>&framework=<framework>
+func (h *RuntimesHandler) FindCompatibleRuntimes(c *gin.Context) {
+	ctx := c.Request.Context()
+	modelFormat := c.Query("format")
+	modelFramework := c.Query("framework")
+
+	if modelFormat == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Model format is required",
+		})
+		return
+	}
+
+	matches, err := h.intelligence.FindCompatibleRuntimes(ctx, modelFormat, modelFramework)
+	if err != nil {
+		h.logger.Error("Failed to find compatible runtimes",
+			zap.String("format", modelFormat),
+			zap.String("framework", modelFramework),
+			zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to find compatible runtimes",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"matches": matches,
+		"total":   len(matches),
+	})
+}
+
+// CheckCompatibility handles GET /api/v1/runtimes/:name/compatibility?format=<format>&framework=<framework>
+func (h *RuntimesHandler) CheckCompatibility(c *gin.Context) {
+	ctx := c.Request.Context()
+	name := c.Param("name")
+	modelFormat := c.Query("format")
+	modelFramework := c.Query("framework")
+
+	if modelFormat == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Model format is required",
+		})
+		return
+	}
+
+	check, err := h.intelligence.CheckCompatibility(ctx, name, modelFormat, modelFramework)
+	if err != nil {
+		h.logger.Error("Failed to check compatibility",
+			zap.String("runtime", name),
+			zap.String("format", modelFormat),
+			zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to check compatibility",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, check)
+}
+
+// GetRecommendation handles GET /api/v1/runtimes/recommend?format=<format>&framework=<framework>
+func (h *RuntimesHandler) GetRecommendation(c *gin.Context) {
+	ctx := c.Request.Context()
+	modelFormat := c.Query("format")
+	modelFramework := c.Query("framework")
+
+	if modelFormat == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Model format is required",
+		})
+		return
+	}
+
+	recommendation, err := h.intelligence.GetRecommendation(ctx, modelFormat, modelFramework)
+	if err != nil {
+		h.logger.Error("Failed to get recommendation",
+			zap.String("format", modelFormat),
+			zap.String("framework", modelFramework),
+			zap.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "No compatible runtime found",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, recommendation)
+}
+
+// ValidateConfiguration handles POST /api/v1/runtimes/validate
+func (h *RuntimesHandler) ValidateConfiguration(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var runtimeData map[string]interface{}
+	if err := c.ShouldBindJSON(&runtimeData); err != nil {
+		h.logger.Error("Failed to parse request body", zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	runtime := &unstructured.Unstructured{Object: runtimeData}
+
+	errors, warnings, err := h.intelligence.ValidateRuntimeConfiguration(ctx, runtime)
+	if err != nil {
+		h.logger.Error("Failed to validate configuration", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to validate configuration",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	valid := len(errors) == 0
+	c.JSON(http.StatusOK, gin.H{
+		"valid":    valid,
+		"errors":   errors,
+		"warnings": warnings,
+	})
+}
+
+// Clone handles POST /api/v1/runtimes/:name/clone
+func (h *RuntimesHandler) Clone(c *gin.Context) {
+	ctx := c.Request.Context()
+	name := c.Param("name")
+
+	var req struct {
+		NewName string `json:"newName" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to parse request body", zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Get the existing runtime
+	runtime, err := h.k8sClient.GetClusterServingRuntime(ctx, name)
+	if err != nil {
+		h.logger.Error("Failed to get runtime for cloning", zap.String("name", name), zap.Error(err))
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "Runtime not found",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Clone the runtime
+	cloned := runtime.DeepCopy()
+	cloned.SetName(req.NewName)
+	cloned.SetResourceVersion("")
+	cloned.SetUID("")
+	cloned.SetCreationTimestamp(metav1.Time{})
+	cloned.SetGeneration(0)
+
+	// Remove status
+	unstructured.RemoveNestedField(cloned.Object, "status")
+
+	// Create the cloned runtime
+	created, err := h.k8sClient.CreateClusterServingRuntime(ctx, cloned)
+	if err != nil {
+		h.logger.Error("Failed to create cloned runtime",
+			zap.String("original", name),
+			zap.String("new", req.NewName),
+			zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to create cloned runtime",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Runtime cloned successfully",
+		zap.String("original", name),
+		zap.String("new", req.NewName))
+	c.JSON(http.StatusCreated, created.Object)
 }

@@ -50,3 +50,47 @@ export function useDeleteRuntime() {
     },
   })
 }
+
+// Runtime Intelligence Hooks
+
+export function useCompatibleRuntimes(format?: string, framework?: string) {
+  return useQuery({
+    queryKey: ['runtimes', 'compatible', format, framework],
+    queryFn: () => runtimesApi.findCompatible(format!, framework),
+    enabled: !!format,
+  })
+}
+
+export function useRuntimeCompatibility(name?: string, format?: string, framework?: string) {
+  return useQuery({
+    queryKey: ['runtimes', name, 'compatibility', format, framework],
+    queryFn: () => runtimesApi.checkCompatibility(name!, format!, framework),
+    enabled: !!name && !!format,
+  })
+}
+
+export function useRuntimeRecommendation(format?: string, framework?: string) {
+  return useQuery({
+    queryKey: ['runtimes', 'recommend', format, framework],
+    queryFn: () => runtimesApi.getRecommendation(format!, framework),
+    enabled: !!format,
+  })
+}
+
+export function useValidateRuntime() {
+  return useMutation({
+    mutationFn: (runtime: Partial<ClusterServingRuntime>) => runtimesApi.validate(runtime),
+  })
+}
+
+export function useCloneRuntime() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, newName }: { name: string; newName: string }) =>
+      runtimesApi.clone(name, newName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['runtimes'] })
+    },
+  })
+}
