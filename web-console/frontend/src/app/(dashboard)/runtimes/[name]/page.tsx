@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
 import { ConfirmDeleteModal } from '@/components/ui/Modal'
-import { ModelFormatsDisplay } from '@/components/runtime/ModelFormatsDisplay'
-import { MetadataCollapsible } from '@/components/runtime/MetadataCollapsible'
+import { ModelFormatsDisplay } from '@/components/ui/ModelFormatsDisplay'
+import { MetadataCollapsible } from '@/components/ui/MetadataCollapsible'
 
 // Reusable component for displaying K8s resources
 function ResourceDisplay({ resources }: { resources: any }) {

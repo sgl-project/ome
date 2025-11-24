@@ -5,6 +5,10 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
 import { ConfirmDeleteModal } from '@/components/ui/Modal'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { ResourceRequirements } from '@/components/ui/ResourceRequirements'
 
 export default function ModelDetailPage() {
   const params = useParams()
@@ -24,25 +28,15 @@ export default function ModelDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading model details...</div>
-      </div>
-    )
+    return <LoadingState message="Loading model details..." />
   }
 
   if (error || !model) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="text-lg text-red-600 mb-4">
-            Error: {error instanceof Error ? error.message : 'Model not found'}
-          </div>
-          <Link href="/models" className="text-blue-600 hover:text-blue-800">
-            ← Back to Models
-          </Link>
-        </div>
-      </div>
+      <ErrorState
+        error={error || new Error('Model not found')}
+        backLink={{ href: '/models', label: 'Back to Models' }}
+      />
     )
   }
 
@@ -88,19 +82,7 @@ export default function ModelDetailPage() {
             <div>
               <dt className="text-sm font-medium text-gray-500">State</dt>
               <dd className="mt-1">
-                <span
-                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
-                    model.status?.state === 'Ready'
-                      ? 'bg-green-100 text-green-800'
-                      : model.status?.state === 'Failed'
-                      ? 'bg-red-100 text-red-800'
-                      : model.status?.state === 'In_Transit'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {model.status?.state || 'Unknown'}
-                </span>
+                <StatusBadge state={model.status?.state} />
               </dd>
             </div>
             <div>
@@ -173,39 +155,7 @@ export default function ModelDetailPage() {
         )}
 
         {/* Resource Requirements */}
-        {model.spec.resources && (
-          <div className="mb-6 rounded-lg bg-white p-6 shadow">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">Resource Requirements</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {model.spec.resources.requests && (
-                <div>
-                  <h3 className="mb-2 text-sm font-medium text-gray-700">Requests</h3>
-                  <dl className="space-y-2">
-                    {Object.entries(model.spec.resources.requests).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <dt className="text-sm text-gray-500">{key}:</dt>
-                        <dd className="text-sm text-gray-900">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              )}
-              {model.spec.resources.limits && (
-                <div>
-                  <h3 className="mb-2 text-sm font-medium text-gray-700">Limits</h3>
-                  <dl className="space-y-2">
-                    {Object.entries(model.spec.resources.limits).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <dt className="text-sm text-gray-500">{key}:</dt>
-                        <dd className="text-sm text-gray-900">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <ResourceRequirements resources={model.spec.resources} />
 
         {/* Raw YAML */}
         <div className="rounded-lg bg-white p-6 shadow">

@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { runtimesApi } from '@/lib/api/runtimes'
 import { useQueryClient } from '@tanstack/react-query'
 import * as yaml from 'js-yaml'
-import { ModelFormatsDisplay } from '@/components/runtime/ModelFormatsDisplay'
-import { MetadataCollapsible } from '@/components/runtime/MetadataCollapsible'
+import { ModelFormatsDisplay } from '@/components/ui/ModelFormatsDisplay'
+import { MetadataCollapsible } from '@/components/ui/MetadataCollapsible'
 
 type ImportMethod = 'upload' | 'url'
 

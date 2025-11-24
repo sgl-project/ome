@@ -30,6 +30,10 @@ export default function ImportModelPage() {
   const [huggingfaceToken, setHuggingfaceToken] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
+
   // API hooks
   const { data: searchResults, isLoading: isSearching } = useHuggingFaceSearch(searchParams)
   const { data: modelInfo, isLoading: isLoadingInfo } = useHuggingFaceModelInfo(
@@ -41,12 +45,36 @@ export default function ImportModelPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    setCurrentPage(1) // Reset to first page on new search
     setSearchParams({
       q: searchQuery,
-      limit: 10,
+      limit: itemsPerPage * 5, // Load 5 pages worth of data (100 items) for client-side pagination
       sort: 'downloads',
       direction: 'desc',
     })
+  }
+
+  // Calculate paginated results
+  const totalResults = searchResults?.length || 0
+  const totalPages = Math.ceil(totalResults / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedResults = searchResults?.slice(startIndex, endIndex) || []
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1)
+      // Scroll to top of results
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1)
+      // Scroll to top of results
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 
   const handleSelectModel = (model: HuggingFaceModelSearchResult) => {
@@ -182,10 +210,16 @@ export default function ImportModelPage() {
             {/* Search Results */}
             {searchResults && searchResults.length > 0 && (
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">
-                  Found {searchResults.length} models
-                </h3>
-                {searchResults.map((model) => (
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-gray-700">
+                    Found {totalResults} models - Showing page {currentPage} of {totalPages}
+                  </h3>
+                  <div className="text-sm text-gray-500">
+                    {startIndex + 1}-{Math.min(endIndex, totalResults)} of {totalResults}
+                  </div>
+                </div>
+
+                {paginatedResults.map((model) => (
                   <div
                     key={model.id}
                     className="cursor-pointer rounded-lg border border-gray-200 p-4 hover:border-blue-500 hover:bg-blue-50"
@@ -214,6 +248,43 @@ export default function ImportModelPage() {
                     </div>
                   </div>
                 ))}
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                    <button
+                      onClick={handlePrevPage}
+                      disabled={currentPage === 1}
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                    >
+                      ← Previous
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`h-10 w-10 rounded-lg text-sm font-medium transition-colors ${
+                            pageNum === currentPage
+                              ? 'bg-blue-600 text-white'
+                              : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages}
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

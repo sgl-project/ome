@@ -4,10 +4,19 @@ import { useModels } from '@/lib/hooks/useModels'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
+import { useState, useMemo } from 'react'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+
+type SortField = 'name' | 'vendor' | 'framework' | 'size' | 'status' | 'created'
+type SortDirection = 'asc' | 'desc'
 
 export default function ModelsPage() {
   const { data, isLoading, error } = useModels()
   const queryClient = useQueryClient()
+  const [sortField, setSortField] = useState<SortField>('name')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   // Connect to SSE for real-time updates
   useServerEvents({
@@ -22,22 +31,92 @@ export default function ModelsPage() {
     },
   })
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading models...</div>
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedModels = useMemo(() => {
+    if (!data?.items) return []
+
+    const items = [...data.items]
+
+    items.sort((a, b) => {
+      let aValue: any
+      let bValue: any
+
+      switch (sortField) {
+        case 'name':
+          aValue = a.metadata.name.toLowerCase()
+          bValue = b.metadata.name.toLowerCase()
+          break
+        case 'vendor':
+          aValue = a.spec.vendor?.toLowerCase() || ''
+          bValue = b.spec.vendor?.toLowerCase() || ''
+          break
+        case 'framework':
+          aValue = a.spec.modelFramework?.name?.toLowerCase() || ''
+          bValue = b.spec.modelFramework?.name?.toLowerCase() || ''
+          break
+        case 'size':
+          aValue = a.spec.modelParameterSize || ''
+          bValue = b.spec.modelParameterSize || ''
+          break
+        case 'status':
+          aValue = a.status?.state || ''
+          bValue = b.status?.state || ''
+          break
+        case 'created':
+          aValue = a.metadata.creationTimestamp || ''
+          bValue = b.metadata.creationTimestamp || ''
+          break
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return items
+  }, [data?.items, sortField, sortDirection])
+
+  const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
+    <th
+      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:text-gray-700 transition-colors select-none"
+      onClick={() => handleSort(field)}
+    >
+      <div className="flex items-center gap-2">
+        {children}
+        <div className="flex flex-col">
+          <svg
+            className={`w-3 h-3 -mb-1 transition-colors ${sortField === field && sortDirection === 'asc' ? 'text-blue-600' : 'text-gray-400'}`}
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 6.414l-3.293 3.293a1 1 0 01-1.414 0z" />
+          </svg>
+          <svg
+            className={`w-3 h-3 transition-colors ${sortField === field && sortDirection === 'desc' ? 'text-blue-600' : 'text-gray-400'}`}
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" />
+          </svg>
+        </div>
       </div>
-    )
+    </th>
+  )
+
+  if (isLoading) {
+    return <LoadingState message="Loading models..." />
   }
 
   if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-red-600">
-          Error: {error instanceof Error ? error.message : 'Failed to load models'}
-        </div>
-      </div>
-    )
+    return <ErrorState error={error || new Error('Failed to load models')} />
   }
 
   return (
@@ -146,28 +225,16 @@ export default function ModelsPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Vendor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Framework
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Size
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Created
-                  </th>
+                  <SortableHeader field="name">Name</SortableHeader>
+                  <SortableHeader field="vendor">Vendor</SortableHeader>
+                  <SortableHeader field="framework">Framework</SortableHeader>
+                  <SortableHeader field="size">Size</SortableHeader>
+                  <SortableHeader field="status">Status</SortableHeader>
+                  <SortableHeader field="created">Created</SortableHeader>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {data?.items.map((model) => (
+                {sortedModels.map((model) => (
                   <tr key={model.metadata.name} className="hover:bg-gray-50">
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
                       <Link
@@ -187,19 +254,7 @@ export default function ModelsPage() {
                       {model.spec.modelParameterSize || '-'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                          model.status?.state === 'Ready'
-                            ? 'bg-green-100 text-green-800'
-                            : model.status?.state === 'Failed'
-                            ? 'bg-red-100 text-red-800'
-                            : model.status?.state === 'In_Transit'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {model.status?.state || 'Unknown'}
-                      </span>
+                      <StatusBadge state={model.status?.state} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {model.metadata.creationTimestamp
