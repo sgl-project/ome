@@ -1,31 +1,83 @@
-type ModelState = 'Ready' | 'Failed' | 'In_Transit' | 'Unknown' | string
+import { clsx } from 'clsx'
+
+type StatusState = 'Ready' | 'Running' | 'Failed' | 'In_Transit' | 'Pending' | 'Creating' | 'Unknown' | 'Active' | 'Disabled' | string
 
 interface StatusBadgeProps {
-  state: ModelState | undefined | null
+  state: StatusState | undefined | null
   className?: string
+  size?: 'sm' | 'md'
 }
 
-export function StatusBadge({ state, className = '' }: StatusBadgeProps) {
-  const normalizedState = state || 'Unknown'
+const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
+  Ready: {
+    bg: 'bg-success/10 border-success/20',
+    text: 'text-success',
+    dot: 'bg-success',
+  },
+  Running: {
+    bg: 'bg-success/10 border-success/20',
+    text: 'text-success',
+    dot: 'bg-success',
+  },
+  Active: {
+    bg: 'bg-success/10 border-success/20',
+    text: 'text-success',
+    dot: 'bg-success',
+  },
+  Failed: {
+    bg: 'bg-destructive/10 border-destructive/20',
+    text: 'text-destructive',
+    dot: 'bg-destructive',
+  },
+  In_Transit: {
+    bg: 'bg-warning/10 border-warning/20',
+    text: 'text-warning',
+    dot: 'bg-warning animate-pulse',
+  },
+  Pending: {
+    bg: 'bg-warning/10 border-warning/20',
+    text: 'text-warning',
+    dot: 'bg-warning animate-pulse',
+  },
+  Creating: {
+    bg: 'bg-accent/10 border-accent/20',
+    text: 'text-accent',
+    dot: 'bg-accent animate-pulse',
+  },
+  Disabled: {
+    bg: 'bg-muted border-border',
+    text: 'text-muted-foreground',
+    dot: 'bg-muted-foreground',
+  },
+  Unknown: {
+    bg: 'bg-muted border-border',
+    text: 'text-muted-foreground',
+    dot: 'bg-muted-foreground',
+  },
+}
 
-  const getStatusClasses = () => {
-    switch (normalizedState) {
-      case 'Ready':
-        return 'bg-green-100 text-green-800 border-green-200'
-      case 'Failed':
-        return 'bg-red-100 text-red-800 border-red-200'
-      case 'In_Transit':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
-  }
+export function StatusBadge({ state, className = '', size = 'md' }: StatusBadgeProps) {
+  const normalizedState = state || 'Unknown'
+  const config = statusConfig[normalizedState] || statusConfig.Unknown
+
+  const sizeClasses = size === 'sm'
+    ? 'px-2 py-0.5 text-xs gap-1'
+    : 'px-3 py-1 text-xs gap-1.5'
+
+  const dotSize = size === 'sm' ? 'h-1 w-1' : 'h-1.5 w-1.5'
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${getStatusClasses()} ${className}`}
+      className={clsx(
+        'inline-flex items-center rounded-full border font-medium',
+        config.bg,
+        config.text,
+        sizeClasses,
+        className
+      )}
     >
-      {normalizedState}
+      <span className={clsx('rounded-full', config.dot, dotSize)} />
+      {normalizedState.replace('_', ' ')}
     </span>
   )
 }

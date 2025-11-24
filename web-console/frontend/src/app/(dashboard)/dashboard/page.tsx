@@ -5,7 +5,35 @@ import { useRuntimes } from '@/lib/hooks/useRuntimes'
 import { useServices } from '@/lib/hooks/useServices'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { StatCard } from '@/components/ui/StatCard'
+import { DataTable, TableLink, TableText } from '@/components/ui/DataTable'
+import { Button, ButtonIcons } from '@/components/ui/Button'
 import Link from 'next/link'
+import type { BaseModel } from '@/types/model'
+
+// Icons for stat cards
+const Icons = {
+  models: (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+    </svg>
+  ),
+  ready: (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  runtimes: (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+    </svg>
+  ),
+  services: (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+    </svg>
+  ),
+}
 
 export default function DashboardPage() {
   const { data: modelsData, isLoading: modelsLoading } = useModels()
@@ -16,217 +44,129 @@ export default function DashboardPage() {
     return <LoadingState message="Loading dashboard..." />
   }
 
-  const stats = [
+  const recentModels = modelsData?.items.slice(0, 5) || []
+
+  const columns = [
     {
-      name: 'Total Models',
-      value: modelsData?.total || 0,
-      color: 'bg-blue-500',
-      textColor: 'text-blue-600',
-      href: '/models',
+      key: 'name',
+      header: 'Name',
+      cell: (model: BaseModel) => (
+        <TableLink href={`/models/${model.metadata.name}`}>
+          {model.metadata.name}
+        </TableLink>
+      ),
     },
     {
-      name: 'Ready Models',
-      value: modelsData?.items.filter((m) => m.status?.state === 'Ready').length || 0,
-      color: 'bg-green-500',
-      textColor: 'text-green-600',
-      href: '/models',
+      key: 'vendor',
+      header: 'Vendor',
+      cell: (model: BaseModel) => (
+        <TableText muted>{model.spec.vendor || '-'}</TableText>
+      ),
     },
     {
-      name: 'Runtimes',
-      value: runtimesData?.total || 0,
-      color: 'bg-purple-500',
-      textColor: 'text-purple-600',
-      href: '/runtimes',
+      key: 'framework',
+      header: 'Framework',
+      cell: (model: BaseModel) => (
+        <TableText muted>{model.spec.modelFramework?.name || '-'}</TableText>
+      ),
     },
     {
-      name: 'Services',
-      value: servicesData?.total || 0,
-      color: 'bg-orange-500',
-      textColor: 'text-orange-600',
-      href: '/services',
+      key: 'status',
+      header: 'Status',
+      cell: (model: BaseModel) => (
+        <StatusBadge state={model.status?.state} size="sm" />
+      ),
     },
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="border-b border-border/50 bg-card/80 backdrop-blur-sm shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Overview of your OME resources
-          </p>
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="flex items-start justify-between gap-8">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+                Dashboard
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Overview of your OME resources
+              </p>
+            </div>
+            <Button href="/models/import" icon={ButtonIcons.import}>
+              Quick Import
+            </Button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <Link
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard
+            label="Total Models"
+            value={modelsData?.total || 0}
+            icon={Icons.models}
             href="/models"
-            className="group relative overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 animate-in"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <div className="relative p-5">
-              <div className="flex items-center">
-                <div className="flex-1">
-                  <dt className="truncate text-sm font-medium text-muted-foreground">
-                    Total Models
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold tracking-tight">
-                    {modelsData?.total || 0}
-                  </dd>
-                </div>
-                <div className="ml-4">
-                  <svg className="h-12 w-12 text-primary/20 group-hover:text-primary/30 group-hover:scale-110 transition-all duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          <Link
+            variant="primary"
+            delay={0}
+          />
+          <StatCard
+            label="Ready Models"
+            value={modelsData?.items.filter((m) => m.status?.state === 'Ready').length || 0}
+            icon={Icons.ready}
             href="/models"
-            className="group relative overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 animate-in animate-in-delay-1"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <div className="relative p-5">
-              <div className="flex items-center">
-                <div className="flex-1">
-                  <dt className="truncate text-sm font-medium text-muted-foreground">
-                    Ready Models
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold text-green-600 tracking-tight">
-                    {modelsData?.items.filter((m) => m.status?.state === 'Ready').length || 0}
-                  </dd>
-                </div>
-                <div className="ml-4">
-                  <svg className="h-12 w-12 text-green-500/20 group-hover:text-green-500/30 group-hover:scale-110 transition-all duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          <Link
+            variant="success"
+            delay={1}
+          />
+          <StatCard
+            label="Runtimes"
+            value={runtimesData?.total || 0}
+            icon={Icons.runtimes}
             href="/runtimes"
-            className="group relative overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 animate-in animate-in-delay-2"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <div className="relative p-5">
-              <div className="flex items-center">
-                <div className="flex-1">
-                  <dt className="truncate text-sm font-medium text-muted-foreground">
-                    Runtimes
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold text-purple-600 tracking-tight">
-                    {runtimesData?.total || 0}
-                  </dd>
-                </div>
-                <div className="ml-4">
-                  <svg className="h-12 w-12 text-purple-500/20 group-hover:text-purple-500/30 group-hover:scale-110 transition-all duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </Link>
-
-          <Link
+            variant="accent"
+            delay={2}
+          />
+          <StatCard
+            label="Services"
+            value={servicesData?.total || 0}
+            icon={Icons.services}
             href="/services"
-            className="group relative overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 animate-in animate-in-delay-3"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <div className="relative p-5">
-              <div className="flex items-center">
-                <div className="flex-1">
-                  <dt className="truncate text-sm font-medium text-muted-foreground">
-                    Services
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold text-orange-600 tracking-tight">
-                    {servicesData?.total || 0}
-                  </dd>
-                </div>
-                <div className="ml-4">
-                  <svg className="h-12 w-12 text-orange-500/20 group-hover:text-orange-500/30 group-hover:scale-110 transition-all duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </Link>
+            variant="warning"
+            delay={3}
+          />
         </div>
 
-        {/* Recent Activity */}
-        <div className="mt-8">
-          <div className="overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm">
-            <div className="border-b border-border/50 px-6 py-5 bg-muted/30">
-              <h3 className="text-lg font-semibold tracking-tight">
-                Recent Models
-              </h3>
+        {/* Recent Models Table */}
+        <DataTable
+          title="Recent Models"
+          columns={columns}
+          data={recentModels}
+          keyExtractor={(model) => model.metadata.name}
+          headerActions={
+            <Link
+              href="/models"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors group"
+            >
+              View all
+              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          }
+          emptyState={
+            <div className="flex flex-col items-center gap-3 py-4">
+              <svg className="h-12 w-12 text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+              </svg>
+              <p className="text-sm text-muted-foreground">No models yet</p>
+              <Button href="/models/import" variant="outline" size="sm" icon={ButtonIcons.import}>
+                Import your first model
+              </Button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-border/50">
-                <thead className="bg-muted/50 backdrop-blur-sm">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Vendor
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Framework
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50 bg-card/50">
-                  {modelsData?.items.slice(0, 5).map((model) => (
-                    <tr key={model.metadata.name} className="transition-colors duration-150 hover:bg-muted/30">
-                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
-                        <Link
-                          href={`/models`}
-                          className="text-primary hover:text-primary/80 transition-colors duration-150 font-medium"
-                        >
-                          {model.metadata.name}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">
-                        {model.spec.vendor || '-'}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">
-                        {model.spec.modelFramework?.name || '-'}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <StatusBadge state={model.status?.state} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="bg-muted/30 px-6 py-4 text-right">
-              <Link
-                href="/models"
-                className="text-sm font-medium text-primary hover:text-primary/80 transition-colors duration-150 inline-flex items-center gap-1 group"
-              >
-                View all models
-                <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-            </div>
-          </div>
-        </div>
+          }
+        />
       </main>
     </div>
   )

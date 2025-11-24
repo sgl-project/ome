@@ -2,23 +2,36 @@
 
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { clusterServingRuntimeSchema, type ClusterServingRuntimeFormData } from '@/lib/validation/runtime-schema'
+import { clusterServingRuntimeSchema } from '@/lib/validation/runtime-schema'
 import { useCreateRuntime } from '@/lib/hooks/useRuntimes'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
+import { ContainerForm } from '@/components/forms/ContainerForm'
+import { VolumeForm } from '@/components/forms/VolumeForm'
 
 export default function CreateRuntimePage() {
   const router = useRouter()
   const createRuntime = useCreateRuntime()
   const [error, setError] = useState<string | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    basic: true,
+    'model-formats': true,
+    engine: false,
+    decoder: false,
+    router: false,
+  })
+
+  // Checkboxes for enabling multi-node deployments
+  const [engineMultiNode, setEngineMultiNode] = useState(false)
+  const [decoderMultiNode, setDecoderMultiNode] = useState(false)
 
   const {
     register,
     handleSubmit,
     control,
     formState: { errors, isSubmitting },
-  } = useForm<ClusterServingRuntimeFormData>({
+  } = useForm({
     resolver: zodResolver(clusterServingRuntimeSchema),
     defaultValues: {
       apiVersion: 'ome.io/v1beta1',
@@ -28,18 +41,64 @@ export default function CreateRuntimePage() {
       },
       spec: {
         supportedModelFormats: [{ name: '' }],
-        multiModel: false,
         disabled: false,
+        protocolVersions: [],
       },
     },
   })
 
+  // Field arrays for dynamic lists
   const { fields: formatFields, append: appendFormat, remove: removeFormat } = useFieldArray({
     control,
     name: 'spec.supportedModelFormats',
   })
 
-  const onSubmit = async (data: ClusterServingRuntimeFormData) => {
+  const { fields: protocolFields, append: appendProtocol, remove: removeProtocol } = useFieldArray({
+    control,
+    name: 'spec.protocolVersions',
+  })
+
+  // Field arrays for Engine init containers and sidecars
+  const { fields: engineInitContainerFields, append: appendEngineInitContainer, remove: removeEngineInitContainer } = useFieldArray({
+    control,
+    name: 'spec.engineConfig.initContainers',
+  })
+
+  const { fields: engineSidecarFields, append: appendEngineSidecar, remove: removeEngineSidecar } = useFieldArray({
+    control,
+    name: 'spec.engineConfig.sidecars',
+  })
+
+  // Field arrays for Decoder init containers and sidecars
+  const { fields: decoderInitContainerFields, append: appendDecoderInitContainer, remove: removeDecoderInitContainer } = useFieldArray({
+    control,
+    name: 'spec.decoderConfig.initContainers',
+  })
+
+  const { fields: decoderSidecarFields, append: appendDecoderSidecar, remove: removeDecoderSidecar } = useFieldArray({
+    control,
+    name: 'spec.decoderConfig.sidecars',
+  })
+
+  // Field arrays for Router init containers and sidecars
+  const { fields: routerInitContainerFields, append: appendRouterInitContainer, remove: removeRouterInitContainer } = useFieldArray({
+    control,
+    name: 'spec.routerConfig.initContainers',
+  })
+
+  const { fields: routerSidecarFields, append: appendRouterSidecar, remove: removeRouterSidecar } = useFieldArray({
+    control,
+    name: 'spec.routerConfig.sidecars',
+  })
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }))
+  }
+
+  const onSubmit = async (data: any) => {
     try {
       setError(null)
       await createRuntime.mutateAsync(data)
@@ -49,240 +108,891 @@ export default function CreateRuntimePage() {
     }
   }
 
+  const AccordionSection = ({
+    id,
+    title,
+    children,
+  }: {
+    id: string
+    title: string
+    children: React.ReactNode
+  }) => {
+    const isExpanded = expandedSections[id]
+
+    return (
+      <div className="section-card rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => toggleSection(id)}
+          className="w-full flex items-center justify-between p-6 text-left hover:bg-slate-50/50 transition-colors"
+        >
+          <h2 className="text-xl font-display font-semibold text-slate-900">{title}</h2>
+          <svg
+            className={`h-6 w-6 text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {isExpanded && (
+          <div className="border-t border-slate-200 p-6 animate-in slide-in-from-top-2 duration-300">
+            {children}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50">
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+        .font-display {
+          font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .font-mono {
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .input-focus {
+          transition: all 0.2s ease;
+        }
+
+        .input-focus:focus {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(147, 51, 234, 0.15);
+        }
+
+        .section-card {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(148, 163, 184, 0.1);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(148, 163, 184, 0.05);
+        }
+
+        .field-label {
+          font-weight: 500;
+          letter-spacing: -0.01em;
+        }
+      `}</style>
+
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <Link href="/runtimes" className="text-sm text-purple-600 hover:text-purple-800 mb-2 inline-block">
-            ← Back to Runtimes
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-10">
+        <div className="mx-auto max-w-7xl px-6 py-6">
+          <Link
+            href="/runtimes"
+            className="group inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-purple-600 transition-colors mb-3"
+          >
+            <span className="transition-transform group-hover:-translate-x-1">←</span>
+            <span>Back to Runtimes</span>
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Create New Runtime</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Define a new ClusterServingRuntime resource
+          <h1 className="text-4xl font-display font-bold text-slate-900 tracking-tight">
+            Create New Runtime
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 font-medium">
+            Define a new <span className="font-mono text-purple-600">ClusterServingRuntime</span> resource
           </p>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl px-6 py-8">
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-6 rounded-xl bg-red-50 border border-red-200 p-4 animate-in slide-in-from-top-2">
+            <p className="text-sm font-medium text-red-800">{error}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Basic Information */}
-          <div className="rounded-lg bg-white p-6 shadow">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">Basic Information</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  Name *
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  {...register('metadata.name')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                  placeholder="my-runtime"
-                />
-                {errors.metadata?.name && (
-                  <p className="mt-1 text-sm text-red-600">{errors.metadata.name.message}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="namespace" className="block text-sm font-medium text-gray-700">
-                  Namespace
-                </label>
-                <input
-                  type="text"
-                  id="namespace"
-                  {...register('metadata.namespace')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                  placeholder="default"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="multiModel" className="flex items-center">
+          <AccordionSection id="basic" title="Basic Information">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="name" className="field-label block text-sm text-slate-700 mb-2">
+                    Name *
+                  </label>
                   <input
-                    type="checkbox"
-                    id="multiModel"
-                    {...register('spec.multiModel')}
-                    className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    type="text"
+                    id="name"
+                    {...register('metadata.name')}
+                    className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    placeholder="my-runtime"
                   />
-                  <span className="ml-2 text-sm text-gray-700">Multi-Model Support</span>
-                </label>
-              </div>
+                  {errors.metadata?.name && (
+                    <p className="mt-1.5 text-xs text-red-600">{errors.metadata.name.message as string}</p>
+                  )}
+                </div>
 
-              <div>
-                <label htmlFor="disabled" className="flex items-center">
+                <div>
+                  <label htmlFor="namespace" className="field-label block text-sm text-slate-700 mb-2">
+                    Namespace
+                  </label>
+                  <input
+                    type="text"
+                    id="namespace"
+                    {...register('metadata.namespace')}
+                    className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    placeholder="Leave empty for cluster-scoped"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-500">Leave empty for ClusterServingRuntime (cluster-scoped)</p>
+                </div>
+
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-slate-50 border border-slate-200">
                   <input
                     type="checkbox"
                     id="disabled"
                     {...register('spec.disabled')}
-                    className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
+                    className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 focus:ring-offset-2 transition-all"
                   />
-                  <span className="ml-2 text-sm text-gray-700">Disabled</span>
-                </label>
+                  <label htmlFor="disabled" className="flex-1">
+                    <span className="field-label text-sm text-slate-700 block">Disabled</span>
+                    <span className="text-xs text-slate-500">Disable this runtime from being selected</span>
+                  </label>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Supported Model Formats */}
-          <div className="rounded-lg bg-white p-6 shadow">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-medium text-gray-900">Supported Model Formats</h2>
-              <button
-                type="button"
-                onClick={() => appendFormat({ name: '', version: '' })}
-                className="rounded-md bg-purple-600 px-3 py-1 text-sm text-white hover:bg-purple-700"
-              >
-                Add Format
-              </button>
-            </div>
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Model Size Range</h3>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Minimum Size
+                    </label>
+                    <input
+                      type="text"
+                      {...register('spec.modelSizeRange.min')}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="e.g., 100MB"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Maximum Size
+                    </label>
+                    <input
+                      type="text"
+                      {...register('spec.modelSizeRange.max')}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="e.g., 10GB"
+                    />
+                  </div>
+                </div>
+              </div>
 
-            <div className="space-y-4">
-              {formatFields.map((field, index) => (
-                <div key={field.id} className="rounded-lg border border-gray-200 p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-700">Format {index + 1}</h3>
-                    {formatFields.length > 1 && (
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-base font-display font-semibold text-slate-700">Protocol Versions</h3>
+                  <button
+                    type="button"
+                    onClick={() => appendProtocol('')}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Protocol
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {protocolFields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        {...register(`spec.protocolVersions.${index}` as const)}
+                        className="input-focus flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                        placeholder="e.g., openai, cohere"
+                      />
                       <button
                         type="button"
-                        onClick={() => removeFormat(index)}
-                        className="text-sm text-red-600 hover:text-red-800"
+                        onClick={() => removeProtocol(index)}
+                        className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
                       >
                         Remove
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  ))}
+                  {protocolFields.length === 0 && (
+                    <p className="text-sm text-slate-500 italic">No protocols defined</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </AccordionSection>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Format Name *
-                      </label>
-                      <select
-                        {...register(`spec.supportedModelFormats.${index}.name` as const)}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                      >
-                        <option value="">Select format...</option>
-                        <option value="safetensors">SafeTensors</option>
-                        <option value="pytorch">PyTorch</option>
-                        <option value="onnx">ONNX</option>
-                        <option value="tensorflow">TensorFlow</option>
-                        <option value="huggingface">HuggingFace</option>
-                      </select>
-                      {errors.spec?.supportedModelFormats?.[index]?.name && (
-                        <p className="mt-1 text-sm text-red-600">
-                          {errors.spec.supportedModelFormats[index]?.name?.message}
-                        </p>
+          {/* Model Formats */}
+          <AccordionSection id="model-formats" title="Supported Model Formats">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">Define the model formats this runtime can execute</p>
+                <button
+                  type="button"
+                  onClick={() => appendFormat({ name: '' })}
+                  className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:shadow-md transition-all"
+                >
+                  + Add Format
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {formatFields.map((field, index) => (
+                  <div key={field.id} className="rounded-xl border border-slate-200 bg-white/50 p-5">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h4 className="text-sm font-display font-semibold text-slate-700">Format {index + 1}</h4>
+                      {formatFields.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFormat(index)}
+                          className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+                        >
+                          Remove
+                        </button>
                       )}
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Version
-                      </label>
-                      <input
-                        type="text"
-                        {...register(`spec.supportedModelFormats.${index}.version` as const)}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                        placeholder="1.0"
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Format Name *
+                        </label>
+                        <select
+                          {...register(`spec.supportedModelFormats.${index}.name` as const)}
+                          className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                        >
+                          <option value="">Select format...</option>
+                          <option value="safetensors">SafeTensors</option>
+                          <option value="pytorch">PyTorch</option>
+                          <option value="onnx">ONNX</option>
+                          <option value="tensorflow">TensorFlow</option>
+                          <option value="huggingface">HuggingFace</option>
+                        </select>
+                        {errors.spec?.supportedModelFormats?.[index]?.name && (
+                          <p className="mt-1 text-xs text-red-600">
+                            {errors.spec.supportedModelFormats[index]?.name?.message as string}
+                          </p>
+                        )}
+                      </div>
 
-                    <div>
-                      <label className="flex items-center">
+                      <div>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Version
+                        </label>
+                        <input
+                          type="text"
+                          {...register(`spec.supportedModelFormats.${index}.version` as const)}
+                          className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                          placeholder="1.0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Model Type
+                        </label>
+                        <input
+                          type="text"
+                          {...register(`spec.supportedModelFormats.${index}.modelType` as const)}
+                          className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                          placeholder="text-generation"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Model Architecture
+                        </label>
+                        <input
+                          type="text"
+                          {...register(`spec.supportedModelFormats.${index}.modelArchitecture` as const)}
+                          className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                          placeholder="LlamaForCausalLM"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Quantization
+                        </label>
+                        <select
+                          {...register(`spec.supportedModelFormats.${index}.quantization` as const)}
+                          className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                        >
+                          <option value="">None</option>
+                          <option value="fp8">FP8</option>
+                          <option value="fbgemm_fp8">FBGEMM FP8</option>
+                          <option value="int4">INT4</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Priority
+                        </label>
+                        <input
+                          type="number"
+                          {...register(`spec.supportedModelFormats.${index}.priority` as const, {
+                            valueAsNumber: true,
+                          })}
+                          className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
                         <input
                           type="checkbox"
                           {...register(`spec.supportedModelFormats.${index}.autoSelect` as const)}
-                          className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                         />
-                        <span className="ml-2 text-sm text-gray-700">Auto Select</span>
-                      </label>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Priority
-                      </label>
-                      <input
-                        type="number"
-                        {...register(`spec.supportedModelFormats.${index}.priority` as const, {
-                          valueAsNumber: true,
-                        })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                        placeholder="0"
-                      />
+                        <label className="text-sm text-slate-700 font-medium">Auto Select</label>
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          </AccordionSection>
+
+          {/* Engine Configuration */}
+          <AccordionSection id="engine" title="Engine Configuration">
+            <div className="space-y-8">
+              <p className="text-sm text-slate-600">Configure the inference engine component</p>
+
+              {/* Scaling Configuration */}
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <input
+                      type="number"
+                      {...register('spec.engineConfig.minReplicas', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <input
+                      type="number"
+                      {...register('spec.engineConfig.maxReplicas', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="5"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <input
+                      type="number"
+                      {...register('spec.engineConfig.scaleTarget', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="80"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <select
+                      {...register('spec.engineConfig.scaleMetric')}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    >
+                      <option value="">Select metric...</option>
+                      <option value="cpu">CPU</option>
+                      <option value="memory">Memory</option>
+                      <option value="concurrency">Concurrency</option>
+                      <option value="rps">RPS</option>
+                    </select>
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Runner (Main Container) */}
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
+                <ContainerForm
+                  basePath="spec.engineConfig.runner"
+                  register={register}
+                  control={control}
+                />
+              </div>
+
+              {/* Multi-Node Deployment Checkbox */}
+              <div className="rounded-lg bg-purple-50 border border-purple-200 p-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={engineMultiNode}
+                    onChange={(e) => setEngineMultiNode(e.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <div>
+                    <span className="field-label text-sm text-slate-700 block">Enable Multi-Node Deployment</span>
+                    <span className="text-xs text-slate-600">Configure leader and worker nodes for distributed inference</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Leader Configuration - CONDITIONAL */}
+              {engineMultiNode && (
+                <div>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Leader Node Configuration</h3>
+                  <p className="text-xs text-slate-500 mb-4">Coordinates distributed inference across worker nodes</p>
+                  <ContainerForm
+                    basePath="spec.engineConfig.leader.runner"
+                    register={register}
+                    control={control}
+                  />
+                </div>
+              )}
+
+              {/* Worker Configuration - CONDITIONAL */}
+              {engineMultiNode && (
+                <div>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Worker Node Configuration</h3>
+                  <p className="text-xs text-slate-500 mb-4">Performs distributed processing tasks</p>
+                  <div className="mb-4">
+                    <label className="field-label block text-sm text-slate-700 mb-2">Worker Size (Number of Pods)</label>
+                    <input
+                      type="number"
+                      {...register('spec.engineConfig.worker.size', { valueAsNumber: true })}
+                      className="input-focus w-full max-w-xs rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="1"
+                    />
+                  </div>
+                  <ContainerForm
+                    basePath="spec.engineConfig.worker.runner"
+                    register={register}
+                    control={control}
+                  />
+                </div>
+              )}
+
+              {/* Volumes */}
+              <VolumeForm
+                basePath="spec.engineConfig.volumes"
+                register={register}
+                control={control}
+              />
+
+              {/* Init Containers */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
+                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendEngineInitContainer({ name: '', image: '' })}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Init Container
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {engineInitContainerFields.map((field, index) => (
+                    <ContainerForm
+                      key={field.id}
+                      basePath={`spec.engineConfig.initContainers.${index}`}
+                      register={register}
+                      control={control}
+                      showRemove={true}
+                      onRemove={() => removeEngineInitContainer(index)}
+                      title={`Init Container ${index + 1}`}
+                    />
+                  ))}
+                  {engineInitContainerFields.length === 0 && (
+                    <p className="text-xs text-slate-500 italic">No init containers defined</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sidecar Containers */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
+                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendEngineSidecar({ name: '', image: '' })}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Sidecar
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {engineSidecarFields.map((field, index) => (
+                    <ContainerForm
+                      key={field.id}
+                      basePath={`spec.engineConfig.sidecars.${index}`}
+                      register={register}
+                      control={control}
+                      showRemove={true}
+                      onRemove={() => removeEngineSidecar(index)}
+                      title={`Sidecar ${index + 1}`}
+                    />
+                  ))}
+                  {engineSidecarFields.length === 0 && (
+                    <p className="text-xs text-slate-500 italic">No sidecar containers defined</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          </AccordionSection>
 
-          {/* Configuration */}
-          <div className="rounded-lg bg-white p-6 shadow">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">Configuration (Optional)</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          {/* Decoder Configuration */}
+          <AccordionSection id="decoder" title="Decoder Configuration">
+            <div className="space-y-8">
+              <p className="text-sm text-slate-600">Configure the decoder component for prefill-decode disaggregated deployments</p>
+
+              {/* Scaling Configuration */}
               <div>
-                <label htmlFor="replicas" className="block text-sm font-medium text-gray-700">
-                  Replicas
-                </label>
-                <input
-                  type="number"
-                  id="replicas"
-                  {...register('spec.replicas', { valueAsNumber: true })}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                  placeholder="1"
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <input
+                      type="number"
+                      {...register('spec.decoderConfig.minReplicas', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <input
+                      type="number"
+                      {...register('spec.decoderConfig.maxReplicas', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="5"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <input
+                      type="number"
+                      {...register('spec.decoderConfig.scaleTarget', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="80"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <select
+                      {...register('spec.decoderConfig.scaleMetric')}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    >
+                      <option value="">Select metric...</option>
+                      <option value="cpu">CPU</option>
+                      <option value="memory">Memory</option>
+                      <option value="concurrency">Concurrency</option>
+                      <option value="rps">RPS</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Runner (Main Container) */}
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
+                <ContainerForm
+                  basePath="spec.decoderConfig.runner"
+                  register={register}
+                  control={control}
                 />
               </div>
 
-              <div>
-                <label htmlFor="grpcEndpoint" className="block text-sm font-medium text-gray-700">
-                  gRPC Endpoint
+              {/* Multi-Node Deployment Checkbox */}
+              <div className="rounded-lg bg-purple-50 border border-purple-200 p-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={decoderMultiNode}
+                    onChange={(e) => setDecoderMultiNode(e.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <div>
+                    <span className="field-label text-sm text-slate-700 block">Enable Multi-Node Deployment</span>
+                    <span className="text-xs text-slate-600">Configure leader and worker nodes for distributed token generation</span>
+                  </div>
                 </label>
-                <input
-                  type="text"
-                  id="grpcEndpoint"
-                  {...register('spec.grpcEndpoint')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                  placeholder="localhost:8081"
-                />
               </div>
 
+              {/* Leader Configuration - CONDITIONAL */}
+              {decoderMultiNode && (
+                <div>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Leader Node Configuration</h3>
+                  <p className="text-xs text-slate-500 mb-4">Coordinates distributed token generation across worker nodes</p>
+                  <ContainerForm
+                    basePath="spec.decoderConfig.leader.runner"
+                    register={register}
+                    control={control}
+                  />
+                </div>
+              )}
+
+              {/* Worker Configuration - CONDITIONAL */}
+              {decoderMultiNode && (
+                <div>
+                  <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Worker Node Configuration</h3>
+                  <p className="text-xs text-slate-500 mb-4">Performs distributed token generation tasks</p>
+                  <div className="mb-4">
+                    <label className="field-label block text-sm text-slate-700 mb-2">Worker Size (Number of Pods)</label>
+                    <input
+                      type="number"
+                      {...register('spec.decoderConfig.worker.size', { valueAsNumber: true })}
+                      className="input-focus w-full max-w-xs rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="1"
+                    />
+                  </div>
+                  <ContainerForm
+                    basePath="spec.decoderConfig.worker.runner"
+                    register={register}
+                    control={control}
+                  />
+                </div>
+              )}
+
+              {/* Volumes */}
+              <VolumeForm
+                basePath="spec.decoderConfig.volumes"
+                register={register}
+                control={control}
+              />
+
+              {/* Init Containers */}
               <div>
-                <label htmlFor="httpEndpoint" className="block text-sm font-medium text-gray-700">
-                  HTTP Endpoint
-                </label>
-                <input
-                  type="text"
-                  id="httpEndpoint"
-                  {...register('spec.httpEndpoint')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-purple-500"
-                  placeholder="localhost:8080"
-                />
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
+                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendDecoderInitContainer({ name: '', image: '' })}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Init Container
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {decoderInitContainerFields.map((field, index) => (
+                    <ContainerForm
+                      key={field.id}
+                      basePath={`spec.decoderConfig.initContainers.${index}`}
+                      register={register}
+                      control={control}
+                      showRemove={true}
+                      onRemove={() => removeDecoderInitContainer(index)}
+                      title={`Init Container ${index + 1}`}
+                    />
+                  ))}
+                  {decoderInitContainerFields.length === 0 && (
+                    <p className="text-xs text-slate-500 italic">No init containers defined</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sidecar Containers */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
+                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendDecoderSidecar({ name: '', image: '' })}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Sidecar
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {decoderSidecarFields.map((field, index) => (
+                    <ContainerForm
+                      key={field.id}
+                      basePath={`spec.decoderConfig.sidecars.${index}`}
+                      register={register}
+                      control={control}
+                      showRemove={true}
+                      onRemove={() => removeDecoderSidecar(index)}
+                      title={`Sidecar ${index + 1}`}
+                    />
+                  ))}
+                  {decoderSidecarFields.length === 0 && (
+                    <p className="text-xs text-slate-500 italic">No sidecar containers defined</p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </AccordionSection>
+
+          {/* Router Configuration */}
+          <AccordionSection id="router" title="Router Configuration">
+            <div className="space-y-8">
+              <p className="text-sm text-slate-600">Configure the router component for request routing and load balancing</p>
+
+              {/* Scaling Configuration */}
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <input
+                      type="number"
+                      {...register('spec.routerConfig.minReplicas', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <input
+                      type="number"
+                      {...register('spec.routerConfig.maxReplicas', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="5"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <input
+                      type="number"
+                      {...register('spec.routerConfig.scaleTarget', { valueAsNumber: true })}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      placeholder="80"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <select
+                      {...register('spec.routerConfig.scaleMetric')}
+                      className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    >
+                      <option value="">Select metric...</option>
+                      <option value="cpu">CPU</option>
+                      <option value="memory">Memory</option>
+                      <option value="concurrency">Concurrency</option>
+                      <option value="rps">RPS</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Runner (Main Container) */}
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
+                <ContainerForm
+                  basePath="spec.routerConfig.runner"
+                  register={register}
+                  control={control}
+                />
+              </div>
+
+              {/* Router Config Map */}
+              <div>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Router Configuration Parameters</h3>
+                <p className="text-xs text-slate-500 mb-3">Additional configuration parameters as key-value pairs (JSON format)</p>
+                <textarea
+                  {...register('spec.routerConfig.config')}
+                  className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 min-h-[100px]"
+                  placeholder={`{
+  "timeout": "30s",
+  "maxConnections": "1000"
+}`}
+                />
+              </div>
+
+              {/* Volumes */}
+              <VolumeForm
+                basePath="spec.routerConfig.volumes"
+                register={register}
+                control={control}
+              />
+
+              {/* Init Containers */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
+                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendRouterInitContainer({ name: '', image: '' })}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Init Container
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {routerInitContainerFields.map((field, index) => (
+                    <ContainerForm
+                      key={field.id}
+                      basePath={`spec.routerConfig.initContainers.${index}`}
+                      register={register}
+                      control={control}
+                      showRemove={true}
+                      onRemove={() => removeRouterInitContainer(index)}
+                      title={`Init Container ${index + 1}`}
+                    />
+                  ))}
+                  {routerInitContainerFields.length === 0 && (
+                    <p className="text-xs text-slate-500 italic">No init containers defined</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sidecar Containers */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
+                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendRouterSidecar({ name: '', image: '' })}
+                    className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:shadow-md transition-all"
+                  >
+                    + Add Sidecar
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {routerSidecarFields.map((field, index) => (
+                    <ContainerForm
+                      key={field.id}
+                      basePath={`spec.routerConfig.sidecars.${index}`}
+                      register={register}
+                      control={control}
+                      showRemove={true}
+                      onRemove={() => removeRouterSidecar(index)}
+                      title={`Sidecar ${index + 1}`}
+                    />
+                  ))}
+                  {routerSidecarFields.length === 0 && (
+                    <p className="text-xs text-slate-500 italic">No sidecar containers defined</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </AccordionSection>
 
           {/* Form Actions */}
-          <div className="flex justify-end gap-3">
+          <div className="section-card rounded-2xl p-4 flex justify-end gap-3 sticky bottom-4">
             <Link
               href="/runtimes"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border-2 border-slate-300 px-6 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all"
             >
               Cancel
             </Link>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:bg-purple-400"
+              className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {isSubmitting ? 'Creating...' : 'Create Runtime'}
             </button>
