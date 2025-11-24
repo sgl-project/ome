@@ -14,6 +14,15 @@ import { useState, useEffect } from 'react'
 import { modelsApi, baseModelsApi } from '@/lib/api/models'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNamespaces } from '@/lib/hooks/useNamespaces'
+import {
+  HuggingFaceStorage,
+  S3Storage,
+  GCSStorage,
+  OCIStorage,
+  PVCStorage,
+  AzureStorage,
+  GitHubStorage,
+} from '@/components/forms/storage'
 
 type StorageType = 'oci' | 'pvc' | 'hf' | 's3' | 'az' | 'gs' | 'github' | 'local' | 'vendor'
 type ModelScope = 'cluster' | 'namespace'
@@ -398,276 +407,82 @@ export default function CreateModelPage() {
 
               {/* HuggingFace Fields */}
               {storageType === 'hf' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Model ID * <span className="text-gray-500 text-xs">(e.g., meta-llama/Llama-2-7b)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={hfModelId}
-                      onChange={(e) => setHfModelId(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="meta-llama/Llama-2-7b"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Branch <span className="text-gray-500 text-xs">(default: main)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={hfBranch}
-                      onChange={(e) => setHfBranch(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="main"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="hfToken" className="block text-sm font-medium text-gray-700">
-                      HuggingFace Token <span className="text-gray-500 text-xs">(optional for gated models)</span>
-                    </label>
-                    <input
-                      type="password"
-                      id="hfToken"
-                      value={huggingfaceToken}
-                      onChange={(e) => setHuggingfaceToken(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="hf_..."
-                    />
-                    <p className="mt-1 text-sm text-gray-500">
-                      Required for gated models (e.g., Llama, Mistral) or private repos
-                    </p>
-                  </div>
-                </>
+                <HuggingFaceStorage
+                  modelId={hfModelId}
+                  branch={hfBranch}
+                  token={huggingfaceToken}
+                  onModelIdChange={setHfModelId}
+                  onBranchChange={setHfBranch}
+                  onTokenChange={setHuggingfaceToken}
+                />
               )}
 
               {/* OCI Object Storage Fields */}
               {storageType === 'oci' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      OCI Namespace *
-                    </label>
-                    <input
-                      type="text"
-                      value={ociNamespace}
-                      onChange={(e) => setOciNamespace(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="my-namespace"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Bucket Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={ociBucket}
-                      onChange={(e) => setOciBucket(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="my-bucket"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Object Path <span className="text-gray-500 text-xs">(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={ociPrefix}
-                      onChange={(e) => setOciPrefix(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="models/my-model"
-                    />
-                  </div>
-                </>
+                <OCIStorage
+                  namespace={ociNamespace}
+                  bucket={ociBucket}
+                  prefix={ociPrefix}
+                  onNamespaceChange={setOciNamespace}
+                  onBucketChange={setOciBucket}
+                  onPrefixChange={setOciPrefix}
+                />
               )}
 
               {/* PVC Fields */}
               {storageType === 'pvc' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      PVC Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={pvcName}
-                      onChange={(e) => setPvcName(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="model-storage"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Sub-path *
-                    </label>
-                    <input
-                      type="text"
-                      value={pvcSubPath}
-                      onChange={(e) => setPvcSubPath(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="models/my-model"
-                    />
-                  </div>
-                </>
+                <PVCStorage
+                  name={pvcName}
+                  subPath={pvcSubPath}
+                  onNameChange={setPvcName}
+                  onSubPathChange={setPvcSubPath}
+                />
               )}
 
               {/* S3 Fields */}
               {storageType === 's3' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      S3 Bucket *
-                    </label>
-                    <input
-                      type="text"
-                      value={s3Bucket}
-                      onChange={(e) => setS3Bucket(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="my-bucket"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Region <span className="text-gray-500 text-xs">(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={s3Region}
-                      onChange={(e) => setS3Region(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="us-west-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Prefix <span className="text-gray-500 text-xs">(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={s3Prefix}
-                      onChange={(e) => setS3Prefix(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="models/my-model"
-                    />
-                  </div>
-                </>
+                <S3Storage
+                  bucket={s3Bucket}
+                  region={s3Region}
+                  prefix={s3Prefix}
+                  onBucketChange={setS3Bucket}
+                  onRegionChange={setS3Region}
+                  onPrefixChange={setS3Prefix}
+                />
               )}
 
               {/* GCS Fields */}
               {storageType === 'gs' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      GCS Bucket *
-                    </label>
-                    <input
-                      type="text"
-                      value={gcsBucket}
-                      onChange={(e) => setGcsBucket(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="my-bucket"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Object Path <span className="text-gray-500 text-xs">(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={gcsObject}
-                      onChange={(e) => setGcsObject(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="models/my-model"
-                    />
-                  </div>
-                </>
+                <GCSStorage
+                  bucket={gcsBucket}
+                  object={gcsObject}
+                  onBucketChange={setGcsBucket}
+                  onObjectChange={setGcsObject}
+                />
               )}
 
               {/* Azure Fields */}
               {storageType === 'az' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Storage Account *
-                    </label>
-                    <input
-                      type="text"
-                      value={azAccount}
-                      onChange={(e) => setAzAccount(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="mystorageaccount"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Container *
-                    </label>
-                    <input
-                      type="text"
-                      value={azContainer}
-                      onChange={(e) => setAzContainer(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="models"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Blob Path <span className="text-gray-500 text-xs">(optional)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={azBlobPath}
-                      onChange={(e) => setAzBlobPath(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="my-model"
-                    />
-                  </div>
-                </>
+                <AzureStorage
+                  account={azAccount}
+                  container={azContainer}
+                  blobPath={azBlobPath}
+                  onAccountChange={setAzAccount}
+                  onContainerChange={setAzContainer}
+                  onBlobPathChange={setAzBlobPath}
+                />
               )}
 
               {/* GitHub Fields */}
               {storageType === 'github' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Owner *
-                    </label>
-                    <input
-                      type="text"
-                      value={githubOwner}
-                      onChange={(e) => setGithubOwner(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="myorg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Repository *
-                    </label>
-                    <input
-                      type="text"
-                      value={githubRepo}
-                      onChange={(e) => setGithubRepo(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="my-model-repo"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Tag/Release <span className="text-gray-500 text-xs">(default: latest)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={githubTag}
-                      onChange={(e) => setGithubTag(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="latest"
-                    />
-                  </div>
-                </>
+                <GitHubStorage
+                  owner={githubOwner}
+                  repo={githubRepo}
+                  tag={githubTag}
+                  onOwnerChange={setGithubOwner}
+                  onRepoChange={setGithubRepo}
+                  onTagChange={setGithubTag}
+                />
               )}
 
               {/* Local Storage Fields */}

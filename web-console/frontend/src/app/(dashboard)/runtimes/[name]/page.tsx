@@ -7,6 +7,8 @@ import { useState } from 'react'
 import { ConfirmDeleteModal } from '@/components/ui/Modal'
 import { ModelFormatsDisplay } from '@/components/ui/ModelFormatsDisplay'
 import { MetadataCollapsible } from '@/components/ui/MetadataCollapsible'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
 
 // Reusable component for displaying K8s resources
 function ResourceDisplay({ resources }: { resources: any }) {
@@ -65,25 +67,15 @@ export default function RuntimeDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading runtime details...</div>
-      </div>
-    )
+    return <LoadingState message="Loading runtime details..." />
   }
 
   if (error || !runtime) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="text-lg text-red-600 mb-4">
-            Error: {error instanceof Error ? error.message : 'Runtime not found'}
-          </div>
-          <Link href="/runtimes" className="text-purple-600 hover:text-purple-800">
-            ← Back to Runtimes
-          </Link>
-        </div>
-      </div>
+      <ErrorState
+        error={error || new Error('Runtime not found')}
+        backLink={{ href: '/runtimes', label: 'Back to Runtimes' }}
+      />
     )
   }
 

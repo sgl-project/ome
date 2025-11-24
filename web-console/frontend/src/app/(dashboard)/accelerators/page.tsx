@@ -1,26 +1,18 @@
 'use client'
 
 import { useAccelerators } from '@/lib/hooks/useAccelerators'
+import { LoadingState } from '@/components/ui/LoadingState'
+import { ErrorState } from '@/components/ui/ErrorState'
 
 export default function AcceleratorsPage() {
   const { data, isLoading, error } = useAccelerators()
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading accelerators...</div>
-      </div>
-    )
+    return <LoadingState message="Loading accelerators..." />
   }
 
   if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-red-600">
-          Error: {error instanceof Error ? error.message : 'Failed to load accelerators'}
-        </div>
-      </div>
-    )
+    return <ErrorState error={error} />
   }
 
   return (
