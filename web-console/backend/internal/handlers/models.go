@@ -24,9 +24,36 @@ func NewModelsHandler(k8sClient *k8s.Client, logger *zap.Logger) *ModelsHandler 
 }
 
 // List handles GET /api/v1/models
+// Supports optional ?namespace= query parameter
+// - No namespace: returns ClusterBaseModel resources
+// - namespace=<name>: returns BaseModel resources from that namespace
 func (h *ModelsHandler) List(c *gin.Context) {
 	ctx := c.Request.Context()
+	namespace := c.Query("namespace")
 
+	// If namespace is specified, list namespace-scoped BaseModels
+	if namespace != "" {
+		models, err := h.k8sClient.ListBaseModels(ctx, namespace)
+		if err != nil {
+			h.logger.Error("Failed to list base models",
+				zap.String("namespace", namespace),
+				zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to list base models",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"items": models.Items,
+			"total": len(models.Items),
+			"namespace": namespace,
+		})
+		return
+	}
+
+	// Otherwise, list cluster-scoped ClusterBaseModels
 	models, err := h.k8sClient.ListClusterBaseModels(ctx)
 	if err != nil {
 		h.logger.Error("Failed to list models", zap.Error(err))

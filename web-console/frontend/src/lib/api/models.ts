@@ -13,8 +13,9 @@ export interface BaseModelListResponse {
 
 // ClusterBaseModel API (cluster-scoped)
 export const modelsApi = {
-  list: async (): Promise<ModelListResponse> => {
-    const response = await apiClient.get<ModelListResponse>('/models')
+  list: async (namespace?: string): Promise<ModelListResponse> => {
+    const params = namespace ? { namespace } : {}
+    const response = await apiClient.get<ModelListResponse>('/models', { params })
     return response.data
   },
 

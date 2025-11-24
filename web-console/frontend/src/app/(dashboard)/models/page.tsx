@@ -1,6 +1,7 @@
 'use client'
 
 import { useModels } from '@/lib/hooks/useModels'
+import { useNamespaces } from '@/lib/hooks/useNamespaces'
 import { useServerEvents } from '@/hooks/useServerEvents'
 import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
@@ -13,7 +14,9 @@ type SortField = 'name' | 'vendor' | 'framework' | 'size' | 'status' | 'created'
 type SortDirection = 'asc' | 'desc'
 
 export default function ModelsPage() {
-  const { data, isLoading, error } = useModels()
+  const [selectedNamespace, setSelectedNamespace] = useState<string>('')
+  const { data, isLoading, error } = useModels(selectedNamespace || undefined)
+  const { data: namespacesData } = useNamespaces()
   const queryClient = useQueryClient()
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
@@ -217,9 +220,30 @@ export default function ModelsPage() {
         {/* Models Table */}
         <div className="overflow-hidden rounded-lg bg-white shadow">
           <div className="border-b border-gray-200 px-4 py-5 sm:px-6">
-            <h3 className="text-lg font-medium leading-6 text-gray-900">
-              All Models
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium leading-6 text-gray-900">
+                All Models
+              </h3>
+              {/* Namespace Selector */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="namespace" className="text-sm font-medium text-gray-700">
+                  Scope:
+                </label>
+                <select
+                  id="namespace"
+                  value={selectedNamespace}
+                  onChange={(e) => setSelectedNamespace(e.target.value)}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                >
+                  <option value="">Cluster-scoped</option>
+                  {namespacesData?.items.map((ns) => (
+                    <option key={ns} value={ns}>
+                      Namespace: {ns}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

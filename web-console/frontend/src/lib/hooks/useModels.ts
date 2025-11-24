@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { modelsApi } from '../api/models'
 import { ClusterBaseModel } from '../types/model'
 
-export function useModels() {
+export function useModels(namespace?: string) {
   return useQuery({
-    queryKey: ['models'],
-    queryFn: modelsApi.list,
+    queryKey: namespace ? ['models', { namespace }] : ['models'],
+    queryFn: () => modelsApi.list(namespace),
   })
 }
 

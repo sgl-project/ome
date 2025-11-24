@@ -17,6 +17,7 @@ export default function ModelDetailPage() {
   const { data: model, isLoading, error } = useModel(name)
   const deleteModel = useDeleteModel()
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showRawSpec, setShowRawSpec] = useState(false)
 
   const handleDelete = async () => {
     try {
@@ -52,7 +53,7 @@ export default function ModelDetailPage() {
               </Link>
               <h1 className="text-3xl font-bold text-gray-900">{model.metadata.name}</h1>
               <p className="mt-1 text-sm text-gray-500">
-                ClusterBaseModel Details
+                {model.kind || 'ClusterBaseModel'} Details
               </p>
             </div>
             <div className="flex gap-3">
@@ -94,12 +95,37 @@ export default function ModelDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-sm font-medium text-gray-500">Namespace</dt>
+              <dt className="text-sm font-medium text-gray-500">Scope</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {model.metadata.namespace || 'default'}
+                {model.kind === 'ClusterBaseModel' ? (
+                  <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                    Cluster-scoped
+                  </span>
+                ) : (
+                  <span>Namespace: {model.metadata.namespace || 'default'}</span>
+                )}
               </dd>
             </div>
           </div>
+
+          {/* Nodes Ready */}
+          {model.status?.nodesReady && model.status.nodesReady.length > 0 && (
+            <div className="mt-6">
+              <dt className="text-sm font-medium text-gray-500 mb-2">
+                Ready on Nodes ({model.status.nodesReady.length})
+              </dt>
+              <dd className="flex flex-wrap gap-2">
+                {model.status.nodesReady.map((node: string, index: number) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800"
+                  >
+                    {node}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          )}
         </div>
 
         {/* Model Specification */}
@@ -130,6 +156,56 @@ export default function ModelDetailPage() {
                 {model.spec.modelFormat?.version && ` v${model.spec.modelFormat.version}`}
               </dd>
             </div>
+
+            {/* Model Configuration fields */}
+            {model.spec.modelConfiguration?.architecture && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Architecture</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {model.spec.modelConfiguration.architecture}
+                </dd>
+              </div>
+            )}
+            {model.spec.modelConfiguration?.model_type && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Model Type</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {model.spec.modelConfiguration.model_type}
+                </dd>
+              </div>
+            )}
+            {model.spec.modelConfiguration?.context_length && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Context Length</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {model.spec.modelConfiguration.context_length.toLocaleString()}
+                </dd>
+              </div>
+            )}
+            {model.spec.modelConfiguration?.torch_dtype && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Data Type</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {model.spec.modelConfiguration.torch_dtype}
+                </dd>
+              </div>
+            )}
+            {model.spec.modelConfiguration?.transformers_version && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Transformers Version</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {model.spec.modelConfiguration.transformers_version}
+                </dd>
+              </div>
+            )}
+            {model.spec.modelConfiguration?.has_vision !== undefined && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Vision Support</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {model.spec.modelConfiguration.has_vision ? 'Yes' : 'No'}
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
 
@@ -157,12 +233,29 @@ export default function ModelDetailPage() {
         {/* Resource Requirements */}
         <ResourceRequirements resources={model.spec.resources} />
 
-        {/* Raw YAML */}
+        {/* Raw Specification - Collapsible */}
         <div className="rounded-lg bg-white p-6 shadow">
-          <h2 className="mb-4 text-lg font-medium text-gray-900">Raw Specification</h2>
-          <pre className="overflow-x-auto rounded bg-gray-50 p-4 text-sm text-gray-800">
-            {JSON.stringify(model, null, 2)}
-          </pre>
+          <button
+            onClick={() => setShowRawSpec(!showRawSpec)}
+            className="flex w-full items-center justify-between text-left"
+          >
+            <h2 className="text-lg font-medium text-gray-900">Raw Specification</h2>
+            <svg
+              className={`h-5 w-5 transform text-gray-500 transition-transform ${
+                showRawSpec ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showRawSpec && (
+            <pre className="mt-4 overflow-x-auto rounded bg-gray-50 p-4 text-sm text-gray-800">
+              {JSON.stringify(model, null, 2)}
+            </pre>
+          )}
         </div>
       </main>
 
