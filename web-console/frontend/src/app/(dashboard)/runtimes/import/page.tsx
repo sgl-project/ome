@@ -99,6 +99,34 @@ export default function ImportRuntimePage() {
     event.preventDefault()
   }
 
+  // Validate and convert GitHub URL to raw URL
+  const convertToRawGitHubUrl = (url: string): string | null => {
+    try {
+      const parsedUrl = new URL(url)
+      const hostname = parsedUrl.hostname.toLowerCase()
+
+      // Only allow github.com and raw.githubusercontent.com
+      if (hostname === 'raw.githubusercontent.com') {
+        return url // Already a raw URL
+      }
+
+      if (hostname === 'github.com') {
+        // Convert github.com/user/repo/blob/branch/path to raw.githubusercontent.com/user/repo/branch/path
+        const pathParts = parsedUrl.pathname.split('/')
+        if (pathParts.length >= 5 && pathParts[3] === 'blob') {
+          // Remove 'blob' from path: /user/repo/blob/branch/path -> /user/repo/branch/path
+          pathParts.splice(3, 1)
+          return `https://raw.githubusercontent.com${pathParts.join('/')}`
+        }
+        return null // Invalid GitHub URL format
+      }
+
+      return null // Not a valid GitHub domain
+    } catch {
+      return null // Invalid URL
+    }
+  }
+
   // Fetch YAML from GitHub URL
   const fetchFromGitHub = async () => {
     if (!githubUrl) {
@@ -110,10 +138,12 @@ export default function ImportRuntimePage() {
     setError(null)
 
     try {
-      // Convert GitHub URL to raw URL if needed
-      let rawUrl = githubUrl
-      if (githubUrl.includes('github.com') && !githubUrl.includes('raw.githubusercontent.com')) {
-        rawUrl = githubUrl.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
+      // Validate and convert GitHub URL to raw URL
+      const rawUrl = convertToRawGitHubUrl(githubUrl)
+      if (!rawUrl) {
+        throw new Error(
+          'Invalid GitHub URL. Please use a URL from github.com or raw.githubusercontent.com pointing to a YAML file.'
+        )
       }
 
       const response = await fetch(`/api/v1/runtimes/fetch-yaml?url=${encodeURIComponent(rawUrl)}`)
