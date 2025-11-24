@@ -52,7 +52,7 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="border-b border-border/50 bg-card/80 backdrop-blur-sm shadow-sm">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

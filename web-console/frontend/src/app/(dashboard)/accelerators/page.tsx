@@ -26,11 +26,13 @@ export default function AcceleratorsPage() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <header className="relative border-b border-border/50 bg-card/50 backdrop-blur-sm animate-in">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Accelerator Classes</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Accelerator Classes
+            </h1>
+            <p className="mt-2 text-muted-foreground max-w-2xl">
               View available accelerator configurations for your cluster
             </p>
           </div>

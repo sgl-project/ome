@@ -23,7 +23,9 @@ export default function ServicesPage() {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex items-start justify-between gap-8">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight">Inference Services</h1>
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                Inference Services
+              </h1>
               <p className="mt-2 text-muted-foreground max-w-2xl">
                 Manage your InferenceService deployments
               </p>
