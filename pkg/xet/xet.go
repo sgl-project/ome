@@ -237,6 +237,38 @@ func (e *XetError) Error() string {
 	return fmt.Sprintf("xet error %d: %s", e.Code, e.Message)
 }
 
+// IsAuthFailedError checks if an error is an authentication failure (HTTP 401)
+// Error code 2 matches XetErrorCode::AuthFailed in Rust
+func IsAuthFailedError(err error) bool {
+	if xetErr, ok := err.(*XetError); ok {
+		return xetErr.Code == 2 // XetErrorCode::AuthFailed
+	}
+	return false
+}
+
+// IsPermissionDeniedError checks if an error is a permission denied error (HTTP 403)
+// Error code 5 matches XetErrorCode::PermissionDenied in Rust
+func IsPermissionDeniedError(err error) bool {
+	if xetErr, ok := err.(*XetError); ok {
+		return xetErr.Code == 5 // XetErrorCode::PermissionDenied
+	}
+	return false
+}
+
+// IsNotFoundError checks if an error is a not found error (HTTP 404)
+// Error code 4 matches XetErrorCode::NotFound in Rust
+func IsNotFoundError(err error) bool {
+	if xetErr, ok := err.(*XetError); ok {
+		return xetErr.Code == 4 // XetErrorCode::NotFound
+	}
+	return false
+}
+
+// IsFatalError checks if an error is one of the fatal errors (401, 403, 404) that should cause process exit
+func IsFatalError(err error) bool {
+	return IsAuthFailedError(err) || IsPermissionDeniedError(err) || IsNotFoundError(err)
+}
+
 // NewClient creates a new xet client
 func NewClient(config *Config) (*Client, error) {
 	if config == nil {
