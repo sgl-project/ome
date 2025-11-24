@@ -1,6 +1,9 @@
 package api
 
 import (
+	"os"
+	"strings"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/sgl-project/ome/web-console/backend/internal/handlers"
@@ -40,7 +43,11 @@ func (s *Server) SetupRoutes() *gin.Engine {
 
 	// CORS configuration
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000", "http://localhost:3001"}
+	if allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS"); allowedOrigins != "" {
+		config.AllowOrigins = strings.Split(allowedOrigins, ",")
+	} else {
+		config.AllowOrigins = []string{"http://localhost:3000", "http://localhost:3001"}
+	}
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	router.Use(cors.New(config))

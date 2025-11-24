@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { useServices } from '@/lib/hooks/useServices'
+import { useNamespaces } from '@/lib/hooks/useNamespaces'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -70,7 +72,9 @@ const Icons = {
 }
 
 export default function ServicesPage() {
-  const { data, isLoading, error } = useServices()
+  const [selectedNamespace, setSelectedNamespace] = useState<string>('')
+  const { data, isLoading, error } = useServices(selectedNamespace || undefined)
+  const { data: namespacesData } = useNamespaces()
 
   if (isLoading) {
     return <LoadingState message="Loading services..." />
@@ -145,8 +149,26 @@ export default function ServicesPage() {
 
         {/* Services Table */}
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="border-b border-border px-6 py-4 bg-muted/30">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
             <h3 className="text-base font-semibold tracking-tight">All Services</h3>
+            <div className="flex items-center gap-3">
+              <label htmlFor="namespace" className="text-sm font-medium text-muted-foreground">
+                Namespace:
+              </label>
+              <select
+                id="namespace"
+                value={selectedNamespace}
+                onChange={(e) => setSelectedNamespace(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="">All namespaces</option>
+                {namespacesData?.items.map((ns) => (
+                  <option key={ns} value={ns}>
+                    {ns}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border">

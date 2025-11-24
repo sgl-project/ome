@@ -3,7 +3,7 @@
 
 .PHONY: help dev dev-frontend dev-backend build build-frontend build-backend \
         run-backend start-frontend install install-frontend install-backend \
-        clean lint test
+        clean lint test test-backend test-frontend
 
 # Colors for terminal output
 CYAN := \033[36m
@@ -103,11 +103,15 @@ typecheck: ## Run TypeScript type checking
 	@echo "$(CYAN)Type checking frontend...$(RESET)"
 	@cd $(FRONTEND_DIR) && npm run typecheck
 
-test: test-backend ## Run all tests
+test: test-backend test-frontend ## Run all tests
 
 test-backend: ## Run backend tests
 	@echo "$(CYAN)Running backend tests...$(RESET)"
 	@cd $(BACKEND_DIR) && go test -v ./...
+
+test-frontend: ## Run frontend tests (typecheck)
+	@echo "$(CYAN)Running frontend tests...$(RESET)"
+	@cd $(FRONTEND_DIR) && npm run test
 
 ##@ Utilities
 

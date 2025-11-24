@@ -10,7 +10,8 @@
     "lint:fix": "next lint --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"No test framework configured yet. Run 'npm run typecheck' for type checking.\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -3,6 +3,8 @@ package handlers
 import (
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +14,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// allowedHosts is a list of trusted hosts for fetching YAML files
+var allowedHosts = []string{
+	"raw.githubusercontent.com",
+	"github.com",
+	"gist.githubusercontent.com",
+	"gitlab.com",
+	"bitbucket.org",
+}
 
 // RuntimesHandler handles HTTP requests for ClusterServingRuntime resources
 type RuntimesHandler struct {
@@ -198,12 +209,52 @@ func (h *RuntimesHandler) Delete(c *gin.Context) {
 	})
 }
 
+// isAllowedHost checks if the URL host is in the allowed list
+func isAllowedHost(urlStr string) (bool, error) {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false, err
+	}
+
+	// Only allow HTTPS
+	if parsedURL.Scheme != "https" {
+		return false, nil
+	}
+
+	host := strings.ToLower(parsedURL.Host)
+	for _, allowed := range allowedHosts {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // FetchYAML handles GET /api/v1/runtimes/fetch-yaml?url=<url>
 func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
-	url := c.Query("url")
-	if url == "" {
+	urlStr := c.Query("url")
+	if urlStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "URL parameter is required",
+		})
+		return
+	}
+
+	// Validate URL against allowed hosts to prevent SSRF attacks
+	allowed, err := isAllowedHost(urlStr)
+	if err != nil {
+		h.logger.Error("Failed to parse URL", zap.String("url", urlStr), zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid URL format",
+			"details": err.Error(),
+		})
+		return
+	}
+	if !allowed {
+		h.logger.Warn("URL fetch blocked - host not in allowed list", zap.String("url", urlStr))
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "URL not allowed",
+			"details": "Only HTTPS URLs from trusted hosts (GitHub, GitLab, Bitbucket) are allowed",
 		})
 		return
 	}
@@ -214,9 +265,9 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 	}
 
 	// Fetch the URL
-	resp, err := client.Get(url)
+	resp, err := client.Get(urlStr)
 	if err != nil {
-		h.logger.Error("Failed to fetch URL", zap.String("url", url), zap.Error(err))
+		h.logger.Error("Failed to fetch URL", zap.String("url", urlStr), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to fetch URL",
 			"details": err.Error(),
@@ -227,7 +278,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 
 	if resp.StatusCode != http.StatusOK {
 		h.logger.Error("URL returned non-200 status",
-			zap.String("url", url),
+			zap.String("url", urlStr),
 			zap.Int("status", resp.StatusCode))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to fetch URL",
@@ -247,7 +298,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Successfully fetched YAML from URL", zap.String("url", url))
+	h.logger.Info("Successfully fetched YAML from URL", zap.String("url", urlStr))
 	c.JSON(http.StatusOK, gin.H{
 		"content": string(content),
 	})
