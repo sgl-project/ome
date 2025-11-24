@@ -12,6 +12,7 @@ Build a modern web interface for managing OME resources with focus on user exper
 - **Phase 1**: Foundation - Backend API + Frontend Setup
 - **Phase 2 (Week 3-4)**: Models Management - Full CRUD + HuggingFace Integration
 - **Phase 3 (Week 5)**: Runtimes Management - Full CRUD (list, detail, create, delete)
+- **Phase 5 (Partial)**: UI/UX Polish - Modern design system with gradient effects and animations
 
 ### 🚀 Live Services
 - **Backend API**: Running on `http://localhost:8080`
@@ -22,7 +23,9 @@ Build a modern web interface for managing OME resources with focus on user exper
 - ✅ **Phase 1**: 100% Complete
 - ✅ **Phase 2**: 100% Complete (CRUD + HuggingFace import wizard)
 - ⏳ **Phase 3**: 75% Complete (CRUD done, intelligence features pending)
-- ⏸️ **Phase 4-6**: Not started
+- ⏸️ **Phase 4**: Services Management (basic list view done, deployment wizard pending)
+- ⏳ **Phase 5**: 40% Complete (UI/UX polish done, YAML editor pending)
+- ⏸️ **Phase 6**: Not started
 
 ### 🎨 Key Features Implemented
 - **Models Management**:
@@ -30,17 +33,33 @@ Build a modern web interface for managing OME resources with focus on user exper
   - HuggingFace import wizard with 3-step process (search → scope → review)
   - Auto-detection of model format, architecture, and configuration from HF model hub
   - Model scope selector (cluster vs namespace)
-- **Runtimes Management**: List, create, view details, delete with confirmation modal
+  - Namespace filtering and sorting capabilities
+- **Runtimes Management**:
+  - List, create, view details, delete with confirmation modal
+  - Namespace filtering support
+  - Sortable table columns
+- **Inference Services**:
+  - Basic list view with status indicators
+  - Real-time status updates (Ready, Running, Pending, Failed)
 - **Type-Safe Forms**: React Hook Form + Zod validation for both resources
-- **Responsive UI**: Tailwind CSS with sidebar navigation and color-coded themes
+- **Modern UI/UX**:
+  - Gradient purple/fading titles across all pages
+  - Animated stat cards with hover effects and custom SVG icons
+  - Consistent button styling with gradient effects (primary to accent)
+  - Backdrop blur and glassmorphism effects
+  - Smooth transitions and staggered animations
+  - Custom gradient borders for primary actions
+  - Landing page with bold aesthetic at root route (`/`)
+  - Dashboard moved to `/dashboard` route
 - **API Integration**: TanStack Query for data fetching and mutations
 - **HuggingFace Integration**: Search, metadata retrieval, config.json parsing, format detection
 
 ### 📝 Next Steps
 1. Implement edit functionality for Models and Runtimes
-2. Implement Services management (Phase 4)
+2. Complete Services deployment wizard (Phase 4)
 3. Add search and filtering capabilities for resource lists
 4. Add runtime intelligence features (auto-selection, compatibility checking)
+5. Implement YAML editor with Monaco (Phase 5)
 
 ---
 
