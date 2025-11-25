@@ -141,7 +141,7 @@ func UpdateVolumeMounts(container *v1.Container, baseModelName string, baseModel
 	}
 
 	isvcutils.AppendVolumeMount(container, &volumeMount)
-	isvcutils.AppendEnvVars(container, &[]v1.EnvVar{
+	isvcutils.AppendEnvVarsIfNotExist(container, &[]v1.EnvVar{
 		{Name: "MODEL_PATH", Value: *baseModel.Storage.Path},
 	})
 }

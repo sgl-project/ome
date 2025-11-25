@@ -40,8 +40,23 @@ func AppendVolumeMountIfNotExist(container *v1.Container, volumeMount *v1.Volume
 	container.VolumeMounts = append(container.VolumeMounts, *volumeMount)
 }
 
-func AppendEnvVars(container *v1.Container, envVars *[]v1.EnvVar) {
-	container.Env = append(container.Env, *envVars...)
+func AppendEnvVarsIfNotExist(container *v1.Container, envVars *[]v1.EnvVar) {
+	if envVars == nil {
+		return
+	}
+
+	for _, envVar := range *envVars {
+		var exists bool
+		for i := range container.Env {
+			if container.Env[i].Name == envVar.Name {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			container.Env = append(container.Env, envVar)
+		}
+	}
 }
 
 func UpdateEnvVars(container *v1.Container, envVar *v1.EnvVar) {
