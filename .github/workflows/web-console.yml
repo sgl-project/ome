@@ -39,27 +39,22 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          npm cache clean --force
-          npm install
-          # Verify next was installed
-          test -f node_modules/.bin/next || (echo "ERROR: next not installed" && exit 1)
+        run: yarn install
 
       - name: Run ESLint
-        run: npm run lint
+        run: yarn lint
 
       - name: Run Prettier check
-        run: npm run format:check
+        run: yarn format:check
 
       - name: Run TypeScript type check
-        run: npm run typecheck
-        continue-on-error: true  # TODO: Fix TypeScript errors and make this required
+        run: yarn typecheck
 
       - name: Build
-        run: npm run build
+        run: yarn build
 
       - name: Run tests
-        run: npm test
+        run: yarn test
 
   # Backend checks - build and vet
   backend:

@@ -1,6 +1,6 @@
 'use client'
 
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm, useFieldArray, FieldValues } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { clusterServingRuntimeSchema } from '@/lib/validation/runtime-schema'
 import Link from 'next/link'
@@ -8,6 +8,9 @@ import { useState, useEffect } from 'react'
 import { ContainerForm } from '@/components/forms/ContainerForm'
 import { VolumeForm } from '@/components/forms/VolumeForm'
 import type { ClusterServingRuntime } from '@/lib/types/runtime'
+
+// Runtime form data type - more permissive for complex nested forms
+type RuntimeFormData = FieldValues
 
 interface RuntimeFormProps {
   mode: 'create' | 'edit'
@@ -57,8 +60,8 @@ export function RuntimeForm({
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm({
-    resolver: zodResolver(clusterServingRuntimeSchema),
+  } = useForm<RuntimeFormData>({
+    resolver: zodResolver(clusterServingRuntimeSchema) as any,
     defaultValues,
   })
 
@@ -304,9 +307,9 @@ export function RuntimeForm({
                       Name cannot be changed after creation
                     </p>
                   ) : (
-                    errors.metadata?.name && (
+                    (errors.metadata as any)?.name && (
                       <p className="mt-1.5 text-xs text-red-600">
-                        {errors.metadata.name.message as string}
+                        {(errors.metadata as any).name.message as string}
                       </p>
                     )
                   )}
@@ -476,9 +479,12 @@ export function RuntimeForm({
                           <option value="tensorflow">TensorFlow</option>
                           <option value="huggingface">HuggingFace</option>
                         </select>
-                        {errors.spec?.supportedModelFormats?.[index]?.name && (
+                        {(errors.spec as any)?.supportedModelFormats?.[index]?.name && (
                           <p className="mt-1 text-xs text-red-600">
-                            {errors.spec.supportedModelFormats[index]?.name?.message as string}
+                            {
+                              (errors.spec as any).supportedModelFormats[index]?.name
+                                ?.message as string
+                            }
                           </p>
                         )}
                       </div>

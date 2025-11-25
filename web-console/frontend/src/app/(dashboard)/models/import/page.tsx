@@ -381,9 +381,7 @@ export default function ImportModelPage() {
               <div>
                 <label htmlFor="hfToken" className="block text-sm font-medium text-gray-700">
                   HuggingFace Token
-                  {selectedModel?.gated && selectedModel.gated !== false && (
-                    <span className="ml-1 text-red-600">*</span>
-                  )}
+                  {selectedModel?.gated && <span className="ml-1 text-red-600">*</span>}
                 </label>
                 <input
                   type="password"
@@ -394,7 +392,7 @@ export default function ImportModelPage() {
                   placeholder="hf_..."
                 />
                 <p className="mt-1 text-sm text-gray-500">
-                  {selectedModel?.gated && selectedModel.gated !== false ? (
+                  {selectedModel?.gated ? (
                     <span className="text-amber-600">
                       ⚠️ This model is gated and requires a HuggingFace token
                     </span>
