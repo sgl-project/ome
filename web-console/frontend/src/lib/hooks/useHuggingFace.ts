@@ -22,7 +22,7 @@ export function useHuggingFaceSearch(params: HuggingFaceSearchParams) {
       if (params.direction) searchParams.append('direction', params.direction)
       if (params.limit) searchParams.append('limit', params.limit.toString())
       if (params.tags) {
-        params.tags.forEach(tag => searchParams.append('tags', tag))
+        params.tags.forEach((tag) => searchParams.append('tags', tag))
       }
 
       const url = `${API_BASE_URL}/api/v1/huggingface/models/search?${searchParams.toString()}`

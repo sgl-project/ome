@@ -1,5 +1,10 @@
 import { apiClient } from './client'
-import { ClusterServingRuntime, RuntimeMatch, CompatibilityCheck, RuntimeValidationResult } from '../types/runtime'
+import {
+  ClusterServingRuntime,
+  RuntimeMatch,
+  CompatibilityCheck,
+  RuntimeValidationResult,
+} from '../types/runtime'
 
 export interface RuntimeListResponse {
   items: ClusterServingRuntime[]
@@ -28,7 +33,10 @@ export const runtimesApi = {
     return response.data
   },
 
-  update: async (name: string, runtime: Partial<ClusterServingRuntime>): Promise<ClusterServingRuntime> => {
+  update: async (
+    name: string,
+    runtime: Partial<ClusterServingRuntime>
+  ): Promise<ClusterServingRuntime> => {
     const response = await apiClient.put<ClusterServingRuntime>(`/runtimes/${name}`, runtime)
     return response.data
   },
@@ -38,17 +46,28 @@ export const runtimesApi = {
   },
 
   // Intelligence features
-  findCompatible: async (format: string, framework?: string): Promise<CompatibleRuntimesResponse> => {
+  findCompatible: async (
+    format: string,
+    framework?: string
+  ): Promise<CompatibleRuntimesResponse> => {
     const params: Record<string, string> = { format }
     if (framework) params.framework = framework
-    const response = await apiClient.get<CompatibleRuntimesResponse>('/runtimes/compatible', { params })
+    const response = await apiClient.get<CompatibleRuntimesResponse>('/runtimes/compatible', {
+      params,
+    })
     return response.data
   },
 
-  checkCompatibility: async (name: string, format: string, framework?: string): Promise<CompatibilityCheck> => {
+  checkCompatibility: async (
+    name: string,
+    format: string,
+    framework?: string
+  ): Promise<CompatibilityCheck> => {
     const params: Record<string, string> = { format }
     if (framework) params.framework = framework
-    const response = await apiClient.get<CompatibilityCheck>(`/runtimes/${name}/compatibility`, { params })
+    const response = await apiClient.get<CompatibilityCheck>(`/runtimes/${name}/compatibility`, {
+      params,
+    })
     return response.data
   },
 
@@ -65,7 +84,9 @@ export const runtimesApi = {
   },
 
   clone: async (name: string, newName: string): Promise<ClusterServingRuntime> => {
-    const response = await apiClient.post<ClusterServingRuntime>(`/runtimes/${name}/clone`, { newName })
+    const response = await apiClient.post<ClusterServingRuntime>(`/runtimes/${name}/clone`, {
+      newName,
+    })
     return response.data
   },
 }

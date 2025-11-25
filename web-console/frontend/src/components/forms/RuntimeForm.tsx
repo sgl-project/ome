@@ -1,6 +1,6 @@
 'use client'
 
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm, useFieldArray, FieldValues } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { clusterServingRuntimeSchema } from '@/lib/validation/runtime-schema'
 import Link from 'next/link'
@@ -8,6 +8,9 @@ import { useState, useEffect } from 'react'
 import { ContainerForm } from '@/components/forms/ContainerForm'
 import { VolumeForm } from '@/components/forms/VolumeForm'
 import type { ClusterServingRuntime } from '@/lib/types/runtime'
+
+// Runtime form data type - more permissive for complex nested forms
+type RuntimeFormData = FieldValues
 
 interface RuntimeFormProps {
   mode: 'create' | 'edit'
@@ -57,8 +60,8 @@ export function RuntimeForm({
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm({
-    resolver: zodResolver(clusterServingRuntimeSchema),
+  } = useForm<RuntimeFormData>({
+    resolver: zodResolver(clusterServingRuntimeSchema) as any,
     defaultValues,
   })
 
@@ -209,17 +212,35 @@ export function RuntimeForm({
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50">
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-        .font-display { font-family: 'Space Grotesk', sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .input-focus { transition: all 0.2s ease; }
-        .input-focus:focus { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(147, 51, 234, 0.15); }
+        .font-display {
+          font-family: 'Space Grotesk', sans-serif;
+        }
+        .font-mono {
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .input-focus {
+          transition: all 0.2s ease;
+        }
+        .input-focus:focus {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(147, 51, 234, 0.15);
+        }
         .section-card {
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+          background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.9) 0%,
+            rgba(255, 255, 255, 0.95) 100%
+          );
           backdrop-filter: blur(10px);
           border: 1px solid rgba(148, 163, 184, 0.1);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(148, 163, 184, 0.05);
+          box-shadow:
+            0 2px 8px rgba(0, 0, 0, 0.04),
+            0 0 0 1px rgba(148, 163, 184, 0.05);
         }
-        .field-label { font-weight: 500; letter-spacing: -0.01em; }
+        .field-label {
+          font-weight: 500;
+          letter-spacing: -0.01em;
+        }
       `}</style>
 
       {/* Header */}
@@ -238,11 +259,14 @@ export function RuntimeForm({
           <p className="mt-2 text-sm text-slate-600 font-medium">
             {isEditMode ? (
               <>
-                Configure <span className="font-mono text-purple-600">{initialData?.metadata?.name}</span> runtime settings
+                Configure{' '}
+                <span className="font-mono text-purple-600">{initialData?.metadata?.name}</span>{' '}
+                runtime settings
               </>
             ) : (
               <>
-                Define a new <span className="font-mono text-purple-600">ClusterServingRuntime</span> resource
+                Define a new{' '}
+                <span className="font-mono text-purple-600">ClusterServingRuntime</span> resource
               </>
             )}
           </p>
@@ -279,16 +303,23 @@ export function RuntimeForm({
                     placeholder="my-runtime"
                   />
                   {isEditMode ? (
-                    <p className="mt-1.5 text-xs text-slate-500">Name cannot be changed after creation</p>
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Name cannot be changed after creation
+                    </p>
                   ) : (
-                    errors.metadata?.name && (
-                      <p className="mt-1.5 text-xs text-red-600">{errors.metadata.name.message as string}</p>
+                    (errors.metadata as any)?.name && (
+                      <p className="mt-1.5 text-xs text-red-600">
+                        {(errors.metadata as any).name.message as string}
+                      </p>
                     )
                   )}
                 </div>
 
                 <div>
-                  <label htmlFor="namespace" className="field-label block text-sm text-slate-700 mb-2">
+                  <label
+                    htmlFor="namespace"
+                    className="field-label block text-sm text-slate-700 mb-2"
+                  >
                     Namespace
                   </label>
                   <input
@@ -304,7 +335,9 @@ export function RuntimeForm({
                     placeholder={isEditMode ? 'default' : 'Leave empty for cluster-scoped'}
                   />
                   <p className="mt-1.5 text-xs text-slate-500">
-                    {isEditMode ? 'Namespace cannot be changed' : 'Leave empty for ClusterServingRuntime (cluster-scoped)'}
+                    {isEditMode
+                      ? 'Namespace cannot be changed'
+                      : 'Leave empty for ClusterServingRuntime (cluster-scoped)'}
                   </p>
                 </div>
 
@@ -317,16 +350,22 @@ export function RuntimeForm({
                   />
                   <label htmlFor="disabled" className="flex-1">
                     <span className="field-label text-sm text-slate-700 block">Disabled</span>
-                    <span className="text-xs text-slate-500">Disable this runtime from being selected</span>
+                    <span className="text-xs text-slate-500">
+                      Disable this runtime from being selected
+                    </span>
                   </label>
                 </div>
               </div>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Model Size Range</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Model Size Range
+                </h3>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Minimum Size</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Minimum Size
+                    </label>
                     <input
                       type="text"
                       {...register('spec.modelSizeRange.min')}
@@ -335,7 +374,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Maximum Size</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Maximum Size
+                    </label>
                     <input
                       type="text"
                       {...register('spec.modelSizeRange.max')}
@@ -348,7 +389,9 @@ export function RuntimeForm({
 
               <div>
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-base font-display font-semibold text-slate-700">Protocol Versions</h3>
+                  <h3 className="text-base font-display font-semibold text-slate-700">
+                    Protocol Versions
+                  </h3>
                   <button
                     type="button"
                     onClick={() => appendProtocol('')}
@@ -387,7 +430,9 @@ export function RuntimeForm({
           <AccordionSection id="model-formats" title="Supported Model Formats">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">Define the model formats this runtime can execute</p>
+                <p className="text-sm text-slate-600">
+                  Define the model formats this runtime can execute
+                </p>
                 <button
                   type="button"
                   onClick={() => appendFormat({ name: '' })}
@@ -399,9 +444,14 @@ export function RuntimeForm({
 
               <div className="space-y-4">
                 {formatFields.map((field, index) => (
-                  <div key={field.id} className="rounded-xl border border-slate-200 bg-white/50 p-5">
+                  <div
+                    key={field.id}
+                    className="rounded-xl border border-slate-200 bg-white/50 p-5"
+                  >
                     <div className="mb-4 flex items-center justify-between">
-                      <h4 className="text-sm font-display font-semibold text-slate-700">Format {index + 1}</h4>
+                      <h4 className="text-sm font-display font-semibold text-slate-700">
+                        Format {index + 1}
+                      </h4>
                       {formatFields.length > 1 && (
                         <button
                           type="button"
@@ -415,7 +465,9 @@ export function RuntimeForm({
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="field-label block text-sm text-slate-700 mb-2">Format Name *</label>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Format Name *
+                        </label>
                         <select
                           {...register(`spec.supportedModelFormats.${index}.name` as const)}
                           className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -427,15 +479,20 @@ export function RuntimeForm({
                           <option value="tensorflow">TensorFlow</option>
                           <option value="huggingface">HuggingFace</option>
                         </select>
-                        {errors.spec?.supportedModelFormats?.[index]?.name && (
+                        {(errors.spec as any)?.supportedModelFormats?.[index]?.name && (
                           <p className="mt-1 text-xs text-red-600">
-                            {errors.spec.supportedModelFormats[index]?.name?.message as string}
+                            {
+                              (errors.spec as any).supportedModelFormats[index]?.name
+                                ?.message as string
+                            }
                           </p>
                         )}
                       </div>
 
                       <div>
-                        <label className="field-label block text-sm text-slate-700 mb-2">Version</label>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Version
+                        </label>
                         <input
                           type="text"
                           {...register(`spec.supportedModelFormats.${index}.version` as const)}
@@ -445,7 +502,9 @@ export function RuntimeForm({
                       </div>
 
                       <div>
-                        <label className="field-label block text-sm text-slate-700 mb-2">Model Type</label>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Model Type
+                        </label>
                         <input
                           type="text"
                           {...register(`spec.supportedModelFormats.${index}.modelType` as const)}
@@ -455,17 +514,23 @@ export function RuntimeForm({
                       </div>
 
                       <div>
-                        <label className="field-label block text-sm text-slate-700 mb-2">Model Architecture</label>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Model Architecture
+                        </label>
                         <input
                           type="text"
-                          {...register(`spec.supportedModelFormats.${index}.modelArchitecture` as const)}
+                          {...register(
+                            `spec.supportedModelFormats.${index}.modelArchitecture` as const
+                          )}
                           className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                           placeholder="LlamaForCausalLM"
                         />
                       </div>
 
                       <div>
-                        <label className="field-label block text-sm text-slate-700 mb-2">Quantization</label>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Quantization
+                        </label>
                         <select
                           {...register(`spec.supportedModelFormats.${index}.quantization` as const)}
                           className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -478,10 +543,14 @@ export function RuntimeForm({
                       </div>
 
                       <div>
-                        <label className="field-label block text-sm text-slate-700 mb-2">Priority</label>
+                        <label className="field-label block text-sm text-slate-700 mb-2">
+                          Priority
+                        </label>
                         <input
                           type="number"
-                          {...register(`spec.supportedModelFormats.${index}.priority` as const, { valueAsNumber: true })}
+                          {...register(`spec.supportedModelFormats.${index}.priority` as const, {
+                            valueAsNumber: true,
+                          })}
                           className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                           placeholder="0"
                         />
@@ -509,10 +578,14 @@ export function RuntimeForm({
 
               {/* Scaling Configuration */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Scaling Configuration
+                </h3>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Min Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.minReplicas', { valueAsNumber: true })}
@@ -521,7 +594,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Max Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.maxReplicas', { valueAsNumber: true })}
@@ -530,7 +605,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Target
+                    </label>
                     <input
                       type="number"
                       {...register('spec.engineConfig.scaleTarget', { valueAsNumber: true })}
@@ -539,7 +616,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Metric
+                    </label>
                     <select
                       {...register('spec.engineConfig.scaleMetric')}
                       className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -556,8 +635,14 @@ export function RuntimeForm({
 
               {/* Runner */}
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
-                <ContainerForm basePath="spec.engineConfig.runner" register={register} control={control} />
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Runner (Main Container)
+                </h3>
+                <ContainerForm
+                  basePath="spec.engineConfig.runner"
+                  register={register}
+                  control={control}
+                />
               </div>
 
               {/* Multi-Node Toggle */}
@@ -570,8 +655,12 @@ export function RuntimeForm({
                     className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                   />
                   <div>
-                    <span className="field-label text-sm text-slate-700 block">Enable Multi-Node Deployment</span>
-                    <span className="text-xs text-slate-600">Configure leader and worker nodes for distributed inference</span>
+                    <span className="field-label text-sm text-slate-700 block">
+                      Enable Multi-Node Deployment
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      Configure leader and worker nodes for distributed inference
+                    </span>
                   </div>
                 </label>
               </div>
@@ -579,15 +668,29 @@ export function RuntimeForm({
               {engineMultiNode && (
                 <>
                   <div>
-                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Leader Node Configuration</h3>
-                    <p className="text-xs text-slate-500 mb-4">Coordinates distributed inference across worker nodes</p>
-                    <ContainerForm basePath="spec.engineConfig.leader.runner" register={register} control={control} />
+                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                      Leader Node Configuration
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Coordinates distributed inference across worker nodes
+                    </p>
+                    <ContainerForm
+                      basePath="spec.engineConfig.leader.runner"
+                      register={register}
+                      control={control}
+                    />
                   </div>
                   <div>
-                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Worker Node Configuration</h3>
-                    <p className="text-xs text-slate-500 mb-4">Performs distributed processing tasks</p>
+                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                      Worker Node Configuration
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Performs distributed processing tasks
+                    </p>
                     <div className="mb-4">
-                      <label className="field-label block text-sm text-slate-700 mb-2">Worker Size (Number of Pods)</label>
+                      <label className="field-label block text-sm text-slate-700 mb-2">
+                        Worker Size (Number of Pods)
+                      </label>
                       <input
                         type="number"
                         {...register('spec.engineConfig.worker.size', { valueAsNumber: true })}
@@ -595,19 +698,31 @@ export function RuntimeForm({
                         placeholder="1"
                       />
                     </div>
-                    <ContainerForm basePath="spec.engineConfig.worker.runner" register={register} control={control} />
+                    <ContainerForm
+                      basePath="spec.engineConfig.worker.runner"
+                      register={register}
+                      control={control}
+                    />
                   </div>
                 </>
               )}
 
-              <VolumeForm basePath="spec.engineConfig.volumes" register={register} control={control} />
+              <VolumeForm
+                basePath="spec.engineConfig.volumes"
+                register={register}
+                control={control}
+              />
 
               {/* Init Containers */}
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Init Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run before the main container starts
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -639,8 +754,12 @@ export function RuntimeForm({
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Sidecar Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run alongside the main container
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -673,13 +792,19 @@ export function RuntimeForm({
           {/* Decoder Configuration */}
           <AccordionSection id="decoder" title="Decoder Configuration">
             <div className="space-y-8">
-              <p className="text-sm text-slate-600">Configure the decoder component for prefill-decode disaggregated deployments</p>
+              <p className="text-sm text-slate-600">
+                Configure the decoder component for prefill-decode disaggregated deployments
+              </p>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Scaling Configuration
+                </h3>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Min Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.minReplicas', { valueAsNumber: true })}
@@ -688,7 +813,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Max Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.maxReplicas', { valueAsNumber: true })}
@@ -697,7 +824,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Target
+                    </label>
                     <input
                       type="number"
                       {...register('spec.decoderConfig.scaleTarget', { valueAsNumber: true })}
@@ -706,7 +835,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Metric
+                    </label>
                     <select
                       {...register('spec.decoderConfig.scaleMetric')}
                       className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -722,8 +853,14 @@ export function RuntimeForm({
               </div>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
-                <ContainerForm basePath="spec.decoderConfig.runner" register={register} control={control} />
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Runner (Main Container)
+                </h3>
+                <ContainerForm
+                  basePath="spec.decoderConfig.runner"
+                  register={register}
+                  control={control}
+                />
               </div>
 
               <div className="rounded-lg bg-purple-50 border border-purple-200 p-4">
@@ -735,8 +872,12 @@ export function RuntimeForm({
                     className="h-5 w-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                   />
                   <div>
-                    <span className="field-label text-sm text-slate-700 block">Enable Multi-Node Deployment</span>
-                    <span className="text-xs text-slate-600">Configure leader and worker nodes for distributed token generation</span>
+                    <span className="field-label text-sm text-slate-700 block">
+                      Enable Multi-Node Deployment
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      Configure leader and worker nodes for distributed token generation
+                    </span>
                   </div>
                 </label>
               </div>
@@ -744,15 +885,29 @@ export function RuntimeForm({
               {decoderMultiNode && (
                 <>
                   <div>
-                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Leader Node Configuration</h3>
-                    <p className="text-xs text-slate-500 mb-4">Coordinates distributed token generation across worker nodes</p>
-                    <ContainerForm basePath="spec.decoderConfig.leader.runner" register={register} control={control} />
+                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                      Leader Node Configuration
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Coordinates distributed token generation across worker nodes
+                    </p>
+                    <ContainerForm
+                      basePath="spec.decoderConfig.leader.runner"
+                      register={register}
+                      control={control}
+                    />
                   </div>
                   <div>
-                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Worker Node Configuration</h3>
-                    <p className="text-xs text-slate-500 mb-4">Performs distributed token generation tasks</p>
+                    <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                      Worker Node Configuration
+                    </h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Performs distributed token generation tasks
+                    </p>
                     <div className="mb-4">
-                      <label className="field-label block text-sm text-slate-700 mb-2">Worker Size (Number of Pods)</label>
+                      <label className="field-label block text-sm text-slate-700 mb-2">
+                        Worker Size (Number of Pods)
+                      </label>
                       <input
                         type="number"
                         {...register('spec.decoderConfig.worker.size', { valueAsNumber: true })}
@@ -760,18 +915,30 @@ export function RuntimeForm({
                         placeholder="1"
                       />
                     </div>
-                    <ContainerForm basePath="spec.decoderConfig.worker.runner" register={register} control={control} />
+                    <ContainerForm
+                      basePath="spec.decoderConfig.worker.runner"
+                      register={register}
+                      control={control}
+                    />
                   </div>
                 </>
               )}
 
-              <VolumeForm basePath="spec.decoderConfig.volumes" register={register} control={control} />
+              <VolumeForm
+                basePath="spec.decoderConfig.volumes"
+                register={register}
+                control={control}
+              />
 
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Init Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run before the main container starts
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -802,8 +969,12 @@ export function RuntimeForm({
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Sidecar Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run alongside the main container
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -836,13 +1007,19 @@ export function RuntimeForm({
           {/* Router Configuration */}
           <AccordionSection id="router" title="Router Configuration">
             <div className="space-y-8">
-              <p className="text-sm text-slate-600">Configure the router component for request routing and load balancing</p>
+              <p className="text-sm text-slate-600">
+                Configure the router component for request routing and load balancing
+              </p>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Scaling Configuration</h3>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Scaling Configuration
+                </h3>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Min Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Min Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.routerConfig.minReplicas', { valueAsNumber: true })}
@@ -851,7 +1028,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Max Replicas</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Max Replicas
+                    </label>
                     <input
                       type="number"
                       {...register('spec.routerConfig.maxReplicas', { valueAsNumber: true })}
@@ -860,7 +1039,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Target</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Target
+                    </label>
                     <input
                       type="number"
                       {...register('spec.routerConfig.scaleTarget', { valueAsNumber: true })}
@@ -869,7 +1050,9 @@ export function RuntimeForm({
                     />
                   </div>
                   <div>
-                    <label className="field-label block text-sm text-slate-700 mb-2">Scale Metric</label>
+                    <label className="field-label block text-sm text-slate-700 mb-2">
+                      Scale Metric
+                    </label>
                     <select
                       {...register('spec.routerConfig.scaleMetric')}
                       className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
@@ -885,13 +1068,23 @@ export function RuntimeForm({
               </div>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Runner (Main Container)</h3>
-                <ContainerForm basePath="spec.routerConfig.runner" register={register} control={control} />
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Runner (Main Container)
+                </h3>
+                <ContainerForm
+                  basePath="spec.routerConfig.runner"
+                  register={register}
+                  control={control}
+                />
               </div>
 
               <div>
-                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">Router Configuration Parameters</h3>
-                <p className="text-xs text-slate-500 mb-3">Additional configuration parameters as key-value pairs (JSON format)</p>
+                <h3 className="text-base font-display font-semibold text-slate-700 mb-4">
+                  Router Configuration Parameters
+                </h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  Additional configuration parameters as key-value pairs (JSON format)
+                </p>
                 <textarea
                   {...register('spec.routerConfig.config')}
                   className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 min-h-[100px]"
@@ -899,13 +1092,21 @@ export function RuntimeForm({
                 />
               </div>
 
-              <VolumeForm basePath="spec.routerConfig.volumes" register={register} control={control} />
+              <VolumeForm
+                basePath="spec.routerConfig.volumes"
+                register={register}
+                control={control}
+              />
 
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Init Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run before the main container starts</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Init Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run before the main container starts
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -936,8 +1137,12 @@ export function RuntimeForm({
               <div>
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h5 className="text-sm font-display font-semibold text-slate-700">Sidecar Containers</h5>
-                    <p className="text-xs text-slate-500 mt-1">Containers that run alongside the main container</p>
+                    <h5 className="text-sm font-display font-semibold text-slate-700">
+                      Sidecar Containers
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Containers that run alongside the main container
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -981,8 +1186,12 @@ export function RuntimeForm({
               className="rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {isSubmitting
-                ? isEditMode ? 'Updating...' : 'Creating...'
-                : isEditMode ? 'Update Runtime' : 'Create Runtime'}
+                ? isEditMode
+                  ? 'Updating...'
+                  : 'Creating...'
+                : isEditMode
+                  ? 'Update Runtime'
+                  : 'Create Runtime'}
             </button>
           </div>
         </form>

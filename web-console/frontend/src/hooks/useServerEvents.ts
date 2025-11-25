@@ -81,7 +81,9 @@ export function useServerEvents(options: UseServerEventsOptions = {}) {
       // Exponential backoff reconnection
       if (reconnectAttempts.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
-        console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`)
+        console.log(
+          `[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`
+        )
         reconnectTimeoutRef.current = setTimeout(() => {
           reconnectAttempts.current++
           connect()

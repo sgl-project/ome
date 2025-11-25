@@ -31,17 +31,12 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={onClose} />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative w-full max-w-md transform rounded-lg bg-white p-6 shadow-xl transition-all">
-          <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
-            {title}
-          </h3>
+          <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">{title}</h3>
           {children}
         </div>
       </div>
@@ -70,7 +65,8 @@ export function ConfirmDeleteModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Confirm Deletion">
       <div className="mb-4">
         <p className="text-sm text-gray-500">
-          Are you sure you want to delete <span className="font-semibold text-gray-900">{resourceName}</span>?
+          Are you sure you want to delete{' '}
+          <span className="font-semibold text-gray-900">{resourceName}</span>?
         </p>
         <p className="mt-2 text-sm text-gray-500">
           This {resourceType} will be permanently removed. This action cannot be undone.

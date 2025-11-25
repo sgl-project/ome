@@ -5,10 +5,12 @@ interface ModelFormat {
     version?: string
   }
   modelArchitecture?: string
-  quantization?: {
-    name: string
-    bits?: number
-  }
+  quantization?:
+    | string
+    | {
+        name: string
+        bits?: number
+      }
   version?: string
   autoSelect?: boolean
   priority?: number
@@ -53,8 +55,9 @@ export function ModelFormatsDisplay({ formats }: ModelFormatsDisplayProps) {
                 <div className="flex gap-2">
                   <span className="font-medium text-purple-700 min-w-[140px]">Quantization:</span>
                   <span className="text-purple-900">
-                    {format.quantization.name}
-                    {format.quantization.bits && ` (${format.quantization.bits}-bit)`}
+                    {typeof format.quantization === 'string'
+                      ? format.quantization
+                      : `${format.quantization.name}${format.quantization.bits ? ` (${format.quantization.bits}-bit)` : ''}`}
                   </span>
                 </div>
               )}
@@ -67,7 +70,9 @@ export function ModelFormatsDisplay({ formats }: ModelFormatsDisplayProps) {
               {format.autoSelect !== undefined && (
                 <div className="flex gap-2">
                   <span className="font-medium text-purple-700 min-w-[140px]">Auto-Select:</span>
-                  <span className={`font-semibold ${format.autoSelect ? 'text-green-700' : 'text-gray-600'}`}>
+                  <span
+                    className={`font-semibold ${format.autoSelect ? 'text-green-700' : 'text-gray-600'}`}
+                  >
                     {format.autoSelect ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>

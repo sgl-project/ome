@@ -341,9 +341,9 @@ export default function CreateModelPage() {
                       ))}
                     </select>
                   )}
-                  {errors.metadata?.namespace && (
+                  {(errors.metadata as any)?.namespace && (
                     <p className="mt-1 text-sm text-red-600">
-                      {(errors.metadata.namespace as any).message}
+                      {(errors.metadata as any).namespace.message}
                     </p>
                   )}
                   <p className="mt-1 text-xs text-gray-500">

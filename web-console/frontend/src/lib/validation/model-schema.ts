@@ -21,15 +21,15 @@ export const storageSchema = z.object({
 
 // Resource Requirements schema
 export const resourceRequirementsSchema = z.object({
-  requests: z.record(z.string()).optional(),
-  limits: z.record(z.string()).optional(),
+  requests: z.record(z.string(), z.string()).optional(),
+  limits: z.record(z.string(), z.string()).optional(),
 })
 
 // Base Model Spec schema
 export const baseModelSpecSchema = z.object({
   vendor: z.string().min(1, 'Vendor is required'),
   modelParameterSize: z.string().optional(),
-  modelFormat: modelFormatSchema.optional(),
+  modelFormat: modelFormatSchema,
   modelFramework: modelFrameworkSchema.optional(),
   storage: storageSchema,
   resources: resourceRequirementsSchema.optional(),
@@ -40,11 +40,12 @@ export const clusterBaseModelSchema = z.object({
   apiVersion: z.string().default('ome.io/v1beta1'),
   kind: z.string().default('ClusterBaseModel'),
   metadata: z.object({
-    name: z.string()
+    name: z
+      .string()
       .min(1, 'Name is required')
       .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Name must be lowercase alphanumeric with dashes'),
-    labels: z.record(z.string()).optional(),
-    annotations: z.record(z.string()).optional(),
+    labels: z.record(z.string(), z.string()).optional(),
+    annotations: z.record(z.string(), z.string()).optional(),
   }),
   spec: baseModelSpecSchema,
 })
@@ -54,12 +55,13 @@ export const baseModelSchema = z.object({
   apiVersion: z.string().default('ome.io/v1beta1'),
   kind: z.string().default('BaseModel'),
   metadata: z.object({
-    name: z.string()
+    name: z
+      .string()
       .min(1, 'Name is required')
       .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Name must be lowercase alphanumeric with dashes'),
     namespace: z.string().min(1, 'Namespace is required'),
-    labels: z.record(z.string()).optional(),
-    annotations: z.record(z.string()).optional(),
+    labels: z.record(z.string(), z.string()).optional(),
+    annotations: z.record(z.string(), z.string()).optional(),
   }),
   spec: baseModelSpecSchema,
 })
