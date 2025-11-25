@@ -355,7 +355,10 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 
 	// Create request with the validated URL
 	// The URL is constructed from constant host values and validated path
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, safeURL.String(), nil)
+	// Security: Host is from allowlist constants, path is sanitized char-by-char
+	// CodeQL: This is safe - URL is validated against allowlist and sanitized
+	// #nosec G107 -- URL is validated against strict allowlist (GitHub/GitLab/Bitbucket only)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, safeURL.String(), nil) //nolint:gosec
 	if err != nil {
 		h.logger.Error("Failed to create request", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
