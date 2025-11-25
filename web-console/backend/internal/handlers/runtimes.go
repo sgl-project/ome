@@ -20,10 +20,10 @@ import (
 // is a constant from the map, not derived from user input.
 var allowedHostsMap = map[string]string{
 	"raw.githubusercontent.com":  "raw.githubusercontent.com",
-	"github.com":                  "github.com",
-	"gist.githubusercontent.com":  "gist.githubusercontent.com",
-	"gitlab.com":                  "gitlab.com",
-	"bitbucket.org":               "bitbucket.org",
+	"github.com":                 "github.com",
+	"gist.githubusercontent.com": "gist.githubusercontent.com",
+	"gitlab.com":                 "gitlab.com",
+	"bitbucket.org":              "bitbucket.org",
 }
 
 // RuntimesHandler handles HTTP requests for ClusterServingRuntime resources
