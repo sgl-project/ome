@@ -7,6 +7,7 @@ import (
 
 	kedav1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/onsi/gomega"
+	ray "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
@@ -21,13 +22,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	omeTesting "github.com/sgl-project/ome/pkg/testing"
 )
 
 // Helper functions for creating pointers
@@ -42,14 +41,6 @@ func stringPtr(s string) *string {
 func TestEngineReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
-	testEnv := omeTesting.SetupEnvTest()
-	cfg, err := testEnv.Start()
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(cfg).NotTo(gomega.BeNil())
-	defer func(testEnv *envtest.Environment) {
-		_ = testEnv.Stop()
-	}(testEnv)
-
 	// Create scheme
 	scheme := runtime.NewScheme()
 	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
@@ -60,6 +51,7 @@ func TestEngineReconcile(t *testing.T) {
 	g.Expect(kedav1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(autoscalingv2.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 	g.Expect(policyv1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(ray.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
 
 	tests := []struct {
 		name           string
@@ -286,6 +278,113 @@ func TestEngineReconcile(t *testing.T) {
 				}
 				g.Expect(lwsList.Items[0].Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
 				g.Expect(lwsList.Items[0].Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+			},
+		},
+		{
+			name:           "Multi-node Ray VLLM deployment",
+			deploymentMode: constants.MultiNodeRayVLLM,
+			baseModel: &v1beta1.BaseModelSpec{
+				ModelFormat: v1beta1.ModelFormat{
+					Name: "safetensors",
+				},
+				Storage: &v1beta1.StorageSpec{
+					Path: stringPtr("/mnt/models/model-ray"),
+				},
+			},
+			baseModelMeta: &metav1.ObjectMeta{
+				Name:      "base-model-ray",
+				Namespace: "default",
+			},
+			engineSpec: &v1beta1.EngineSpec{
+				ComponentExtensionSpec: v1beta1.ComponentExtensionSpec{
+					MinReplicas: intPtr(2),
+					Annotations: map[string]string{
+						constants.DeploymentMode: string(constants.MultiNodeRayVLLM),
+					},
+				},
+				PodSpec: v1beta1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "ray-container",
+							Image: "ray-vllm:latest",
+						},
+					},
+				},
+			},
+			runtime:     &v1beta1.ServingRuntimeSpec{},
+			runtimeName: "ray-runtime",
+			isvc: &v1beta1.InferenceService{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ray-isvc",
+					Namespace: "default",
+				},
+				Spec: v1beta1.InferenceServiceSpec{
+					Model: &v1beta1.ModelRef{},
+				},
+			},
+			setupMocks: func(c client.Client, cs kubernetes.Interface) {
+				// Create inferenceservice config in both clients with multinodeProber config
+				cm := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "inferenceservice-config",
+						Namespace: "ome",
+					},
+					Data: map[string]string{
+						"config": "{}",
+						"multinodeProber": `{
+							"image": "multinode-prober:latest",
+							"memoryRequest": "100Mi",
+							"memoryLimit": "100Mi",
+							"cpuRequest": "100m",
+							"cpuLimit": "100m",
+							"startupFailureThreshold": 150,
+							"startupPeriodSeconds": 30,
+							"startupTimeoutSeconds": 60,
+							"startupInitialDelaySeconds": 200,
+							"unavailableThresholdSeconds": 1800
+						}`,
+						"ingress": `{
+							"ingressGateway": "knative-serving/knative-ingress-gateway",
+							"ingressService": "istio-ingressgateway.istio-system.svc.cluster.local",
+							"ingressDomain": "svc.cluster.local",
+							"domainTemplate": "{{ .Name }}.{{ .Namespace }}.{{ .IngressDomain }}"
+						}`,
+					},
+				}
+				// Create in controller-runtime client
+				err := c.Create(context.TODO(), cm)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Also create in clientset (if different)
+				_, err = cs.CoreV1().ConfigMaps("ome").Create(context.TODO(), cm, metav1.CreateOptions{})
+				if err != nil && !strings.Contains(err.Error(), "already exists") {
+					g.Expect(err).NotTo(gomega.HaveOccurred())
+				}
+			},
+			validate: func(t *testing.T, c client.Client, isvc *v1beta1.InferenceService) {
+				// Check RayCluster was created (not LeaderWorkerSet)
+				rayClusterList := &ray.RayClusterList{}
+				err := c.List(context.TODO(), rayClusterList, client.InNamespace("default"))
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(rayClusterList.Items).To(gomega.HaveLen(2)) // MinReplicas is 2
+
+				// Verify first RayCluster
+				rayCluster := &ray.RayCluster{}
+				err = c.Get(context.TODO(), types.NamespacedName{
+					Name:      "test-ray-isvc-engine-0",
+					Namespace: "default",
+				}, rayCluster)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+				g.Expect(rayCluster.Spec.HeadGroupSpec.Template.Spec.Containers[0].Image).To(gomega.Equal("ray-vllm:latest"))
+
+				// Check node selector was added
+				expectedNodeSelector := map[string]string{
+					"models.ome.io/default.basemodel.base-model-ray": "Ready",
+				}
+				g.Expect(rayCluster.Spec.HeadGroupSpec.Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				if len(rayCluster.Spec.WorkerGroupSpecs) > 0 {
+					g.Expect(rayCluster.Spec.WorkerGroupSpecs[0].Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				}
 			},
 		},
 		{
