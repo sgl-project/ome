@@ -2,6 +2,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { modelsApi } from '../api/models'
 import { ClusterBaseModel } from '../types/model'
 
+/**
+ * Models hooks are intentionally NOT using createResourceHooks factory because:
+ * - useCreateModel has a custom signature: { model: Partial<ClusterBaseModel>; huggingfaceToken?: string }
+ *   This differs from the factory's standard create(data: T) pattern
+ * - The HuggingFace token handling is specific to model imports
+ *
+ * See useRuntimes.ts and useServices.ts for examples of factory usage.
+ */
+
 export function useModels(namespace?: string) {
   return useQuery({
     queryKey: namespace ? ['models', { namespace }] : ['models'],

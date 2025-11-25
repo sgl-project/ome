@@ -2,7 +2,7 @@
 
 import { useCreateRuntime } from '@/lib/hooks/useRuntimes'
 import { useRouter } from 'next/navigation'
-import { RuntimeForm } from '@/components/forms/RuntimeForm'
+import { RuntimeForm } from '@/components/forms/runtime'
 
 export default function CreateRuntimePage() {
   const router = useRouter()

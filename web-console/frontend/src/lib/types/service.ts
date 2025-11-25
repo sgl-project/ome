@@ -1,5 +1,11 @@
 // InferenceService TypeScript types
 
+// Import shared types from common
+import { ResourceRequirements, Condition } from './common'
+
+// Re-export for backwards compatibility
+export type { ResourceRequirements, Condition } from './common'
+
 export interface InferenceService {
   apiVersion: string
   kind: string
@@ -7,7 +13,7 @@ export interface InferenceService {
     name: string
     namespace?: string
     creationTimestamp?: string
-    [key: string]: any
+    [key: string]: unknown
   }
   spec: InferenceServiceSpec
   status?: InferenceServiceStatus
@@ -15,7 +21,7 @@ export interface InferenceService {
 
 export interface InferenceServiceSpec {
   predictor: PredictorSpec
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface PredictorSpec {
@@ -25,25 +31,12 @@ export interface PredictorSpec {
   minReplicas?: number
   maxReplicas?: number
   resources?: ResourceRequirements
-  [key: string]: any
-}
-
-export interface ResourceRequirements {
-  limits?: Record<string, string>
-  requests?: Record<string, string>
+  [key: string]: unknown
 }
 
 export interface InferenceServiceStatus {
   state?: string
   url?: string
   conditions?: Condition[]
-  [key: string]: any
-}
-
-export interface Condition {
-  type: string
-  status: string
-  lastTransitionTime?: string
-  reason?: string
-  message?: string
+  [key: string]: unknown
 }
