@@ -9,6 +9,13 @@ spec:
   displayName: openai.gpt-oss-20b
   modelCapabilities:
     - "CHAT"
+  modelFramework:
+    name: transformers
+    version: "4.55.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelArchitecture: GptOssForCausalLM
   storage:
     storageUri: hf://openai/gpt-oss-20b
     path: /raid/models/openai/gpt-oss-20b

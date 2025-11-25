@@ -1,26 +1,35 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-1-405b-instruct-fp8
+  name: vllm-llama-3-2-90b-vision-instruct-fp8-dynamic
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.0.dev0"
+        version: "4.46.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: LlamaForCausalLM
+      modelArchitecture: MllamaForConditionalGeneration
+      autoSelect: false
+      priority: 1
+      version: "1.0.0"
+    - modelFramework:
+        name: transformers
+        version: "4.50.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: MllamaForConditionalGeneration
       autoSelect: true
       priority: 1
       version: "1.0.0"
-      quantization: fp8
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 400B
-    max: 410B
+    min: 85B
+    max: 95B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -47,6 +56,11 @@ spec:
         - /bin/bash
         - '-lc'
         - --
+      env:
+        - name: VLLM_RPC_TIMEOUT
+          value: '30000'
+        - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+          value: '120'
       args:
         - |
           python3 -m vllm.entrypoints.openai.api_server \
@@ -55,26 +69,27 @@ spec:
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
           --served-model-name=vllm-model \
-          --tensor-parallel-size=8 \
+          --tensor-parallel-size=4 \
+          --max-num-seqs=32 \
+          --enforce-eager \
+          --limit-mm-per-prompt=image=1 \
           --max-model-len=131072 \
           --gpu-memory-utilization=0.9 \
-          --enable-chunked-prefill \
           --enable-auto-tool-choice \
           --tool-call-parser=llama3_json \
-          --chat-template=examples/tool_chat_template_llama3.1_json.jinja \
-          --cuda-graph-sizes=256
+          --chat-template=./examples/tool_chat_template_llama3.2_json.jinja
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:
