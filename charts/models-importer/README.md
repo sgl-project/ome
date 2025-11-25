@@ -158,6 +158,8 @@ A Helm chart for importing ome base models
 | gpt-5-1.lifecyclePhase                                              | string | `"ACTIVE"`                                   |             |
 | gpt-5-1-2025-11-13.enabled                                          | bool   | `false`                                      |             |
 | gpt-5-1-2025-11-13.lifecyclePhase                                   | string | `"ACTIVE"`                                   |             |
+| robin-alpha-2025-11-21.enabled                                      | bool   | `false`                                      |             |
+| robin-alpha-2025-11-21.lifecyclePhase                               | string | `"ACTIVE"`                                   |             |
 | gpt-5-1-codex.enabled                                               | bool   | `false`                                      |             |
 | gpt-5-1-codex.lifecyclePhase                                        | string | `"ACTIVE"`                                   |             |
 | gpt-5-1-codex-mini.enabled                                          | bool   | `false`                                      |             |
