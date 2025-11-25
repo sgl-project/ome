@@ -1,6 +1,16 @@
 import { clsx } from 'clsx'
 
-type StatusState = 'Ready' | 'Running' | 'Failed' | 'In_Transit' | 'Pending' | 'Creating' | 'Unknown' | 'Active' | 'Disabled' | string
+type StatusState =
+  | 'Ready'
+  | 'Running'
+  | 'Failed'
+  | 'In_Transit'
+  | 'Pending'
+  | 'Creating'
+  | 'Unknown'
+  | 'Active'
+  | 'Disabled'
+  | string
 
 interface StatusBadgeProps {
   state: StatusState | undefined | null
@@ -60,9 +70,7 @@ export function StatusBadge({ state, className = '', size = 'md' }: StatusBadgeP
   const normalizedState = state || 'Unknown'
   const config = statusConfig[normalizedState] || statusConfig.Unknown
 
-  const sizeClasses = size === 'sm'
-    ? 'px-2 py-0.5 text-xs gap-1'
-    : 'px-3 py-1 text-xs gap-1.5'
+  const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs gap-1' : 'px-3 py-1 text-xs gap-1.5'
 
   const dotSize = size === 'sm' ? 'h-1 w-1' : 'h-1.5 w-1.5'
 

@@ -67,7 +67,9 @@ export function ModelFormatsDisplay({ formats }: ModelFormatsDisplayProps) {
               {format.autoSelect !== undefined && (
                 <div className="flex gap-2">
                   <span className="font-medium text-purple-700 min-w-[140px]">Auto-Select:</span>
-                  <span className={`font-semibold ${format.autoSelect ? 'text-green-700' : 'text-gray-600'}`}>
+                  <span
+                    className={`font-semibold ${format.autoSelect ? 'text-green-700' : 'text-gray-600'}`}
+                  >
                     {format.autoSelect ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>

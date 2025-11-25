@@ -40,7 +40,9 @@ export const builtInAdapterSchema = z.object({
 
 // Serving Runtime Spec schema
 export const servingRuntimeSpecSchema = z.object({
-  supportedModelFormats: z.array(supportedModelFormatSchema).min(1, 'At least one supported model format is required'),
+  supportedModelFormats: z
+    .array(supportedModelFormatSchema)
+    .min(1, 'At least one supported model format is required'),
   containers: z.array(containerSchema).optional(),
   builtInAdapter: builtInAdapterSchema.optional(),
   replicas: z.number().optional(),
@@ -57,7 +59,8 @@ export const clusterServingRuntimeSchema = z.object({
   apiVersion: z.string().default('ome.io/v1beta1'),
   kind: z.string().default('ClusterServingRuntime'),
   metadata: z.object({
-    name: z.string()
+    name: z
+      .string()
       .min(1, 'Name is required')
       .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Name must be lowercase alphanumeric with dashes'),
     namespace: z.string().optional(),

@@ -40,7 +40,8 @@ export const clusterBaseModelSchema = z.object({
   apiVersion: z.string().default('ome.io/v1beta1'),
   kind: z.string().default('ClusterBaseModel'),
   metadata: z.object({
-    name: z.string()
+    name: z
+      .string()
       .min(1, 'Name is required')
       .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Name must be lowercase alphanumeric with dashes'),
     labels: z.record(z.string()).optional(),
@@ -54,7 +55,8 @@ export const baseModelSchema = z.object({
   apiVersion: z.string().default('ome.io/v1beta1'),
   kind: z.string().default('BaseModel'),
   metadata: z.object({
-    name: z.string()
+    name: z
+      .string()
       .min(1, 'Name is required')
       .regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, 'Name must be lowercase alphanumeric with dashes'),
     namespace: z.string().min(1, 'Namespace is required'),

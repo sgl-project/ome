@@ -11,7 +11,9 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css}\"",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"No test framework configured yet. Run 'npm run typecheck' for type checking.\""
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -29,14 +31,21 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.0.1",
-    "eslint-config-prettier": "^10.1.8",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.0.4",
+    "eslint-config-prettier": "^9.1.0",
+    "jsdom": "^25.0.1",
     "postcss": "^8",
     "prettier": "^3.6.2",
     "tailwindcss": "^3.3.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.8"
   }
 }
