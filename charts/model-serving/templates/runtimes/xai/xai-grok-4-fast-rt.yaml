@@ -112,6 +112,12 @@ spec:
           value: "grok2v-staging"
         - name: TOKENIZER_PATH
           value: "/opt/sglang-private/dummy_grok3/v6.xtok.json"
+        {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+        - name: OCI_REGION_METADATA
+          value: {{ .Values.oci.ociRegionMetadata }}
+        - name: REQUESTS_CA_BUNDLE
+          value: {{ .Values.oci.requestsCaBundle }}
+        {{- end }}
       resources:
         limits:
           nvidia.com/gpu: "8"
@@ -124,6 +130,11 @@ spec:
           name: shared-memory
         - mountPath: /opt/model
           name: model-empty-dir
+        {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+        - mountPath: /etc/pki
+          name: etc-pki
+          readOnly: true
+        {{- end }}
       readinessProbe:
         {{- toYaml .Values.grok_4_fast_self_hosted.readinessProbe | nindent 8 }}
       livenessProbe:

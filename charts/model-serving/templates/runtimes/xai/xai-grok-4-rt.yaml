@@ -67,12 +67,12 @@ spec:
   - hostPath:
       path: /dev/infiniband
     name: devinf
-    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+  {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
   - name: etc-pki
     hostPath:
       path: /etc/pki
       type: Directory
-    {{- end }}
+  {{- end }}
   protocolVersions:
   - openAI
   containers:
@@ -151,11 +151,22 @@ spec:
       value: eth0
     - name: TOKENIZER_PATH
       value: "/opt/sglang-private/dummy_grok3/v6.xtok.json"
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: OCI_REGION_METADATA
+      value: {{ .Values.oci.ociRegionMetadata }}
+    - name: REQUESTS_CA_BUNDLE
+      value: {{ .Values.oci.requestsCaBundle }}
+    {{- end }}
     volumeMounts:
     - mountPath: /dev/shm
       name: dshm
     - mountPath: /dev/infiniband
       name: devinf
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - mountPath: /etc/pki
+      name: etc-pki
+      readOnly: true
+    {{- end }}
     resources:
       requests:
         nvidia.com/gpu: 8
@@ -168,7 +179,7 @@ spec:
         - CAP_SYS_ADMIN
       privileged: true
     readinessProbe:
-    {{- toYaml .Values.grok_4_fast_self_hosted.readinessProbe | nindent 6 }}
+    {{- toYaml .Values.grok_4_self_hosted.readinessProbe | nindent 6 }}
     livenessProbe:
       {{- toYaml .Values.xai.livenessProbe | nindent 6 }}
     startupProbe:
@@ -205,6 +216,12 @@ spec:
     - hostPath:
         path: /dev/infiniband
       name: devinf
+    {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+    - name: etc-pki
+      hostPath:
+        path: /etc/pki
+        type: Directory
+    {{- end }}
     containers:
     - name: ome-container
       image: {{ .Values.grok_4_self_hosted.image.repository | default .Values.xai.grokImage.repository }}:{{ .Values.grok_4_self_hosted.image.tag | default .Values.xai.grokImage.tag }}
@@ -284,6 +301,15 @@ spec:
         value: eth0
       - name: TOKENIZER_PATH
         value: "/opt/sglang-private/dummy_grok3/v6.xtok.json"
+      - name: DIST_INIT_ADDR
+        value: "$(LWS_LEADER_ADDRESS):29005"
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: OCI_REGION_METADATA
+        value: {{ .Values.oci.ociRegionMetadata }}
+      - name: REQUESTS_CA_BUNDLE
+        value: {{ .Values.oci.requestsCaBundle }}
+      {{- end }}
+
       securityContext:
         capabilities:
           add:
@@ -295,3 +321,8 @@ spec:
         name: dshm
       - mountPath: /dev/infiniband
         name: devinf
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - mountPath: /etc/pki
+        name: etc-pki
+        readOnly: true
+      {{- end }}

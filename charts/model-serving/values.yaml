@@ -19,6 +19,9 @@ sglang:
 
 oci:
   realm: oc1
+  # Required environment variables for ONSR
+  ociRegionMetadata: ""
+  requestsCaBundle: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
 
 command_a_032025:
   enabled: false
@@ -1239,7 +1242,7 @@ grok_4_self_hosted:
         curl -s -f http://localhost:8080/v1/chat/completions \
           -X POST \
           -H "Content-Type: application/json" \
-          -d '{"model":"grok-4","messages":[{"role":"user","content":"hi"}],"max_tokens":1000}' \
+          -d '{"model":"grok-4","messages":[{"role":"user","content":"hi"}],"max_tokens":10}' \
           --max-time 25
 
 gemma_2_2b_it:
