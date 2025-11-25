@@ -21,7 +21,8 @@ export function useCreateModel() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (model: Partial<ClusterBaseModel>) => modelsApi.create(model),
+    mutationFn: (requestBody: { model: Partial<ClusterBaseModel>; huggingfaceToken?: string }) =>
+      modelsApi.create(requestBody),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['models'] })
     },

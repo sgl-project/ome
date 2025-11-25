@@ -9,12 +9,7 @@ interface PVCStorageProps {
   onSubPathChange: (value: string) => void
 }
 
-export function PVCStorage({
-  name,
-  subPath,
-  onNameChange,
-  onSubPathChange,
-}: PVCStorageProps) {
+export function PVCStorage({ name, subPath, onNameChange, onSubPathChange }: PVCStorageProps) {
   return (
     <>
       <FormInput

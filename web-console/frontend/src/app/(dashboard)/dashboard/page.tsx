@@ -10,7 +10,7 @@ import { DataTable, TableLink, TableText } from '@/components/ui/DataTable'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { StatIcons } from '@/components/ui/Icons'
 import Link from 'next/link'
-import type { BaseModel } from '@/lib/types/model'
+import type { ClusterBaseModel } from '@/lib/types/model'
 
 export default function DashboardPage() {
   const { data: modelsData, isLoading: modelsLoading } = useModels()
@@ -27,26 +27,26 @@ export default function DashboardPage() {
     {
       key: 'name',
       header: 'Name',
-      cell: (model: BaseModel) => (
+      cell: (model: ClusterBaseModel) => (
         <TableLink href={`/models/${model.metadata.name}`}>{model.metadata.name}</TableLink>
       ),
     },
     {
       key: 'vendor',
       header: 'Vendor',
-      cell: (model: BaseModel) => <TableText muted>{model.spec.vendor || '-'}</TableText>,
+      cell: (model: ClusterBaseModel) => <TableText muted>{model.spec.vendor || '-'}</TableText>,
     },
     {
       key: 'framework',
       header: 'Framework',
-      cell: (model: BaseModel) => (
+      cell: (model: ClusterBaseModel) => (
         <TableText muted>{model.spec.modelFramework?.name || '-'}</TableText>
       ),
     },
     {
       key: 'status',
       header: 'Status',
-      cell: (model: BaseModel) => <StatusBadge state={model.status?.state} size="sm" />,
+      cell: (model: ClusterBaseModel) => <StatusBadge state={model.status?.state} size="sm" />,
     },
   ]
 

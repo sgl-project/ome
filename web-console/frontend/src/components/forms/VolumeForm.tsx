@@ -9,7 +9,11 @@ interface VolumeFormProps {
 }
 
 export function VolumeForm({ basePath, register, control }: VolumeFormProps) {
-  const { fields: volumeFields, append: appendVolume, remove: removeVolume } = useFieldArray({
+  const {
+    fields: volumeFields,
+    append: appendVolume,
+    remove: removeVolume,
+  } = useFieldArray({
     control,
     name: basePath,
   })
@@ -41,7 +45,9 @@ export function VolumeForm({ basePath, register, control }: VolumeFormProps) {
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="field-label block text-xs text-slate-600 mb-1.5">Volume Name *</label>
+                <label className="field-label block text-xs text-slate-600 mb-1.5">
+                  Volume Name *
+                </label>
                 <input
                   type="text"
                   {...register(`${basePath}.${index}.name`)}
@@ -50,7 +56,9 @@ export function VolumeForm({ basePath, register, control }: VolumeFormProps) {
                 />
               </div>
               <div>
-                <label className="field-label block text-xs text-slate-600 mb-1.5">Volume Type</label>
+                <label className="field-label block text-xs text-slate-600 mb-1.5">
+                  Volume Type
+                </label>
                 <select
                   {...register(`${basePath}.${index}.volumeType`)}
                   className="input-focus w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"

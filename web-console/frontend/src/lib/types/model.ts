@@ -26,6 +26,15 @@ export interface ResourceRequirements {
   limits?: Record<string, string>
 }
 
+export interface ModelConfigurationSpec {
+  architecture?: string
+  model_type?: string
+  context_length?: number
+  torch_dtype?: string
+  transformers_version?: string
+  has_vision?: boolean
+}
+
 export interface ModelExtensionSpec {
   displayName?: string
   version?: string
@@ -42,6 +51,7 @@ export interface BaseModelSpec {
   quantization?: string
   modelParameterSize?: string
   modelCapabilities?: string[]
+  modelConfiguration?: ModelConfigurationSpec
   storage?: StorageSpec
   resources?: ResourceRequirements
   displayName?: string

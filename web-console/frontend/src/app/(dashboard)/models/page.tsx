@@ -14,7 +14,7 @@ import { Button, ButtonIcons } from '@/components/ui/Button'
 import { StatIcons } from '@/components/ui/Icons'
 import { useSortedData } from '@/hooks/useSortedData'
 import { SortableHeader } from '@/components/ui/SortableHeader'
-import type { BaseModel } from '@/lib/types/model'
+import type { ClusterBaseModel } from '@/lib/types/model'
 
 type SortField = 'name' | 'vendor' | 'framework' | 'size' | 'status' | 'created'
 
@@ -36,7 +36,7 @@ export default function ModelsPage() {
     },
   })
 
-  const getValue = (model: BaseModel, field: SortField) => {
+  const getValue = (model: ClusterBaseModel, field: SortField) => {
     switch (field) {
       case 'name':
         return model.metadata.name

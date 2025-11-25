@@ -29,17 +29,9 @@ export function PageHeader({ title, description, actions, backLink }: PageHeader
             <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               {title}
             </h1>
-            {description && (
-              <p className="mt-2 text-muted-foreground max-w-2xl">
-                {description}
-              </p>
-            )}
+            {description && <p className="mt-2 text-muted-foreground max-w-2xl">{description}</p>}
           </div>
-          {actions && (
-            <div className="flex gap-3 flex-shrink-0">
-              {actions}
-            </div>
-          )}
+          {actions && <div className="flex gap-3 flex-shrink-0">{actions}</div>}
         </div>
       </div>
     </header>
