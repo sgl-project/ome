@@ -3,12 +3,35 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sgl-project/ome/web-console/backend/internal/k8s"
 	"go.uber.org/zap"
 )
+
+// defaultAllowedOrigins is used when CORS_ALLOWED_ORIGINS is not set
+var defaultAllowedOrigins = []string{"http://localhost:3000", "http://localhost:3001"}
+
+// getAllowedOrigins returns the list of allowed CORS origins
+func getAllowedOrigins() []string {
+	if origins := os.Getenv("CORS_ALLOWED_ORIGINS"); origins != "" {
+		return strings.Split(origins, ",")
+	}
+	return defaultAllowedOrigins
+}
+
+// isOriginAllowed checks if the given origin is in the allowed list
+func isOriginAllowed(origin string) bool {
+	for _, allowed := range getAllowedOrigins() {
+		if strings.TrimSpace(allowed) == origin {
+			return true
+		}
+	}
+	return false
+}
 
 // EventsHandler handles SSE connections for real-time updates
 type EventsHandler struct {
@@ -26,11 +49,17 @@ func NewEventsHandler(k8sClient *k8s.Client, logger *zap.Logger) *EventsHandler 
 
 // Stream handles SSE connections for real-time Kubernetes resource updates
 func (h *EventsHandler) Stream(c *gin.Context) {
+	// Validate and set CORS origin header
+	origin := c.GetHeader("Origin")
+	if origin != "" && isOriginAllowed(origin) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
+
 	// Set headers for SSE
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// Subscribe to events
 	eventChan := h.k8sClient.Broadcaster.Subscribe()
