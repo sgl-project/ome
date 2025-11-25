@@ -12,7 +12,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: Llama4ForConditionalGeneration
-      autoSelect: true
+      autoSelect: false
       priority: 2
   protocolVersions:
     - openAI
@@ -36,7 +36,7 @@ spec:
           medium: Memory
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+      image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
       ports:
         - containerPort: 8080
           name: http1
@@ -51,12 +51,17 @@ spec:
           --host=0.0.0.0 \
           --port=8080 \
           --enable-metrics \
+          --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp-size 8 \
-          --context-length=430000 \
-          --chat-template llama-4 \
-          --attention-backend fa3 \
-          --log-requests
+          --tp=8 \
+          --mem-frac=0.82 \
+          --context-length=524288 \
+          --enable-multimodal \
+          --tool-call-parser=pythonic \
+          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
+          --attention-backend=fa3 \
+          --mm-attention-backend=fa3 \
+          --disable-fast-image-processor
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -97,7 +102,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: ghcr.io/moirai-internal/sgl-router:0.1.4.30f2a44
+      image: docker.io/lmsysorg/sglang-router:v0.2.3
       resources:
         limits:
           cpu: "1"

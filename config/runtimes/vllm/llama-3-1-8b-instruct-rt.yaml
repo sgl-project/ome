@@ -1,26 +1,26 @@
+---
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: vllm-llama-3-1-405b-instruct-fp8
+  name: vllm-llama-3-1-8b-instruct
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.0.dev0"
+        version: "4.42.3"
       modelFormat:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: LlamaForCausalLM
-      autoSelect: true
+      autoSelect: false
       priority: 1
       version: "1.0.0"
-      quantization: fp8
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 400B
-    max: 410B
+    min: 7B
+    max: 9B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -54,27 +54,29 @@ spec:
           --model="$MODEL_PATH" \
           --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
           --max-log-len=0 \
-          --served-model-name=vllm-model \
-          --tensor-parallel-size=8 \
+          --served-model-name="$SERVED_MODEL_NAME" \
+          --tensor-parallel-size=1 \
           --max-model-len=131072 \
           --gpu-memory-utilization=0.9 \
           --enable-chunked-prefill \
           --enable-auto-tool-choice \
           --tool-call-parser=llama3_json \
-          --chat-template=examples/tool_chat_template_llama3.1_json.jinja \
-          --cuda-graph-sizes=256
+          --chat-template=./examples/tool_chat_template_llama3.1_json.jinja
+      env:
+        - name: SERVED_MODEL_NAME
+          value: "vllm-model"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
         limits:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:

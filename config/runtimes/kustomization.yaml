@@ -4,10 +4,18 @@ kind: Kustomization
 resources:
 - srt/deepseek-rdma-pd-rt.yaml
 - srt/deepseek-rdma-rt.yaml
+- srt/e5-mistral-7b-instruct-rt.yaml
+- srt/llama-3-1-8b-instruct-rt.yaml
+- vllm/llama-3-1-8b-instruct-rt.yaml
+- srt/llama-3-1-70b-instruct-rt.yaml
+- vllm/llama-3-1-405b-instruct-fp8-rt.yaml
+- vllm/llama-3-2-11b-vision-instruct-rt.yaml
+- vllm/llama-3-2-90b-vision-instruct-rt.yaml
+- vllm/llama-3-2-90b-vision-instruct-fp8-dynamic-rt.yaml
+- srt/llama-3-3-70b-instruct-rt.yaml
+- srt/llama-3-3-70b-instruct-pd-rt.yaml
+- srt/llama-3-3-70b-instruct-fp8-dynamic-rt.yaml
 - srt/llama-4-maverick-17b-128e-instruct-fp8-rt.yaml
 - srt/llama-4-maverick-17b-128e-instruct-fp8-pd-rt.yaml
 - srt/llama-4-scout-17b-16e-instruct-rt.yaml
 - srt/llama-4-scout-17b-16e-instruct-pd-rt.yaml
-- srt/e5-mistral-7b-instruct-rt.yaml
-- srt/llama-3-3-70b-instruct-rt.yaml
-- srt/llama-3-3-70b-instruct-pd-rt.yaml

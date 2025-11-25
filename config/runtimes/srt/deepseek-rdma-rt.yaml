@@ -11,31 +11,22 @@ spec:
     - modelFormat:
         name: safetensors
         version: "1.0.0"
+        operator: GreaterThanOrEqual
       version: "1.0.0"
       modelFramework:
         name: transformers
         version: "4.46.3"
+        operator: GreaterThanOrEqual
       modelArchitecture: DeepseekV3ForCausalLM
       quantization: "fp8"
-      autoSelect: true
-      priority: 1
-    - modelFormat:
-        name: safetensors
-        version: "1.0.0"
-      version: "1.0.0"
-      modelFramework:
-        name: transformers
-        version: "4.33.1"
-      modelArchitecture: DeepseekV3ForCausalLM
-      quantization: "fp8"
-      autoSelect: true
+      autoSelect: false
       priority: 1
   protocolVersions:
     - openAI
   routerConfig:
     runner:
       name: router
-      image: ghcr.io/moirai-internal/sgl-router:0.1.4.30f2a44
+      image: docker.io/lmsysorg/sglang-router:v0.2.3
       resources:
         limits:
           cpu: "1"
@@ -77,7 +68,32 @@ spec:
       hostNetwork: true
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+        image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
+        env:
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: SGLANG_TBO_DEBUG
+            value: "1"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: '1'
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: 'true'
+          - name: SGLANG_ENABLE_JIT_DEEPGEMM
+            value: '1'
+          - name: NVSHMEM_HCA_LIST
+            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+          - name: NVSHMEM_IB_GID_INDEX
+            value: '3'
+          - name: NVSHMEM_DEBUG
+            value: INFO
         command:
           - sh
           - -c
@@ -85,20 +101,34 @@ spec:
             python3 -m sglang.launch_server 
             --host 0.0.0.0 --port 8080 
             --model-path ${MODEL_PATH} 
-            --tp-size 16 
-            --nccl-init $(LWS_LEADER_ADDRESS):5000 
+            --tp-size ${PARALLELISM_SIZE}
+            --nccl-init ${LWS_LEADER_ADDRESS}:5000 
             --nnodes ${LWS_GROUP_SIZE} 
             --node-rank ${LWS_WORKER_INDEX} 
             --trust-remote-code 
             --enable-torch-compile 
             --torch-compile-max-bs 1 
             --reasoning-parser deepseek-r1 
-            --enable-metrics
+            --enable-metrics 
+            --ep-dispatch-algorithm dynamic
+            --moe-a2a-backend deepep 
+            --deepep-mode auto
         resources:
           requests:
             nvidia.com/gpu: 8
           limits:
             nvidia.com/gpu: 8
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
         readinessProbe:
           httpGet:
             path: /health_generate
@@ -132,9 +162,49 @@ spec:
           effect: NoSchedule
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      enableServiceLinks: false
+      hostIPC: true
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: devinf
+          hostPath:
+            path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+        image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
+        env:
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: 'true'
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: '8'
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: '0'
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: '1'
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: '8'
+          - name: SGLANG_ENABLE_JIT_DEEPGEMM
+            value: '1'
+          - name: SGLANG_CHUNKED_PREFIX_CACHE_THRESHOLD
+            value: '0'
+          - name: NVSHMEM_HCA_LIST
+            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+          - name: NVSHMEM_IB_GID_INDEX
+            value: '3'
+          - name: NVSHMEM_DEBUG
+            value: INFO
         command:
           - sh
           - -c
@@ -143,17 +213,31 @@ spec:
             --host 0.0.0.0 
             --port 8080 
             --model-path ${MODEL_PATH} 
-            --tp-size 16 
-            --nccl-init $(LWS_LEADER_ADDRESS):5000 
+            --tp-size ${PARALLELISM_SIZE}
+            --nccl-init ${LWS_LEADER_ADDRESS}:5000 
             --nnodes ${LWS_GROUP_SIZE} 
             --node-rank ${LWS_WORKER_INDEX} 
             --trust-remote-code 
             --enable-torch-compile 
             --torch-compile-max-bs 1 
             --reasoning-parser deepseek-r1 
-            --enable-metrics
+            --enable-metrics 
+            --ep-dispatch-algorithm dynamic
+            --moe-a2a-backend deepep 
+            --deepep-mode auto
         resources:
           limits:
             nvidia.com/gpu: "8"
           requests:
             nvidia.com/gpu: "8"
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /dev/infiniband
+            name: devinf
+        securityContext:
+          capabilities:
+            add:
+              - IPC_LOCK
+              - CAP_SYS_ADMIN
+          privileged: true
