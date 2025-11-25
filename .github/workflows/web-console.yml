@@ -38,16 +38,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('web-console/frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
       - name: Install dependencies
-        run: npm ci --prefer-offline
+        run: |
+          npm cache clean --force
+          npm install
+          # Verify next was installed
+          test -f node_modules/.bin/next || (echo "ERROR: next not installed" && exit 1)
 
       - name: Run ESLint
         run: npm run lint
@@ -63,7 +59,7 @@ jobs:
         run: npm run build
 
       - name: Run tests
-        run: npm run test
+        run: npm test
 
   # Backend checks - build and vet
   backend:
