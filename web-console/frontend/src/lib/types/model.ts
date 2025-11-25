@@ -1,3 +1,9 @@
+// Import shared types from common
+import { ResourceRequirements, ObjectMeta } from './common'
+
+// Re-export for backwards compatibility
+export type { ResourceRequirements } from './common'
+
 export interface ModelFormat {
   name: string
   version?: string
@@ -19,11 +25,6 @@ export interface StorageSpec {
   key?: string
   storageUri?: string
   nodeSelector?: Record<string, string>
-}
-
-export interface ResourceRequirements {
-  requests?: Record<string, string>
-  limits?: Record<string, string>
 }
 
 export interface ModelConfigurationSpec {

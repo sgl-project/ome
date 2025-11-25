@@ -3,7 +3,7 @@
 import { useRuntime, useUpdateRuntime } from '@/lib/hooks/useRuntimes'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { RuntimeForm } from '@/components/forms/RuntimeForm'
+import { RuntimeForm } from '@/components/forms/runtime'
 
 export default function EditRuntimePage() {
   const params = useParams()

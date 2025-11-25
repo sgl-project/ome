@@ -1,5 +1,27 @@
 // ClusterServingRuntime TypeScript types
 
+// Import shared types from common
+import {
+  ResourceRequirements,
+  EnvVar,
+  VolumeMount,
+  Volume,
+  Container,
+  Toleration,
+  LocalObjectReference,
+} from './common'
+
+// Re-export for backwards compatibility
+export type {
+  ResourceRequirements,
+  EnvVar,
+  VolumeMount,
+  Volume,
+  Container,
+  Toleration,
+  LocalObjectReference,
+} from './common'
+
 export interface ClusterServingRuntime {
   apiVersion: string
   kind: string
@@ -181,40 +203,7 @@ export interface AcceleratorConstraints {
   architectureFamilies?: string[]
 }
 
-export interface Volume {
-  name: string
-  [key: string]: any
-}
-
-export interface VolumeMount {
-  name: string
-  mountPath: string
-  readOnly?: boolean
-  [key: string]: any
-}
-
-export interface Container {
-  name: string
-  image: string
-  command?: string[]
-  args?: string[]
-  env?: EnvVar[]
-  resources?: ResourceRequirements
-  volumeMounts?: VolumeMount[]
-  [key: string]: any
-}
-
-export interface Toleration {
-  key?: string
-  operator?: string
-  value?: string
-  effect?: string
-  [key: string]: any
-}
-
-export interface LocalObjectReference {
-  name: string
-}
+// Volume, VolumeMount, Container, Toleration, LocalObjectReference now imported from common.ts
 
 export interface ContainerSpec {
   name: string
@@ -234,16 +223,7 @@ export interface AdapterSpec {
   [key: string]: any
 }
 
-export interface EnvVar {
-  name: string
-  value?: string
-  valueFrom?: any
-}
-
-export interface ResourceRequirements {
-  limits?: Record<string, string>
-  requests?: Record<string, string>
-}
+// EnvVar and ResourceRequirements now imported from common.ts
 
 export interface ServingRuntimeStatus {
   [key: string]: any

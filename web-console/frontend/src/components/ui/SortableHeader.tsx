@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { SortDirection } from '@/hooks/useSortedData'
+import { SortDirection } from '@/lib/hooks/useSortedData'
 
 interface SortableHeaderProps<K extends string> {
   field: K
