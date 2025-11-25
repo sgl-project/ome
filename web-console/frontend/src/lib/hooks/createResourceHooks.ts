@@ -4,13 +4,17 @@ import { ListResponse } from '../types/common'
 /**
  * Generic API interface for standard resource operations.
  * APIs may have additional methods beyond these core operations.
+ *
+ * This interface is intentionally flexible to accommodate different API patterns:
+ * - Cluster-scoped resources (no namespace in get/update/delete)
+ * - Namespace-scoped resources (namespace required or optional)
  */
 export interface ResourceApi<T, CreateInput = Partial<T>, UpdateInput = Partial<T>> {
   list: (namespace?: string) => Promise<ListResponse<T>>
   get: (name: string, namespace?: string) => Promise<T>
   create: (data: CreateInput) => Promise<T>
-  update: (name: string, data: UpdateInput, namespace?: string) => Promise<T>
-  delete: (name: string, namespace?: string) => Promise<void>
+  update: (name: string, data: UpdateInput) => Promise<T>
+  delete: (name: string) => Promise<void>
 }
 
 export interface ResourceHooksOptions {
@@ -18,6 +22,8 @@ export interface ResourceHooksOptions {
   resourceKey: string
   /** Default stale time in ms (default: 30000) */
   staleTime?: number
+  /** Whether list queries should include namespace in query key */
+  namespaceInListKey?: boolean
 }
 
 /**
@@ -49,20 +55,23 @@ export function createResourceHooks<T, CreateInput = Partial<T>, UpdateInput = P
   api: ResourceApi<T, CreateInput, UpdateInput>,
   options: ResourceHooksOptions
 ) {
-  const { resourceKey, staleTime = 30000 } = options
+  const { resourceKey, staleTime = 30000, namespaceInListKey = true } = options
 
   /**
-   * Build a query key for the resource
+   * Build a query key for the resource list
    */
-  function getQueryKey(namespace?: string, name?: string): QueryKey {
-    const key: (string | Record<string, string>)[] = [resourceKey]
-    if (namespace) {
-      key.push({ namespace })
+  function getListQueryKey(namespace?: string): QueryKey {
+    if (namespaceInListKey && namespace) {
+      return [resourceKey, { namespace }]
     }
-    if (name) {
-      key.push(name)
-    }
-    return key
+    return [resourceKey]
+  }
+
+  /**
+   * Build a query key for a single resource
+   */
+  function getItemQueryKey(name: string): QueryKey {
+    return [resourceKey, name]
   }
 
   return {
@@ -71,7 +80,7 @@ export function createResourceHooks<T, CreateInput = Partial<T>, UpdateInput = P
      */
     useList: (namespace?: string) => {
       return useQuery({
-        queryKey: getQueryKey(namespace),
+        queryKey: getListQueryKey(namespace),
         queryFn: () => api.list(namespace),
         staleTime,
       })
@@ -80,10 +89,10 @@ export function createResourceHooks<T, CreateInput = Partial<T>, UpdateInput = P
     /**
      * Fetch a single resource by name
      */
-    useGet: (name: string, namespace?: string) => {
+    useGet: (name: string) => {
       return useQuery({
-        queryKey: getQueryKey(namespace, name),
-        queryFn: () => api.get(name, namespace),
+        queryKey: getItemQueryKey(name),
+        queryFn: () => api.get(name),
         enabled: !!name,
         staleTime,
       })
@@ -108,15 +117,7 @@ export function createResourceHooks<T, CreateInput = Partial<T>, UpdateInput = P
     useUpdate: () => {
       const queryClient = useQueryClient()
       return useMutation({
-        mutationFn: ({
-          name,
-          data,
-          namespace,
-        }: {
-          name: string
-          data: UpdateInput
-          namespace?: string
-        }) => api.update(name, data, namespace),
+        mutationFn: ({ name, data }: { name: string; data: UpdateInput }) => api.update(name, data),
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: [resourceKey] })
         },
@@ -129,8 +130,7 @@ export function createResourceHooks<T, CreateInput = Partial<T>, UpdateInput = P
     useDelete: () => {
       const queryClient = useQueryClient()
       return useMutation({
-        mutationFn: ({ name, namespace }: { name: string; namespace?: string }) =>
-          api.delete(name, namespace),
+        mutationFn: (name: string) => api.delete(name),
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: [resourceKey] })
         },
@@ -138,10 +138,11 @@ export function createResourceHooks<T, CreateInput = Partial<T>, UpdateInput = P
     },
 
     /**
-     * Get the query key builder for advanced use cases
+     * Get the query key builders for advanced use cases
      * (e.g., prefetching, direct cache manipulation)
      */
-    getQueryKey,
+    getListQueryKey,
+    getItemQueryKey,
 
     /**
      * Invalidate all queries for this resource type

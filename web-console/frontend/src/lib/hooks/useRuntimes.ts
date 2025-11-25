@@ -1,33 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { runtimesApi } from '../api/runtimes'
 import { ClusterServingRuntime } from '../types/runtime'
+import { createResourceHooks, createResourceMutation } from './createResourceHooks'
 
-export function useRuntimes(namespace?: string) {
-  return useQuery({
-    queryKey: namespace ? ['runtimes', { namespace }] : ['runtimes'],
-    queryFn: () => runtimesApi.list(namespace),
-  })
-}
+// Create base CRUD hooks using the factory
+const runtimeHooks = createResourceHooks<
+  ClusterServingRuntime,
+  Partial<ClusterServingRuntime>,
+  Partial<ClusterServingRuntime>
+>(runtimesApi, {
+  resourceKey: 'runtimes',
+})
 
-export function useRuntime(name: string) {
-  return useQuery({
-    queryKey: ['runtimes', name],
-    queryFn: () => runtimesApi.get(name),
-    enabled: !!name,
-  })
-}
+// Export standard CRUD hooks from factory
+export const useRuntimes = runtimeHooks.useList
+export const useRuntime = runtimeHooks.useGet
+export const useCreateRuntime = runtimeHooks.useCreate
+export const useDeleteRuntime = runtimeHooks.useDelete
 
-export function useCreateRuntime() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (runtime: Partial<ClusterServingRuntime>) => runtimesApi.create(runtime),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['runtimes'] })
-    },
-  })
-}
-
+// Custom useUpdateRuntime to match existing API signature
+// (existing code passes { name, runtime } instead of { name, data })
 export function useUpdateRuntime() {
   const queryClient = useQueryClient()
 
@@ -40,18 +32,7 @@ export function useUpdateRuntime() {
   })
 }
 
-export function useDeleteRuntime() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (name: string) => runtimesApi.delete(name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['runtimes'] })
-    },
-  })
-}
-
-// Runtime Intelligence Hooks
+// Runtime Intelligence Hooks (specialized operations not covered by factory)
 
 export function useCompatibleRuntimes(format?: string, framework?: string) {
   return useQuery({
@@ -77,11 +58,10 @@ export function useRuntimeRecommendation(format?: string, framework?: string) {
   })
 }
 
-export function useValidateRuntime() {
-  return useMutation({
-    mutationFn: (runtime: Partial<ClusterServingRuntime>) => runtimesApi.validate(runtime),
-  })
-}
+export const useValidateRuntime = createResourceMutation(
+  (runtime: Partial<ClusterServingRuntime>) => runtimesApi.validate(runtime),
+  [] // No invalidation needed for validation
+)
 
 export function useCloneRuntime() {
   const queryClient = useQueryClient()
