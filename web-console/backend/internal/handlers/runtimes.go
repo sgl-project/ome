@@ -209,65 +209,88 @@ func (h *RuntimesHandler) Delete(c *gin.Context) {
 	})
 }
 
-// isAllowedHost checks if the URL host is in the allowed list
-func isAllowedHost(urlStr string) (bool, error) {
-	parsedURL, err := url.Parse(urlStr)
+// sanitizeAndValidateURL validates the URL against allowed hosts and returns a sanitized URL.
+// This prevents SSRF attacks by only allowing HTTPS URLs from trusted hosts.
+// Returns the sanitized URL string and an error message if validation fails.
+func sanitizeAndValidateURL(rawURL string) (string, string) {
+	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return false, err
+		return "", "Invalid URL format: " + err.Error()
 	}
 
 	// Only allow HTTPS
 	if parsedURL.Scheme != "https" {
-		return false, nil
+		return "", "Only HTTPS URLs are allowed"
 	}
 
+	// Validate host against allowlist
 	host := strings.ToLower(parsedURL.Host)
+	hostAllowed := false
 	for _, allowed := range allowedHosts {
 		if host == allowed || strings.HasSuffix(host, "."+allowed) {
-			return true, nil
+			hostAllowed = true
+			break
 		}
 	}
-	return false, nil
+	if !hostAllowed {
+		return "", "Host not in allowed list. Only GitHub, GitLab, and Bitbucket URLs are allowed"
+	}
+
+	// Reconstruct a clean URL from parsed components to ensure sanitization
+	// This creates a new URL string from validated components
+	sanitizedURL := &url.URL{
+		Scheme: "https",
+		Host:   parsedURL.Host,
+		Path:   parsedURL.Path,
+	}
+
+	return sanitizedURL.String(), ""
 }
 
 // FetchYAML handles GET /api/v1/runtimes/fetch-yaml?url=<url>
 func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
-	urlStr := c.Query("url")
-	if urlStr == "" {
+	rawURL := c.Query("url")
+	if rawURL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "URL parameter is required",
 		})
 		return
 	}
 
-	// Validate URL against allowed hosts to prevent SSRF attacks
-	allowed, err := isAllowedHost(urlStr)
-	if err != nil {
-		h.logger.Error("Failed to parse URL", zap.String("url", urlStr), zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid URL format",
-			"details": err.Error(),
-		})
-		return
-	}
-	if !allowed {
-		h.logger.Warn("URL fetch blocked - host not in allowed list", zap.String("url", urlStr))
+	// Validate and sanitize URL to prevent SSRF attacks
+	sanitizedURL, errMsg := sanitizeAndValidateURL(rawURL)
+	if errMsg != "" {
+		h.logger.Warn("URL validation failed",
+			zap.String("url", rawURL),
+			zap.String("reason", errMsg))
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":   "URL not allowed",
-			"details": "Only HTTPS URLs from trusted hosts (GitHub, GitLab, Bitbucket) are allowed",
+			"details": errMsg,
 		})
 		return
 	}
 
-	// Create HTTP client with timeout
+	// Create HTTP client with timeout and redirect policy
 	client := &http.Client{
 		Timeout: 30 * time.Second,
+		// Prevent redirects to disallowed hosts
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Validate redirect URL against allowlist
+			redirectURL := req.URL.String()
+			if _, err := sanitizeAndValidateURL(redirectURL); err != "" {
+				return http.ErrUseLastResponse
+			}
+			if len(via) >= 3 {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
 	}
 
-	// Fetch the URL
-	resp, err := client.Get(urlStr)
+	// Fetch using the sanitized URL (not the raw user input)
+	resp, err := client.Get(sanitizedURL)
 	if err != nil {
-		h.logger.Error("Failed to fetch URL", zap.String("url", urlStr), zap.Error(err))
+		h.logger.Error("Failed to fetch URL", zap.String("url", sanitizedURL), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to fetch URL",
 			"details": err.Error(),
@@ -278,7 +301,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 
 	if resp.StatusCode != http.StatusOK {
 		h.logger.Error("URL returned non-200 status",
-			zap.String("url", urlStr),
+			zap.String("url", sanitizedURL),
 			zap.Int("status", resp.StatusCode))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Failed to fetch URL",
@@ -298,7 +321,7 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Successfully fetched YAML from URL", zap.String("url", urlStr))
+	h.logger.Info("Successfully fetched YAML from URL", zap.String("url", sanitizedURL))
 	c.JSON(http.StatusOK, gin.H{
 		"content": string(content),
 	})
