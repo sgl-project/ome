@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { clsx } from 'clsx'
 
@@ -59,11 +60,13 @@ export function Sidebar() {
     <div className="flex h-full w-64 flex-col bg-sidebar">
       {/* Logo */}
       <Link href="/" className="flex h-16 items-center gap-3 border-b border-sidebar-muted px-6 hover:bg-sidebar-muted/50 transition-colors">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent">
-          <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-          </svg>
-        </div>
+        <Image
+          src="/icon.png"
+          alt="OME Logo"
+          width={36}
+          height={36}
+          className="rounded-lg"
+        />
         <div>
           <h1 className="text-base font-semibold text-sidebar-foreground">OME Console</h1>
           <p className="text-xs text-sidebar-foreground/50">Model Engine</p>

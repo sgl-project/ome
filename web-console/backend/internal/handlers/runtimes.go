@@ -305,7 +305,14 @@ func (h *RuntimesHandler) FetchYAML(c *gin.Context) {
 	}
 
 	// Fetch using the constructed safe URL (not the raw user input)
-	resp, err := client.Get(safeURL)
+	// The URL is safe because:
+	// 1. Host is validated against a strict allowlist (GitHub, GitLab, Bitbucket only)
+	// 2. Only HTTPS scheme is allowed
+	// 3. URL is reconstructed from validated components, not used directly
+	// 4. All redirects are blocked to prevent open redirect attacks
+	// 5. Response size is limited to prevent resource exhaustion
+	// lgtm[go/request-forgery]
+	resp, err := client.Get(safeURL) // #nosec G107 -- URL validated against strict allowlist
 	if err != nil {
 		h.logger.Error("Failed to fetch URL", zap.String("url", safeURL), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
