@@ -39,7 +39,7 @@ ARG VERSION
 ARG GIT_TAG
 ARG GIT_COMMIT
 
-# Build the manager binary with Go build cache (CGO must be enabled for XET library)
+# Build the manager binary with Go build cache (CGO required for XET library dependency)
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
@@ -47,9 +47,17 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -ldflags "-X github.com/sgl-project/ome/pkg/version.GitVersion=${GIT_TAG} -X github.com/sgl-project/ome/pkg/version.GitCommit=${GIT_COMMIT}" \
     -o manager ./cmd/manager
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# Use Oracle Linux 10 as base image (has glibc for CGO binaries)
+FROM oraclelinux:10-slim
+RUN microdnf update -y && microdnf clean all
+
+# Install runtime dependencies for the XET library
+RUN microdnf install -y \
+    glibc \
+    libgcc \
+    libstdc++ \
+    openssl-libs \
+    && microdnf clean all
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
