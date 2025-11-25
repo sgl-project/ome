@@ -1,6 +1,13 @@
 'use client'
 
 import { UseFormRegister, useFieldArray, Control } from 'react-hook-form'
+import {
+  inputMonoClassName,
+  inputClassName,
+  labelStyles,
+  sectionStyles,
+  arrayFieldStyles,
+} from './styles'
 
 interface ContainerFormProps {
   basePath: string
@@ -90,27 +97,23 @@ export function ContainerForm({
 
       {/* Basic Container Info */}
       <div>
-        <h5 className="text-sm font-display font-semibold text-slate-700 mb-3">
-          Basic Configuration
-        </h5>
+        <h5 className={sectionStyles.headerSmall}>Basic Configuration</h5>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="field-label block text-sm text-slate-700 mb-2">
-              Container Name *
-            </label>
+            <label className={labelStyles.base}>Container Name *</label>
             <input
               type="text"
               {...register(`${basePath}.name`)}
-              className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              className={inputMonoClassName}
               placeholder="container-name"
             />
           </div>
           <div>
-            <label className="field-label block text-sm text-slate-700 mb-2">Image *</label>
+            <label className={labelStyles.base}>Image *</label>
             <input
               type="text"
               {...register(`${basePath}.image`)}
-              className="input-focus w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              className={inputMonoClassName}
               placeholder="image:tag"
             />
           </div>
@@ -120,7 +123,7 @@ export function ContainerForm({
       {/* Command */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h5 className="text-sm font-display font-semibold text-slate-700">Command</h5>
+          <h5 className={sectionStyles.headerSmall}>Command</h5>
           <button
             type="button"
             onClick={() => appendCommand('')}
@@ -135,7 +138,7 @@ export function ContainerForm({
               <input
                 type="text"
                 {...register(`${basePath}.command.${index}`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="/bin/sh"
               />
               <button
@@ -158,7 +161,7 @@ export function ContainerForm({
       {/* Arguments */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h5 className="text-sm font-display font-semibold text-slate-700">Arguments</h5>
+          <h5 className={sectionStyles.headerSmall}>Arguments</h5>
           <button
             type="button"
             onClick={() => appendArg('')}
@@ -173,7 +176,7 @@ export function ContainerForm({
               <input
                 type="text"
                 {...register(`${basePath}.args.${index}`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="--arg=value"
               />
               <button
@@ -194,9 +197,7 @@ export function ContainerForm({
       {/* Environment Variables */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h5 className="text-sm font-display font-semibold text-slate-700">
-            Environment Variables
-          </h5>
+          <h5 className={sectionStyles.headerSmall}>Environment Variables</h5>
           <button
             type="button"
             onClick={() => appendEnv({ name: '', value: '' })}
@@ -211,13 +212,13 @@ export function ContainerForm({
               <input
                 type="text"
                 {...register(`${basePath}.env.${index}.name`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="VAR_NAME"
               />
               <input
                 type="text"
                 {...register(`${basePath}.env.${index}.value`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="value"
               />
               <button
@@ -237,41 +238,41 @@ export function ContainerForm({
 
       {/* Resources */}
       <div>
-        <h5 className="text-sm font-display font-semibold text-slate-700 mb-3">Resources</h5>
+        <h5 className={sectionStyles.headerSmall}>Resources</h5>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="field-label block text-xs text-slate-600 mb-2">CPU Requests</label>
+            <label className={labelStyles.base}>CPU Requests</label>
             <input
               type="text"
               {...register(`${basePath}.resources.requests.cpu`)}
-              className="input-focus w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              className={inputMonoClassName}
               placeholder="100m"
             />
           </div>
           <div>
-            <label className="field-label block text-xs text-slate-600 mb-2">CPU Limits</label>
+            <label className={labelStyles.base}>CPU Limits</label>
             <input
               type="text"
               {...register(`${basePath}.resources.limits.cpu`)}
-              className="input-focus w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              className={inputMonoClassName}
               placeholder="1000m"
             />
           </div>
           <div>
-            <label className="field-label block text-xs text-slate-600 mb-2">Memory Requests</label>
+            <label className={labelStyles.base}>Memory Requests</label>
             <input
               type="text"
               {...register(`${basePath}.resources.requests.memory`)}
-              className="input-focus w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              className={inputMonoClassName}
               placeholder="128Mi"
             />
           </div>
           <div>
-            <label className="field-label block text-xs text-slate-600 mb-2">Memory Limits</label>
+            <label className={labelStyles.base}>Memory Limits</label>
             <input
               type="text"
               {...register(`${basePath}.resources.limits.memory`)}
-              className="input-focus w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              className={inputMonoClassName}
               placeholder="512Mi"
             />
           </div>
@@ -281,7 +282,7 @@ export function ContainerForm({
       {/* Volume Mounts */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h5 className="text-sm font-display font-semibold text-slate-700">Volume Mounts</h5>
+          <h5 className={sectionStyles.headerSmall}>Volume Mounts</h5>
           <button
             type="button"
             onClick={() => appendVolumeMount({ name: '', mountPath: '' })}
@@ -296,13 +297,13 @@ export function ContainerForm({
               <input
                 type="text"
                 {...register(`${basePath}.volumeMounts.${index}.name`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="volume-name"
               />
               <input
                 type="text"
                 {...register(`${basePath}.volumeMounts.${index}.mountPath`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="/mnt/path"
               />
               <label className="flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap">
@@ -331,7 +332,7 @@ export function ContainerForm({
       {/* Ports */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h5 className="text-sm font-display font-semibold text-slate-700">Ports</h5>
+          <h5 className={sectionStyles.headerSmall}>Ports</h5>
           <button
             type="button"
             onClick={() => appendPort({ containerPort: '', protocol: 'TCP' })}
@@ -360,7 +361,7 @@ export function ContainerForm({
               <input
                 type="text"
                 {...register(`${basePath}.ports.${index}.name`)}
-                className="input-focus flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                className={inputMonoClassName}
                 placeholder="http (optional)"
               />
               <button

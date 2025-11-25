@@ -1,15 +1,15 @@
 'use client'
 
+import Link from 'next/link'
 import { useModels } from '@/lib/hooks/useModels'
 import { useRuntimes } from '@/lib/hooks/useRuntimes'
 import { useServices } from '@/lib/hooks/useServices'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { StatCard } from '@/components/ui/StatCard'
 import { DataTable, TableLink, TableText } from '@/components/ui/DataTable'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { StatIcons } from '@/components/ui/Icons'
-import Link from 'next/link'
+import { ResourcePageHeader, StatsGrid, type StatItem } from '@/components/layout'
 import type { ClusterBaseModel } from '@/lib/types/model'
 
 export default function DashboardPage() {
@@ -50,62 +50,52 @@ export default function DashboardPage() {
     },
   ]
 
+  const stats: StatItem[] = [
+    {
+      label: 'Total Models',
+      value: modelsData?.total || 0,
+      icon: StatIcons.models,
+      href: '/models',
+      variant: 'primary',
+    },
+    {
+      label: 'Ready Models',
+      value: modelsData?.items.filter((m) => m.status?.state === 'Ready').length || 0,
+      icon: StatIcons.ready,
+      href: '/models',
+      variant: 'success',
+    },
+    {
+      label: 'Runtimes',
+      value: runtimesData?.total || 0,
+      icon: StatIcons.runtimes,
+      href: '/runtimes',
+      variant: 'accent',
+    },
+    {
+      label: 'Services',
+      value: servicesData?.total || 0,
+      icon: StatIcons.services,
+      href: '/services',
+      variant: 'warning',
+    },
+  ]
+
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="flex items-start justify-between gap-8">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Dashboard</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Overview of your OME resources</p>
-            </div>
-            <Button href="/models/import" icon={ButtonIcons.import}>
-              Quick Import
-            </Button>
-          </div>
-        </div>
-      </header>
+      <ResourcePageHeader
+        title="Dashboard"
+        description="Overview of your OME resources"
+        actions={
+          <Button href="/models/import" icon={ButtonIcons.import}>
+            Quick Import
+          </Button>
+        }
+      />
 
-      {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <StatCard
-            label="Total Models"
-            value={modelsData?.total || 0}
-            icon={StatIcons.models}
-            href="/models"
-            variant="primary"
-            delay={0}
-          />
-          <StatCard
-            label="Ready Models"
-            value={modelsData?.items.filter((m) => m.status?.state === 'Ready').length || 0}
-            icon={StatIcons.ready}
-            href="/models"
-            variant="success"
-            delay={1}
-          />
-          <StatCard
-            label="Runtimes"
-            value={runtimesData?.total || 0}
-            icon={StatIcons.runtimes}
-            href="/runtimes"
-            variant="accent"
-            delay={2}
-          />
-          <StatCard
-            label="Services"
-            value={servicesData?.total || 0}
-            icon={StatIcons.services}
-            href="/services"
-            variant="warning"
-            delay={3}
-          />
-        </div>
+        <StatsGrid stats={stats} />
 
-        {/* Recent Models Table */}
         <DataTable
           title="Recent Models"
           columns={columns}
