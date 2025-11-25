@@ -42,7 +42,7 @@ spec:
             path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:dev
+        image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -54,6 +54,18 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
+          - name: SGLANG_TBO_DEBUG
+            value: "1"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: '1'
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: 'true'
+          - name: SGLANG_ENABLE_JIT_DEEPGEMM
+            value: '0'
+          - name: NVSHMEM_HCA_LIST
+            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+          - name: NVSHMEM_IB_GID_INDEX
+            value: '3'
         command:
           - python3
           - -m
@@ -65,7 +77,7 @@ spec:
           - --model-path
           - $(MODEL_PATH)
           - --disaggregation-ib-device
-          - mlx5_1
+          - mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
           - --chunked-prefill-size
           - "524288"
           - --ep-dispatch-algorithm
@@ -80,7 +92,8 @@ spec:
           - --dp-size
           - $(PARALLELISM_SIZE)
           - --disable-radix-cache
-          - --enable-deepep-moe
+          - --moe-a2a-backend
+          - deepep
           - --deepep-mode
           - normal
           - --disaggregation-mode
@@ -100,13 +113,17 @@ spec:
           - "1"
           - --decode-log-interval
           - "1"
-          - --max-running-requests
-          - "1024"
           - --max-total-tokens
           - "131072"
           - --enable-eplb
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
+          - --load-balance-method
+          - round_robin
+          - --watchdog-timeout
+          - "1000000"
+          - --page-size
+          - "1"
         resources:
           requests:
             nvidia.com/gpu: 8
@@ -142,7 +159,7 @@ spec:
             path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:dev
+        image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -154,6 +171,24 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: 'true'
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: '8'
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: '0'
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: '1'
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: '8'
+          - name: SGLANG_ENABLE_JIT_DEEPGEMM
+            value: '0'
+          - name: SGLANG_CHUNKED_PREFIX_CACHE_THRESHOLD
+            value: '0'
+          - name: NVSHMEM_HCA_LIST
+            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+          - name: NVSHMEM_IB_GID_INDEX
+            value: '3'
         command:
           - python3
           - -m
@@ -161,7 +196,7 @@ spec:
           - --model-path
           - $(MODEL_PATH)
           - --disaggregation-ib-device
-          - mlx5_1
+          - mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
           - --chunked-prefill-size
           - "524288"
           - --ep-dispatch-algorithm
@@ -176,7 +211,8 @@ spec:
           - --dp-size
           - $(PARALLELISM_SIZE)
           - --disable-radix-cache
-          - --enable-deepep-moe
+          - --moe-a2a-backend
+          - deepep
           - --deepep-mode
           - normal
           - --disaggregation-mode
@@ -196,13 +232,17 @@ spec:
           - "1"
           - --decode-log-interval
           - "1"
-          - --max-running-requests
-          - "1024"
           - --max-total-tokens
           - "131072"
           - --enable-eplb
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
+          - --load-balance-method
+          - round_robin
+          - --watchdog-timeout
+          - "1000000"
+          - --page-size
+          - "1"
         resources:
           limits:
             nvidia.com/gpu: "8"
@@ -238,7 +278,7 @@ spec:
       hostIPC: true
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:dev
+        image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -252,6 +292,16 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: '16'
+          - name: SGLANG_ENABLE_JIT_DEEPGEMM
+            value: '0'
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: '1'
+          - name: NVSHMEM_HCA_LIST
+            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+          - name: NVSHMEM_IB_GID_INDEX
+            value: '3'
         command:
           - python3
           - -m
@@ -268,20 +318,19 @@ spec:
           - $(PARALLELISM_SIZE)
           - --disable-radix-cache
           - --disable-shared-experts-fusion
-          - --enable-deepep-moe
+          - --moe-a2a-backend
+          - deepep
           - --deepep-mode
           - low_latency
           - --disaggregation-mode
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.6"
+          - "0.835"
           - --disaggregation-ib-device
-          - mlx5_1
+          - mlx5_0,mlx5_1,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
           - --cuda-graph-bs
-          - "480"
-          - --max-running-requests
-          - "46080"
+          - "128"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -298,6 +347,11 @@ spec:
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
           - --enable-eplb
+          - --prefill-round-robin-balance
+          - --watchdog-timeout
+          - "1000000"
+          - --page-size
+          - "1"
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -333,7 +387,7 @@ spec:
             path: /dev/infiniband
       runner:
         name: ome-container
-        image: docker.io/lmsysorg/sglang:dev
+        image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
         env:
           - name: MC_TE_METRIC
             value: "true"
@@ -347,6 +401,22 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.hostIP
+          - name: SGLANG_HACK_DEEPEP_NUM_SMS
+            value: '24'
+          - name: SGLANG_HACK_DEEPEP_NEW_MODE
+            value: '0'
+          - name: NVSHMEM_IB_TRAFFIC_CLASS
+            value: '16'
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: '16'
+          - name: SGLANG_ENABLE_JIT_DEEPGEMM
+            value: '0'
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: '1'
+          - name: NVSHMEM_HCA_LIST
+            value: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1,mlx5_8:1,mlx5_9:1,mlx5_10:1,mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1,mlx5_16:1,mlx5_17:1
+          - name: NVSHMEM_IB_GID_INDEX
+            value: '3'
         command:
           - python3
           - -m
@@ -359,20 +429,19 @@ spec:
           - $(PARALLELISM_SIZE)
           - --disable-radix-cache
           - --disable-shared-experts-fusion
-          - --enable-deepep-moe
+          - --moe-a2a-backend
+          - deepep
           - --deepep-mode
           - low_latency
           - --disaggregation-mode
           - decode
           - --enable-two-batch-overlap
           - --mem-fraction-static
-          - "0.6"
+          - "0.835"
           - --disaggregation-ib-device
-          - mlx5_1
+          - mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9,mlx5_10,mlx5_12,mlx5_13,mlx5_14,mlx5_15,mlx5_16,mlx5_17
           - --cuda-graph-bs
-          - "480"
-          - --max-running-requests
-          - "46080"
+          - "128"
           - --tp-size
           - $(PARALLELISM_SIZE)
           - --dist-init-addr
@@ -389,6 +458,11 @@ spec:
           - --ep-num-redundant-experts
           - $(PARALLELISM_SIZE)
           - --enable-eplb
+          - --prefill-round-robin-balance
+          - --watchdog-timeout
+          - "1000000"
+          - --page-size
+          - "1"
         volumeMounts:
           - mountPath: /dev/shm
             name: dshm
@@ -408,7 +482,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: ghcr.io/moirai-internal/sgl-router:dev
+      image: docker.io/lmsysorg/sglang-router:v0.2.3
       resources:
         limits:
           cpu: "1"

@@ -1,24 +1,25 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-4-maverick-17b-128e-instruct-fp8
+  name: srt-llama-3-1-8b-instruct-grpc
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.51.0.dev0"
+        version: "4.42.3"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: Llama4ForConditionalGeneration
+      modelArchitecture: LlamaForCausalLM
       autoSelect: false
-      priority: 2
+      priority: 1
+      version: "1.0.0"
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 400B
-    max: 402B
+    min: 7B
+    max: 9B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -39,7 +40,7 @@ spec:
       image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
       ports:
         - containerPort: 8080
-          name: http1
+          name: grpc1
           protocol: TCP
       command:
         - /bin/bash
@@ -53,53 +54,56 @@ spec:
           --enable-metrics \
           --log-requests \
           --model-path="$MODEL_PATH" \
-          --tp=8 \
-          --mem-frac=0.82 \
-          --context-length=524288 \
-          --enable-multimodal \
-          --tool-call-parser=pythonic \
-          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
-          --attention-backend=fa3 \
-          --mm-attention-backend=fa3 \
-          --disable-fast-image-processor
+          --tp-size=1 \
+          --mem-frac=0.9 \
+          --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
         limits:
-          cpu: 128
-          memory: 512Gi
-          nvidia.com/gpu: 8
-      readinessProbe:
-        httpGet:
-          path: /health_generate
-          port: 8080
-        failureThreshold: 3
-        successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 200
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
+      # Liveness: Restart if process dies
       livenessProbe:
-        httpGet:
-          path: /health
+        grpc:
           port: 8080
+          service: ""  # Overall server health
         failureThreshold: 5
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
-      startupProbe:
-        httpGet:
-          path: /health_generate
+
+      # Readiness: Don't send traffic until ready
+      readinessProbe:
+        grpc:
           port: 8080
+          service: "sglang.grpc.scheduler.SglangScheduler"
+        initialDelaySeconds: 60
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      startupProbe:
+        grpc:
+          port: 8080
+          service: ""
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
         initialDelaySeconds: 60
         timeoutSeconds: 30
   routerConfig:
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
     runner:
       name: router
       image: docker.io/lmsysorg/sglang-router:v0.2.3
@@ -117,6 +121,7 @@ spec:
           python3 -m sglang_router.launch_router
           --host "0.0.0.0"
           --port "8080"
+          --model-path=/raid/models/meta/llama-3-1-8b-instruct
           --service-discovery
           --service-discovery-namespace "${NAMESPACE}"
           --service-discovery-port 8080

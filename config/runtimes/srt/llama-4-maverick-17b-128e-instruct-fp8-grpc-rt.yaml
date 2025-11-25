@@ -1,7 +1,7 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-llama-4-maverick-17b-128e-instruct-fp8
+  name: srt-llama-4-maverick-17b-128e-instruct-fp8-grpc
 spec:
   disabled: false
   supportedModelFormats:
@@ -39,7 +39,7 @@ spec:
       image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
       ports:
         - containerPort: 8080
-          name: http1
+          name: grpc1
           protocol: TCP
       command:
         - /bin/bash
@@ -61,7 +61,8 @@ spec:
           --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
           --attention-backend=fa3 \
           --mm-attention-backend=fa3 \
-          --disable-fast-image-processor
+          --disable-fast-image-processor \
+          --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -74,26 +75,31 @@ spec:
           cpu: 128
           memory: 512Gi
           nvidia.com/gpu: 8
-      readinessProbe:
-        httpGet:
-          path: /health_generate
-          port: 8080
-        failureThreshold: 3
-        successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 200
+      # Liveness: Restart if process dies
       livenessProbe:
-        httpGet:
-          path: /health
+        grpc:
           port: 8080
+          service: ""  # Overall server health
         failureThreshold: 5
         successThreshold: 1
         periodSeconds: 60
         timeoutSeconds: 60
-      startupProbe:
-        httpGet:
-          path: /health_generate
+
+      # Readiness: Don't send traffic until ready
+      readinessProbe:
+        grpc:
           port: 8080
+          service: "sglang.grpc.scheduler.SglangScheduler"
+        initialDelaySeconds: 60
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      startupProbe:
+        grpc:
+          port: 8080
+          service: ""
         failureThreshold: 150
         successThreshold: 1
         periodSeconds: 6
@@ -117,6 +123,7 @@ spec:
           python3 -m sglang_router.launch_router
           --host "0.0.0.0"
           --port "8080"
+          --model-path=/raid/models/meta/llama-4-maverick-17b-128e-instruct-fp8
           --service-discovery
           --service-discovery-namespace "${NAMESPACE}"
           --service-discovery-port 8080
