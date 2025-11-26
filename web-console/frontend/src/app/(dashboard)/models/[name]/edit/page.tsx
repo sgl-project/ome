@@ -18,6 +18,7 @@ import {
   arrayFieldStyles,
 } from '@/components/forms/styles'
 import type { ClusterBaseModel } from '@/lib/types/model'
+import { MODEL_FORMAT_OPTIONS, MODEL_FRAMEWORK_OPTIONS } from '@/lib/constants/model-options'
 
 interface EditModelFormData {
   spec: {
@@ -308,14 +309,11 @@ export default function EditModelPage() {
                   {...register('spec.modelFormat.name')}
                   className={selectClassName}
                 >
-                  <option value="">Select format...</option>
-                  <option value="safetensors">SafeTensors</option>
-                  <option value="pytorch">PyTorch</option>
-                  <option value="gguf">GGUF</option>
-                  <option value="ggml">GGML</option>
-                  <option value="onnx">ONNX</option>
-                  <option value="tensorflow">TensorFlow</option>
-                  <option value="huggingface">HuggingFace</option>
+                  {MODEL_FORMAT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -346,13 +344,11 @@ export default function EditModelPage() {
                   {...register('spec.modelFramework.name')}
                   className={selectClassName}
                 >
-                  <option value="">Select framework...</option>
-                  <option value="transformers">Transformers</option>
-                  <option value="pytorch">PyTorch</option>
-                  <option value="tensorflow">TensorFlow</option>
-                  <option value="jax">JAX</option>
-                  <option value="onnx-runtime">ONNX Runtime</option>
-                  <option value="llama-cpp">llama.cpp</option>
+                  {MODEL_FRAMEWORK_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
