@@ -309,11 +309,13 @@ export default function EditModelPage() {
                   className={selectClassName}
                 >
                   <option value="">Select format...</option>
-                  <option value="transformer">Transformer</option>
+                  <option value="safetensors">SafeTensors</option>
                   <option value="pytorch">PyTorch</option>
-                  <option value="tensorllm">TensorLLM</option>
-                  <option value="onnx-runtime">ONNX Runtime</option>
+                  <option value="gguf">GGUF</option>
+                  <option value="ggml">GGML</option>
+                  <option value="onnx">ONNX</option>
                   <option value="tensorflow">TensorFlow</option>
+                  <option value="huggingface">HuggingFace</option>
                 </select>
               </div>
               <div>
@@ -345,11 +347,12 @@ export default function EditModelPage() {
                   className={selectClassName}
                 >
                   <option value="">Select framework...</option>
-                  <option value="transformer">Transformer</option>
+                  <option value="transformers">Transformers</option>
                   <option value="pytorch">PyTorch</option>
-                  <option value="tensorllm">TensorLLM</option>
-                  <option value="onnx-runtime">ONNX Runtime</option>
                   <option value="tensorflow">TensorFlow</option>
+                  <option value="jax">JAX</option>
+                  <option value="onnx-runtime">ONNX Runtime</option>
+                  <option value="llama-cpp">llama.cpp</option>
                 </select>
               </div>
               <div>

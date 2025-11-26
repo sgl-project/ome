@@ -660,11 +660,13 @@ export default function CreateModelPage() {
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                     >
                       <option value="">Select format...</option>
-                      <option value="transformer">Transformer</option>
+                      <option value="safetensors">SafeTensors</option>
                       <option value="pytorch">PyTorch</option>
-                      <option value="tensorllm">TensorLLM</option>
-                      <option value="onnx-runtime">ONNX Runtime</option>
+                      <option value="gguf">GGUF</option>
+                      <option value="ggml">GGML</option>
+                      <option value="onnx">ONNX</option>
                       <option value="tensorflow">TensorFlow</option>
+                      <option value="huggingface">HuggingFace</option>
                     </select>
                     {errors.spec?.modelFormat?.name && (
                       <p className="mt-1 text-sm text-red-600">
@@ -737,11 +739,12 @@ export default function CreateModelPage() {
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                     >
                       <option value="">Select framework...</option>
-                      <option value="transformer">Transformer</option>
+                      <option value="transformers">Transformers</option>
                       <option value="pytorch">PyTorch</option>
-                      <option value="tensorllm">TensorLLM</option>
-                      <option value="onnx-runtime">ONNX Runtime</option>
                       <option value="tensorflow">TensorFlow</option>
+                      <option value="jax">JAX</option>
+                      <option value="onnx-runtime">ONNX Runtime</option>
+                      <option value="llama-cpp">llama.cpp</option>
                     </select>
                     {errors.spec?.modelFramework?.name && (
                       <p className="mt-1 text-sm text-red-600">
