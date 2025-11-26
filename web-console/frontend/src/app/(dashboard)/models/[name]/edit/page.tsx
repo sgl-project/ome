@@ -19,6 +19,8 @@ import {
 } from '@/components/forms/styles'
 import type { ClusterBaseModel } from '@/lib/types/model'
 import { MODEL_FORMAT_OPTIONS, MODEL_FRAMEWORK_OPTIONS } from '@/lib/constants/model-options'
+import { Icons } from '@/components/ui/Icons'
+import { exportAsYaml } from '@/lib/utils'
 
 interface EditModelFormData {
   spec: {
@@ -134,6 +136,12 @@ export default function EditModelPage() {
       }
     }
   }, [model, reset])
+
+  const handleExportYaml = () => {
+    if (model) {
+      exportAsYaml(model, `${model.metadata.name}.yaml`)
+    }
+  }
 
   const onSubmit = async (data: EditModelFormData) => {
     if (!model) return
@@ -400,21 +408,34 @@ export default function EditModelPage() {
             />
           </CollapsibleSection>
 
-          {/* Submit */}
-          <div className="flex justify-end gap-4 pt-4">
-            <Link
-              href={`/models/${name}`}
-              className="rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-            >
-              Cancel
-            </Link>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between pt-4">
+            {/* Export Button - Left side */}
             <button
-              type="submit"
-              disabled={isSubmitting}
-              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              type="button"
+              onClick={handleExportYaml}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
             >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              <Icons.downloadFile size="sm" />
+              Export YAML
             </button>
+
+            {/* Cancel and Submit - Right side */}
+            <div className="flex gap-4">
+              <Link
+                href={`/models/${name}`}
+                className="rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </form>
       </main>

@@ -35,6 +35,8 @@ import {
   arrayFieldStyles,
 } from '@/components/forms/styles'
 import { MODEL_FORMAT_OPTIONS, MODEL_FRAMEWORK_OPTIONS } from '@/lib/constants/model-options'
+import { Icons } from '@/components/ui/Icons'
+import { exportAsYaml } from '@/lib/utils'
 
 type StorageType = 'oci' | 'pvc' | 'hf' | 's3' | 'az' | 'gs' | 'github' | 'local' | 'vendor'
 type ModelScope = 'cluster' | 'namespace'
@@ -89,6 +91,7 @@ export default function CreateModelPage() {
     register,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<ClusterBaseModelFormData | BaseModelFormData>({
     resolver: zodResolver(schema) as any,
@@ -208,6 +211,12 @@ export default function CreateModelPage() {
     vendorResourcePath,
     setValue,
   ])
+
+  const handleExportYaml = () => {
+    const data = getValues()
+    const filename = data.metadata?.name || 'model'
+    exportAsYaml(data, `${filename}.yaml`)
+  }
 
   const onSubmit = async (data: ClusterBaseModelFormData | BaseModelFormData) => {
     try {
@@ -811,21 +820,34 @@ export default function CreateModelPage() {
             </div>
           </CollapsibleSection>
 
-          {/* Submit Button */}
-          <div className="flex justify-end gap-4 pt-4">
-            <Link
-              href="/models"
-              className="rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-            >
-              Cancel
-            </Link>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between pt-4">
+            {/* Export Button - Left side */}
             <button
-              type="submit"
-              disabled={isSubmitting}
-              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              type="button"
+              onClick={handleExportYaml}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
             >
-              {isSubmitting ? 'Creating...' : 'Create Model'}
+              <Icons.downloadFile size="sm" />
+              Export YAML
             </button>
+
+            {/* Cancel and Submit - Right side */}
+            <div className="flex gap-4">
+              <Link
+                href="/models"
+                className="rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {isSubmitting ? 'Creating...' : 'Create Model'}
+              </button>
+            </div>
           </div>
         </form>
       </main>
