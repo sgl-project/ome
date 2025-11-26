@@ -13,6 +13,9 @@ import {
   DecoderConfigSection,
   RouterConfigSection,
 } from './sections'
+import { exportAsYaml } from '@/lib/utils'
+import { Icons } from '@/components/ui/Icons'
+import { Spinner } from '@/components/ui/Spinner'
 import type { ClusterServingRuntime } from '@/lib/types/runtime'
 
 interface RuntimeFormProps {
@@ -78,8 +81,15 @@ export function RuntimeForm({
   const {
     handleSubmit,
     reset,
+    getValues,
     formState: { isSubmitting },
   } = form
+
+  const handleExportYaml = () => {
+    const data = getValues()
+    const filename = data.metadata?.name || 'runtime'
+    exportAsYaml(data, `${filename}.yaml`)
+  }
 
   // Pre-populate form when initial data is provided (edit/clone mode)
   useEffect(() => {
@@ -122,7 +132,7 @@ export function RuntimeForm({
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-purple-600"></div>
+          <Spinner size="lg" className="text-purple-600" />
           <p className="text-sm font-medium text-slate-600">Loading runtime configuration...</p>
         </div>
       </div>
@@ -187,45 +197,43 @@ export function RuntimeForm({
             <DecoderConfigSection />
             <RouterConfigSection />
 
-            {/* Submit Button */}
-            <div className="flex items-center justify-end gap-4 pt-6">
-              <Link
-                href={backLink}
-                className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
-              >
-                Cancel
-              </Link>
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between pt-6">
+              {/* Export Button - Left side */}
               <button
-                type="submit"
-                disabled={isSubmitting}
-                className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 px-8 py-3 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                type="button"
+                onClick={handleExportYaml}
+                className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all inline-flex items-center gap-2"
               >
-                {isSubmitting ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    {isEditMode ? 'Saving...' : 'Creating...'}
-                  </span>
-                ) : isEditMode ? (
-                  'Save Changes'
-                ) : (
-                  'Create Runtime'
-                )}
+                <Icons.downloadFile size="sm" />
+                Export YAML
               </button>
+
+              {/* Cancel and Submit - Right side */}
+              <div className="flex items-center gap-4">
+                <Link
+                  href={backLink}
+                  className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 px-8 py-3 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all inline-flex items-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Spinner size="sm" />
+                      {isEditMode ? 'Saving...' : 'Creating...'}
+                    </>
+                  ) : isEditMode ? (
+                    'Save Changes'
+                  ) : (
+                    'Create Runtime'
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         </RuntimeFormProvider>
