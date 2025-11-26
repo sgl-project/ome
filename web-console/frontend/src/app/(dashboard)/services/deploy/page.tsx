@@ -16,6 +16,7 @@ import { useCreateService } from '@/lib/hooks/useServices'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Spinner } from '@/components/ui/Spinner'
 import Link from 'next/link'
 import type { ClusterBaseModel } from '@/lib/types/model'
 import type { RuntimeMatch } from '@/lib/types/runtime'
@@ -518,7 +519,7 @@ export default function DeployServicePage() {
             <div className="p-6">
               {compatibleLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <Spinner size="lg" className="text-primary" />
                 </div>
               ) : sortedRuntimes.length === 0 ? (
                 <div className="text-center py-12">
