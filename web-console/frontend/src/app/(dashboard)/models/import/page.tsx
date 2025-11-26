@@ -13,6 +13,7 @@ import {
   type HuggingFaceModelSearchResult,
   type HuggingFaceSearchParams,
 } from '@/lib/types/model'
+import { Spinner } from '@/components/ui/Spinner'
 
 type WizardStep = 'search' | 'scope' | 'review' | 'importing'
 
@@ -656,7 +657,7 @@ export default function ImportModelPage() {
           <div className="rounded-lg bg-white p-6 shadow text-center">
             <h2 className="mb-4 text-lg font-medium text-gray-900">Importing Model...</h2>
             <div className="flex justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+              <Spinner size="lg" className="text-primary" />
             </div>
             <p className="mt-4 text-sm text-gray-500">
               Creating {modelScope === ModelScope.Cluster ? 'ClusterBaseModel' : 'BaseModel'}{' '}

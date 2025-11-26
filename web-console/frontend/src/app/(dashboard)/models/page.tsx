@@ -11,7 +11,7 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button, ButtonIcons } from '@/components/ui/Button'
-import { StatIcons } from '@/components/ui/Icons'
+import { Icons, StatIcons } from '@/components/ui/Icons'
 import { SortableHeader } from '@/components/ui/SortableHeader'
 import {
   ResourcePageHeader,
@@ -24,15 +24,7 @@ import type { ClusterBaseModel } from '@/lib/types/model'
 
 type SortField = 'name' | 'vendor' | 'framework' | 'size' | 'status' | 'created'
 
-const emptyIcon = (
-  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-    />
-  </svg>
-)
+const emptyIcon = <Icons.cube size="lg" />
 
 export default function ModelsPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('')
@@ -46,9 +38,6 @@ export default function ModelsPage() {
       if (event.resource === 'models') {
         queryClient.invalidateQueries({ queryKey: ['models'] })
       }
-    },
-    onConnected: () => {
-      console.log('Connected to real-time updates')
     },
   })
 
