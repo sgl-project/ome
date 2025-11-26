@@ -5,11 +5,7 @@ import {
   CompatibilityCheck,
   RuntimeValidationResult,
 } from '../types/runtime'
-
-export interface RuntimeListResponse {
-  items: ClusterServingRuntime[]
-  total: number
-}
+import { ListResponse } from '../types/common'
 
 export interface CompatibleRuntimesResponse {
   matches: RuntimeMatch[]
@@ -17,9 +13,11 @@ export interface CompatibleRuntimesResponse {
 }
 
 export const runtimesApi = {
-  list: async (namespace?: string): Promise<RuntimeListResponse> => {
+  list: async (namespace?: string): Promise<ListResponse<ClusterServingRuntime>> => {
     const params = namespace ? { namespace } : {}
-    const response = await apiClient.get<RuntimeListResponse>('/runtimes', { params })
+    const response = await apiClient.get<ListResponse<ClusterServingRuntime>>('/runtimes', {
+      params,
+    })
     return response.data
   },
 

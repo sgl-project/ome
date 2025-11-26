@@ -1,14 +1,10 @@
 import { apiClient } from './client'
 import { AcceleratorClass } from '../types/accelerator'
-
-export interface AcceleratorListResponse {
-  items: AcceleratorClass[]
-  total: number
-}
+import { ListResponse } from '../types/common'
 
 export const acceleratorsApi = {
-  list: async (): Promise<AcceleratorListResponse> => {
-    const response = await apiClient.get<AcceleratorListResponse>('/accelerators')
+  list: async (): Promise<ListResponse<AcceleratorClass>> => {
+    const response = await apiClient.get<ListResponse<AcceleratorClass>>('/accelerators')
     return response.data
   },
 

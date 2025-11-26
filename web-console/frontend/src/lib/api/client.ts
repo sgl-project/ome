@@ -1,4 +1,5 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
+import { transformAxiosError } from '../types/api'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
@@ -10,24 +11,20 @@ export const apiClient = axios.create({
   timeout: 30000,
 })
 
-// Request interceptor
-apiClient.interceptors.request.use(
-  (config) => {
-    // Add auth token if available (future enhancement)
-    // const token = localStorage.getItem('auth_token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
-    return config
-  },
-  (error) => Promise.reject(error)
-)
-
-// Response interceptor
+// Response interceptor with standardized error transformation
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    console.error('API Error:', error)
-    return Promise.reject(error)
+  async (error: AxiosError) => {
+    const apiError = transformAxiosError(error)
+
+    if (process.env.NODE_ENV === 'development') {
+      console.error('API Error:', {
+        status: apiError.status,
+        code: apiError.code,
+        message: apiError.message,
+      })
+    }
+
+    return Promise.reject(apiError)
   }
 )

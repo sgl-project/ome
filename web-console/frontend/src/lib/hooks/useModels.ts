@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { modelsApi } from '../api/models'
 import { ClusterBaseModel } from '../types/model'
+import { DEFAULT_QUERY_CONFIG, queryKeys } from './createResourceHooks'
 
 /**
  * Models hooks are intentionally NOT using createResourceHooks factory because:
@@ -8,21 +9,34 @@ import { ClusterBaseModel } from '../types/model'
  *   This differs from the factory's standard create(data: T) pattern
  * - The HuggingFace token handling is specific to model imports
  *
+ * However, these hooks follow the same query key patterns and default configurations
+ * as factory-generated hooks for consistency.
+ *
  * See useRuntimes.ts and useServices.ts for examples of factory usage.
  */
 
+const RESOURCE_KEY = 'models'
+
 export function useModels(namespace?: string) {
   return useQuery({
-    queryKey: namespace ? ['models', { namespace }] : ['models'],
+    queryKey: queryKeys.list(RESOURCE_KEY, namespace),
     queryFn: () => modelsApi.list(namespace),
+    staleTime: DEFAULT_QUERY_CONFIG.staleTime,
+    gcTime: DEFAULT_QUERY_CONFIG.gcTime,
+    retry: DEFAULT_QUERY_CONFIG.retry,
+    retryDelay: DEFAULT_QUERY_CONFIG.retryDelay,
   })
 }
 
 export function useModel(name: string) {
   return useQuery({
-    queryKey: ['models', name],
+    queryKey: queryKeys.detail(RESOURCE_KEY, name),
     queryFn: () => modelsApi.get(name),
     enabled: !!name,
+    staleTime: DEFAULT_QUERY_CONFIG.staleTime,
+    gcTime: DEFAULT_QUERY_CONFIG.gcTime,
+    retry: DEFAULT_QUERY_CONFIG.retry,
+    retryDelay: DEFAULT_QUERY_CONFIG.retryDelay,
   })
 }
 
@@ -33,7 +47,7 @@ export function useCreateModel() {
     mutationFn: (requestBody: { model: Partial<ClusterBaseModel>; huggingfaceToken?: string }) =>
       modelsApi.create(requestBody),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(RESOURCE_KEY) })
     },
   })
 }
@@ -45,7 +59,7 @@ export function useUpdateModel() {
     mutationFn: ({ name, model }: { name: string; model: Partial<ClusterBaseModel> }) =>
       modelsApi.update(name, model),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(RESOURCE_KEY) })
     },
   })
 }
@@ -56,7 +70,7 @@ export function useDeleteModel() {
   return useMutation({
     mutationFn: (name: string) => modelsApi.delete(name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(RESOURCE_KEY) })
     },
   })
 }

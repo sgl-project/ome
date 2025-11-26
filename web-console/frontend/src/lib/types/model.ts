@@ -1,5 +1,5 @@
 // Import shared types from common
-import { ResourceRequirements, ObjectMeta } from './common'
+import { ObjectMeta, ResourceRequirements } from './common'
 
 // Re-export for backwards compatibility
 export type { ResourceRequirements } from './common'
@@ -75,11 +75,7 @@ export interface ModelStatusSpec {
 export interface ClusterBaseModel {
   apiVersion: string
   kind: string
-  metadata: {
-    name: string
-    creationTimestamp?: string
-    [key: string]: any
-  }
+  metadata: ObjectMeta
   spec: BaseModelSpec
   status?: ModelStatusSpec
 }
@@ -88,12 +84,7 @@ export interface ClusterBaseModel {
 export interface BaseModel {
   apiVersion: string
   kind: string
-  metadata: {
-    name: string
-    namespace: string
-    creationTimestamp?: string
-    [key: string]: any
-  }
+  metadata: ObjectMeta & { namespace: string }
   spec: BaseModelSpec
   status?: ModelStatusSpec
 }
@@ -143,21 +134,40 @@ export interface HuggingFaceModelInfo {
   pipeline_tag?: string
   library_name?: string
   siblings?: HuggingFaceFileSibling[]
-  config?: Record<string, any>
-  cardData?: Record<string, any>
+  config?: HuggingFaceModelConfig
+  cardData?: HuggingFaceCardData
+}
+
+export interface HuggingFaceCardData {
+  license?: string
+  language?: string | string[]
+  tags?: string[]
+  datasets?: string[]
+  library_name?: string
+  pipeline_tag?: string
+  base_model?: string
 }
 
 export interface HuggingFaceModelConfig {
   architectures?: string[]
   model_type?: string
-  task_specific_params?: Record<string, any>
+  task_specific_params?: Record<string, unknown>
   max_position_embeddings?: number
   vocab_size?: number
   hidden_size?: number
   num_hidden_layers?: number
   num_attention_heads?: number
   torch_dtype?: string
-  quantization_config?: Record<string, any>
+  quantization_config?: QuantizationConfig
+}
+
+export interface QuantizationConfig {
+  quant_method?: string
+  bits?: number
+  group_size?: number
+  desc_act?: boolean
+  sym?: boolean
+  checkpoint_format?: string
 }
 
 export interface HuggingFaceModelInfoResponse {
