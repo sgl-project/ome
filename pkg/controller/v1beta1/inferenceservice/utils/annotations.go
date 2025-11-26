@@ -10,16 +10,30 @@ import (
 )
 
 /*
+GetDeploymentModeFromAnnotations extracts a valid deployment mode from annotations if present.
+Returns the deployment mode and true if found and valid, otherwise returns empty string and false.
+*/
+func GetDeploymentModeFromAnnotations(annotations map[string]string) (constants.DeploymentModeType, bool) {
+	if annotations == nil {
+		return "", false
+	}
+	if mode, exists := annotations[constants.DeploymentMode]; exists {
+		deploymentMode := constants.DeploymentModeType(mode)
+		if deploymentMode.IsValid() {
+			return deploymentMode, true
+		}
+	}
+	return "", false
+}
+
+/*
 GetDeploymentMode returns the current deployment mode based on annotations and config.
 If a valid deployment mode is specified in annotations, it is used.
 Otherwise, returns the default deployment mode from config.
 */
 func GetDeploymentMode(annotations map[string]string, deployConfig *controllerconfig.DeployConfig) constants.DeploymentModeType {
-	if mode, exists := annotations[constants.DeploymentMode]; exists {
-		deploymentMode := constants.DeploymentModeType(mode)
-		if deploymentMode.IsValid() {
-			return deploymentMode
-		}
+	if mode, found := GetDeploymentModeFromAnnotations(annotations); found {
+		return mode
 	}
 	return constants.DeploymentModeType(deployConfig.DefaultDeploymentMode)
 }

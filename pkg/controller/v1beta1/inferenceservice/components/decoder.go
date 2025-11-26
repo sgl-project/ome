@@ -154,6 +154,8 @@ func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta
 		return d.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNode:
 		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+	case constants.MultiNodeRayVLLM:
+		return d.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.Serverless:
 		return d.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	default:
