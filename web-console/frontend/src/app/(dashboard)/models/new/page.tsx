@@ -74,11 +74,9 @@ export default function CreateModelPage() {
   const [vendorResourceType, setVendorResourceType] = useState('')
   const [vendorResourcePath, setVendorResourcePath] = useState('')
 
-  // Collapsible sections state
-  const [showModelFormat, setShowModelFormat] = useState(false)
-  const [showModelFramework, setShowModelFramework] = useState(false)
-  const [showLabels, setShowLabels] = useState(false)
-  const [showAnnotations, setShowAnnotations] = useState(false)
+  // Collapsible sections state (only for initial default open state)
+  const [showModelFormat] = useState(false)
+  const [showModelFramework] = useState(false)
 
   // Labels and Annotations state (key-value pairs)
   const [labels, setLabels] = useState<Array<{ key: string; value: string }>>([])
@@ -702,185 +700,129 @@ export default function CreateModelPage() {
           </CollapsibleSection>
 
           {/* Labels - Optional, Collapsible */}
-          <div className="rounded-lg bg-white shadow">
-            <button
-              type="button"
-              onClick={() => setShowLabels(!showLabels)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
-            >
-              <div>
-                <h2 className="text-lg font-medium text-gray-900">
-                  Labels <span className="text-sm text-gray-500 font-normal">(Optional)</span>
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Key-value pairs for organizing and categorizing
-                </p>
-              </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showLabels ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showLabels && (
-              <div className="px-6 pb-6 border-t border-gray-200">
-                <div className="space-y-4 mt-4">
-                  {labels.map((label, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={label.key}
-                          onChange={(e) => {
-                            const newLabels = [...labels]
-                            newLabels[index].key = e.target.value
-                            setLabels(newLabels)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Key (e.g., env)"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={label.value}
-                          onChange={(e) => {
-                            const newLabels = [...labels]
-                            newLabels[index].value = e.target.value
-                            setLabels(newLabels)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Value (e.g., production)"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newLabels = labels.filter((_, i) => i !== index)
-                          setLabels(newLabels)
-                        }}
-                        className="px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+          <CollapsibleSection
+            title="Labels"
+            description="Key-value pairs for organizing and categorizing"
+            defaultOpen={labels.length > 0}
+            badge={
+              labels.length > 0 ? (
+                <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{labels.length}</span>
+              ) : undefined
+            }
+          >
+            <div className="space-y-3">
+              {labels.map((label, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={label.key}
+                    onChange={(e) => {
+                      const newLabels = [...labels]
+                      newLabels[index].key = e.target.value
+                      setLabels(newLabels)
+                    }}
+                    className={inputClassName}
+                    placeholder="Key"
+                  />
+                  <input
+                    type="text"
+                    value={label.value}
+                    onChange={(e) => {
+                      const newLabels = [...labels]
+                      newLabels[index].value = e.target.value
+                      setLabels(newLabels)
+                    }}
+                    className={inputClassName}
+                    placeholder="Value"
+                  />
                   <button
                     type="button"
-                    onClick={() => setLabels([...labels, { key: '', value: '' }])}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => setLabels(labels.filter((_, i) => i !== index))}
+                    className={arrayFieldStyles.removeButton}
                   >
-                    + Add Label
+                    Remove
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setLabels([...labels, { key: '', value: '' }])}
+                className={arrayFieldStyles.addButton}
+              >
+                + Add Label
+              </button>
+            </div>
+          </CollapsibleSection>
 
           {/* Annotations - Optional, Collapsible */}
-          <div className="rounded-lg bg-white shadow">
-            <button
-              type="button"
-              onClick={() => setShowAnnotations(!showAnnotations)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
-            >
-              <div>
-                <h2 className="text-lg font-medium text-gray-900">
-                  Annotations <span className="text-sm text-gray-500 font-normal">(Optional)</span>
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Key-value pairs for storing additional metadata
-                </p>
-              </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showAnnotations ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showAnnotations && (
-              <div className="px-6 pb-6 border-t border-gray-200">
-                <div className="space-y-4 mt-4">
-                  {annotations.map((annotation, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={annotation.key}
-                          onChange={(e) => {
-                            const newAnnotations = [...annotations]
-                            newAnnotations[index].key = e.target.value
-                            setAnnotations(newAnnotations)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Key (e.g., description)"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={annotation.value}
-                          onChange={(e) => {
-                            const newAnnotations = [...annotations]
-                            newAnnotations[index].value = e.target.value
-                            setAnnotations(newAnnotations)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Value (e.g., Production model)"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newAnnotations = annotations.filter((_, i) => i !== index)
-                          setAnnotations(newAnnotations)
-                        }}
-                        className="px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+          <CollapsibleSection
+            title="Annotations"
+            description="Key-value pairs for storing additional metadata"
+            defaultOpen={annotations.length > 0}
+            badge={
+              annotations.length > 0 ? (
+                <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                  {annotations.length}
+                </span>
+              ) : undefined
+            }
+          >
+            <div className="space-y-3">
+              {annotations.map((annotation, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={annotation.key}
+                    onChange={(e) => {
+                      const newAnnotations = [...annotations]
+                      newAnnotations[index].key = e.target.value
+                      setAnnotations(newAnnotations)
+                    }}
+                    className={inputClassName}
+                    placeholder="Key"
+                  />
+                  <input
+                    type="text"
+                    value={annotation.value}
+                    onChange={(e) => {
+                      const newAnnotations = [...annotations]
+                      newAnnotations[index].value = e.target.value
+                      setAnnotations(newAnnotations)
+                    }}
+                    className={inputClassName}
+                    placeholder="Value"
+                  />
                   <button
                     type="button"
-                    onClick={() => setAnnotations([...annotations, { key: '', value: '' }])}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => setAnnotations(annotations.filter((_, i) => i !== index))}
+                    className={arrayFieldStyles.removeButton}
                   >
-                    + Add Annotation
+                    Remove
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setAnnotations([...annotations, { key: '', value: '' }])}
+                className={arrayFieldStyles.addButton}
+              >
+                + Add Annotation
+              </button>
+            </div>
+          </CollapsibleSection>
 
           {/* Submit Button */}
-          <div className="flex justify-end gap-4">
+          <div className="flex justify-end gap-4 pt-4">
             <Link
               href="/models"
-              className="rounded-lg border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
             >
               Cancel
             </Link>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {isSubmitting ? 'Creating...' : 'Create Model'}
             </button>
