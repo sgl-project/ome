@@ -158,8 +158,8 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 		// Base model serving - add MODEL_PATH env variable if necessary
 		if isvcutils.IsOriginalModelVolumeMountNecessary(objectMeta.Annotations) {
 			if b.BaseModel != nil && b.BaseModel.Storage != nil && b.BaseModel.Storage.Path != nil {
-				b.Log.Info("Base model serving - adding MODEL_PATH env variable", "inference service", isvc.Name, "namespace", isvc.Namespace)
-				isvcutils.AppendEnvVars(container, &[]corev1.EnvVar{
+				b.Log.Info("Base model serving - adding MODEL_PATH env variable if not provided", "inference service", isvc.Name, "namespace", isvc.Namespace)
+				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
 					{Name: constants.ModelPathEnvVarKey, Value: *b.BaseModel.Storage.Path},
 				})
 			}
@@ -176,13 +176,13 @@ func UpdateEnvVariables(b *BaseComponentFields, isvc *v1beta1.InferenceService, 
 						objectMeta.Annotations[constants.FineTunedAdapterInjectionKey],
 					),
 				})
-				isvcutils.AppendEnvVars(container, &[]corev1.EnvVar{
+				isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
 					{Name: constants.ModelPathEnvVarKey, Value: constants.ModelDefaultMountPath},
 				})
 			} else if *b.BaseModel.Vendor == string(constants.Cohere) {
 				// Cohere vendor specific env vars
 				if isvcutils.IsCohereCommand1TFewFTServing(objectMeta) {
-					isvcutils.AppendEnvVars(container, &[]corev1.EnvVar{
+					isvcutils.AppendEnvVarsIfNotExist(container, &[]corev1.EnvVar{
 						{Name: constants.TFewWeightPathEnvVarKey, Value: constants.CohereTFewFineTunedWeightDefaultPath},
 					})
 				}
