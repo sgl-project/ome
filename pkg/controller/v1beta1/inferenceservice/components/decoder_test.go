@@ -21,13 +21,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	lws "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
 	"github.com/sgl-project/ome/pkg/controller/v1beta1/controllerconfig"
-	omeTesting "github.com/sgl-project/ome/pkg/testing"
 )
 
 // Helper function for creating int32 pointers
@@ -37,14 +35,6 @@ func int32Ptr(i int32) *int32 {
 
 func TestDecoderReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-
-	testEnv := omeTesting.SetupEnvTest()
-	cfg, err := testEnv.Start()
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	g.Expect(cfg).NotTo(gomega.BeNil())
-	defer func(testEnv *envtest.Environment) {
-		_ = testEnv.Stop()
-	}(testEnv)
 
 	// Create scheme
 	scheme := runtime.NewScheme()
