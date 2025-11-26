@@ -28,6 +28,8 @@ export default function ImportModelPage() {
   const [namespace, setNamespace] = useState('default')
   const [modelName, setModelName] = useState('')
   const [storagePath, setStoragePath] = useState('')
+  const [vendor, setVendor] = useState('')
+  const [version, setVersion] = useState('')
   const [huggingfaceToken, setHuggingfaceToken] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -82,6 +84,11 @@ export default function ImportModelPage() {
     setSelectedModel(model)
     // Auto-generate model name from HF model ID
     setModelName(model.modelId.replace('/', '-').toLowerCase())
+    // Auto-populate vendor from the model author (first part of modelId)
+    const authorPart = model.modelId.split('/')[0]
+    if (authorPart) {
+      setVendor(authorPart)
+    }
     setStep('scope')
   }
 
@@ -118,7 +125,7 @@ export default function ImportModelPage() {
       }
 
       // Build model spec
-      const modelSpec = {
+      const modelSpec: Record<string, unknown> = {
         modelFormat: {
           name: detectedFormat,
         },
@@ -126,6 +133,14 @@ export default function ImportModelPage() {
         modelArchitecture: modelConfig?.architectures?.[0] || '',
         storage: storageSpec,
         displayName: selectedModel.modelId,
+      }
+
+      // Add optional fields if provided
+      if (vendor.trim()) {
+        modelSpec.vendor = vendor.trim()
+      }
+      if (version.trim()) {
+        modelSpec.version = version.trim()
       }
 
       // Prepare model data based on scope
@@ -385,6 +400,38 @@ export default function ImportModelPage() {
                 </p>
               </div>
 
+              {/* Vendor and Version Row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="vendor" className="block text-sm font-medium text-gray-700">
+                    Vendor
+                  </label>
+                  <input
+                    type="text"
+                    id="vendor"
+                    value={vendor}
+                    onChange={(e) => setVendor(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                    placeholder="meta-llama"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">Model provider or organization</p>
+                </div>
+                <div>
+                  <label htmlFor="version" className="block text-sm font-medium text-gray-700">
+                    Version
+                  </label>
+                  <input
+                    type="text"
+                    id="version"
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                    placeholder="1.0.0"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">Optional version identifier</p>
+                </div>
+              </div>
+
               {/* Storage Path */}
               <div>
                 <label htmlFor="storagePath" className="block text-sm font-medium text-gray-700">
@@ -474,6 +521,18 @@ export default function ImportModelPage() {
                       <dt className="text-gray-500">Model Name</dt>
                       <dd className="font-medium text-gray-900">{modelName}</dd>
                     </div>
+                    {vendor && (
+                      <div>
+                        <dt className="text-gray-500">Vendor</dt>
+                        <dd className="font-medium text-gray-900">{vendor}</dd>
+                      </div>
+                    )}
+                    {version && (
+                      <div>
+                        <dt className="text-gray-500">Version</dt>
+                        <dd className="font-medium text-gray-900">{version}</dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="text-gray-500">Storage URI</dt>
                       <dd className="font-medium text-gray-900 font-mono text-xs">

@@ -2,6 +2,7 @@
 
 // Import shared types from common
 import {
+  ObjectMeta,
   ResourceRequirements,
   EnvVar,
   VolumeMount,
@@ -9,6 +10,7 @@ import {
   Container,
   Toleration,
   LocalObjectReference,
+  PodAffinity,
 } from './common'
 
 // Re-export for backwards compatibility
@@ -25,11 +27,7 @@ export type {
 export interface ClusterServingRuntime {
   apiVersion: string
   kind: string
-  metadata: {
-    name: string
-    creationTimestamp?: string
-    [key: string]: any
-  }
+  metadata: ObjectMeta
   spec: ServingRuntimeSpec
   status?: ServingRuntimeStatus
 }
@@ -38,6 +36,7 @@ export interface ServingRuntimeSpec {
   supportedModelFormats?: SupportedModelFormat[]
   modelSizeRange?: ModelSizeRange
   disabled?: boolean
+  multiModel?: boolean
   routerConfig?: RouterConfig
   engineConfig?: EngineConfig
   decoderConfig?: DecoderConfig
@@ -46,7 +45,7 @@ export interface ServingRuntimeSpec {
   containers?: ContainerSpec[]
   volumes?: Volume[]
   nodeSelector?: Record<string, string>
-  affinity?: any
+  affinity?: PodAffinity
   tolerations?: Toleration[]
   labels?: Record<string, string>
   annotations?: Record<string, string>
@@ -59,7 +58,6 @@ export interface ServingRuntimeSpec {
   workers?: WorkerPodSpec
   // AcceleratorRequirements
   acceleratorRequirements?: AcceleratorRequirements
-  [key: string]: any
 }
 
 export interface SupportedModelFormat {
@@ -155,7 +153,8 @@ export interface RunnerSpec {
   env?: EnvVar[]
   resources?: ResourceRequirements
   volumeMounts?: VolumeMount[]
-  [key: string]: any
+  imagePullPolicy?: 'Always' | 'Never' | 'IfNotPresent'
+  workingDir?: string
 }
 
 export interface LeaderSpec {
@@ -203,8 +202,6 @@ export interface AcceleratorConstraints {
   architectureFamilies?: string[]
 }
 
-// Volume, VolumeMount, Container, Toleration, LocalObjectReference now imported from common.ts
-
 export interface ContainerSpec {
   name: string
   image: string
@@ -212,7 +209,10 @@ export interface ContainerSpec {
   args?: string[]
   env?: EnvVar[]
   resources?: ResourceRequirements
-  [key: string]: any
+  volumeMounts?: VolumeMount[]
+  ports?: { containerPort: number; protocol?: string; name?: string }[]
+  imagePullPolicy?: 'Always' | 'Never' | 'IfNotPresent'
+  workingDir?: string
 }
 
 export interface AdapterSpec {
@@ -220,13 +220,13 @@ export interface AdapterSpec {
   runtimeManagementPort?: number
   memBufferBytes?: number
   modelLoadingTimeoutMillis?: number
-  [key: string]: any
 }
 
-// EnvVar and ResourceRequirements now imported from common.ts
-
 export interface ServingRuntimeStatus {
-  [key: string]: any
+  replicas?: number
+  readyReplicas?: number
+  availableReplicas?: number
+  conditions?: { type: string; status: string; reason?: string; message?: string }[]
 }
 
 // Runtime Intelligence Types

@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { servicesApi } from '../api/services'
 import { InferenceService } from '../types/service'
-import { createResourceHooks } from './createResourceHooks'
+import { DEFAULT_QUERY_CONFIG, queryKeys, createResourceHooks } from './createResourceHooks'
+
+const RESOURCE_KEY = 'services'
 
 // Create base CRUD hooks using the factory
 const serviceHooks = createResourceHooks<
@@ -9,28 +11,26 @@ const serviceHooks = createResourceHooks<
   Partial<InferenceService>,
   Partial<InferenceService>
 >(servicesApi, {
-  resourceKey: 'services',
-  namespaceInListKey: false, // services uses ['services', namespace] not ['services', { namespace }]
+  resourceKey: RESOURCE_KEY,
 })
 
-// Export hooks that match the factory signatures
-export const useServices = (namespace?: string) => {
-  // Custom query key format to match existing behavior
-  return useQuery({
-    queryKey: ['services', namespace],
-    queryFn: () => servicesApi.list(namespace),
-  })
-}
+// Export standard list hook from factory
+export const useServices = serviceHooks.useList
 
+// Export create and delete from factory
 export const useCreateService = serviceHooks.useCreate
 export const useDeleteService = serviceHooks.useDelete
 
 // Custom useService to support namespace parameter in get
 export function useService(name: string, namespace?: string) {
   return useQuery({
-    queryKey: ['services', name, namespace],
+    queryKey: queryKeys.detail(RESOURCE_KEY, name, namespace),
     queryFn: () => servicesApi.get(name, namespace),
     enabled: !!name,
+    staleTime: DEFAULT_QUERY_CONFIG.staleTime,
+    gcTime: DEFAULT_QUERY_CONFIG.gcTime,
+    retry: DEFAULT_QUERY_CONFIG.retry,
+    retryDelay: DEFAULT_QUERY_CONFIG.retryDelay,
   })
 }
 
@@ -43,7 +43,7 @@ export function useUpdateService() {
     mutationFn: ({ name, service }: { name: string; service: Partial<InferenceService> }) =>
       servicesApi.update(name, service),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['services'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.all(RESOURCE_KEY) })
     },
   })
 }
