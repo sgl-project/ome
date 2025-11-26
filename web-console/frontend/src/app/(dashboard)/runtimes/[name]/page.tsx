@@ -110,6 +110,12 @@ export default function RuntimeDetailPage() {
             </div>
             <div className="flex gap-3">
               <button
+                onClick={() => router.push(`/runtimes/${name}/clone`)}
+                className="rounded-lg border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                Clone
+              </button>
+              <button
                 onClick={() => router.push(`/runtimes/${name}/edit`)}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
               >
