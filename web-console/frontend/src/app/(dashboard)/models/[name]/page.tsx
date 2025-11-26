@@ -134,100 +134,104 @@ export default function ModelDetailPage() {
         {/* Model Specification */}
         <div className="mb-6 rounded-lg bg-white p-6 shadow">
           <h2 className="mb-4 text-lg font-medium text-gray-900">Model Specification</h2>
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Vendor</dt>
-              <dd className="mt-1 text-sm text-gray-900">{model.spec.vendor || '-'}</dd>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="rounded-lg bg-gray-50 p-3">
+              <dt className="text-xs text-gray-500 mb-1">Vendor</dt>
+              <dd className="text-sm font-medium text-gray-900">{model.spec.vendor || '-'}</dd>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Parameter Size</dt>
-              <dd className="mt-1 text-sm text-gray-900">{model.spec.modelParameterSize || '-'}</dd>
+            <div className="rounded-lg bg-gray-50 p-3">
+              <dt className="text-xs text-gray-500 mb-1">Parameter Size</dt>
+              <dd className="text-sm font-medium text-gray-900">{model.spec.modelParameterSize || '-'}</dd>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Framework</dt>
-              <dd className="mt-1 text-sm text-gray-900">
+            <div className="rounded-lg bg-gray-50 p-3">
+              <dt className="text-xs text-gray-500 mb-1">Framework</dt>
+              <dd className="text-sm font-medium text-gray-900">
                 {model.spec.modelFramework?.name || '-'}
-                {model.spec.modelFramework?.version && ` (${model.spec.modelFramework.version})`}
+                {model.spec.modelFramework?.version && (
+                  <span className="text-gray-500 font-normal"> ({model.spec.modelFramework.version})</span>
+                )}
               </dd>
             </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Model Format</dt>
-              <dd className="mt-1 text-sm text-gray-900">
+            <div className="rounded-lg bg-gray-50 p-3">
+              <dt className="text-xs text-gray-500 mb-1">Format</dt>
+              <dd className="text-sm font-medium text-gray-900">
                 {model.spec.modelFormat?.name || '-'}
-                {model.spec.modelFormat?.version && ` v${model.spec.modelFormat.version}`}
+                {model.spec.modelFormat?.version && (
+                  <span className="text-gray-500 font-normal"> v{model.spec.modelFormat.version}</span>
+                )}
               </dd>
             </div>
 
             {/* Model Configuration fields */}
             {model.spec.modelConfiguration?.architecture && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Architecture</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Architecture</dt>
+                <dd className="text-sm font-medium text-gray-900 truncate" title={model.spec.modelConfiguration.architecture}>
                   {model.spec.modelConfiguration.architecture}
                 </dd>
               </div>
             )}
             {model.spec.modelConfiguration?.model_type && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Model Type</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {model.spec.modelConfiguration.model_type}
-                </dd>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Model Type</dt>
+                <dd className="text-sm font-medium text-gray-900">{model.spec.modelConfiguration.model_type}</dd>
               </div>
             )}
             {model.spec.modelConfiguration?.context_length && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Context Length</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Context Length</dt>
+                <dd className="text-sm font-medium text-gray-900">
                   {model.spec.modelConfiguration.context_length.toLocaleString()}
                 </dd>
               </div>
             )}
             {model.spec.modelConfiguration?.torch_dtype && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Data Type</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {model.spec.modelConfiguration.torch_dtype}
-                </dd>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Data Type</dt>
+                <dd className="text-sm font-medium text-gray-900">{model.spec.modelConfiguration.torch_dtype}</dd>
               </div>
             )}
             {model.spec.modelConfiguration?.transformers_version && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Transformers Version</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {model.spec.modelConfiguration.transformers_version}
-                </dd>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Transformers</dt>
+                <dd className="text-sm font-medium text-gray-900">v{model.spec.modelConfiguration.transformers_version}</dd>
               </div>
             )}
             {model.spec.modelConfiguration?.has_vision !== undefined && (
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Vision Support</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {model.spec.modelConfiguration.has_vision ? 'Yes' : 'No'}
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Vision Support</dt>
+                <dd className="text-sm font-medium text-gray-900">
+                  {model.spec.modelConfiguration.has_vision ? (
+                    <span className="text-green-600">Yes</span>
+                  ) : (
+                    <span>No</span>
+                  )}
                 </dd>
               </div>
             )}
-          </dl>
+          </div>
         </div>
 
         {/* Storage Configuration */}
         {model.spec.storage && (
           <div className="mb-6 rounded-lg bg-white p-6 shadow">
             <h2 className="mb-4 text-lg font-medium text-gray-900">Storage Configuration</h2>
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Storage URI</dt>
-                <dd className="mt-1 text-sm text-gray-900 break-all">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <dt className="text-xs text-gray-500 mb-1">Storage URI</dt>
+                <dd className="text-sm font-mono font-medium text-gray-900 break-all">
                   {model.spec.storage.storageUri || '-'}
                 </dd>
               </div>
               {model.spec.storage.path && (
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Path</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{model.spec.storage.path}</dd>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <dt className="text-xs text-gray-500 mb-1">Local Path</dt>
+                  <dd className="text-sm font-mono font-medium text-gray-900 break-all">
+                    {model.spec.storage.path}
+                  </dd>
                 </div>
               )}
-            </dl>
+            </div>
           </div>
         )}
 
