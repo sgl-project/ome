@@ -4,7 +4,7 @@ import { useForm, FieldValues } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { clusterServingRuntimeSchema } from '@/lib/validation/runtime-schema'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { RuntimeFormProvider } from './RuntimeFormContext'
 import {
   BasicInfoSection,
@@ -22,6 +22,8 @@ interface RuntimeFormProps {
   isLoading?: boolean
   backLink: string
   backLinkText: string
+  /** When set, indicates this is a clone operation from the specified runtime */
+  cloneFrom?: string
 }
 
 const defaultValues = {
@@ -54,10 +56,19 @@ export function RuntimeForm({
   isLoading = false,
   backLink,
   backLinkText,
+  cloneFrom,
 }: RuntimeFormProps) {
   const [error, setError] = useState<string | null>(null)
-  const [initialEngineMultiNode, setInitialEngineMultiNode] = useState(false)
-  const [initialDecoderMultiNode, setInitialDecoderMultiNode] = useState(false)
+
+  // Compute initial multi-node states from initialData immediately (not in useEffect)
+  // This ensures the provider receives the correct initial values on first render
+  const initialEngineMultiNode = useMemo(() => {
+    return !!(initialData?.spec?.engineConfig?.leader || initialData?.spec?.engineConfig?.worker)
+  }, [initialData])
+
+  const initialDecoderMultiNode = useMemo(() => {
+    return !!(initialData?.spec?.decoderConfig?.leader || initialData?.spec?.decoderConfig?.worker)
+  }, [initialData])
 
   const form = useForm<FieldValues>({
     resolver: zodResolver(clusterServingRuntimeSchema) as any,
@@ -70,7 +81,7 @@ export function RuntimeForm({
     formState: { isSubmitting },
   } = form
 
-  // Pre-populate form when initial data is provided (edit mode)
+  // Pre-populate form when initial data is provided (edit/clone mode)
   useEffect(() => {
     if (initialData) {
       reset({
@@ -92,14 +103,6 @@ export function RuntimeForm({
           protocolVersions: initialData.spec?.protocolVersions || [],
         },
       })
-
-      // Set multi-node states based on initial data
-      if (initialData.spec?.engineConfig?.leader || initialData.spec?.engineConfig?.worker) {
-        setInitialEngineMultiNode(true)
-      }
-      if (initialData.spec?.decoderConfig?.leader || initialData.spec?.decoderConfig?.worker) {
-        setInitialDecoderMultiNode(true)
-      }
     }
   }, [initialData, reset])
 
@@ -113,6 +116,7 @@ export function RuntimeForm({
   }
 
   const isEditMode = mode === 'edit'
+  const isCloneMode = mode === 'create' && !!cloneFrom
 
   if (isLoading) {
     return (
@@ -138,7 +142,7 @@ export function RuntimeForm({
             <span>{backLinkText}</span>
           </Link>
           <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
-            {isEditMode ? 'Edit Runtime' : 'Create New Runtime'}
+            {isEditMode ? 'Edit Runtime' : isCloneMode ? 'Clone Runtime' : 'Create New Runtime'}
           </h1>
           <p className="mt-2 text-sm text-slate-600 font-medium">
             {isEditMode ? (
@@ -146,6 +150,11 @@ export function RuntimeForm({
                 Configure{' '}
                 <span className="font-mono text-purple-600">{initialData?.metadata?.name}</span>{' '}
                 runtime settings
+              </>
+            ) : isCloneMode ? (
+              <>
+                Create a new runtime based on{' '}
+                <span className="font-mono text-purple-600">{cloneFrom}</span>
               </>
             ) : (
               <>
