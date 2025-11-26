@@ -12,6 +12,8 @@ import { ResourceRequirements } from '@/components/ui/ResourceRequirements'
 import { KeyValueList } from '@/components/ui/KeyValueList'
 import { NodeList } from '@/components/ui/NodeList'
 import { SpecCard } from '@/components/ui/SpecCard'
+import { Icons } from '@/components/ui/Icons'
+import { exportAsYaml } from '@/lib/utils'
 
 export default function ModelDetailPage() {
   const params = useParams()
@@ -28,6 +30,12 @@ export default function ModelDetailPage() {
       router.push('/models')
     } catch (err) {
       console.error('Failed to delete model:', err)
+    }
+  }
+
+  const handleExportYaml = () => {
+    if (model) {
+      exportAsYaml(model, `${model.metadata.name}.yaml`)
     }
   }
 
@@ -63,6 +71,13 @@ export default function ModelDetailPage() {
               </p>
             </div>
             <div className="flex gap-3">
+              <button
+                onClick={handleExportYaml}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Icons.downloadFile size="sm" />
+                Export YAML
+              </button>
               <button
                 onClick={() => router.push(`/models/${name}/edit`)}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -224,21 +239,10 @@ export default function ModelDetailPage() {
             className="flex w-full items-center justify-between text-left"
           >
             <h2 className="text-lg font-medium text-gray-900">Raw Specification</h2>
-            <svg
-              className={`h-5 w-5 transform text-gray-500 transition-transform ${
-                showRawSpec ? 'rotate-180' : ''
-              }`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+            <Icons.chevronDown
+              size="md"
+              className={`text-gray-500 transition-transform ${showRawSpec ? 'rotate-180' : ''}`}
+            />
           </button>
           {showRawSpec && (
             <pre className="mt-4 overflow-x-auto rounded bg-gray-50 p-4 text-sm text-gray-800">
