@@ -9,6 +9,9 @@ import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ResourceRequirements } from '@/components/ui/ResourceRequirements'
+import { KeyValueList } from '@/components/ui/KeyValueList'
+import { NodeList } from '@/components/ui/NodeList'
+import { SpecCard } from '@/components/ui/SpecCard'
 
 export default function ModelDetailPage() {
   const params = useParams()
@@ -111,22 +114,26 @@ export default function ModelDetailPage() {
             </div>
           </div>
 
-          {/* Nodes Ready */}
-          {model.status?.nodesReady && model.status.nodesReady.length > 0 && (
-            <div className="mt-6">
-              <dt className="text-sm font-medium text-gray-500 mb-2">
-                Ready on Nodes ({model.status.nodesReady.length})
-              </dt>
-              <dd className="flex flex-wrap gap-2">
-                {model.status.nodesReady.map((node: string, index: number) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800"
-                  >
-                    {node}
-                  </span>
-                ))}
-              </dd>
+          {/* Nodes Ready/Failed */}
+          {model.status?.nodesReady && (
+            <NodeList title="Ready on Nodes" nodes={model.status.nodesReady} variant="success" />
+          )}
+          {model.status?.nodesFailed && (
+            <NodeList title="Failed on Nodes" nodes={model.status.nodesFailed} variant="error" />
+          )}
+
+          {/* Labels & Annotations */}
+          {((model.metadata.labels && Object.keys(model.metadata.labels).length > 0) ||
+            (model.metadata.annotations && Object.keys(model.metadata.annotations).length > 0)) && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {model.metadata.labels && (
+                  <KeyValueList title="Labels" items={model.metadata.labels} />
+                )}
+                {model.metadata.annotations && (
+                  <KeyValueList title="Annotations" items={model.metadata.annotations} truncate />
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -135,79 +142,57 @@ export default function ModelDetailPage() {
         <div className="mb-6 rounded-lg bg-white p-6 shadow">
           <h2 className="mb-4 text-lg font-medium text-gray-900">Model Specification</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            <div className="rounded-lg bg-gray-50 p-3">
-              <dt className="text-xs text-gray-500 mb-1">Vendor</dt>
-              <dd className="text-sm font-medium text-gray-900">{model.spec.vendor || '-'}</dd>
-            </div>
-            <div className="rounded-lg bg-gray-50 p-3">
-              <dt className="text-xs text-gray-500 mb-1">Parameter Size</dt>
-              <dd className="text-sm font-medium text-gray-900">{model.spec.modelParameterSize || '-'}</dd>
-            </div>
-            <div className="rounded-lg bg-gray-50 p-3">
-              <dt className="text-xs text-gray-500 mb-1">Framework</dt>
-              <dd className="text-sm font-medium text-gray-900">
-                {model.spec.modelFramework?.name || '-'}
-                {model.spec.modelFramework?.version && (
-                  <span className="text-gray-500 font-normal"> ({model.spec.modelFramework.version})</span>
-                )}
-              </dd>
-            </div>
-            <div className="rounded-lg bg-gray-50 p-3">
-              <dt className="text-xs text-gray-500 mb-1">Format</dt>
-              <dd className="text-sm font-medium text-gray-900">
-                {model.spec.modelFormat?.name || '-'}
-                {model.spec.modelFormat?.version && (
-                  <span className="text-gray-500 font-normal"> v{model.spec.modelFormat.version}</span>
-                )}
-              </dd>
-            </div>
+            <SpecCard label="Vendor">{model.spec.vendor || '-'}</SpecCard>
+            <SpecCard label="Parameter Size">{model.spec.modelParameterSize || '-'}</SpecCard>
+            <SpecCard label="Framework">
+              {model.spec.modelFramework?.name || '-'}
+              {model.spec.modelFramework?.version && (
+                <span className="text-gray-500 font-normal">
+                  {' '}
+                  ({model.spec.modelFramework.version})
+                </span>
+              )}
+            </SpecCard>
+            <SpecCard label="Format">
+              {model.spec.modelFormat?.name || '-'}
+              {model.spec.modelFormat?.version && (
+                <span className="text-gray-500 font-normal">
+                  {' '}
+                  v{model.spec.modelFormat.version}
+                </span>
+              )}
+            </SpecCard>
 
             {/* Model Configuration fields */}
             {model.spec.modelConfiguration?.architecture && (
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Architecture</dt>
-                <dd className="text-sm font-medium text-gray-900 truncate" title={model.spec.modelConfiguration.architecture}>
-                  {model.spec.modelConfiguration.architecture}
-                </dd>
-              </div>
+              <SpecCard label="Architecture" title={model.spec.modelConfiguration.architecture}>
+                {model.spec.modelConfiguration.architecture}
+              </SpecCard>
             )}
             {model.spec.modelConfiguration?.model_type && (
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Model Type</dt>
-                <dd className="text-sm font-medium text-gray-900">{model.spec.modelConfiguration.model_type}</dd>
-              </div>
+              <SpecCard label="Model Type">{model.spec.modelConfiguration.model_type}</SpecCard>
             )}
             {model.spec.modelConfiguration?.context_length && (
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Context Length</dt>
-                <dd className="text-sm font-medium text-gray-900">
-                  {model.spec.modelConfiguration.context_length.toLocaleString()}
-                </dd>
-              </div>
+              <SpecCard label="Context Length">
+                {model.spec.modelConfiguration.context_length.toLocaleString()}
+              </SpecCard>
             )}
             {model.spec.modelConfiguration?.torch_dtype && (
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Data Type</dt>
-                <dd className="text-sm font-medium text-gray-900">{model.spec.modelConfiguration.torch_dtype}</dd>
-              </div>
+              <SpecCard label="Data Type">{model.spec.modelConfiguration.torch_dtype}</SpecCard>
             )}
             {model.spec.modelConfiguration?.transformers_version && (
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Transformers</dt>
-                <dd className="text-sm font-medium text-gray-900">v{model.spec.modelConfiguration.transformers_version}</dd>
-              </div>
+              <SpecCard label="Transformers">
+                v{model.spec.modelConfiguration.transformers_version}
+              </SpecCard>
             )}
             {model.spec.modelConfiguration?.has_vision !== undefined && (
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Vision Support</dt>
-                <dd className="text-sm font-medium text-gray-900">
-                  {model.spec.modelConfiguration.has_vision ? (
-                    <span className="text-green-600">Yes</span>
-                  ) : (
-                    <span>No</span>
-                  )}
-                </dd>
-              </div>
+              <SpecCard label="Vision Support">
+                {model.spec.modelConfiguration.has_vision ? (
+                  <span className="text-green-600">Yes</span>
+                ) : (
+                  <span>No</span>
+                )}
+              </SpecCard>
             )}
           </div>
         </div>
@@ -217,19 +202,13 @@ export default function ModelDetailPage() {
           <div className="mb-6 rounded-lg bg-white p-6 shadow">
             <h2 className="mb-4 text-lg font-medium text-gray-900">Storage Configuration</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <dt className="text-xs text-gray-500 mb-1">Storage URI</dt>
-                <dd className="text-sm font-mono font-medium text-gray-900 break-all">
-                  {model.spec.storage.storageUri || '-'}
-                </dd>
-              </div>
+              <SpecCard label="Storage URI" copyValue={model.spec.storage.storageUri}>
+                <span className="font-mono">{model.spec.storage.storageUri || '-'}</span>
+              </SpecCard>
               {model.spec.storage.path && (
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <dt className="text-xs text-gray-500 mb-1">Local Path</dt>
-                  <dd className="text-sm font-mono font-medium text-gray-900 break-all">
-                    {model.spec.storage.path}
-                  </dd>
-                </div>
+                <SpecCard label="Local Path" copyValue={model.spec.storage.path}>
+                  <span className="font-mono">{model.spec.storage.path}</span>
+                </SpecCard>
               )}
             </div>
           </div>
