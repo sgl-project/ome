@@ -141,7 +141,7 @@ func (h *ModelsHandler) Create(c *gin.Context) {
 			return
 		}
 
-		// Set storage.storageKey to reference the secret
+		// Set storage.key to reference the secret
 		spec, found, err := unstructured.NestedMap(model.Object, "spec")
 		if err != nil || !found {
 			spec = make(map[string]interface{})
@@ -152,7 +152,7 @@ func (h *ModelsHandler) Create(c *gin.Context) {
 			storage = make(map[string]interface{})
 		}
 
-		storage["storageKey"] = secretName
+		storage["key"] = secretName
 		spec["storage"] = storage
 		model.Object["spec"] = spec
 

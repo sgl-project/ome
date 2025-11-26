@@ -27,6 +27,7 @@ export default function ImportModelPage() {
   const [modelScope, setModelScope] = useState<ModelScope>(ModelScope.Cluster)
   const [namespace, setNamespace] = useState('default')
   const [modelName, setModelName] = useState('')
+  const [storagePath, setStoragePath] = useState('')
   const [huggingfaceToken, setHuggingfaceToken] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -107,6 +108,15 @@ export default function ImportModelPage() {
       // Detect model format from siblings
       const detectedFormat = modelInfo.detectedFormat || 'safetensors'
 
+      // Build storage spec with hf:// URI scheme
+      // Note: The backend automatically adds storage.key when huggingfaceToken is provided
+      const storageSpec: { storageUri: string; path?: string } = {
+        storageUri: `hf://${selectedModel.modelId}`,
+      }
+      if (storagePath.trim()) {
+        storageSpec.path = storagePath.trim()
+      }
+
       // Build model spec
       const modelSpec = {
         modelFormat: {
@@ -114,9 +124,7 @@ export default function ImportModelPage() {
         },
         modelType: modelConfig?.model_type || 'text-generation',
         modelArchitecture: modelConfig?.architectures?.[0] || '',
-        storage: {
-          storageUri: `https://huggingface.co/${selectedModel.modelId}`,
-        },
+        storage: storageSpec,
         displayName: selectedModel.modelId,
       }
 
@@ -377,6 +385,25 @@ export default function ImportModelPage() {
                 </p>
               </div>
 
+              {/* Storage Path */}
+              <div>
+                <label htmlFor="storagePath" className="block text-sm font-medium text-gray-700">
+                  Storage Path
+                </label>
+                <input
+                  type="text"
+                  id="storagePath"
+                  value={storagePath}
+                  onChange={(e) => setStoragePath(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  placeholder="/raid/models/meta-llama/llama-3.1-8b-instruct"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Local filesystem path where the model will be stored. If not specified, the system
+                  will use a default path.
+                </p>
+              </div>
+
               {/* HuggingFace Token */}
               <div>
                 <label htmlFor="hfToken" className="block text-sm font-medium text-gray-700">
@@ -447,13 +474,35 @@ export default function ImportModelPage() {
                       <dt className="text-gray-500">Model Name</dt>
                       <dd className="font-medium text-gray-900">{modelName}</dd>
                     </div>
+                    <div>
+                      <dt className="text-gray-500">Storage URI</dt>
+                      <dd className="font-medium text-gray-900 font-mono text-xs">
+                        hf://{selectedModel.modelId}
+                      </dd>
+                    </div>
+                    {storagePath && (
+                      <div>
+                        <dt className="text-gray-500">Storage Path</dt>
+                        <dd className="font-medium text-gray-900 font-mono text-xs">
+                          {storagePath}
+                        </dd>
+                      </div>
+                    )}
+                    {huggingfaceToken && (
+                      <div>
+                        <dt className="text-gray-500">Token Secret</dt>
+                        <dd className="font-medium text-gray-900 font-mono text-xs">
+                          {modelName}-hf-token
+                        </dd>
+                      </div>
+                    )}
                     {modelInfo?.detectedFormat && (
                       <div>
                         <dt className="text-gray-500">Detected Format</dt>
                         <dd className="font-medium text-gray-900">{modelInfo.detectedFormat}</dd>
                       </div>
                     )}
-                    {modelInfo?.estimatedSize && (
+                    {modelInfo?.estimatedSize != null && modelInfo.estimatedSize > 0 && (
                       <div>
                         <dt className="text-gray-500">Estimated Size</dt>
                         <dd className="font-medium text-gray-900">
