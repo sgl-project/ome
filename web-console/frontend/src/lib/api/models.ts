@@ -1,21 +1,12 @@
 import { apiClient } from './client'
 import { ClusterBaseModel, BaseModel } from '../types/model'
-
-export interface ModelListResponse {
-  items: ClusterBaseModel[]
-  total: number
-}
-
-export interface BaseModelListResponse {
-  items: BaseModel[]
-  total: number
-}
+import { ListResponse } from '../types/common'
 
 // ClusterBaseModel API (cluster-scoped)
 export const modelsApi = {
-  list: async (namespace?: string): Promise<ModelListResponse> => {
+  list: async (namespace?: string): Promise<ListResponse<ClusterBaseModel>> => {
     const params = namespace ? { namespace } : {}
-    const response = await apiClient.get<ModelListResponse>('/models', { params })
+    const response = await apiClient.get<ListResponse<ClusterBaseModel>>('/models', { params })
     return response.data
   },
 
@@ -41,7 +32,7 @@ export const modelsApi = {
     await apiClient.delete(`/models/${name}`)
   },
 
-  getStatus: async (name: string): Promise<any> => {
+  getStatus: async (name: string): Promise<unknown> => {
     const response = await apiClient.get(`/models/${name}/status`)
     return response.data
   },
@@ -49,8 +40,8 @@ export const modelsApi = {
 
 // BaseModel API (namespace-scoped)
 export const baseModelsApi = {
-  list: async (namespace: string): Promise<BaseModelListResponse> => {
-    const response = await apiClient.get<BaseModelListResponse>(`/namespaces/${namespace}/models`)
+  list: async (namespace: string): Promise<ListResponse<BaseModel>> => {
+    const response = await apiClient.get<ListResponse<BaseModel>>(`/namespaces/${namespace}/models`)
     return response.data
   },
 

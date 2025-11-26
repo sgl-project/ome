@@ -1,15 +1,11 @@
 import { apiClient } from './client'
 import { InferenceService } from '../types/service'
-
-export interface ServiceListResponse {
-  items: InferenceService[]
-  total: number
-}
+import { ListResponse } from '../types/common'
 
 export const servicesApi = {
-  list: async (namespace?: string): Promise<ServiceListResponse> => {
+  list: async (namespace?: string): Promise<ListResponse<InferenceService>> => {
     const params = namespace ? { namespace } : {}
-    const response = await apiClient.get<ServiceListResponse>('/services', { params })
+    const response = await apiClient.get<ListResponse<InferenceService>>('/services', { params })
     return response.data
   },
 
@@ -33,7 +29,7 @@ export const servicesApi = {
     await apiClient.delete(`/services/${name}`)
   },
 
-  getStatus: async (name: string, namespace?: string): Promise<any> => {
+  getStatus: async (name: string, namespace?: string): Promise<unknown> => {
     const params = namespace ? { namespace } : {}
     const response = await apiClient.get(`/services/${name}/status`, { params })
     return response.data
