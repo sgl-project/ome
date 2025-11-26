@@ -23,6 +23,18 @@ import {
   AzureStorage,
   GitHubStorage,
 } from '@/components/forms/storage'
+import { CollapsibleSection } from '@/components/forms/CollapsibleSection'
+import {
+  sectionStyles,
+  gridStyles,
+  inputClassName,
+  selectClassName,
+  labelStyles,
+  helpTextClassName,
+  errorClassName,
+  arrayFieldStyles,
+} from '@/components/forms/styles'
+import { MODEL_FORMAT_OPTIONS, MODEL_FRAMEWORK_OPTIONS } from '@/lib/constants/model-options'
 
 type StorageType = 'oci' | 'pvc' | 'hf' | 's3' | 'az' | 'gs' | 'github' | 'local' | 'vendor'
 type ModelScope = 'cluster' | 'namespace'
@@ -62,11 +74,9 @@ export default function CreateModelPage() {
   const [vendorResourceType, setVendorResourceType] = useState('')
   const [vendorResourcePath, setVendorResourcePath] = useState('')
 
-  // Collapsible sections state
-  const [showModelFormat, setShowModelFormat] = useState(false)
-  const [showModelFramework, setShowModelFramework] = useState(false)
-  const [showLabels, setShowLabels] = useState(false)
-  const [showAnnotations, setShowAnnotations] = useState(false)
+  // Collapsible sections state (only for initial default open state)
+  const [showModelFormat] = useState(false)
+  const [showModelFramework] = useState(false)
 
   // Labels and Annotations state (key-value pairs)
   const [labels, setLabels] = useState<Array<{ key: string; value: string }>>([])
@@ -252,18 +262,18 @@ export default function CreateModelPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <header className="border-b border-border bg-card shadow-sm">
+        <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
           <Link
             href="/models"
-            className="text-sm text-blue-600 hover:text-blue-800 mb-2 inline-block"
+            className="text-sm text-primary hover:text-primary/80 mb-2 inline-block"
           >
             ← Back to Models
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900">Create New Model</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-3xl font-bold text-foreground">Create New Model</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Define a new{' '}
             {modelScope === 'cluster'
               ? 'ClusterBaseModel (cluster-scoped)'
@@ -276,28 +286,28 @@ export default function CreateModelPage() {
       {/* Main Content */}
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-6 rounded-lg bg-destructive/10 border border-destructive/20 p-4">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Scope Selection */}
-          <div className="rounded-lg bg-white p-6 shadow">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">Model Scope</h2>
+          <div className={sectionStyles.card}>
+            <h2 className={sectionStyles.header}>Model Scope</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Scope *</label>
-                <div className="space-y-2">
+                <label className={labelStyles.base}>Scope *</label>
+                <div className="space-y-2 mt-2">
                   <label className="flex items-center">
                     <input
                       type="radio"
                       value="cluster"
                       checked={modelScope === 'cluster'}
                       onChange={(e) => setModelScope(e.target.value as ModelScope)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      className="h-4 w-4 text-primary focus:ring-primary"
                     />
-                    <span className="ml-2 text-sm text-gray-700">
+                    <span className="ml-2 text-sm text-foreground">
                       <span className="font-medium">Cluster-scoped</span> - Available to all
                       namespaces (ClusterBaseModel)
                     </span>
@@ -308,9 +318,9 @@ export default function CreateModelPage() {
                       value="namespace"
                       checked={modelScope === 'namespace'}
                       onChange={(e) => setModelScope(e.target.value as ModelScope)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      className="h-4 w-4 text-primary focus:ring-primary"
                     />
-                    <span className="ml-2 text-sm text-gray-700">
+                    <span className="ml-2 text-sm text-foreground">
                       <span className="font-medium">Namespace-scoped</span> - Only available in
                       specified namespace (BaseModel)
                     </span>
@@ -320,11 +330,11 @@ export default function CreateModelPage() {
 
               {modelScope === 'namespace' && (
                 <div>
-                  <label htmlFor="namespace" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="namespace" className={labelStyles.base}>
                     Namespace *
                   </label>
                   {namespacesLoading ? (
-                    <div className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm bg-gray-50 text-gray-500">
+                    <div className={`${inputClassName} bg-muted text-muted-foreground`}>
                       Loading namespaces...
                     </div>
                   ) : (
@@ -332,7 +342,7 @@ export default function CreateModelPage() {
                       id="namespace"
                       value={namespace}
                       onChange={(e) => setNamespace(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      className={selectClassName}
                     >
                       {namespacesData?.items.map((ns) => (
                         <option key={ns} value={ns}>
@@ -342,11 +352,9 @@ export default function CreateModelPage() {
                     </select>
                   )}
                   {(errors.metadata as any)?.namespace && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {(errors.metadata as any).namespace.message}
-                    </p>
+                    <p className={errorClassName}>{(errors.metadata as any).namespace.message}</p>
                   )}
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className={helpTextClassName}>
                     Select an existing namespace. This does not create a new namespace.
                   </p>
                 </div>
@@ -355,78 +363,73 @@ export default function CreateModelPage() {
           </div>
 
           {/* Basic Information */}
-          <div className="rounded-lg bg-white p-6 shadow">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">Basic Information</h2>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className={sectionStyles.card}>
+            <h2 className={sectionStyles.header}>Basic Information</h2>
+            <div className={gridStyles.cols2}>
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="name" className={labelStyles.base}>
                   Name *
                 </label>
                 <input
                   type="text"
                   id="name"
                   {...register('metadata.name')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  className={inputClassName}
                   placeholder="my-model"
                 />
                 {errors.metadata?.name && (
-                  <p className="mt-1 text-sm text-red-600">{errors.metadata.name.message}</p>
+                  <p className={errorClassName}>{errors.metadata.name.message}</p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="vendor" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="vendor" className={labelStyles.base}>
                   Vendor *
                 </label>
                 <input
                   type="text"
                   id="vendor"
                   {...register('spec.vendor')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  className={inputClassName}
                   placeholder="e.g., meta, openai, anthropic"
                 />
                 {errors.spec?.vendor && (
-                  <p className="mt-1 text-sm text-red-600">{errors.spec.vendor.message}</p>
+                  <p className={errorClassName}>{errors.spec.vendor.message}</p>
                 )}
               </div>
             </div>
 
             <div className="mt-6">
-              <label
-                htmlFor="modelParameterSize"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="modelParameterSize" className={labelStyles.base}>
                 Model Parameter Size
               </label>
               <input
                 type="text"
                 id="modelParameterSize"
                 {...register('spec.modelParameterSize')}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                className={inputClassName}
                 placeholder="e.g., 7B, 13B, 70B"
               />
             </div>
           </div>
 
           {/* Storage - REQUIRED */}
-          <div className="rounded-lg bg-white p-6 shadow">
-            <h2 className="mb-4 text-lg font-medium text-gray-900">
-              Storage <span className="text-red-600">*</span>
+          <div className={sectionStyles.card}>
+            <h2 className={sectionStyles.header}>
+              Storage <span className="text-destructive">*</span>
             </h2>
-            <p className="mb-4 text-sm text-gray-500">
+            <p className={helpTextClassName}>
               Specify the storage backend where the model files are located
             </p>
 
-            <div className="space-y-4">
+            <div className="space-y-4 mt-4">
               {/* Storage Type Selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Storage Type *
-                </label>
+                <label className={labelStyles.base}>Storage Type *</label>
                 <select
                   value={storageType}
                   onChange={(e) => setStorageType(e.target.value as StorageType)}
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  className={selectClassName}
                 >
                   <option value="hf">HuggingFace (hf://)</option>
                   <option value="oci">OCI Object Storage (oci://)</option>
@@ -523,15 +526,15 @@ export default function CreateModelPage() {
               {/* Local Storage Fields */}
               {storageType === 'local' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Local Path *</label>
+                  <label className={labelStyles.base}>Local Path *</label>
                   <input
                     type="text"
                     value={localPath}
                     onChange={(e) => setLocalPath(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                    className={inputClassName}
                     placeholder="/data/models/my-model"
                   />
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className={helpTextClassName}>
                     Absolute path to model files on the host filesystem
                   </p>
                 </div>
@@ -541,36 +544,32 @@ export default function CreateModelPage() {
               {storageType === 'vendor' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Vendor Name *</label>
+                    <label className={labelStyles.base}>Vendor Name *</label>
                     <input
                       type="text"
                       value={vendorName}
                       onChange={(e) => setVendorName(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      className={inputClassName}
                       placeholder="my-vendor"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Resource Type *
-                    </label>
+                    <label className={labelStyles.base}>Resource Type *</label>
                     <input
                       type="text"
                       value={vendorResourceType}
                       onChange={(e) => setVendorResourceType(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      className={inputClassName}
                       placeholder="models"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Resource Path *
-                    </label>
+                    <label className={labelStyles.base}>Resource Path *</label>
                     <input
                       type="text"
                       value={vendorResourcePath}
                       onChange={(e) => setVendorResourcePath(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      className={inputClassName}
                       placeholder="my-model/v1"
                     />
                   </div>
@@ -579,9 +578,9 @@ export default function CreateModelPage() {
 
               {/* Storage Path - REQUIRED */}
               <div>
-                <label htmlFor="storagePath" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="storagePath" className={labelStyles.base}>
                   Storage Path *{' '}
-                  <span className="text-gray-500 text-xs">
+                  <span className="text-muted-foreground text-xs">
                     (e.g., /raid/models/microsoft/phi-4-gguf)
                   </span>
                 </label>
@@ -589,367 +588,241 @@ export default function CreateModelPage() {
                   type="text"
                   id="storagePath"
                   {...register('spec.storage.path')}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                  className={inputClassName}
                   placeholder="/raid/models/microsoft/phi-4-gguf"
                 />
                 {errors.spec?.storage?.path && (
-                  <p className="mt-1 text-sm text-red-600">{errors.spec.storage.path.message}</p>
+                  <p className={errorClassName}>{errors.spec.storage.path.message}</p>
                 )}
-                <p className="mt-1 text-xs text-gray-500">
+                <p className={helpTextClassName}>
                   Local filesystem path where the model will be stored or is located
                 </p>
               </div>
 
               {/* Generated URI Display */}
-              <div className="mt-4 rounded-lg bg-gray-50 p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Generated Storage URI
-                </label>
+              <div className="mt-4 rounded-lg bg-muted p-4">
+                <label className={labelStyles.base}>Generated Storage URI</label>
                 <input
                   type="text"
                   {...register('spec.storage.storageUri')}
                   readOnly
-                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm shadow-sm"
+                  className={`${inputClassName} bg-card font-mono text-sm cursor-not-allowed`}
                 />
                 {errors.spec?.storage?.storageUri && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {errors.spec.storage.storageUri.message}
-                  </p>
+                  <p className={errorClassName}>{errors.spec.storage.storageUri.message}</p>
                 )}
               </div>
             </div>
           </div>
 
           {/* Model Format - Optional, Collapsible */}
-          <div className="rounded-lg bg-white shadow">
-            <button
-              type="button"
-              onClick={() => setShowModelFormat(!showModelFormat)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
-            >
+          <CollapsibleSection
+            title="Model Format"
+            description="Specify the model file format"
+            defaultOpen={showModelFormat}
+          >
+            <div className={gridStyles.cols2}>
               <div>
-                <h2 className="text-lg font-medium text-gray-900">
-                  Model Format <span className="text-sm text-gray-500 font-normal">(Optional)</span>
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">Specify the model file format</p>
+                <label htmlFor="formatName" className={labelStyles.base}>
+                  Format Name
+                </label>
+                <select
+                  id="formatName"
+                  {...register('spec.modelFormat.name')}
+                  className={selectClassName}
+                >
+                  {MODEL_FORMAT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.spec?.modelFormat?.name && (
+                  <p className={errorClassName}>{errors.spec.modelFormat.name.message}</p>
+                )}
               </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showModelFormat ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showModelFormat && (
-              <div className="px-6 pb-6 border-t border-gray-200">
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-4">
-                  <div>
-                    <label htmlFor="formatName" className="block text-sm font-medium text-gray-700">
-                      Format Name
-                    </label>
-                    <select
-                      id="formatName"
-                      {...register('spec.modelFormat.name')}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                    >
-                      <option value="">Select format...</option>
-                      <option value="transformer">Transformer</option>
-                      <option value="pytorch">PyTorch</option>
-                      <option value="tensorllm">TensorLLM</option>
-                      <option value="onnx-runtime">ONNX Runtime</option>
-                      <option value="tensorflow">TensorFlow</option>
-                    </select>
-                    {errors.spec?.modelFormat?.name && (
-                      <p className="mt-1 text-sm text-red-600">
-                        {errors.spec.modelFormat.name.message}
-                      </p>
-                    )}
-                  </div>
 
-                  <div>
-                    <label
-                      htmlFor="formatVersion"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Format Version
-                    </label>
-                    <input
-                      type="text"
-                      id="formatVersion"
-                      {...register('spec.modelFormat.version')}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="e.g., 1.0"
-                    />
-                  </div>
-                </div>
+              <div>
+                <label htmlFor="formatVersion" className={labelStyles.base}>
+                  Format Version
+                </label>
+                <input
+                  type="text"
+                  id="formatVersion"
+                  {...register('spec.modelFormat.version')}
+                  className={inputClassName}
+                  placeholder="e.g., 1.0"
+                />
               </div>
-            )}
-          </div>
+            </div>
+          </CollapsibleSection>
 
           {/* Model Framework - Optional, Collapsible */}
-          <div className="rounded-lg bg-white shadow">
-            <button
-              type="button"
-              onClick={() => setShowModelFramework(!showModelFramework)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
-            >
+          <CollapsibleSection
+            title="Model Framework"
+            description="Specify the ML framework used"
+            defaultOpen={showModelFramework}
+          >
+            <div className={gridStyles.cols2}>
               <div>
-                <h2 className="text-lg font-medium text-gray-900">
-                  Model Framework{' '}
-                  <span className="text-sm text-gray-500 font-normal">(Optional)</span>
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">Specify the ML framework used</p>
+                <label htmlFor="frameworkName" className={labelStyles.base}>
+                  Framework Name
+                </label>
+                <select
+                  id="frameworkName"
+                  {...register('spec.modelFramework.name')}
+                  className={selectClassName}
+                >
+                  {MODEL_FRAMEWORK_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.spec?.modelFramework?.name && (
+                  <p className={errorClassName}>{errors.spec.modelFramework.name.message}</p>
+                )}
               </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showModelFramework ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showModelFramework && (
-              <div className="px-6 pb-6 border-t border-gray-200">
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-4">
-                  <div>
-                    <label
-                      htmlFor="frameworkName"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Framework Name
-                    </label>
-                    <select
-                      id="frameworkName"
-                      {...register('spec.modelFramework.name')}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                    >
-                      <option value="">Select framework...</option>
-                      <option value="transformer">Transformer</option>
-                      <option value="pytorch">PyTorch</option>
-                      <option value="tensorllm">TensorLLM</option>
-                      <option value="onnx-runtime">ONNX Runtime</option>
-                      <option value="tensorflow">TensorFlow</option>
-                    </select>
-                    {errors.spec?.modelFramework?.name && (
-                      <p className="mt-1 text-sm text-red-600">
-                        {errors.spec.modelFramework.name.message}
-                      </p>
-                    )}
-                  </div>
 
-                  <div>
-                    <label
-                      htmlFor="frameworkVersion"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Framework Version
-                    </label>
-                    <input
-                      type="text"
-                      id="frameworkVersion"
-                      {...register('spec.modelFramework.version')}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                      placeholder="e.g., 2.0"
-                    />
-                  </div>
-                </div>
+              <div>
+                <label htmlFor="frameworkVersion" className={labelStyles.base}>
+                  Framework Version
+                </label>
+                <input
+                  type="text"
+                  id="frameworkVersion"
+                  {...register('spec.modelFramework.version')}
+                  className={inputClassName}
+                  placeholder="e.g., 2.0"
+                />
               </div>
-            )}
-          </div>
+            </div>
+          </CollapsibleSection>
 
           {/* Labels - Optional, Collapsible */}
-          <div className="rounded-lg bg-white shadow">
-            <button
-              type="button"
-              onClick={() => setShowLabels(!showLabels)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
-            >
-              <div>
-                <h2 className="text-lg font-medium text-gray-900">
-                  Labels <span className="text-sm text-gray-500 font-normal">(Optional)</span>
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Key-value pairs for organizing and categorizing
-                </p>
-              </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showLabels ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showLabels && (
-              <div className="px-6 pb-6 border-t border-gray-200">
-                <div className="space-y-4 mt-4">
-                  {labels.map((label, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={label.key}
-                          onChange={(e) => {
-                            const newLabels = [...labels]
-                            newLabels[index].key = e.target.value
-                            setLabels(newLabels)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Key (e.g., env)"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={label.value}
-                          onChange={(e) => {
-                            const newLabels = [...labels]
-                            newLabels[index].value = e.target.value
-                            setLabels(newLabels)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Value (e.g., production)"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newLabels = labels.filter((_, i) => i !== index)
-                          setLabels(newLabels)
-                        }}
-                        className="px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+          <CollapsibleSection
+            title="Labels"
+            description="Key-value pairs for organizing and categorizing"
+            defaultOpen={labels.length > 0}
+            badge={
+              labels.length > 0 ? (
+                <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{labels.length}</span>
+              ) : undefined
+            }
+          >
+            <div className="space-y-3">
+              {labels.map((label, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={label.key}
+                    onChange={(e) => {
+                      const newLabels = [...labels]
+                      newLabels[index].key = e.target.value
+                      setLabels(newLabels)
+                    }}
+                    className={inputClassName}
+                    placeholder="Key"
+                  />
+                  <input
+                    type="text"
+                    value={label.value}
+                    onChange={(e) => {
+                      const newLabels = [...labels]
+                      newLabels[index].value = e.target.value
+                      setLabels(newLabels)
+                    }}
+                    className={inputClassName}
+                    placeholder="Value"
+                  />
                   <button
                     type="button"
-                    onClick={() => setLabels([...labels, { key: '', value: '' }])}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => setLabels(labels.filter((_, i) => i !== index))}
+                    className={arrayFieldStyles.removeButton}
                   >
-                    + Add Label
+                    Remove
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setLabels([...labels, { key: '', value: '' }])}
+                className={arrayFieldStyles.addButton}
+              >
+                + Add Label
+              </button>
+            </div>
+          </CollapsibleSection>
 
           {/* Annotations - Optional, Collapsible */}
-          <div className="rounded-lg bg-white shadow">
-            <button
-              type="button"
-              onClick={() => setShowAnnotations(!showAnnotations)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
-            >
-              <div>
-                <h2 className="text-lg font-medium text-gray-900">
-                  Annotations <span className="text-sm text-gray-500 font-normal">(Optional)</span>
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Key-value pairs for storing additional metadata
-                </p>
-              </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showAnnotations ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {showAnnotations && (
-              <div className="px-6 pb-6 border-t border-gray-200">
-                <div className="space-y-4 mt-4">
-                  {annotations.map((annotation, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={annotation.key}
-                          onChange={(e) => {
-                            const newAnnotations = [...annotations]
-                            newAnnotations[index].key = e.target.value
-                            setAnnotations(newAnnotations)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Key (e.g., description)"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={annotation.value}
-                          onChange={(e) => {
-                            const newAnnotations = [...annotations]
-                            newAnnotations[index].value = e.target.value
-                            setAnnotations(newAnnotations)
-                          }}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                          placeholder="Value (e.g., Production model)"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newAnnotations = annotations.filter((_, i) => i !== index)
-                          setAnnotations(newAnnotations)
-                        }}
-                        className="px-3 py-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+          <CollapsibleSection
+            title="Annotations"
+            description="Key-value pairs for storing additional metadata"
+            defaultOpen={annotations.length > 0}
+            badge={
+              annotations.length > 0 ? (
+                <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                  {annotations.length}
+                </span>
+              ) : undefined
+            }
+          >
+            <div className="space-y-3">
+              {annotations.map((annotation, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={annotation.key}
+                    onChange={(e) => {
+                      const newAnnotations = [...annotations]
+                      newAnnotations[index].key = e.target.value
+                      setAnnotations(newAnnotations)
+                    }}
+                    className={inputClassName}
+                    placeholder="Key"
+                  />
+                  <input
+                    type="text"
+                    value={annotation.value}
+                    onChange={(e) => {
+                      const newAnnotations = [...annotations]
+                      newAnnotations[index].value = e.target.value
+                      setAnnotations(newAnnotations)
+                    }}
+                    className={inputClassName}
+                    placeholder="Value"
+                  />
                   <button
                     type="button"
-                    onClick={() => setAnnotations([...annotations, { key: '', value: '' }])}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => setAnnotations(annotations.filter((_, i) => i !== index))}
+                    className={arrayFieldStyles.removeButton}
                   >
-                    + Add Annotation
+                    Remove
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setAnnotations([...annotations, { key: '', value: '' }])}
+                className={arrayFieldStyles.addButton}
+              >
+                + Add Annotation
+              </button>
+            </div>
+          </CollapsibleSection>
 
           {/* Submit Button */}
-          <div className="flex justify-end gap-4">
+          <div className="flex justify-end gap-4 pt-4">
             <Link
               href="/models"
-              className="rounded-lg border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors"
             >
               Cancel
             </Link>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               {isSubmitting ? 'Creating...' : 'Create Model'}
             </button>
