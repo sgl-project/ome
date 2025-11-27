@@ -426,21 +426,29 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host 0.0.0.0
-          --port 8080
-          --pd-disaggregation
-          --policy random
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 30000
-          --prefill-selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --decode-selector component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --max-payload-size 2147483648
-          --worker-startup-timeout-secs 1200
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --pd-disaggregation
+        - --policy
+        - random
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "30000"
+        - --prefill-selector
+        - component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --decode-selector
+        - component=decoder leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --max-payload-size
+        - "2147483648"
+        - --worker-startup-timeout-secs
+        - "1200"
       env:
         - name: NAMESPACE
           valueFrom:

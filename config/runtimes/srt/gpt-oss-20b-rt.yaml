@@ -66,22 +66,26 @@ spec:
           name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port=8080 \
-          --enable-metrics \
-          --log-requests \
-          --log-requests-level=1 \
-          --model-path="$MODEL_PATH" \
-          --tp 1 \
-          --reasoning-parser=gpt-oss \
-          --context-length=131072 \
-          --grpc-mode
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --log-requests
+        - --log-requests-level
+        - "1"
+        - --model-path
+        - $(MODEL_PATH)
+        - --tp
+        - "1"
+        - --reasoning-parser
+        - gpt-oss
+        - --context-length
+        - "131072"
+        - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -140,20 +144,28 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host "0.0.0.0"
-          --port "8080"
-          --policy cache_aware
-          --model-path /raid/models/openai/gpt-oss-20b
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
-          --selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --log-level debug
-          --health-check-endpoint /HealthCheck
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --policy
+        - cache_aware
+        - --model-path
+        - /raid/models/openai/gpt-oss-20b
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --log-level
+        - debug
+        - --health-check-endpoint
+        - /HealthCheck
       env:
         - name: NAMESPACE
           valueFrom:
