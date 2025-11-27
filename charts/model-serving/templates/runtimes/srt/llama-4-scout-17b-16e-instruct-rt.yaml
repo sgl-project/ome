@@ -103,6 +103,8 @@ spec:
         - /bin/bash
         - '-lc'
         - --
+      {{- $gpus := 4 }}
+      {{- if eq .Values.oci.region "me-dubai-1" }}{{- $gpus = 8 }}{{- end }}
       args:
         - |
           python3 -m sglang.launch_server \
@@ -110,7 +112,7 @@ spec:
           --port=8080 \
           --enable-metrics \
           --model-path="$MODEL_PATH" \
-          --tp=4 \
+          --tp={{ $gpus }} \
           --mem-frac=0.85 \
           --context-length=196608 \
           --enable-multimodal \
@@ -129,11 +131,11 @@ spec:
         requests:
           cpu: 64
           memory: 256Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
         limits:
           cpu: 64
           memory: 256Gi
-          nvidia.com/gpu: 4
+          nvidia.com/gpu: {{ $gpus }}
 
       readinessProbe:
         httpGet:

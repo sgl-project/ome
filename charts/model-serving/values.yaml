@@ -19,6 +19,7 @@ sglang:
 
 oci:
   realm: oc1
+  region: us-chicago-1
   # Required environment variables for ONSR
   ociRegionMetadata: ""
   requestsCaBundle: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
