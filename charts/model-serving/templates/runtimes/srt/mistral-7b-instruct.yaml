@@ -54,6 +54,15 @@ spec:
       modelArchitecture: MistralForCausalLM
       autoSelect: false
       priority: 1
+    - modelFramework:
+        name: transformers
+        version: "4.34.0.dev0"
+      modelFormat:
+        name: safetensors
+        version: "1.0.0"
+      modelArchitecture: MistralForCausalLM
+      autoSelect: true
+      priority: 1
   modelSizeRange:
     min: 5B
     max: 9B
@@ -62,7 +71,7 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
-      image: {{ .Values.mistral_7b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.mistral_7b_instruct.image.tag | default .Values.sglang.commonImage.tag }}
+      image: {{ .Values.mistral_7b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.mistral_7b_instruct.image.tag | default .Values.sglang.latestImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}
           name: http1
@@ -78,8 +87,8 @@ spec:
           --port={{ .Values.sglang.port }} \
           --enable-metrics \
           --log-requests \
-          --model="$MODEL_PATH"\
-          --tp 2 \
+          --model="$MODEL_PATH" \
+          --tp=1 \
           --mem-frac=0.9
       volumeMounts:
         - mountPath: /dev/shm
@@ -88,11 +97,11 @@ spec:
         requests:
           cpu: 10
           memory: 30Gi
-          nvidia.com/gpu: 2
+          nvidia.com/gpu: 1
         limits:
           cpu: 10
           memory: 30Gi
-          nvidia.com/gpu: 2
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:
