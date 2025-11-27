@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useModels } from '@/lib/hooks/useModels'
+import { useModels, useDeleteModel } from '@/lib/hooks/useModels'
 import { useNamespaces } from '@/lib/hooks/useNamespaces'
 import { useServerEvents } from '@/lib/hooks/useServerEvents'
+import { useBulkSelection } from '@/lib/hooks/useBulkSelection'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSortedData } from '@/lib/hooks/useSortedData'
 import { LoadingState } from '@/components/ui/LoadingState'
@@ -13,6 +14,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { Icons, StatIcons } from '@/components/ui/Icons'
 import { SortableHeader } from '@/components/ui/SortableHeader'
+import { BulkActionDropdown } from '@/components/ui/BulkActionDropdown'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { ConfirmDeleteModal } from '@/components/ui/Modal'
 import {
   ResourcePageHeader,
   StatsGrid,
@@ -28,9 +32,11 @@ const emptyIcon = <Icons.cube size="lg" />
 
 export default function ModelsPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('')
+
   const { data, isLoading, error } = useModels(selectedNamespace || undefined)
   const { data: namespacesData } = useNamespaces()
   const queryClient = useQueryClient()
+  const deleteModel = useDeleteModel()
 
   // Connect to SSE for real-time updates
   useServerEvents({
@@ -66,6 +72,25 @@ export default function ModelsPage() {
     sortDirection,
     handleSort,
   } = useSortedData(data?.items, 'name' as SortField, getValue)
+
+  const {
+    selectedItems,
+    showDeleteModal,
+    isDeleting,
+    allSelected,
+    someSelected,
+    handleSelectAll,
+    handleSelectItem,
+    handleBulkDelete,
+    closeDeleteModal,
+    bulkActions,
+    deleteModalResourceName,
+  } = useBulkSelection({
+    items: sortedModels,
+    resourceType: 'model',
+    basePath: '/models',
+    deleteMutation: deleteModel,
+  })
 
   if (isLoading) return <LoadingState message="Loading models..." />
   if (error) return <ErrorState error={error || new Error('Failed to load models')} />
@@ -103,6 +128,9 @@ export default function ModelsPage() {
 
         <ResourceTable
           title="All Models"
+          headerActions={
+            <BulkActionDropdown actions={bulkActions} selectedCount={selectedItems.size} />
+          }
           filterProps={{
             namespaces: namespacesData?.items,
             selectedNamespace,
@@ -111,6 +139,14 @@ export default function ModelsPage() {
         >
           <thead className="bg-muted/50">
             <tr>
+              <th className="w-12 px-4 py-3">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onChange={handleSelectAll}
+                  aria-label="Select all models"
+                />
+              </th>
               <SortableHeader
                 field="name"
                 currentField={sortField}
@@ -164,7 +200,7 @@ export default function ModelsPage() {
           <tbody className="divide-y divide-border bg-card">
             {sortedModels.length === 0 ? (
               <EmptyTableState
-                colSpan={6}
+                colSpan={7}
                 icon={emptyIcon}
                 message="No models found"
                 action={
@@ -180,7 +216,19 @@ export default function ModelsPage() {
               />
             ) : (
               sortedModels.map((model) => (
-                <tr key={model.metadata.name} className="transition-colors hover:bg-muted/30">
+                <tr
+                  key={model.metadata.name}
+                  className={`transition-colors hover:bg-muted/30 ${
+                    selectedItems.has(model.metadata.name) ? 'bg-primary/5' : ''
+                  }`}
+                >
+                  <td className="w-12 px-4 py-4">
+                    <Checkbox
+                      checked={selectedItems.has(model.metadata.name)}
+                      onChange={(checked) => handleSelectItem(model.metadata.name, checked)}
+                      aria-label={`Select ${model.metadata.name}`}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
                     <Link
                       href={`/models/${model.metadata.name}`}
@@ -212,6 +260,15 @@ export default function ModelsPage() {
           </tbody>
         </ResourceTable>
       </main>
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteModal}
+        onClose={closeDeleteModal}
+        onConfirm={handleBulkDelete}
+        resourceName={deleteModalResourceName}
+        resourceType="model"
+        isDeleting={isDeleting}
+      />
     </div>
   )
 }
