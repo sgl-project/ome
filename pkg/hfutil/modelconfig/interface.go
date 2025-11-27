@@ -3,6 +3,7 @@ package modelconfig
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -204,6 +205,94 @@ var (
 	modelLoaders   = make(map[string]func(string) (HuggingFaceModel, error))
 )
 
+// GenericModelConfig is a fallback configuration for unsupported model types.
+// It provides basic functionality by parsing common fields from the config.json
+// and attempting to get parameter count from safetensors files.
+type GenericModelConfig struct {
+	BaseModelConfig
+
+	// Common fields that most models have
+	HiddenSize            int `json:"hidden_size"`
+	NumHiddenLayers       int `json:"num_hidden_layers"`
+	NumAttentionHeads     int `json:"num_attention_heads"`
+	IntermediateSize      int `json:"intermediate_size"`
+	MaxPositionEmbeddings int `json:"max_position_embeddings"`
+	VocabSize             int `json:"vocab_size"`
+
+	// Quantization config (optional)
+	QuantizationConfig *QuantizationConfig `json:"quantization_config,omitempty"`
+}
+
+// GetParameterCount attempts to get parameter count from safetensors, falls back to estimation
+func (c *GenericModelConfig) GetParameterCount() int64 {
+	// First try to get from safetensors
+	if c.ConfigPath != "" {
+		count, err := FindAndParseSafetensors(c.ConfigPath)
+		if err == nil && count > 0 {
+			return count
+		}
+	}
+
+	// Fallback: estimate from architecture if we have the necessary fields
+	if c.HiddenSize > 0 && c.NumHiddenLayers > 0 {
+		return estimateGenericParams(c.HiddenSize, c.NumHiddenLayers, c.IntermediateSize, c.VocabSize)
+	}
+
+	return 0
+}
+
+// estimateGenericParams provides a rough parameter estimate for transformer models
+func estimateGenericParams(hiddenSize, numLayers, intermediateSize, vocabSize int) int64 {
+	if intermediateSize == 0 {
+		intermediateSize = hiddenSize * 4 // Common default ratio
+	}
+
+	// Rough estimate based on typical transformer architecture:
+	// - Embeddings: vocab_size * hidden_size
+	// - Per layer: ~12 * hidden_size^2 (attention + MLP)
+	// - Output: vocab_size * hidden_size (often tied with embeddings)
+	embeddingParams := int64(vocabSize) * int64(hiddenSize)
+	perLayerParams := int64(12) * int64(hiddenSize) * int64(hiddenSize)
+	totalLayerParams := int64(numLayers) * perLayerParams
+
+	return embeddingParams + totalLayerParams
+}
+
+func (c *GenericModelConfig) GetQuantizationType() string {
+	if c.QuantizationConfig != nil && c.QuantizationConfig.QuantMethod != "" {
+		return c.QuantizationConfig.QuantMethod
+	}
+	return ""
+}
+
+func (c *GenericModelConfig) GetContextLength() int {
+	return c.MaxPositionEmbeddings
+}
+
+func (c *GenericModelConfig) GetModelSizeBytes() int64 {
+	paramCount := c.GetParameterCount()
+	if paramCount == 0 {
+		return 0
+	}
+	return EstimateModelSizeBytes(paramCount, c.TorchDtype)
+}
+
+// loadGenericConfig loads a generic model configuration as a fallback
+func loadGenericConfig(configPath string) (*GenericModelConfig, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file '%s': %w", configPath, err)
+	}
+
+	var config GenericModelConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config JSON from '%s': %w", configPath, err)
+	}
+
+	config.ConfigPath = configPath
+	return &config, nil
+}
+
 // RegisterModelLoader safely registers a model loader function for a given model type
 func RegisterModelLoader(modelType string, loader func(string) (HuggingFaceModel, error)) {
 	if modelType == "" {
@@ -277,9 +366,13 @@ func LoadModelConfig(configPath string) (HuggingFaceModel, error) {
 	modelLoadersMu.RUnlock()
 
 	if !exists {
-		supportedTypes := GetSupportedModelTypes()
-		return nil, fmt.Errorf("unsupported model type '%s' in config file '%s'. Supported types are: %v",
-			baseConfig.ModelType, configPath, supportedTypes)
+		// Fallback to generic config for unsupported model types
+		// Log a warning but still return useful data
+		log.Printf("Warning: model type '%s' is not fully supported, using generic config. "+
+			"Parameter count will be estimated from safetensors or architecture.",
+			baseConfig.ModelType)
+
+		return loadGenericConfig(configPath)
 	}
 
 	model, err := loader(configPath)

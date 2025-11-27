@@ -3,7 +3,6 @@ package modelconfig
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -206,23 +205,91 @@ func TestUnsupportedModelType(t *testing.T) {
 		return
 	}
 
-	// Try to load the unsupported model type
-	_, err := LoadModelConfig(configPath)
+	// Try to load the unsupported model type - should now succeed with generic config
+	config, err := LoadModelConfig(configPath)
 
-	// Verify that an error was returned
-	if err == nil {
-		t.Fatalf("Expected an error when loading unsupported model type, but got nil")
+	// Verify that no error was returned (we now use generic fallback)
+	if err != nil {
+		t.Fatalf("Expected no error when loading unsupported model type with generic fallback, but got: %v", err)
 	}
 
-	// Check that the error message mentions the model type
-	if !strings.Contains(err.Error(), "clip_vision_model") {
-		t.Errorf("Error message does not mention the model type: %v", err)
+	// Verify we got a valid config back
+	if config == nil {
+		t.Fatalf("Expected a config but got nil")
 	}
 
-	// Check that the error message mentions supported types
-	if !strings.Contains(err.Error(), "Supported types") {
-		t.Errorf("Error message does not mention supported types: %v", err)
+	// Check that the model type is preserved
+	modelType := config.GetModelType()
+	if modelType != "clip_vision_model" {
+		t.Errorf("Expected model type 'clip_vision_model' but got '%s'", modelType)
 	}
 
-	t.Logf("Got expected error for unsupported model: %v", err)
+	// Verify that generic config returns reasonable values
+	t.Logf("Generic config for unsupported model type: modelType=%s, params=%d, context=%d",
+		config.GetModelType(), config.GetParameterCount(), config.GetContextLength())
+}
+
+func TestGenericConfigFallback(t *testing.T) {
+	// Create a temporary config file with an unsupported model type
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+
+	// Write a config with common fields but unsupported model type
+	configJSON := `{
+		"model_type": "falcon",
+		"architectures": ["FalconForCausalLM"],
+		"hidden_size": 4544,
+		"num_hidden_layers": 32,
+		"num_attention_heads": 71,
+		"intermediate_size": 18176,
+		"max_position_embeddings": 2048,
+		"vocab_size": 65024,
+		"torch_dtype": "bfloat16",
+		"transformers_version": "4.30.0"
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configJSON), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	// Load the config
+	config, err := LoadModelConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load generic config: %v", err)
+	}
+
+	// Verify basic fields are parsed correctly
+	if config.GetModelType() != "falcon" {
+		t.Errorf("Expected model type 'falcon', got '%s'", config.GetModelType())
+	}
+
+	if config.GetArchitecture() != "FalconForCausalLM" {
+		t.Errorf("Expected architecture 'FalconForCausalLM', got '%s'", config.GetArchitecture())
+	}
+
+	if config.GetContextLength() != 2048 {
+		t.Errorf("Expected context length 2048, got %d", config.GetContextLength())
+	}
+
+	if config.GetTorchDtype() != "bfloat16" {
+		t.Errorf("Expected torch_dtype 'bfloat16', got '%s'", config.GetTorchDtype())
+	}
+
+	if config.GetTransformerVersion() != "4.30.0" {
+		t.Errorf("Expected transformers_version '4.30.0', got '%s'", config.GetTransformerVersion())
+	}
+
+	// Verify parameter estimation works (should be non-zero based on architecture)
+	paramCount := config.GetParameterCount()
+	if paramCount <= 0 {
+		t.Errorf("Expected positive parameter count from estimation, got %d", paramCount)
+	}
+	t.Logf("Estimated parameter count for Falcon: %s (%d)", FormatParamCount(paramCount), paramCount)
+
+	// Verify model size estimation works
+	modelSize := config.GetModelSizeBytes()
+	if modelSize <= 0 {
+		t.Errorf("Expected positive model size, got %d", modelSize)
+	}
+	t.Logf("Estimated model size: %s", FormatSize(modelSize))
 }
