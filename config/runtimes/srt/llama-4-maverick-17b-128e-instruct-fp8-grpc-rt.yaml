@@ -42,27 +42,34 @@ spec:
           name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port=8080 \
-          --enable-metrics \
-          --log-requests \
-          --model-path="$MODEL_PATH" \
-          --tp=8 \
-          --mem-frac=0.82 \
-          --context-length=524288 \
-          --enable-multimodal \
-          --tool-call-parser=pythonic \
-          --chat-template=/sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja \
-          --attention-backend=fa3 \
-          --mm-attention-backend=fa3 \
-          --disable-fast-image-processor \
-          --grpc-mode
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --log-requests
+        - --model-path
+        - $(MODEL_PATH)
+        - --tp
+        - "8"
+        - --mem-frac
+        - "0.82"
+        - --context-length
+        - "524288"
+        - --enable-multimodal
+        - --tool-call-parser
+        - pythonic
+        - --chat-template
+        - /sgl-workspace/sglang/examples/chat_template/tool_chat_template_llama4_pythonic.jinja
+        - --attention-backend
+        - fa3
+        - --mm-attention-backend
+        - fa3
+        - --disable-fast-image-processor
+        - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -117,17 +124,22 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host "0.0.0.0"
-          --port "8080"
-          --model-path=/raid/models/meta/llama-4-maverick-17b-128e-instruct-fp8
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
-          --selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --model-path
+        - /raid/models/meta/llama-4-maverick-17b-128e-instruct-fp8
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
       env:
         - name: NAMESPACE
           valueFrom:
