@@ -44,24 +44,30 @@ spec:
           name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port=8080 \
-          --enable-metrics \
-          --model-path="$MODEL_PATH" \
-          --disaggregation-mode prefill \
-          --disaggregation-ib-device mlx5_0 \
-          --tp-size 8 \
-          --context-length=430000 \
-          --chat-template llama-4 \
-          --attention-backend fa3 \
-          --log-requests \
-          --grpc-mode
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --model-path
+        - $(MODEL_PATH)
+        - --disaggregation-mode
+        - prefill
+        - --disaggregation-ib-device
+        - mlx5_0
+        - --tp-size
+        - "8"
+        - --context-length
+        - "430000"
+        - --chat-template
+        - llama-4
+        - --attention-backend
+        - fa3
+        - --log-requests
+        - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -129,24 +135,30 @@ spec:
           name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port=8080 \
-          --enable-metrics \
-          --model-path="$MODEL_PATH" \
-          --disaggregation-mode decode \
-          --disaggregation-ib-device mlx5_0 \
-          --tp-size 8 \
-          --context-length=430000 \
-          --chat-template llama-4 \
-          --attention-backend fa3 \
-          --log-requests \
-          --grpc-mode
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --model-path
+        - $(MODEL_PATH)
+        - --disaggregation-mode
+        - decode
+        - --disaggregation-ib-device
+        - mlx5_0
+        - --tp-size
+        - "8"
+        - --context-length
+        - "430000"
+        - --chat-template
+        - llama-4
+        - --attention-backend
+        - fa3
+        - --log-requests
+        - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -201,20 +213,27 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host "0.0.0.0"
-          --port "8080"
-          --model-path=/raid/models/meta/llama-4-maverick-17b-128e-instruct-fp8
-          --pd-disaggregation
-          --policy power_of_two
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
-          --prefill-selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
-          --decode-selector component=decoder ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --model-path
+        - /raid/models/meta/llama-4-maverick-17b-128e-instruct-fp8
+        - --pd-disaggregation
+        - --policy
+        - power_of_two
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --prefill-selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
+        - --decode-selector
+        - component=decoder ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
       env:
         - name: NAMESPACE
           valueFrom:

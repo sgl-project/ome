@@ -43,20 +43,22 @@ spec:
           name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port=8080 \
-          --enable-metrics \
-          --log-requests \
-          --model-path="$MODEL_PATH" \
-          --tp-size=1 \
-          --mem-frac=0.9 \
-          --grpc-mode
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --log-requests
+        - --model-path
+        - $(MODEL_PATH)
+        - --tp-size
+        - "1"
+        - --mem-frac
+        - "0.9"
+        - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -115,17 +117,22 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host "0.0.0.0"
-          --port "8080"
-          --model-path=/raid/models/meta/llama-3-1-8b-instruct
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
-          --selector component=engine ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --model-path
+        - /raid/models/meta/llama-3-1-8b-instruct
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
       env:
         - name: NAMESPACE
           valueFrom:
