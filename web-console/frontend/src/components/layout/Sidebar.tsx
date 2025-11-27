@@ -113,7 +113,7 @@ export function Sidebar() {
         href="/"
         className="flex h-16 items-center gap-3 border-b border-sidebar-muted px-6 hover:bg-sidebar-muted/50 transition-colors"
       >
-        <Image src="/icon.png" alt="OME Logo" width={36} height={36} className="rounded-lg" />
+        <Image src="/logo.png" alt="OME Logo" width={36} height={36} className="rounded-lg" />
         <div>
           <h1 className="text-base font-semibold text-sidebar-foreground">OME Console</h1>
           <p className="text-xs text-sidebar-foreground/50">Model Engine</p>

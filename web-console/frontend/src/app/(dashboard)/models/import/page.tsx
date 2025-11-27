@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -8,6 +8,7 @@ import {
   useHuggingFaceModelInfo,
   useHuggingFaceModelConfig,
 } from '@/lib/hooks/useHuggingFace'
+import { useNamespaces } from '@/lib/hooks/useNamespaces'
 import {
   ModelScope,
   type HuggingFaceModelSearchResult,
@@ -46,6 +47,17 @@ export default function ImportModelPage() {
   const { data: modelConfig, isLoading: isLoadingConfig } = useHuggingFaceModelConfig(
     selectedModel?.modelId || null
   )
+  const { data: namespacesData, isLoading: namespacesLoading } = useNamespaces()
+
+  // Set default namespace when namespaces load
+  useEffect(() => {
+    if (namespacesData?.items && namespacesData.items.length > 0) {
+      const defaultNs = namespacesData.items.includes('default')
+        ? 'default'
+        : namespacesData.items[0]
+      setNamespace(defaultNs)
+    }
+  }, [namespacesData])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -366,20 +378,33 @@ export default function ImportModelPage() {
                 </div>
               </div>
 
-              {/* Namespace Input (conditional) */}
+              {/* Namespace Select (conditional) */}
               {modelScope === ModelScope.Namespace && (
                 <div>
                   <label htmlFor="namespace" className="block text-sm font-medium text-gray-700">
                     Namespace *
                   </label>
-                  <input
-                    type="text"
-                    id="namespace"
-                    value={namespace}
-                    onChange={(e) => setNamespace(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                    placeholder="default"
-                  />
+                  {namespacesLoading ? (
+                    <div className="mt-1 block w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-gray-500">
+                      Loading namespaces...
+                    </div>
+                  ) : (
+                    <select
+                      id="namespace"
+                      value={namespace}
+                      onChange={(e) => setNamespace(e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                    >
+                      {namespacesData?.items?.map((ns) => (
+                        <option key={ns} value={ns}>
+                          {ns}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="mt-1 text-sm text-gray-500">
+                    Select an existing namespace for this model
+                  </p>
                 </div>
               )}
 
