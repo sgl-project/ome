@@ -41,7 +41,7 @@ spec:
     hostNetwork: true
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+      image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
       ports:
         - containerPort: 8080
           name: http1
@@ -121,7 +121,7 @@ spec:
     hostNetwork: true
     runner:
       name: ome-container
-      image: docker.io/lmsysorg/sglang:v0.4.8.post1-cu126
+      image: docker.io/lmsysorg/sglang:v0.5.5.post3-cu129-amd64
       ports:
         - containerPort: 8080
           name: http1
