@@ -43,21 +43,27 @@ spec:
           name: http1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m vllm.entrypoints.openai.api_server \
-          --port=8080 \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name=vllm-model \
-          --tensor-parallel-size=1 \
-          --preemption-mode=swap \
-          --max-model-len=131072 \
-          --gpu-memory-utilization=0.90
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        - --port
+        - "8080"
+        - --model
+        - $(MODEL_PATH)
+        - --middleware
+        - vllm.entrypoints.openai.middleware.log_opc_header
+        - --max-log-len
+        - "0"
+        - --served-model-name
+        - vllm-model
+        - --tensor-parallel-size
+        - "1"
+        - --preemption-mode
+        - swap
+        - --max-model-len
+        - "131072"
+        - --gpu-memory-utilization
+        - "0.90"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

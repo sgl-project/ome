@@ -44,25 +44,33 @@ spec:
           name: http1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m vllm.entrypoints.openai.api_server \
-          --port=8080 \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name=vllm-model \
-          --tensor-parallel-size=8 \
-          --max-model-len=131072 \
-          --gpu-memory-utilization=0.9 \
-          --enable-chunked-prefill \
-          --enable-auto-tool-choice \
-          --tool-call-parser=llama3_json \
-          --chat-template=examples/tool_chat_template_llama3.1_json.jinja \
-          --cuda-graph-sizes=256
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        - --port
+        - "8080"
+        - --model
+        - $(MODEL_PATH)
+        - --middleware
+        - vllm.entrypoints.openai.middleware.log_opc_header
+        - --max-log-len
+        - "0"
+        - --served-model-name
+        - vllm-model
+        - --tensor-parallel-size
+        - "8"
+        - --max-model-len
+        - "131072"
+        - --gpu-memory-utilization
+        - "0.9"
+        - --enable-chunked-prefill
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - llama3_json
+        - --chat-template
+        - examples/tool_chat_template_llama3.1_json.jinja
+        - --cuda-graph-sizes
+        - "256"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

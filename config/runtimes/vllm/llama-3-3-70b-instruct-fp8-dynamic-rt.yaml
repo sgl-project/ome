@@ -45,24 +45,31 @@ spec:
           name: http1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m vllm.entrypoints.openai.api_server \
-          --port=8080 \
-          --model="$MODEL_PATH" \
-          --middleware=vllm.entrypoints.openai.middleware.log_opc_header \
-          --max-log-len=0 \
-          --served-model-name="$SERVED_MODEL_NAME" \
-          --tensor-parallel-size=2 \
-          --max-model-len=131072 \
-          --gpu-memory-utilization=0.9 \
-          --enable-chunked-prefill \
-          --enable-auto-tool-choice \
-          --tool-call-parser=llama3_json \
-          --chat-template=./examples/tool_chat_template_llama3.1_json.jinja
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        - --port
+        - "8080"
+        - --model
+        - $(MODEL_PATH)
+        - --middleware
+        - vllm.entrypoints.openai.middleware.log_opc_header
+        - --max-log-len
+        - "0"
+        - --served-model-name
+        - $(SERVED_MODEL_NAME)
+        - --tensor-parallel-size
+        - "2"
+        - --max-model-len
+        - "131072"
+        - --gpu-memory-utilization
+        - "0.9"
+        - --enable-chunked-prefill
+        - --enable-auto-tool-choice
+        - --tool-call-parser
+        - llama3_json
+        - --chat-template
+        - ./examples/tool_chat_template_llama3.1_json.jinja
       env:
         - name: SERVED_MODEL_NAME
           value: "vllm-model"
