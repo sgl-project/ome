@@ -35,16 +35,20 @@ spec:
         - containerPort: 8080
           name: http
       command:
-        - sh
-        - -c
-        - >
-          python3 -m sglang_router.launch_router
-          --host "0.0.0.0"
-          --port "8080"
-          --service-discovery
-          --service-discovery-namespace "${NAMESPACE}"
-          --service-discovery-port 8080
-          --selector component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=${INFERENCESERVICE_NAME}
+        - python3
+        - -m
+        - sglang_router.launch_router
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --service-discovery
+        - --service-discovery-namespace
+        - $(NAMESPACE)
+        - --service-discovery-port
+        - "8080"
+        - --selector
+        - component=engine leaderworkerset.sigs.k8s.io/worker-index=0 ome.io/inferenceservice=$(INFERENCESERVICE_NAME)
       env:
         - name: NAMESPACE
           valueFrom:
@@ -95,24 +99,36 @@ spec:
           - name: NVSHMEM_DEBUG
             value: INFO
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server 
-            --host 0.0.0.0 --port 8080 
-            --model-path ${MODEL_PATH} 
-            --tp-size ${PARALLELISM_SIZE}
-            --nccl-init ${LWS_LEADER_ADDRESS}:5000 
-            --nnodes ${LWS_GROUP_SIZE} 
-            --node-rank ${LWS_WORKER_INDEX} 
-            --trust-remote-code 
-            --enable-torch-compile 
-            --torch-compile-max-bs 1 
-            --reasoning-parser deepseek-r1 
-            --enable-metrics 
-            --ep-dispatch-algorithm dynamic
-            --moe-a2a-backend deepep 
-            --deepep-mode auto
+          - python3
+          - -m
+          - sglang.launch_server
+          - --host
+          - "0.0.0.0"
+          - --port
+          - "8080"
+          - --model-path
+          - $(MODEL_PATH)
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --nccl-init
+          - $(LWS_LEADER_ADDRESS):5000
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --trust-remote-code
+          - --enable-torch-compile
+          - --torch-compile-max-bs
+          - "1"
+          - --reasoning-parser
+          - deepseek-r1
+          - --enable-metrics
+          - --ep-dispatch-algorithm
+          - dynamic
+          - --moe-a2a-backend
+          - deepep
+          - --deepep-mode
+          - auto
         resources:
           requests:
             nvidia.com/gpu: 8
@@ -206,25 +222,36 @@ spec:
           - name: NVSHMEM_DEBUG
             value: INFO
         command:
-          - sh
-          - -c
-          - >
-            python3 -m sglang.launch_server 
-            --host 0.0.0.0 
-            --port 8080 
-            --model-path ${MODEL_PATH} 
-            --tp-size ${PARALLELISM_SIZE}
-            --nccl-init ${LWS_LEADER_ADDRESS}:5000 
-            --nnodes ${LWS_GROUP_SIZE} 
-            --node-rank ${LWS_WORKER_INDEX} 
-            --trust-remote-code 
-            --enable-torch-compile 
-            --torch-compile-max-bs 1 
-            --reasoning-parser deepseek-r1 
-            --enable-metrics 
-            --ep-dispatch-algorithm dynamic
-            --moe-a2a-backend deepep 
-            --deepep-mode auto
+          - python3
+          - -m
+          - sglang.launch_server
+          - --host
+          - "0.0.0.0"
+          - --port
+          - "8080"
+          - --model-path
+          - $(MODEL_PATH)
+          - --tp-size
+          - $(PARALLELISM_SIZE)
+          - --nccl-init
+          - $(LWS_LEADER_ADDRESS):5000
+          - --nnodes
+          - $(LWS_GROUP_SIZE)
+          - --node-rank
+          - $(LWS_WORKER_INDEX)
+          - --trust-remote-code
+          - --enable-torch-compile
+          - --torch-compile-max-bs
+          - "1"
+          - --reasoning-parser
+          - deepseek-r1
+          - --enable-metrics
+          - --ep-dispatch-algorithm
+          - dynamic
+          - --moe-a2a-backend
+          - deepep
+          - --deepep-mode
+          - auto
         resources:
           limits:
             nvidia.com/gpu: "8"

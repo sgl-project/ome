@@ -66,22 +66,26 @@ spec:
           name: grpc1
           protocol: TCP
       command:
-        - /bin/bash
-        - '-lc'
-        - --
-      args:
-        - |
-          python3 -m sglang.launch_server \
-          --host=0.0.0.0 \
-          --port=8080 \
-          --enable-metrics \
-          --log-requests \
-          --log-requests-level=1 \
-          --model-path="$MODEL_PATH" \
-          --tp 2 \
-          --reasoning-parser=gpt-oss \
-          --context-length=131072 \
-          --grpc-mode
+        - python3
+        - -m
+        - sglang.launch_server
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8080"
+        - --enable-metrics
+        - --log-requests
+        - --log-requests-level
+        - "1"
+        - --model-path
+        - $(MODEL_PATH)
+        - --tp
+        - "2"
+        - --reasoning-parser
+        - gpt-oss
+        - --context-length
+        - "131072"
+        - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
