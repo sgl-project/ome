@@ -1,14 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { useServices } from '@/lib/hooks/useServices'
+import { useServices, useDeleteService } from '@/lib/hooks/useServices'
 import { useNamespaces } from '@/lib/hooks/useNamespaces'
+import { useBulkSelection } from '@/lib/hooks/useBulkSelection'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { Icons, StatIcons } from '@/components/ui/Icons'
+import { BulkActionDropdown } from '@/components/ui/BulkActionDropdown'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { ConfirmDeleteModal } from '@/components/ui/Modal'
 import {
   ResourcePageHeader,
   StatsGrid,
@@ -22,8 +26,31 @@ const emptyIcon = <Icons.server size="lg" />
 
 export default function ServicesPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('')
+
   const { data, isLoading, error } = useServices(selectedNamespace || undefined)
   const { data: namespacesData } = useNamespaces()
+  const deleteService = useDeleteService()
+
+  const services = useMemo(() => data?.items || [], [data?.items])
+
+  const {
+    selectedItems,
+    showDeleteModal,
+    isDeleting,
+    allSelected,
+    someSelected,
+    handleSelectAll,
+    handleSelectItem,
+    handleBulkDelete,
+    closeDeleteModal,
+    bulkActions,
+    deleteModalResourceName,
+  } = useBulkSelection({
+    items: services,
+    resourceType: 'service',
+    basePath: '/services',
+    deleteMutation: deleteService,
+  })
 
   if (isLoading) return <LoadingState message="Loading services..." />
   if (error) return <ErrorState error={error || new Error('Failed to load services')} />
@@ -65,6 +92,9 @@ export default function ServicesPage() {
 
         <ResourceTable
           title="All Services"
+          headerActions={
+            <BulkActionDropdown actions={bulkActions} selectedCount={selectedItems.size} />
+          }
           filterProps={{
             namespaces: namespacesData?.items,
             selectedNamespace,
@@ -76,6 +106,14 @@ export default function ServicesPage() {
         >
           <thead className="bg-muted/50">
             <tr>
+              <th className="w-12 px-4 py-3">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onChange={handleSelectAll}
+                  aria-label="Select all services"
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Name
               </th>
@@ -100,9 +138,9 @@ export default function ServicesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border bg-card">
-            {data?.items.length === 0 ? (
+            {services.length === 0 ? (
               <EmptyTableState
-                colSpan={7}
+                colSpan={8}
                 icon={emptyIcon}
                 message="No inference services found"
                 action={
@@ -117,8 +155,20 @@ export default function ServicesPage() {
                 }
               />
             ) : (
-              data?.items.map((service: InferenceService) => (
-                <tr key={service.metadata.name} className="transition-colors hover:bg-muted/30">
+              services.map((service: InferenceService) => (
+                <tr
+                  key={service.metadata.name}
+                  className={`transition-colors hover:bg-muted/30 ${
+                    selectedItems.has(service.metadata.name) ? 'bg-primary/5' : ''
+                  }`}
+                >
+                  <td className="w-12 px-4 py-4">
+                    <Checkbox
+                      checked={selectedItems.has(service.metadata.name)}
+                      onChange={(checked) => handleSelectItem(service.metadata.name, checked)}
+                      aria-label={`Select ${service.metadata.name}`}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-medium">
                     <Link
                       href={`/services/${service.metadata.name}`}
@@ -157,6 +207,15 @@ export default function ServicesPage() {
           </tbody>
         </ResourceTable>
       </main>
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteModal}
+        onClose={closeDeleteModal}
+        onConfirm={handleBulkDelete}
+        resourceName={deleteModalResourceName}
+        resourceType="service"
+        isDeleting={isDeleting}
+      />
     </div>
   )
 }

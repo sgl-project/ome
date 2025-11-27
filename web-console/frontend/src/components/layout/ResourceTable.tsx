@@ -8,6 +8,8 @@ interface ResourceTableProps {
   title: string
   /** Table content (thead + tbody) */
   children: ReactNode
+  /** Header actions (e.g., bulk action dropdown) */
+  headerActions?: ReactNode
   /** Namespace filter props (optional) */
   filterProps?: {
     namespaces?: string[]
@@ -20,14 +22,22 @@ interface ResourceTableProps {
 }
 
 /**
- * Container for resource tables with optional namespace filter.
+ * Container for resource tables with optional namespace filter and header actions.
  * Provides consistent card styling and header layout.
  */
-export function ResourceTable({ title, children, filterProps }: ResourceTableProps) {
+export function ResourceTable({
+  title,
+  children,
+  headerActions,
+  filterProps,
+}: ResourceTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">
-        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+        <div className="flex items-center gap-4">
+          <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+          {headerActions}
+        </div>
         {filterProps && <ResourceFilters {...filterProps} />}
       </div>
       <div className="overflow-x-auto">
