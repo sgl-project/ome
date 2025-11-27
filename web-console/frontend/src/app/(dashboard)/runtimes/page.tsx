@@ -2,15 +2,19 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRuntimes } from '@/lib/hooks/useRuntimes'
+import { useRuntimes, useDeleteRuntime } from '@/lib/hooks/useRuntimes'
 import { useNamespaces } from '@/lib/hooks/useNamespaces'
+import { useBulkSelection } from '@/lib/hooks/useBulkSelection'
+import { useSortedData } from '@/lib/hooks/useSortedData'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button, ButtonIcons } from '@/components/ui/Button'
 import { Icons, StatIcons } from '@/components/ui/Icons'
-import { useSortedData } from '@/lib/hooks/useSortedData'
 import { SortableHeader } from '@/components/ui/SortableHeader'
+import { BulkActionDropdown } from '@/components/ui/BulkActionDropdown'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { ConfirmDeleteModal } from '@/components/ui/Modal'
 import {
   ResourcePageHeader,
   StatsGrid,
@@ -26,8 +30,10 @@ const emptyIcon = <Icons.server size="lg" />
 
 export default function RuntimesPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('')
+
   const { data, isLoading, error } = useRuntimes(selectedNamespace || undefined)
   const { data: namespacesData } = useNamespaces()
+  const deleteRuntime = useDeleteRuntime()
 
   const getValue = (runtime: ClusterServingRuntime, field: SortField) => {
     switch (field) {
@@ -52,6 +58,25 @@ export default function RuntimesPage() {
     sortDirection,
     handleSort,
   } = useSortedData(data?.items, 'name' as SortField, getValue)
+
+  const {
+    selectedItems,
+    showDeleteModal,
+    isDeleting,
+    allSelected,
+    someSelected,
+    handleSelectAll,
+    handleSelectItem,
+    handleBulkDelete,
+    closeDeleteModal,
+    bulkActions,
+    deleteModalResourceName,
+  } = useBulkSelection({
+    items: sortedRuntimes,
+    resourceType: 'runtime',
+    basePath: '/runtimes',
+    deleteMutation: deleteRuntime,
+  })
 
   if (isLoading) return <LoadingState message="Loading runtimes..." />
   if (error) return <ErrorState error={error} />
@@ -93,6 +118,9 @@ export default function RuntimesPage() {
 
         <ResourceTable
           title="All Runtimes"
+          headerActions={
+            <BulkActionDropdown actions={bulkActions} selectedCount={selectedItems.size} />
+          }
           filterProps={{
             namespaces: namespacesData?.items,
             selectedNamespace,
@@ -101,6 +129,14 @@ export default function RuntimesPage() {
         >
           <thead className="bg-muted/50">
             <tr>
+              <th className="w-12 px-4 py-3">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onChange={handleSelectAll}
+                  aria-label="Select all runtimes"
+                />
+              </th>
               <SortableHeader
                 field="name"
                 currentField={sortField}
@@ -146,7 +182,7 @@ export default function RuntimesPage() {
           <tbody className="divide-y divide-border bg-card">
             {sortedRuntimes.length === 0 ? (
               <EmptyTableState
-                colSpan={5}
+                colSpan={6}
                 icon={emptyIcon}
                 message="No runtimes found"
                 action={
@@ -157,7 +193,19 @@ export default function RuntimesPage() {
               />
             ) : (
               sortedRuntimes.map((runtime) => (
-                <tr key={runtime.metadata.name} className="transition-colors hover:bg-muted/30">
+                <tr
+                  key={runtime.metadata.name}
+                  className={`transition-colors hover:bg-muted/30 ${
+                    selectedItems.has(runtime.metadata.name) ? 'bg-primary/5' : ''
+                  }`}
+                >
+                  <td className="w-12 px-4 py-4">
+                    <Checkbox
+                      checked={selectedItems.has(runtime.metadata.name)}
+                      onChange={(checked) => handleSelectItem(runtime.metadata.name, checked)}
+                      aria-label={`Select ${runtime.metadata.name}`}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <Link
                       href={`/runtimes/${runtime.metadata.name}`}
@@ -173,19 +221,7 @@ export default function RuntimesPage() {
                           key={idx}
                           className="inline-flex items-center gap-1 rounded-md bg-accent/10 text-accent px-2 py-0.5 text-xs font-medium"
                         >
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-                            />
-                          </svg>
+                          <Icons.bolt size="xs" />
                           {acc}
                         </span>
                       )) || <span className="text-xs text-muted-foreground">Any</span>}
@@ -217,6 +253,15 @@ export default function RuntimesPage() {
           </tbody>
         </ResourceTable>
       </main>
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteModal}
+        onClose={closeDeleteModal}
+        onConfirm={handleBulkDelete}
+        resourceName={deleteModalResourceName}
+        resourceType="runtime"
+        isDeleting={isDeleting}
+      />
     </div>
   )
 }
