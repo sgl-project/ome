@@ -18,10 +18,6 @@ interface BulkActionDropdownProps {
   label?: string
 }
 
-/**
- * Dropdown menu for bulk actions on selected items.
- * Shows a count of selected items and available actions.
- */
 export function BulkActionDropdown({
   actions,
   selectedCount,
@@ -30,29 +26,28 @@ export function BulkActionDropdown({
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown when clicking outside
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (!isOpen) return
+
+    const handleClose = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent && e.key === 'Escape') {
+        setIsOpen(false)
+      } else if (
+        e instanceof MouseEvent &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false)
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // Close on escape key
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
+    document.addEventListener('mousedown', handleClose)
+    document.addEventListener('keydown', handleClose)
+    return () => {
+      document.removeEventListener('mousedown', handleClose)
+      document.removeEventListener('keydown', handleClose)
     }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [])
+  }, [isOpen])
 
   const hasSelection = selectedCount > 0
 
@@ -80,7 +75,7 @@ export function BulkActionDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-border bg-card shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+        <div className="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-border bg-card shadow-lg">
           <div className="py-1">
             {actions.map((action) => (
               <button
@@ -103,9 +98,6 @@ export function BulkActionDropdown({
               >
                 {action.icon}
                 {action.label}
-                {action.disabled && selectedCount > 1 && action.id === 'edit' && (
-                  <span className="ml-auto text-xs text-muted-foreground">(single only)</span>
-                )}
               </button>
             ))}
           </div>
