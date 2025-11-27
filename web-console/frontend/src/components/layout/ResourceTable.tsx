@@ -25,12 +25,7 @@ interface ResourceTableProps {
  * Container for resource tables with optional namespace filter and header actions.
  * Provides consistent card styling and header layout.
  */
-export function ResourceTable({
-  title,
-  children,
-  headerActions,
-  filterProps,
-}: ResourceTableProps) {
+export function ResourceTable({ title, children, headerActions, filterProps }: ResourceTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/30">

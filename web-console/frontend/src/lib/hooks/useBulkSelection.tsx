@@ -1,111 +1,60 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { exportAsYaml } from '@/lib/utils'
 import { Icons } from '@/components/ui/Icons'
 import type { BulkAction } from '@/components/ui/BulkActionDropdown'
 
 interface ResourceWithMetadata {
-  metadata: {
-    name: string
-  }
+  metadata: { name: string }
 }
 
 interface UseBulkSelectionOptions<T extends ResourceWithMetadata> {
-  /** The list of items to select from */
   items: T[]
-  /** The resource type for display (e.g., 'model', 'runtime', 'service') */
   resourceType: string
-  /** The base path for editing (e.g., '/models', '/runtimes', '/services') */
   basePath: string
-  /** Delete mutation function */
-  deleteMutation: {
-    mutateAsync: (name: string) => Promise<unknown>
-  }
-}
-
-interface UseBulkSelectionReturn<T extends ResourceWithMetadata> {
-  /** Set of selected item names */
-  selectedItems: Set<string>
-  /** Whether the delete modal is shown */
-  showDeleteModal: boolean
-  /** Whether deletion is in progress */
-  isDeleting: boolean
-  /** Whether all items are selected */
-  allSelected: boolean
-  /** Whether some (but not all) items are selected */
-  someSelected: boolean
-  /** The selected items as full objects */
-  selectedData: T[]
-  /** Handler for select all checkbox */
-  handleSelectAll: (checked: boolean) => void
-  /** Handler for individual item checkbox */
-  handleSelectItem: (name: string, checked: boolean) => void
-  /** Handler for bulk delete confirmation */
-  handleBulkDelete: () => Promise<void>
-  /** Open the delete modal */
-  openDeleteModal: () => void
-  /** Close the delete modal */
-  closeDeleteModal: () => void
-  /** Get the bulk actions array */
-  bulkActions: BulkAction[]
-  /** Get the resource name for the delete modal */
-  deleteModalResourceName: string
+  deleteMutation: { mutateAsync: (name: string) => Promise<unknown> }
 }
 
 /**
- * Hook for managing bulk selection, actions, and deletion in resource list pages.
- * Provides consistent selection behavior across models, runtimes, and services pages.
+ * Hook for managing bulk selection and actions in resource list pages.
  */
 export function useBulkSelection<T extends ResourceWithMetadata>({
   items,
   resourceType,
   basePath,
   deleteMutation,
-}: UseBulkSelectionOptions<T>): UseBulkSelectionReturn<T> {
+}: UseBulkSelectionOptions<T>) {
   const router = useRouter()
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Computed selection state
+  // Prune selection when items change (namespace filter, data refresh)
+  useEffect(() => {
+    const currentNames = new Set(items.map((item) => item.metadata.name))
+    setSelectedItems((prev) => {
+      const pruned = new Set([...prev].filter((name) => currentNames.has(name)))
+      return pruned.size !== prev.size ? pruned : prev
+    })
+  }, [items])
+
   const allSelected = items.length > 0 && selectedItems.size === items.length
   const someSelected = selectedItems.size > 0 && selectedItems.size < items.length
 
-  // Get selected items as full objects
-  const selectedData = useMemo(() => {
-    return items.filter((item) => selectedItems.has(item.metadata.name))
-  }, [items, selectedItems])
-
-  // Selection handlers
   const handleSelectAll = useCallback(
     (checked: boolean) => {
-      if (checked) {
-        setSelectedItems(new Set(items.map((item) => item.metadata.name)))
-      } else {
-        setSelectedItems(new Set())
-      }
+      setSelectedItems(checked ? new Set(items.map((item) => item.metadata.name)) : new Set())
     },
     [items]
   )
 
   const handleSelectItem = useCallback((name: string, checked: boolean) => {
     setSelectedItems((prev) => {
-      const newSelected = new Set(prev)
-      if (checked) {
-        newSelected.add(name)
-      } else {
-        newSelected.delete(name)
-      }
-      return newSelected
+      const next = new Set(prev)
+      checked ? next.add(name) : next.delete(name)
+      return next
     })
   }, [])
-
-  // Bulk action handlers
-  const handleBulkExport = useCallback(() => {
-    selectedData.forEach((item) => {
-      exportAsYaml(item, `${item.metadata.name}.yaml`)
-    })
-  }, [selectedData])
 
   const handleBulkDelete = useCallback(async () => {
     setIsDeleting(true)
@@ -122,52 +71,41 @@ export function useBulkSelection<T extends ResourceWithMetadata>({
     }
   }, [selectedItems, deleteMutation, resourceType])
 
-  const handleEdit = useCallback(() => {
-    if (selectedItems.size === 1) {
-      const name = Array.from(selectedItems)[0]
-      router.push(`${basePath}/${name}/edit`)
-    }
-  }, [selectedItems, basePath, router])
-
-  const openDeleteModal = useCallback(() => setShowDeleteModal(true), [])
-  const closeDeleteModal = useCallback(() => setShowDeleteModal(false), [])
-
-  // Build bulk actions array
-  const bulkActions: BulkAction[] = useMemo(
-    () => [
+  const bulkActions: BulkAction[] = useMemo(() => {
+    const selectedData = items.filter((item) => selectedItems.has(item.metadata.name))
+    return [
       {
         id: 'export',
         label: 'Export YAML',
         icon: <Icons.downloadFile size="sm" />,
-        onClick: handleBulkExport,
+        onClick: () =>
+          selectedData.forEach((item) => exportAsYaml(item, `${item.metadata.name}.yaml`)),
         disabled: selectedItems.size === 0,
       },
       {
         id: 'edit',
         label: 'Edit',
         icon: <Icons.pencil size="sm" />,
-        onClick: handleEdit,
+        onClick: () => {
+          if (selectedItems.size === 1) {
+            router.push(`${basePath}/${[...selectedItems][0]}/edit`)
+          }
+        },
         disabled: selectedItems.size !== 1,
       },
       {
         id: 'delete',
         label: 'Delete',
         icon: <Icons.trash size="sm" />,
-        onClick: openDeleteModal,
+        onClick: () => setShowDeleteModal(true),
         disabled: selectedItems.size === 0,
         variant: 'destructive',
       },
-    ],
-    [selectedItems.size, handleBulkExport, handleEdit, openDeleteModal]
-  )
+    ]
+  }, [items, selectedItems, basePath, router])
 
-  // Resource name for delete modal
-  const deleteModalResourceName = useMemo(() => {
-    if (selectedItems.size === 1) {
-      return Array.from(selectedItems)[0]
-    }
-    return `${selectedItems.size} ${resourceType}s`
-  }, [selectedItems, resourceType])
+  const deleteModalResourceName =
+    selectedItems.size === 1 ? [...selectedItems][0] : `${selectedItems.size} ${resourceType}s`
 
   return {
     selectedItems,
@@ -175,12 +113,10 @@ export function useBulkSelection<T extends ResourceWithMetadata>({
     isDeleting,
     allSelected,
     someSelected,
-    selectedData,
     handleSelectAll,
     handleSelectItem,
     handleBulkDelete,
-    openDeleteModal,
-    closeDeleteModal,
+    closeDeleteModal: () => setShowDeleteModal(false),
     bulkActions,
     deleteModalResourceName,
   }
