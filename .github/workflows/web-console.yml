@@ -37,7 +37,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: web-console/frontend
-        run: npm install --force
+        run: |
+          rm -f package-lock.json
+          npm install
 
       - name: Run ESLint
         working-directory: web-console/frontend
