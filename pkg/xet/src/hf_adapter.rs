@@ -156,7 +156,10 @@ impl HfAdapter {
             let url = if current_path.is_empty() {
                 format!("{}/api/models/{}/tree/{}", self.endpoint, repo_id, revision)
             } else {
-                format!("{}/api/models/{}/tree/{}/{}", self.endpoint, repo_id, revision, current_path)
+                format!(
+                    "{}/api/models/{}/tree/{}/{}",
+                    self.endpoint, repo_id, revision, current_path
+                )
             };
 
             // Make HTTP request to HF API
@@ -514,12 +517,12 @@ impl HfAdapter {
             return Err(anyhow!("Download cancelled"));
         }
 
-        // Get XET connection info
+        // Get initial XET connection info
         let mut token_manager = self.xet_token_manager.lock().await;
         let connection_info = token_manager
             .refresh_xet_connection_info(xet_file_data)
             .await?;
-        drop(token_manager); // Release the lock early
+        drop(token_manager); // Release the lock - the XetDownloader will re-acquire it for refreshes
 
         info!(
             "[XET] Using xet-core FileDownloader for hash: {}",
@@ -527,8 +530,14 @@ impl HfAdapter {
         );
         debug!("[XET] Endpoint: {}", connection_info.endpoint);
 
-        // Create XET downloader with connection info
-        let xet_downloader = XetDownloader::new(&connection_info, self.token.clone()).await?;
+        // Create XET downloader with connection info and token refresher capability
+        // The token_manager is passed so it can refresh tokens if they expire during download
+        let xet_downloader = XetDownloader::new(
+            &connection_info,
+            xet_file_data,
+            self.xet_token_manager.clone(),
+        )
+        .await?;
 
         if let Some(ref tracker) = progress {
             tracker.ensure_file_entry(file_name, expected_size);
