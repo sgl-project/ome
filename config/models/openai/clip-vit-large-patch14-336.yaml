@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: clip-vit-large-patch14-336
+spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
+    - IMAGE_TEXT_TO_EMBEDDING
+  vendor: openai
+  displayName: openai.clip-vit-large-patch14-336
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://openai/clip-vit-large-patch14-336
+    path: /raid/models/openai/clip-vit-large-patch14-336

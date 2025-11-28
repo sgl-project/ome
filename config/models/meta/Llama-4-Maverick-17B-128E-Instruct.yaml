@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: llama-4-maverick-17b-128e-instruct
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   vendor: meta
   disabled: false
   displayName: meta.llama-4-maverick-17b-128e-instruct

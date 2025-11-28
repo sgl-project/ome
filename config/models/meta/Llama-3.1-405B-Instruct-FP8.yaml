@@ -3,7 +3,10 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-1-405b-instruct-fp8
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   vendor: meta
+  displayName: meta.llama-3.1-405b-instruct-fp8
   disabled: false
   version: "1.0.0"
   storage:

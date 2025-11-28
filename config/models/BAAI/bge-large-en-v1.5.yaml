@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: bge-large-en-v1-5
+spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
+  vendor: BAAI
+  displayName: BAAI.bge-large-en-v1.5
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://BAAI/bge-large-en-v1.5
+    path: /raid/models/BAAI/bge-large-en-v1.5

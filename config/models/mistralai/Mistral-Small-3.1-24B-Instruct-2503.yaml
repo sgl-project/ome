@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: mistral-small-3-1-24b-instruct-2503
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+    - IMAGE_TEXT_TO_TEXT
+  vendor: mistralai
+  displayName: mistralai.mistral-small-3.1-24b-instruct-2503
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://mistralai/Mistral-Small-3.1-24B-Instruct-2503
+    path: /raid/models/mistralai/Mistral-Small-3.1-24B-Instruct-2503
