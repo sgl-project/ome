@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: bge-reranker-v2-m3
+spec:
+  modelCapabilities:
+    - RERANK
+  vendor: BAAI
+  displayName: BAAI.bge-reranker-v2-m3
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://BAAI/bge-reranker-v2-m3
+    path: /raid/models/BAAI/bge-reranker-v2-m3

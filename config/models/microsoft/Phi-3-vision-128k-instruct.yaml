@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: phi-3-vision-128k-instruct
 spec:
+  modelCapabilities:
+    - IMAGE_TEXT_TO_TEXT
   disabled: false
   displayName: microsoft.phi-3-vision-128k-instruct
   storage:

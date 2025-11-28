@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-3-nemotron-super-49b-v1
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   disabled: false
   displayName: nvidia.llama-3_3-nemotron-super-49b-v1
   storage:

@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: ling-lite
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: inclusionAI
+  displayName: inclusionAI.ling-lite
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://inclusionAI/Ling-lite
+    path: /raid/models/inclusionAI/Ling-lite

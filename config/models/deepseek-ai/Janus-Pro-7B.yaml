@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: janus-pro-7b
+spec:
+  modelCapabilities:
+    - IMAGE_TEXT_TO_TEXT
+  vendor: deepseek-ai
+  displayName: deepseek-ai.janus-pro-7b
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://deepseek-ai/Janus-Pro-7B
+    path: /raid/models/deepseek-ai/Janus-Pro-7B

@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-2-3b-instruct
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   displayName: meta.llama-3.2-3b-instruct
   vendor: meta
   disabled: false

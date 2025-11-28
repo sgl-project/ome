@@ -8,7 +8,7 @@ spec:
   version: "1.0.0"
   displayName: openai.gpt-oss-20b-bf16
   modelCapabilities:
-    - "CHAT"
+    - TEXT_TO_TEXT
   storage:
     storageUri: hf://lmsys/gpt-oss-20b-bf16
     path: /raid/models/lmsys/gpt-oss-20b-bf16

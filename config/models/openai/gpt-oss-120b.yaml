@@ -8,7 +8,7 @@ spec:
   version: "1.0.0"
   displayName: openai.gpt-oss-120b
   modelCapabilities:
-    - "CHAT"
+    - TEXT_TO_TEXT
   modelFramework:
     name: transformers
     version: "4.55.0"

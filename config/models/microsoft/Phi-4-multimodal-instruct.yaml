@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: phi-4-multimodal-instruct
+spec:
+  modelCapabilities:
+    - IMAGE_TEXT_TO_TEXT
+    - VIDEO_TEXT_TO_TEXT
+    - AUDIO_TEXT_TO_TEXT
+  vendor: microsoft
+  displayName: microsoft.phi-4-multimodal-instruct
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://microsoft/Phi-4-multimodal-instruct
+    path: /raid/models/microsoft/Phi-4-multimodal-instruct

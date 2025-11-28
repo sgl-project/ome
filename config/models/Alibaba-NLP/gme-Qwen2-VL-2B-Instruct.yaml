@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gme-qwen2-vl-2b-instruct
+spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
+    - IMAGE_TEXT_TO_EMBEDDING
+  vendor: Alibaba-NLP
+  displayName: Alibaba-NLP.gme-qwen2-vl-2b-instruct
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://Alibaba-NLP/gme-Qwen2-VL-2B-Instruct
+    path: /raid/models/Alibaba-NLP/gme-Qwen2-VL-2B-Instruct

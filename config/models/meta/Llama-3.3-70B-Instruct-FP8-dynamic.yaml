@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-3-70b-instruct-fp8-dynamic
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   disabled: false
   displayName: meta.llama-3.3-70b-instruct-fp8-dynamic
   storage:

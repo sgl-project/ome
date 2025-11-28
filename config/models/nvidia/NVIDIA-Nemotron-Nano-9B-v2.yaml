@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: nvidia-nemotron-nano-9b-v2
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: nvidia
+  displayName: nvidia.nvidia-nemotron-nano-9b-v2
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://nvidia/NVIDIA-Nemotron-Nano-9B-v2
+    path: /raid/models/nvidia/NVIDIA-Nemotron-Nano-9B-v2
