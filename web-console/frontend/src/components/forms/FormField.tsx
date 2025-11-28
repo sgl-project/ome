@@ -29,8 +29,7 @@ interface FormFieldBaseProps {
 }
 
 interface FormInputProps
-  extends FormFieldBaseProps,
-    Omit<InputHTMLAttributes<HTMLInputElement>, 'className'> {
+  extends FormFieldBaseProps, Omit<InputHTMLAttributes<HTMLInputElement>, 'className'> {
   inputClassName?: string
 }
 
@@ -61,8 +60,7 @@ export function FormInput({
 }
 
 interface FormTextareaProps
-  extends FormFieldBaseProps,
-    Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'className'> {
+  extends FormFieldBaseProps, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'className'> {
   inputClassName?: string
 }
 
@@ -97,8 +95,7 @@ export function FormTextarea({
 }
 
 interface FormSelectProps
-  extends FormFieldBaseProps,
-    Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'> {
+  extends FormFieldBaseProps, Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'> {
   inputClassName?: string
   children: ReactNode
 }
@@ -133,8 +130,7 @@ export function FormSelect({
 }
 
 interface FormCheckboxProps
-  extends FormFieldBaseProps,
-    Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'type'> {
+  extends FormFieldBaseProps, Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'type'> {
   inputClassName?: string
 }
 

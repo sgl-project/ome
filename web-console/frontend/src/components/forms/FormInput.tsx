@@ -5,7 +5,8 @@ import { FieldWrapper, FieldWrapperProps } from './FieldWrapper'
 import { getInputClassName } from './styles'
 
 export interface FormInputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'className'>,
+  extends
+    Omit<InputHTMLAttributes<HTMLInputElement>, 'className'>,
     Omit<FieldWrapperProps, 'children'> {
   /** Use monospace font */
   mono?: boolean

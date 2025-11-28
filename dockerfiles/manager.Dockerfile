@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.24 AS builder
+FROM golang:1.25 AS builder
 
 # Install Rust and Cargo for building the XET library
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

@@ -11,7 +11,8 @@ export interface SelectOption {
 }
 
 export interface FormSelectProps
-  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'>,
+  extends
+    Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'>,
     Omit<FieldWrapperProps, 'children'> {
   /** Array of options to render */
   options: SelectOption[]
