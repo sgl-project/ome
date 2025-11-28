@@ -33,7 +33,7 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
@@ -194,7 +194,7 @@ func handleModelDeletion(ctx context.Context, kubeClient client.Client, obj clie
 			return ctrl.Result{RequeueAfter: time.Second * 10}, err
 		}
 
-		// Check if any ConfigMap still has an entry for this model
+		// Check if any ConfigMap still has an entry for this model that is not marked as deleted
 		var modelsNotDeleted []string
 		nodesWithModel := 0
 
@@ -412,6 +412,13 @@ func (r *BaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 			builder.WithPredicates(createModelStatusConfigMapPredicate()),
 		).
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return handleNodeDeletion(ctx, r.Client, r.Log, obj)
+			}),
+			builder.WithPredicates(createNodeDeletionPredicate()),
+		).
 		Complete(r)
 }
 
@@ -426,7 +433,76 @@ func (r *ClusterBaseModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 			builder.WithPredicates(createModelStatusConfigMapPredicate()),
 		).
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return handleNodeDeletion(ctx, r.Client, r.Log, obj)
+			}),
+			builder.WithPredicates(createNodeDeletionPredicate()),
+		).
 		Complete(r)
+}
+
+// createNodeDeletionPredicate creates a predicate that only triggers on Node deletions
+func createNodeDeletionPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return false // Don't trigger on node creation
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return false // Don't trigger on node updates
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true // Only trigger on node deletion
+		},
+	}
+}
+
+// handleNodeDeletion handles Node deletion events by cleaning up the corresponding ConfigMap.
+// If no ConfigMap exists for this node, it simply skips without error.
+// This is a shared utility function used by both BaseModel and ClusterBaseModel controllers.
+func handleNodeDeletion(ctx context.Context, kubeClient client.Client, log logr.Logger, obj client.Object) []reconcile.Request {
+	node, ok := obj.(*corev1.Node)
+	if !ok {
+		return nil
+	}
+
+	nodeName := node.GetName()
+	log = log.WithValues("node", nodeName)
+
+	// Check if a ConfigMap exists for this node
+	configMap := &corev1.ConfigMap{}
+	configMapKey := types.NamespacedName{
+		Namespace: constants.OMENamespace,
+		Name:      nodeName,
+	}
+
+	if err := kubeClient.Get(ctx, configMapKey, configMap); err != nil {
+		if errors.IsNotFound(err) {
+			// No ConfigMap for this node, nothing to clean up - this is normal
+			// for nodes that never had model-agent running
+			return nil
+		}
+		log.Error(err, "Failed to check ConfigMap for deleted node")
+		return nil
+	}
+
+	// Verify this is a model status ConfigMap before deleting
+	if !isModelStatusConfigMap(configMap) {
+		return nil
+	}
+
+	// Delete the stale ConfigMap
+	log.Info("Node deleted, cleaning up associated model status ConfigMap")
+	if err := kubeClient.Delete(ctx, configMap); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to delete ConfigMap for deleted node")
+		}
+		return nil
+	}
+
+	log.Info("Successfully deleted ConfigMap for deleted node")
+	return nil
 }
 
 // createModelStatusConfigMapPredicate creates the shared predicate for ConfigMap events
