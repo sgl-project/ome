@@ -39,22 +39,22 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: yarn install
+        run: npm ci
 
       - name: Run ESLint
-        run: yarn lint
+        run: npm run lint
 
       - name: Run Prettier check
-        run: yarn format:check
+        run: npm run format:check
 
       - name: Run TypeScript type check
-        run: yarn typecheck
+        run: npm run typecheck
 
       - name: Build
-        run: yarn build
+        run: npm run build
 
       - name: Run tests
-        run: yarn test
+        run: npm run test
 
   # Backend checks - build and vet
   backend:
