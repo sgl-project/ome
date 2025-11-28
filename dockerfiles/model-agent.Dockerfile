@@ -1,11 +1,11 @@
 # Configurable base image - must be declared before any FROM statement
 # Defaults to Oracle Linux 10 for OCI SDK compatibility
 # Can be overridden with --build-arg BASE_IMAGE=ubuntu:24.04
-# Note: Ubuntu 22.04 has glibc 2.35, but golang:1.24 requires glibc 2.38+
+# Note: Ubuntu 22.04 has glibc 2.35, but golang:1.25 requires glibc 2.38+
 ARG BASE_IMAGE=oraclelinux:10-slim
 
 # Build the model-agent binary
-FROM golang:1.24 AS builder
+FROM golang:1.25 AS builder
 
 # Install Rust and Cargo for building the XET library
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

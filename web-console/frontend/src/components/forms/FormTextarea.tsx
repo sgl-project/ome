@@ -5,7 +5,8 @@ import { FieldWrapper, FieldWrapperProps } from './FieldWrapper'
 import { getTextareaClassName } from './styles'
 
 export interface FormTextareaProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'className'>,
+  extends
+    Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'className'>,
     Omit<FieldWrapperProps, 'children'> {
   /** Use monospace font */
   mono?: boolean
