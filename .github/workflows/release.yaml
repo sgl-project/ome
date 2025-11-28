@@ -21,7 +21,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_ORG: moirai-internal
   # Go version
-  GO_VERSION: '1.24.1'
+  GO_VERSION: '1.25'
 
 jobs:
   prepare:
