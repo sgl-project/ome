@@ -1,0 +1,234 @@
+# Labels configuration for the OME repository
+# These labels are automatically synced by the sync-labels workflow
+
+# =============================================================================
+# Component Labels (Blue shades)
+# =============================================================================
+- name: api
+  color: "0052CC"
+  description: "API/Types changes in pkg/apis"
+
+- name: controller
+  color: "1D76DB"
+  description: "Controller changes"
+
+- name: inferenceservice
+  color: "0E8A16"
+  description: "InferenceService controller changes"
+
+- name: benchmark
+  color: "006B75"
+  description: "Benchmark related changes"
+
+- name: webhook
+  color: "5319E7"
+  description: "Webhook changes"
+
+- name: runtime
+  color: "D93F0B"
+  description: "Runtime configuration changes"
+
+- name: models
+  color: "FBCA04"
+  description: "Model configuration changes"
+
+# =============================================================================
+# Storage & Auth Labels (Purple shades)
+# =============================================================================
+- name: storage
+  color: "7057FF"
+  description: "Storage provider changes"
+
+- name: auth
+  color: "8B5CF6"
+  description: "Authentication and authorization changes"
+
+# =============================================================================
+# Agent Labels (Teal shades)
+# =============================================================================
+- name: model-agent
+  color: "0D9488"
+  description: "Model agent changes"
+
+- name: ome-agent
+  color: "14B8A6"
+  description: "OME agent changes"
+
+# =============================================================================
+# Web Console Labels (Pink shades)
+# =============================================================================
+- name: web-console
+  color: "EC4899"
+  description: "Web console changes"
+
+- name: frontend
+  color: "F472B6"
+  description: "Frontend/UI changes"
+
+- name: backend
+  color: "DB2777"
+  description: "Backend API changes"
+
+# =============================================================================
+# Infrastructure Labels (Orange shades)
+# =============================================================================
+- name: helm
+  color: "F97316"
+  description: "Helm chart changes"
+
+- name: crd
+  color: "EA580C"
+  description: "CRD definition changes"
+
+- name: rbac
+  color: "C2410C"
+  description: "RBAC configuration changes"
+
+- name: config
+  color: "FB923C"
+  description: "Configuration changes"
+
+- name: docker
+  color: "2496ED"
+  description: "Dockerfile changes"
+
+- name: ci
+  color: "6366F1"
+  description: "CI/CD workflow changes"
+
+# =============================================================================
+# Documentation Labels (Green shades)
+# =============================================================================
+- name: documentation
+  color: "0E8A16"
+  description: "Documentation changes"
+
+- name: oep
+  color: "22C55E"
+  description: "OME Enhancement Proposal"
+
+# =============================================================================
+# Feature Labels (Various)
+# =============================================================================
+- name: ingress
+  color: "3B82F6"
+  description: "Ingress/networking changes"
+
+- name: autoscaling
+  color: "8B5CF6"
+  description: "Autoscaling (HPA/KEDA) changes"
+
+- name: multi-node
+  color: "EF4444"
+  description: "Multi-node/distributed inference changes"
+
+- name: accelerator
+  color: "84CC16"
+  description: "Accelerator class changes"
+
+- name: xet
+  color: "FBBF24"
+  description: "Xet/HuggingFace acceleration changes"
+
+# =============================================================================
+# Quality Labels (Gray/Neutral shades)
+# =============================================================================
+- name: tests
+  color: "BEF264"
+  description: "Test changes"
+
+- name: logging
+  color: "A3A3A3"
+  description: "Logging changes"
+
+- name: dependencies
+  color: "0366D6"
+  description: "Dependency updates"
+
+# =============================================================================
+# Kind Labels (for manual categorization)
+# =============================================================================
+- name: kind/bug
+  color: "D73A4A"
+  description: "Bug fix"
+
+- name: kind/feature
+  color: "A2EEEF"
+  description: "New feature"
+
+- name: kind/enhancement
+  color: "84B6EB"
+  description: "Enhancement to existing feature"
+
+- name: kind/documentation
+  color: "0075CA"
+  description: "Documentation only change"
+
+- name: kind/cleanup
+  color: "FEF2C0"
+  description: "Code cleanup or refactoring"
+
+- name: kind/breaking-change
+  color: "B60205"
+  description: "Breaking change"
+
+# =============================================================================
+# Priority Labels
+# =============================================================================
+- name: priority/critical
+  color: "B60205"
+  description: "Critical priority - requires immediate attention"
+
+- name: priority/high
+  color: "D93F0B"
+  description: "High priority"
+
+- name: priority/medium
+  color: "FBCA04"
+  description: "Medium priority"
+
+- name: priority/low
+  color: "0E8A16"
+  description: "Low priority"
+
+# =============================================================================
+# Status Labels
+# =============================================================================
+- name: status/wip
+  color: "FBCA04"
+  description: "Work in progress"
+
+- name: status/blocked
+  color: "B60205"
+  description: "Blocked by external dependency"
+
+- name: status/needs-review
+  color: "0E8A16"
+  description: "Ready for review"
+
+- name: status/needs-rebase
+  color: "D93F0B"
+  description: "Needs rebase"
+
+# =============================================================================
+# Size Labels (for PR size indication)
+# =============================================================================
+- name: size/XS
+  color: "009900"
+  description: "Extra small change (<10 lines)"
+
+- name: size/S
+  color: "77BB00"
+  description: "Small change (10-50 lines)"
+
+- name: size/M
+  color: "EEBB00"
+  description: "Medium change (50-200 lines)"
+
+- name: size/L
+  color: "EE9900"
+  description: "Large change (200-500 lines)"
+
+- name: size/XL
+  color: "EE5500"
+  description: "Extra large change (>500 lines)"

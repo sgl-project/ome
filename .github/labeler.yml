@@ -1,0 +1,194 @@
+# Configuration for the GitHub Labeler action
+# Automatically adds labels to PRs based on the files changed
+
+# API/Types
+api:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/apis/**/*'
+
+# Controllers
+controller:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/controller/**/*'
+
+# InferenceService
+inferenceservice:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/controller/v1beta1/inferenceservice/**/*'
+
+# Benchmark
+benchmark:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/controller/v1beta1/benchmark/**/*'
+      - 'config/samples/benchmark/**/*'
+
+# Runtime
+runtime:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'config/runtimes/**/*'
+      - 'pkg/runtimeselector/**/*'
+
+# Models
+models:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'config/models/**/*'
+      - 'pkg/hfutil/**/*'
+
+# Webhook
+webhook:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/webhook/**/*'
+
+# Storage
+storage:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/storage/**/*'
+      - 'pkg/ociobjectstore/**/*'
+
+# Authentication
+auth:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/auth/**/*'
+      - 'pkg/principals/**/*'
+      - 'pkg/vault/**/*'
+
+# Model Agent
+model-agent:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/modelagent/**/*'
+      - 'cmd/model-agent/**/*'
+      - 'config/model-agent/**/*'
+
+# OME Agent
+ome-agent:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'cmd/ome-agent/**/*'
+      - 'internal/ome-agent/**/*'
+      - 'config/ome-agent/**/*'
+
+# Web Console
+web-console:
+  - changed-files:
+    - any-glob-to-any-file: 'web-console/**/*'
+
+# Frontend
+frontend:
+  - changed-files:
+    - any-glob-to-any-file: 'web-console/frontend/**/*'
+
+# Backend
+backend:
+  - changed-files:
+    - any-glob-to-any-file: 'web-console/backend/**/*'
+
+# Helm Charts
+helm:
+  - changed-files:
+    - any-glob-to-any-file: 'charts/**/*'
+
+# CRD
+crd:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'config/crd/**/*'
+      - 'charts/ome-crd/**/*'
+
+# RBAC
+rbac:
+  - changed-files:
+    - any-glob-to-any-file: 'config/rbac/**/*'
+
+# Documentation
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'site/**/*'
+      - 'README*'
+
+# Dependencies
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'go.mod'
+      - 'go.sum'
+      - '**/package.json'
+      - '**/package-lock.json'
+
+# CI/CD
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+      - 'Makefile'
+      - 'Makefile-deps.mk'
+
+# Docker
+docker:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'dockerfiles/**/*'
+      - '**/Dockerfile'
+
+# Config
+config:
+  - changed-files:
+    - any-glob-to-any-file: 'config/**/*'
+
+# Tests
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tests/**/*'
+      - '**/*_test.go'
+
+# OEPs (Enhancement Proposals)
+oep:
+  - changed-files:
+    - any-glob-to-any-file: 'oeps/**/*'
+
+# Ingress
+ingress:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/**/*'
+
+# Autoscaling
+autoscaling:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/autoscaler/**/*'
+      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/hpa/**/*'
+      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/keda/**/*'
+
+# Multi-node
+multi-node:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/multinode/**/*'
+      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/multinodevllm/**/*'
+      - 'pkg/controller/v1beta1/inferenceservice/reconcilers/lws/**/*'
+      - 'cmd/multinode-prober/**/*'
+
+# Accelerator
+accelerator:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pkg/acceleratorclassselector/**/*'
+      - 'pkg/controller/v1beta1/acceleratorclass/**/*'
+
+# Xet (HuggingFace acceleration)
+xet:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/xet/**/*'
+
+# Logging
+logging:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/logging/**/*'
