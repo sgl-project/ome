@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // HF Hub compatibility types to match pkg/hfutil/hub
@@ -172,6 +173,70 @@ func SnapshotDownload(ctx context.Context, config *DownloadConfig) (string, erro
 
 	if client == nil {
 		return "", fmt.Errorf("failed to create xet client")
+	}
+
+	revision := config.Revision
+	if revision == "" {
+		revision = "main"
+	}
+
+	snapshotReq := &SnapshotRequest{
+		RepoID:   config.RepoID,
+		RepoType: config.RepoType,
+		Revision: revision,
+		LocalDir: config.LocalDir,
+	}
+
+	if snapshotReq.RepoType == "" {
+		snapshotReq.RepoType = "models"
+	}
+
+	return client.DownloadSnapshotWithContext(ctx, snapshotReq)
+}
+
+// SnapshotDownloadWithProgress downloads a model snapshot with progress callbacks.
+// The progressHandler is called periodically with download progress updates.
+// The throttle parameter controls how often progress updates are sent (minimum 200ms).
+func SnapshotDownloadWithProgress(
+	ctx context.Context,
+	config *DownloadConfig,
+	progressHandler ProgressHandler,
+	throttle time.Duration,
+) (string, error) {
+	if config.LocalDir == "" {
+		return "", fmt.Errorf("local_dir must be specified for snapshot download")
+	}
+
+	// Create client with custom config
+	xetConfig := &Config{
+		Endpoint:               config.Endpoint,
+		Token:                  config.Token,
+		CacheDir:               config.CacheDir,
+		MaxConcurrentDownloads: uint32(config.MaxWorkers),
+		EnableDedup:            true,
+	}
+
+	if xetConfig.Endpoint == "" {
+		xetConfig.Endpoint = "https://huggingface.co"
+	}
+	if xetConfig.MaxConcurrentDownloads == 0 {
+		xetConfig.MaxConcurrentDownloads = 4
+	}
+
+	client, err := NewClient(xetConfig)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	// Set up progress handler if provided
+	if progressHandler != nil {
+		if throttle <= 0 {
+			throttle = 200 * time.Millisecond
+		}
+		if err := client.SetProgressHandler(progressHandler, throttle); err != nil {
+			return "", fmt.Errorf("failed to set progress handler: %w", err)
+		}
 	}
 
 	revision := config.Revision

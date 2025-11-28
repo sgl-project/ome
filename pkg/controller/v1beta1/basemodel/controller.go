@@ -255,6 +255,12 @@ func (r *BaseModelReconciler) updateModelStatus(ctx context.Context, baseModel *
 		},
 		func(ctx context.Context, nodesReady, nodesFailed []string) error {
 			return r.updateStatusWithRetry(ctx, baseModel, nodesReady, nodesFailed)
+		},
+		func(node string, progress *modelagent.DownloadProgress) {
+			message := formatProgressMessage(node, progress)
+			if message != "" {
+				r.Recorder.Event(baseModel, corev1.EventTypeNormal, "DownloadProgress", message)
+			}
 		})
 }
 
@@ -266,13 +272,23 @@ func (r *ClusterBaseModelReconciler) updateModelStatus(ctx context.Context, clus
 		},
 		func(ctx context.Context, nodesReady, nodesFailed []string) error {
 			return r.updateStatusWithRetry(ctx, clusterBaseModel, nodesReady, nodesFailed)
+		},
+		func(node string, progress *modelagent.DownloadProgress) {
+			message := formatProgressMessage(node, progress)
+			if message != "" {
+				r.Recorder.Event(clusterBaseModel, corev1.EventTypeNormal, "DownloadProgress", message)
+			}
 		})
 }
+
+// ProgressEventFunc is a callback function for emitting progress events
+type ProgressEventFunc func(node string, progress *modelagent.DownloadProgress)
 
 // processModelStatus is a shared utility function for processing ConfigMaps and updating model status
 func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.Logger, namespace, name string, isClusterScope bool,
 	specUpdateFunc func(context.Context, *modelagent.ModelConfig) error,
-	statusUpdateFunc func(context.Context, []string, []string) error) error {
+	statusUpdateFunc func(context.Context, []string, []string) error,
+	progressEventFunc ProgressEventFunc) error {
 
 	modelInfo := name
 	if !isClusterScope {
@@ -330,7 +346,14 @@ func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.
 			continue
 		}
 
-		log.V(1).Info("Processing model entry", "node", configMap.Name, "status", modelEntry.Status, "hasConfig", modelEntry.Config != nil)
+		log.V(1).Info("Processing model entry", "node", configMap.Name, "status", modelEntry.Status, "hasConfig", modelEntry.Config != nil, "hasProgress", modelEntry.Progress != nil)
+
+		// Emit progress event if progress is available and we have a callback
+		// Only emit if TotalBytes > 0 (actual download has started)
+		if modelEntry.Progress != nil && progressEventFunc != nil && modelEntry.Progress.TotalBytes > 0 {
+			log.Info("Emitting download progress event", "node", configMap.Name, "percentage", modelEntry.Progress.Percentage())
+			progressEventFunc(configMap.Name, modelEntry.Progress)
+		}
 
 		// Update model spec with config if available
 		if modelEntry.Config != nil {
@@ -742,4 +765,61 @@ func updateSpecWithConfig(spec *v1beta1.BaseModelSpec, config *modelagent.ModelC
 	}
 
 	return updated
+}
+
+// formatBytes formats a byte count into a human-readable string
+func formatBytes(bytes uint64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := uint64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// formatSpeed formats bytes per second into a human-readable speed string
+func formatSpeed(bytesPerSec float64) string {
+	return formatBytes(uint64(bytesPerSec)) + "/s"
+}
+
+// formatDuration formats a duration into a human-readable string
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// formatProgressMessage creates a human-readable progress message for K8s events
+func formatProgressMessage(node string, progress *modelagent.DownloadProgress) string {
+	if progress == nil {
+		return ""
+	}
+
+	percentage := progress.Percentage()
+	speedStr := formatSpeed(progress.SpeedBytesPerSec)
+
+	message := fmt.Sprintf("[%s] Download progress: %.1f%% (%s/%s) at %s",
+		node,
+		percentage,
+		formatBytes(progress.CompletedBytes),
+		formatBytes(progress.TotalBytes),
+		speedStr,
+	)
+
+	// Add ETA if we have speed
+	if progress.SpeedBytesPerSec > 0 && progress.TotalBytes > progress.CompletedBytes {
+		remainingBytes := progress.TotalBytes - progress.CompletedBytes
+		etaSeconds := float64(remainingBytes) / progress.SpeedBytesPerSec
+		message += fmt.Sprintf(", ETA: %s", formatDuration(time.Duration(etaSeconds)*time.Second))
+	}
+
+	return message
 }
