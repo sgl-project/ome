@@ -95,6 +95,12 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
 
+	// Requeue while downloading to ensure progress events are emitted regularly
+	// This is needed because controller-runtime's work queue deduplicates rapid ConfigMap updates
+	if baseModel.Status.State == v1beta1.LifeCycleStateImporting || baseModel.Status.State == v1beta1.LifeCycleStateInTransit {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -138,6 +144,12 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "Failed to update ClusterBaseModel status")
 		r.Recorder.Event(clusterBaseModel, corev1.EventTypeWarning, "StatusUpdateFailed", "Failed to update status")
 		return ctrl.Result{RequeueAfter: time.Minute}, err
+	}
+
+	// Requeue while downloading to ensure progress events are emitted regularly
+	// This is needed because controller-runtime's work queue deduplicates rapid ConfigMap updates
+	if clusterBaseModel.Status.State == v1beta1.LifeCycleStateImporting || clusterBaseModel.Status.State == v1beta1.LifeCycleStateInTransit {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -259,7 +271,12 @@ func (r *BaseModelReconciler) updateModelStatus(ctx context.Context, baseModel *
 		func(node string, progress *modelagent.DownloadProgress) {
 			message := formatProgressMessage(node, progress)
 			if message != "" {
-				r.Recorder.Event(baseModel, corev1.EventTypeNormal, "DownloadProgress", message)
+				// Use percentage bucket in reason to prevent K8s event aggregation
+				// K8s aggregates events with same (source, object, reason) which causes
+				// progress updates to be lost. By using DownloadProgress0, DownloadProgress10, etc.
+				// we ensure each 10% bucket gets its own event.
+				reason := fmt.Sprintf("DownloadProgress%d", getProgressBucket(progress))
+				r.Recorder.Event(baseModel, corev1.EventTypeNormal, reason, message)
 			}
 		})
 }
@@ -276,7 +293,9 @@ func (r *ClusterBaseModelReconciler) updateModelStatus(ctx context.Context, clus
 		func(node string, progress *modelagent.DownloadProgress) {
 			message := formatProgressMessage(node, progress)
 			if message != "" {
-				r.Recorder.Event(clusterBaseModel, corev1.EventTypeNormal, "DownloadProgress", message)
+				// Use percentage bucket in reason to prevent K8s event aggregation
+				reason := fmt.Sprintf("DownloadProgress%d", getProgressBucket(progress))
+				r.Recorder.Event(clusterBaseModel, corev1.EventTypeNormal, reason, message)
 			}
 		})
 }
@@ -871,6 +890,22 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// getProgressBucket returns the percentage bucket (0, 10, 20, ..., 100) for progress tracking.
+// This is used to prevent K8s event aggregation by creating different event reasons
+// for different progress levels (e.g., DownloadProgress0, DownloadProgress10, etc.)
+func getProgressBucket(progress *modelagent.DownloadProgress) int {
+	if progress == nil {
+		return 0
+	}
+	percentage := progress.Percentage()
+	// Round down to nearest 10
+	bucket := int(percentage) / 10 * 10
+	if bucket > 100 {
+		bucket = 100
+	}
+	return bucket
 }
 
 // formatProgressMessage creates a human-readable progress message for K8s events

@@ -73,6 +73,7 @@ func (s *Server) SetupRoutes() *gin.Engine {
 			models.PUT("/:name", modelsHandler.Update)
 			models.DELETE("/:name", modelsHandler.Delete)
 			models.GET("/:name/status", modelsHandler.GetStatus)
+			models.GET("/:name/events", modelsHandler.GetEvents)
 		}
 
 		// Namespaces endpoints

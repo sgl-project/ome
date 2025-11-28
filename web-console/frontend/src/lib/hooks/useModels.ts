@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { modelsApi } from '../api/models'
+import { modelsApi, ModelEventsResponse } from '../api/models'
 import { ClusterBaseModel } from '../types/model'
 import { DEFAULT_QUERY_CONFIG, queryKeys } from './createResourceHooks'
 
@@ -72,5 +72,23 @@ export function useDeleteModel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.all(RESOURCE_KEY) })
     },
+  })
+}
+
+/**
+ * Hook to fetch K8s events for a model.
+ * Used to display download progress and other events.
+ * Polls every 5 seconds when the model is in a downloading state.
+ */
+export function useModelEvents(name: string, enabled = true, refetchInterval?: number) {
+  return useQuery<ModelEventsResponse>({
+    queryKey: [...queryKeys.detail(RESOURCE_KEY, name), 'events'],
+    queryFn: () => modelsApi.getEvents(name),
+    enabled: !!name && enabled,
+    staleTime: 2000, // Events can change frequently during download
+    gcTime: DEFAULT_QUERY_CONFIG.gcTime,
+    retry: DEFAULT_QUERY_CONFIG.retry,
+    retryDelay: DEFAULT_QUERY_CONFIG.retryDelay,
+    refetchInterval: refetchInterval, // Allow caller to set polling interval
   })
 }

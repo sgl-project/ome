@@ -1,9 +1,9 @@
 'use client'
 
-import { useModel, useDeleteModel } from '@/lib/hooks/useModels'
+import { useModel, useDeleteModel, useModelEvents } from '@/lib/hooks/useModels'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { ConfirmDeleteModal } from '@/components/ui/Modal'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -14,6 +14,16 @@ import { NodeList } from '@/components/ui/NodeList'
 import { SpecCard } from '@/components/ui/SpecCard'
 import { Icons } from '@/components/ui/Icons'
 import { exportAsYaml } from '@/lib/utils'
+import { parseDownloadProgress, DownloadProgress } from '@/lib/types/model'
+
+// Helper to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
 export default function ModelDetailPage() {
   const params = useParams()
@@ -23,6 +33,37 @@ export default function ModelDetailPage() {
   const deleteModel = useDeleteModel()
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showRawSpec, setShowRawSpec] = useState(false)
+
+  // Determine if we should poll for events (only when model is downloading)
+  const isDownloading =
+    model?.status?.state === 'In_Transit' || model?.status?.state === 'Importing'
+  const { data: eventsData } = useModelEvents(
+    name,
+    !!model, // Only fetch when model is loaded
+    isDownloading ? 5000 : undefined // Poll every 5 seconds when downloading
+  )
+
+  // Parse download progress from events
+  const downloadProgress = useMemo((): Map<string, DownloadProgress> => {
+    const progressMap = new Map<string, DownloadProgress>()
+    if (!eventsData?.events) return progressMap
+
+    // Filter to DownloadProgress events and get the latest for each node
+    // Reason can be "DownloadProgress" or "DownloadProgress0", "DownloadProgress10", etc.
+    // due to K8s event aggregation prevention using percentage buckets
+    const progressEvents = eventsData.events
+      .filter((e) => e.reason.startsWith('DownloadProgress'))
+      .sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime())
+
+    for (const event of progressEvents) {
+      const progress = parseDownloadProgress(event.message)
+      if (progress && !progressMap.has(progress.node)) {
+        progressMap.set(progress.node, progress)
+      }
+    }
+
+    return progressMap
+  }, [eventsData])
 
   const handleDelete = async () => {
     try {
@@ -128,6 +169,43 @@ export default function ModelDetailPage() {
               </dd>
             </div>
           </div>
+
+          {/* Download Progress - shown when downloading */}
+          {isDownloading && downloadProgress.size > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Download Progress</h3>
+              <div className="space-y-2">
+                {Array.from(downloadProgress.entries()).map(([node, progress]) => (
+                  <div key={node} className="flex items-center gap-3 text-sm">
+                    <span className="text-gray-500 w-28 truncate font-mono text-xs">{node}</span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(progress.percentage, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-gray-700 w-12 text-right">
+                      {progress.percentage.toFixed(1)}%
+                    </span>
+                    <span className="text-gray-500 w-20 text-right text-xs">
+                      {formatBytes(progress.speedBytesPerSec)}/s
+                    </span>
+                    {progress.eta && (
+                      <span className="text-gray-400 w-16 text-xs">{progress.eta}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-gray-400">
+                {Array.from(downloadProgress.values())[0] && (
+                  <span>
+                    {formatBytes(Array.from(downloadProgress.values())[0].completedBytes)} /{' '}
+                    {formatBytes(Array.from(downloadProgress.values())[0].totalBytes)} per node
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Nodes Ready/Failed */}
           {model.status?.nodesReady && (

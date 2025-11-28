@@ -439,3 +439,49 @@ func (h *ModelsHandler) DeleteBaseModel(c *gin.Context) {
 		"namespace": namespace,
 	})
 }
+
+// ModelEvent represents a K8s event in a simplified format for the API
+type ModelEvent struct {
+	Type           string `json:"type"`           // Normal or Warning
+	Reason         string `json:"reason"`         // e.g., DownloadProgress, FinalizerAdded
+	Message        string `json:"message"`        // Human-readable message
+	Count          int32  `json:"count"`          // Number of times this event occurred
+	FirstTimestamp string `json:"firstTimestamp"` // RFC3339 timestamp
+	LastTimestamp  string `json:"lastTimestamp"`  // RFC3339 timestamp
+	Source         string `json:"source"`         // Component that generated the event
+}
+
+// GetEvents handles GET /api/v1/models/:name/events
+func (h *ModelsHandler) GetEvents(c *gin.Context) {
+	ctx := c.Request.Context()
+	name := c.Param("name")
+
+	events, err := h.k8sClient.GetClusterBaseModelEvents(ctx, name)
+	if err != nil {
+		h.logger.Error("Failed to get model events", zap.String("name", name), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get model events",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to simplified format
+	modelEvents := make([]ModelEvent, 0, len(events.Items))
+	for _, e := range events.Items {
+		modelEvents = append(modelEvents, ModelEvent{
+			Type:           e.Type,
+			Reason:         e.Reason,
+			Message:        e.Message,
+			Count:          e.Count,
+			FirstTimestamp: e.FirstTimestamp.Format("2006-01-02T15:04:05Z07:00"),
+			LastTimestamp:  e.LastTimestamp.Format("2006-01-02T15:04:05Z07:00"),
+			Source:         e.Source.Component,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"events": modelEvents,
+		"total":  len(modelEvents),
+	})
+}

@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
 	"github.com/sgl-project/ome/pkg/constants"
@@ -499,6 +500,7 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 
 // ReconcileModelProgress updates the ConfigMap with model download progress.
 // This is called periodically during model downloads to track progress.
+// Uses retry logic to handle concurrent updates gracefully.
 //
 // Parameters:
 //   - ctx: Context for cancellation and timeouts
@@ -509,15 +511,18 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 func (c *ConfigMapReconciler) ReconcileModelProgress(ctx context.Context, op *ConfigMapProgressOp) error {
 	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
 
-	// Get or create the ConfigMap
-	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
-	if err != nil {
-		c.logger.Errorf("Failed to get or create ConfigMap for progress update %s: %v", modelInfo, err)
-		return err
-	}
+	// Use retry logic to handle concurrent updates (optimistic locking conflicts)
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Get or create the ConfigMap (fresh on each retry)
+		configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
+		if err != nil {
+			return err
+		}
 
-	// Update the ConfigMap with progress
-	err = c.updateModelProgressInConfigMap(ctx, configMap, op, needCreate)
+		// Update the ConfigMap with progress
+		return c.updateModelProgressInConfigMap(ctx, configMap, op, needCreate)
+	})
+
 	if err != nil {
 		c.logger.Errorf("Failed to update model progress in ConfigMap for %s: %v", modelInfo, err)
 		return err

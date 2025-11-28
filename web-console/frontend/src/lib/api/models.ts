@@ -1,6 +1,11 @@
 import { apiClient } from './client'
-import { ClusterBaseModel, BaseModel } from '../types/model'
+import { ClusterBaseModel, BaseModel, ModelEvent } from '../types/model'
 import { ListResponse } from '../types/common'
+
+export interface ModelEventsResponse {
+  events: ModelEvent[]
+  total: number
+}
 
 // ClusterBaseModel API (cluster-scoped)
 export const modelsApi = {
@@ -34,6 +39,11 @@ export const modelsApi = {
 
   getStatus: async (name: string): Promise<unknown> => {
     const response = await apiClient.get(`/models/${name}/status`)
+    return response.data
+  },
+
+  getEvents: async (name: string): Promise<ModelEventsResponse> => {
+    const response = await apiClient.get<ModelEventsResponse>(`/models/${name}/events`)
     return response.data
   },
 }
