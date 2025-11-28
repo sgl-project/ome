@@ -55,6 +55,14 @@ type ConfigMapMetadataOp struct {
 	ClusterBaseModel *v1beta1.ClusterBaseModel // Reference to a cluster-scoped BaseModel (nil if using BaseModel)
 }
 
+// ConfigMapProgressOp represents an operation to update model download progress in ConfigMap.
+// It contains the necessary information to identify the model and its progress.
+type ConfigMapProgressOp struct {
+	Progress         *DownloadProgress         // The download progress to be stored
+	BaseModel        *v1beta1.BaseModel        // Reference to a namespace-scoped BaseModel (nil if using ClusterBaseModel)
+	ClusterBaseModel *v1beta1.ClusterBaseModel // Reference to a cluster-scoped BaseModel (nil if using BaseModel)
+}
+
 // NewConfigMapReconciler creates a new ConfigMapReconciler with the given parameters.
 // It initializes the in-memory model cache and sets up the reconciliation interval.
 //
@@ -489,6 +497,88 @@ func (c *ConfigMapReconciler) ReconcileModelMetadata(ctx context.Context, op *Co
 	return nil
 }
 
+// ReconcileModelProgress updates the ConfigMap with model download progress.
+// This is called periodically during model downloads to track progress.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - op: ConfigMapProgressOp containing model references and progress data
+//
+// Returns:
+//   - error: nil if update succeeds, error otherwise
+func (c *ConfigMapReconciler) ReconcileModelProgress(ctx context.Context, op *ConfigMapProgressOp) error {
+	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
+
+	// Get or create the ConfigMap
+	configMap, needCreate, err := c.getOrCreateConfigMap(ctx)
+	if err != nil {
+		c.logger.Errorf("Failed to get or create ConfigMap for progress update %s: %v", modelInfo, err)
+		return err
+	}
+
+	// Update the ConfigMap with progress
+	err = c.updateModelProgressInConfigMap(ctx, configMap, op, needCreate)
+	if err != nil {
+		c.logger.Errorf("Failed to update model progress in ConfigMap for %s: %v", modelInfo, err)
+		return err
+	}
+
+	return nil
+}
+
+// updateModelProgressInConfigMap updates the model progress in the ConfigMap
+func (c *ConfigMapReconciler) updateModelProgressInConfigMap(ctx context.Context, configMap *corev1.ConfigMap, op *ConfigMapProgressOp, needCreate bool) error {
+	// Get model information and key
+	key := c.getModelConfigMapKey(op.BaseModel, op.ClusterBaseModel)
+	modelInfo := getConfigMapModelInfo(op.BaseModel, op.ClusterBaseModel)
+
+	if configMap.Data == nil {
+		configMap.Data = make(map[string]string)
+	}
+
+	// Get the existing model entry or create a new one
+	var modelEntry ModelEntry
+	var modelName string
+	if op.BaseModel != nil {
+		modelName = op.BaseModel.Name
+	} else {
+		modelName = op.ClusterBaseModel.Name
+	}
+
+	// Check if there's already an entry for this model
+	if existingData, exists := configMap.Data[key]; exists {
+		// If entry exists, try to unmarshal it
+		if err := json.Unmarshal([]byte(existingData), &modelEntry); err != nil {
+			// If it's not in our format yet, create a new entry
+			modelEntry = ModelEntry{
+				Name:   modelName,
+				Status: ModelStatusUpdating,
+			}
+		}
+	} else {
+		// No existing entry, create a new one
+		modelEntry = ModelEntry{
+			Name:   modelName,
+			Status: ModelStatusUpdating,
+		}
+	}
+
+	// Update the progress (can be nil to clear it)
+	modelEntry.Progress = op.Progress
+
+	// Marshal the model entry back to JSON
+	entryJSON, err := json.Marshal(modelEntry)
+	if err != nil {
+		c.logger.Errorf("Failed to marshal model entry for %s: %v", modelInfo, err)
+		return err
+	}
+
+	// Store the model entry in the ConfigMap
+	configMap.Data[key] = string(entryJSON)
+
+	return c.saveConfigMap(ctx, configMap, modelInfo, needCreate)
+}
+
 // DeleteModelFromConfigMap removes a model entry from the ConfigMap
 //
 // Parameters:
@@ -636,6 +726,11 @@ func (c *ConfigMapReconciler) updateModelStatusInConfigMap(ctx context.Context, 
 		} else {
 			// Update just the status, preserving the config
 			modelEntry.Status = op.ModelStatus
+			// Clear progress when status becomes Ready or Failed (download complete)
+			// This ensures the controller sees the final status update atomically
+			if op.ModelStatus == ModelStatusReady || op.ModelStatus == ModelStatusFailed {
+				modelEntry.Progress = nil
+			}
 		}
 	} else {
 		// No existing entry, create a new one
