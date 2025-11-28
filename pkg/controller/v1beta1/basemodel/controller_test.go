@@ -1147,6 +1147,169 @@ func TestAddToSlice(t *testing.T) {
 	}
 }
 
+func TestCreateNodeDeletionPredicate(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	pred := createNodeDeletionPredicate()
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node",
+		},
+	}
+
+	// CreateFunc should return false
+	createResult := pred.Create(event.TypedCreateEvent[client.Object]{Object: node})
+	g.Expect(createResult).To(gomega.BeFalse(), "CreateFunc should return false")
+
+	// UpdateFunc should return false
+	updateResult := pred.Update(event.TypedUpdateEvent[client.Object]{ObjectNew: node, ObjectOld: node})
+	g.Expect(updateResult).To(gomega.BeFalse(), "UpdateFunc should return false")
+
+	// DeleteFunc should return true
+	deleteResult := pred.Delete(event.TypedDeleteEvent[client.Object]{Object: node})
+	g.Expect(deleteResult).To(gomega.BeTrue(), "DeleteFunc should return true")
+}
+
+func TestHandleNodeDeletion(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	// Create scheme
+	scheme := runtime.NewScheme()
+	g.Expect(v1beta1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+	g.Expect(corev1.AddToScheme(scheme)).NotTo(gomega.HaveOccurred())
+
+	tests := []struct {
+		name       string
+		nodeName   string
+		setupMocks func(client.Client)
+		validate   func(*testing.T, client.Client, string)
+	}{
+		{
+			name:     "Node deletion cleans up associated ConfigMap",
+			nodeName: "node-with-configmap",
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create a model status ConfigMap for this node
+				configMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node-with-configmap",
+						Namespace: constants.OMENamespace,
+						Labels: map[string]string{
+							constants.ModelStatusConfigMapLabel: "true",
+						},
+					},
+					Data: map[string]string{
+						"clusterbasemodel.test-model": `{"status":"Ready"}`,
+					},
+				}
+				err = c.Create(context.TODO(), configMap)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, nodeName string) {
+				// ConfigMap should be deleted
+				configMap := &corev1.ConfigMap{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Namespace: constants.OMENamespace,
+					Name:      nodeName,
+				}, configMap)
+				g.Expect(errors.IsNotFound(err)).To(gomega.BeTrue(), "ConfigMap should be deleted")
+			},
+		},
+		{
+			name:     "Node deletion with no ConfigMap does nothing",
+			nodeName: "node-without-configmap",
+			setupMocks: func(c client.Client) {
+				// Create ome namespace but no ConfigMap
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, nodeName string) {
+				// No ConfigMap to check - just ensure no error occurred
+				// The function should silently skip
+			},
+		},
+		{
+			name:     "Node deletion skips non-model-status ConfigMap",
+			nodeName: "node-with-other-configmap",
+			setupMocks: func(c client.Client) {
+				// Create ome namespace
+				omeNamespace := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: constants.OMENamespace,
+					},
+				}
+				err := c.Create(context.TODO(), omeNamespace)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+
+				// Create a ConfigMap without model status label
+				configMap := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node-with-other-configmap",
+						Namespace: constants.OMENamespace,
+						// No model status label
+					},
+					Data: map[string]string{
+						"some-key": "some-value",
+					},
+				}
+				err = c.Create(context.TODO(), configMap)
+				g.Expect(err).NotTo(gomega.HaveOccurred())
+			},
+			validate: func(t *testing.T, c client.Client, nodeName string) {
+				// ConfigMap should NOT be deleted (it's not a model status ConfigMap)
+				configMap := &corev1.ConfigMap{}
+				err := c.Get(context.TODO(), types.NamespacedName{
+					Namespace: constants.OMENamespace,
+					Name:      nodeName,
+				}, configMap)
+				g.Expect(err).NotTo(gomega.HaveOccurred(), "ConfigMap should still exist")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := ctrlclientfake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+
+			tt.setupMocks(c)
+
+			log := ctrl.Log.WithName("test")
+
+			// Create the node object that was "deleted"
+			deletedNode := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: tt.nodeName,
+				},
+			}
+
+			// Call handleNodeDeletion (shared function)
+			requests := handleNodeDeletion(context.TODO(), c, log, deletedNode)
+
+			// Should return nil (no reconcile requests needed)
+			g.Expect(requests).To(gomega.BeNil())
+
+			// Validate the result
+			tt.validate(t, c, tt.nodeName)
+		})
+	}
+}
+
 // Helper functions
 func stringPtr(s string) *string {
 	return &s
