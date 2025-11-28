@@ -26,12 +26,9 @@ jobs:
     name: Frontend
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: web-console/frontend
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -39,21 +36,27 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm ci --force
+        working-directory: web-console/frontend
+        run: npm install --force
 
       - name: Run ESLint
+        working-directory: web-console/frontend
         run: npm run lint
 
       - name: Run Prettier check
+        working-directory: web-console/frontend
         run: npm run format:check
 
       - name: Run TypeScript type check
+        working-directory: web-console/frontend
         run: npm run typecheck
 
       - name: Build
+        working-directory: web-console/frontend
         run: npm run build
 
       - name: Run tests
+        working-directory: web-console/frontend
         run: npm run test
 
   # Backend checks - build and vet
@@ -61,12 +64,9 @@ jobs:
     name: Backend
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: web-console/backend
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -76,15 +76,19 @@ jobs:
           cache-dependency-path: web-console/backend/go.sum
 
       - name: Download dependencies
+        working-directory: web-console/backend
         run: go mod download
 
       - name: Run go vet
+        working-directory: web-console/backend
         run: go vet ./...
 
       - name: Build
+        working-directory: web-console/backend
         run: go build ./...
 
       - name: Run tests
+        working-directory: web-console/backend
         run: go test -v -race ./...
         continue-on-error: true  # Tests may not exist yet
 
