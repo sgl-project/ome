@@ -1,48 +1,19 @@
-<!-- 
-Thank you for contributing to OME! Please read the contributing guidelines:
-https://github.com/sgl-project/ome/blob/main/CONTRIBUTING.md
--->
+## What this PR does
 
-## What type of PR is this?
+<!-- Brief description of the changes -->
 
-<!-- 
-Add one of the following:
-/kind bug
-/kind cleanup
-/kind documentation
-/kind feature
-/kind design
--->
+## Why we need it
 
-## What this PR does / why we need it:
+<!-- Motivation, context, or link to issue -->
 
-<!-- 
-Please include a summary of the changes and which issue is fixed. 
-Include relevant motivation and context.
--->
-
-## Which issue(s) this PR fixes:
-
-<!-- 
-Automatically closes linked issue when PR is merged.
-Usage: Fixes #<issue number>, or Fixes (paste link of issue).
--->
 Fixes #
 
-## Special notes for your reviewer:
+## How to test
 
-<!-- 
-Any specific areas you'd like reviewed? Any concerns?
--->
+<!-- Steps to verify, or "N/A" for docs/config changes -->
 
-## Does this PR introduce a user-facing change?
+## Checklist
 
-<!--
-If no, just write "NONE" in the release-note block below.
-If yes, a release note is required:
-Enter your extended release note in the block below. If the PR requires additional action from users switching to the new release, include the string "action required".
--->
-
-```release-note
-
-```
+- [ ] Tests added/updated (if applicable)
+- [ ] Docs updated (if applicable)
+- [ ] `make test` passes locally
