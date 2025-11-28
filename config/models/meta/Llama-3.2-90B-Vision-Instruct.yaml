@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-2-90b-vision-instruct
 spec:
+  modelCapabilities:
+    - IMAGE_TEXT_TO_TEXT
   displayName: meta.llama-3.2-90b-vision-instruct
   vendor: meta
   disabled: false

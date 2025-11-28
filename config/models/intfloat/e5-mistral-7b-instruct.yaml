@@ -3,6 +3,8 @@ kind: ClusterBaseModel
 metadata:
   name: e5-mistral-7b-instruct
 spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
   disabled: false
   displayName: intfloat.e5-mistral-7b-instruct
   storage:

@@ -3,7 +3,10 @@ kind: ClusterBaseModel
 metadata:
   name: deepseek-r1
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   vendor: deepseek-ai
+  displayName: deepseek-ai.deepseek-r1
   disabled: false
   version: "1.0.0"
   storage:

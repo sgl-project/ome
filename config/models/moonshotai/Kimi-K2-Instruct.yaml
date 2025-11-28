@@ -3,7 +3,10 @@ kind: ClusterBaseModel
 metadata:
   name: kimi-k2-instruct
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   vendor: moonshotai
+  displayName: moonshotai.kimi-k2-instruct
   disabled: false
   version: "1.0.0"
   storage:

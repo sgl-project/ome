@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: persimmon-8b-chat
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: adept
+  displayName: adept.persimmon-8b-chat
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://adept/persimmon-8b-chat
+    path: /raid/models/adept/persimmon-8b-chat

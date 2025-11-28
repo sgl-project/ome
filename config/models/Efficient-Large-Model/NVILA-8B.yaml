@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: nvila-8b
+spec:
+  modelCapabilities:
+    - IMAGE_TEXT_TO_TEXT
+    - VIDEO_TEXT_TO_TEXT
+  vendor: Efficient-Large-Model
+  displayName: Efficient-Large-Model.nvila-8b
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://Efficient-Large-Model/NVILA-8B
+    path: /raid/models/Efficient-Large-Model/NVILA-8B

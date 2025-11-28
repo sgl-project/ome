@@ -3,7 +3,10 @@ kind: ClusterBaseModel
 metadata:
   name: llama-3-1-nemotron-ultra-253b-v1
 spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
   vendor: nvidia
+  displayName: nvidia.llama-3.1-nemotron-70b-instruct
   disabled: false
   version: "1.0.0"
   storage:
