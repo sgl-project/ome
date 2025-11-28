@@ -60,12 +60,32 @@ type ModelConfig struct {
 	Quantization              string                 `json:"quantization,omitempty"`              // Quantization type if applicable
 }
 
+// DownloadProgress tracks the progress of a model download
+type DownloadProgress struct {
+	Phase            string  `json:"phase"`            // Scanning, Downloading, Finalizing
+	TotalBytes       uint64  `json:"totalBytes"`       // Total bytes to download
+	CompletedBytes   uint64  `json:"completedBytes"`   // Bytes downloaded so far
+	TotalFiles       uint32  `json:"totalFiles"`       // Total number of files
+	CompletedFiles   uint32  `json:"completedFiles"`   // Files downloaded so far
+	SpeedBytesPerSec float64 `json:"speedBytesPerSec"` // Current download speed
+	LastUpdated      string  `json:"lastUpdated"`      // RFC3339 timestamp of last update
+}
+
+// Percentage returns the download progress as a percentage (0-100)
+func (p *DownloadProgress) Percentage() float64 {
+	if p == nil || p.TotalBytes == 0 {
+		return 0
+	}
+	return float64(p.CompletedBytes) / float64(p.TotalBytes) * 100
+}
+
 // ModelEntry represents an entry in the node model ConfigMap
 // This is the top-level structure stored for each model in the ConfigMap
 type ModelEntry struct {
-	Name   string       `json:"name"`             // Name of the model
-	Status ModelStatus  `json:"status"`           // Current status of the model on this node
-	Config *ModelConfig `json:"config,omitempty"` // Model configuration, may be nil if just tracking status
+	Name     string            `json:"name"`               // Name of the model
+	Status   ModelStatus       `json:"status"`             // Current status of the model on this node
+	Config   *ModelConfig      `json:"config,omitempty"`   // Model configuration, may be nil if just tracking status
+	Progress *DownloadProgress `json:"progress,omitempty"` // Download progress, nil when not downloading
 }
 
 // ConvertMetadataToModelConfig converts internal ModelMetadata to a client-facing ModelConfig

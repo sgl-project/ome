@@ -943,9 +943,52 @@ func (s *Gopher) processHuggingFaceModel(ctx context.Context, task *GopherTask, 
 		config.Token = hfToken
 	}
 
-	// Perform snapshot download - the hub client already has built-in retry logic
-	// with exponential backoff and proper 429 handling
-	downloadPath, err := xet.SnapshotDownload(ctx, config)
+	// Create progress handler for tracking download progress
+	var lastBytes uint64
+	var lastTime = time.Now()
+	progressThrottle := 30 * time.Second // Update ConfigMap every 30 seconds
+
+	progressHandler := func(update xet.ProgressUpdate) {
+		now := time.Now()
+
+		// Calculate speed (bytes per second)
+		var speedBytesPerSec float64
+		elapsed := now.Sub(lastTime).Seconds()
+		if elapsed > 0 && update.CompletedBytes > lastBytes {
+			speedBytesPerSec = float64(update.CompletedBytes-lastBytes) / elapsed
+		}
+		lastBytes = update.CompletedBytes
+		lastTime = now
+
+		// Create progress object
+		progress := &DownloadProgress{
+			Phase:            update.Phase.String(),
+			TotalBytes:       update.TotalBytes,
+			CompletedBytes:   update.CompletedBytes,
+			TotalFiles:       update.TotalFiles,
+			CompletedFiles:   update.CompletedFiles,
+			SpeedBytesPerSec: speedBytesPerSec,
+			LastUpdated:      now.Format(time.RFC3339),
+		}
+
+		// Update ConfigMap with progress (non-blocking)
+		go func() {
+			progressOp := &ConfigMapProgressOp{
+				Progress:         progress,
+				BaseModel:        task.BaseModel,
+				ClusterBaseModel: task.ClusterBaseModel,
+			}
+			if err := s.configMapReconciler.ReconcileModelProgress(ctx, progressOp); err != nil {
+				s.logger.Warnf("Failed to update download progress for %s: %v", modelInfo, err)
+			}
+		}()
+	}
+
+	// Perform snapshot download with progress tracking
+	// Note: Progress is cleared atomically with status update in ReconcileModelStatus
+	// when status becomes Ready/Failed, ensuring the controller sees the final progress
+	downloadPath, err := xet.SnapshotDownloadWithProgress(ctx, config, progressHandler, progressThrottle)
+
 	if err != nil {
 		// Check error type for better handling
 		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "rate limit") {
