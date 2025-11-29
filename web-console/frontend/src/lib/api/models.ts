@@ -1,6 +1,27 @@
 import { apiClient } from './client'
-import { ClusterBaseModel, BaseModel } from '../types/model'
+import { ClusterBaseModel, BaseModel, ModelEvent } from '../types/model'
 import { ListResponse } from '../types/common'
+
+export interface ModelEventsResponse {
+  events: ModelEvent[]
+  total: number
+}
+
+// Progress data from ConfigMap (real-time download progress)
+export interface NodeDownloadProgress {
+  node: string
+  phase: string // Scanning, Downloading, Finalizing
+  totalBytes: number
+  completedBytes: number
+  bytesPerSecond: number
+  remainingTime: number // ETA in seconds
+  percentage: number // 0-100
+}
+
+export interface ModelProgressResponse {
+  progress: NodeDownloadProgress[]
+  total: number
+}
 
 // ClusterBaseModel API (cluster-scoped)
 export const modelsApi = {
@@ -34,6 +55,17 @@ export const modelsApi = {
 
   getStatus: async (name: string): Promise<unknown> => {
     const response = await apiClient.get(`/models/${name}/status`)
+    return response.data
+  },
+
+  getEvents: async (name: string): Promise<ModelEventsResponse> => {
+    const response = await apiClient.get<ModelEventsResponse>(`/models/${name}/events`)
+    return response.data
+  },
+
+  // Get real-time download progress from ConfigMaps
+  getProgress: async (name: string): Promise<ModelProgressResponse> => {
+    const response = await apiClient.get<ModelProgressResponse>(`/models/${name}/progress`)
     return response.data
   },
 }

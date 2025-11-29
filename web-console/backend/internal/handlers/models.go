@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -437,5 +438,146 @@ func (h *ModelsHandler) DeleteBaseModel(c *gin.Context) {
 		"message":   "Base model deleted successfully",
 		"name":      name,
 		"namespace": namespace,
+	})
+}
+
+// ModelEvent represents a K8s event in a simplified format for the API
+type ModelEvent struct {
+	Type           string `json:"type"`           // Normal or Warning
+	Reason         string `json:"reason"`         // e.g., DownloadProgress, FinalizerAdded
+	Message        string `json:"message"`        // Human-readable message
+	Count          int32  `json:"count"`          // Number of times this event occurred
+	FirstTimestamp string `json:"firstTimestamp"` // RFC3339 timestamp
+	LastTimestamp  string `json:"lastTimestamp"`  // RFC3339 timestamp
+	Source         string `json:"source"`         // Component that generated the event
+}
+
+// GetEvents handles GET /api/v1/models/:name/events
+func (h *ModelsHandler) GetEvents(c *gin.Context) {
+	ctx := c.Request.Context()
+	name := c.Param("name")
+
+	events, err := h.k8sClient.GetClusterBaseModelEvents(ctx, name)
+	if err != nil {
+		h.logger.Error("Failed to get model events", zap.String("name", name), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get model events",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to simplified format
+	modelEvents := make([]ModelEvent, 0, len(events.Items))
+	for _, e := range events.Items {
+		modelEvents = append(modelEvents, ModelEvent{
+			Type:           e.Type,
+			Reason:         e.Reason,
+			Message:        e.Message,
+			Count:          e.Count,
+			FirstTimestamp: e.FirstTimestamp.Format("2006-01-02T15:04:05Z07:00"),
+			LastTimestamp:  e.LastTimestamp.Format("2006-01-02T15:04:05Z07:00"),
+			Source:         e.Source.Component,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"events": modelEvents,
+		"total":  len(modelEvents),
+	})
+}
+
+// NodeDownloadProgress represents download progress on a specific node
+type NodeDownloadProgress struct {
+	Node           string  `json:"node"`
+	Phase          string  `json:"phase"`          // Scanning, Downloading, Finalizing
+	TotalBytes     uint64  `json:"totalBytes"`     // Total bytes to download
+	CompletedBytes uint64  `json:"completedBytes"` // Bytes downloaded so far
+	BytesPerSecond float64 `json:"bytesPerSecond"` // Download speed
+	RemainingTime  float64 `json:"remainingTime"`  // ETA in seconds
+	Percentage     float64 `json:"percentage"`     // Calculated percentage (0-100)
+}
+
+// ModelInfoFromConfigMap represents the model info stored in ConfigMap
+type ModelInfoFromConfigMap struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Progress *struct {
+		Phase          string  `json:"phase"`
+		TotalBytes     uint64  `json:"totalBytes"`
+		CompletedBytes uint64  `json:"completedBytes"`
+		BytesPerSecond float64 `json:"bytesPerSecond"`
+		RemainingTime  float64 `json:"remainingTime"`
+	} `json:"progress,omitempty"`
+}
+
+// GetProgress handles GET /api/v1/models/:name/progress
+// Returns download progress from ConfigMaps written by model-agent daemonsets
+func (h *ModelsHandler) GetProgress(c *gin.Context) {
+	ctx := c.Request.Context()
+	modelName := c.Param("name")
+
+	configMaps, err := h.k8sClient.GetModelStatusConfigMaps(ctx)
+	if err != nil {
+		h.logger.Error("Failed to get model status ConfigMaps", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get model progress",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	progressList := make([]NodeDownloadProgress, 0)
+
+	// Each ConfigMap is named after a node and contains model status data
+	for _, cm := range configMaps.Items {
+		nodeName := cm.Name
+		// Get node name from annotation if available (more reliable)
+		if nn, ok := cm.Annotations["models.ome.io/node-name"]; ok {
+			nodeName = nn
+		}
+
+		// Look for the specific model in this ConfigMap's data
+		// The key format can be just the model name for ClusterBaseModels
+		// or namespace/name for namespaced BaseModels
+		for key, value := range cm.Data {
+			// Check if this entry is for our model
+			// Handle both "modelName" and potentially "namespace/modelName" formats
+			if key != modelName && key != "default/"+modelName {
+				continue
+			}
+
+			var modelInfo ModelInfoFromConfigMap
+			if err := json.Unmarshal([]byte(value), &modelInfo); err != nil {
+				h.logger.Warn("Failed to parse model info from ConfigMap",
+					zap.String("node", nodeName),
+					zap.String("key", key),
+					zap.Error(err))
+				continue
+			}
+
+			// Only include if there's progress data
+			if modelInfo.Progress != nil {
+				percentage := float64(0)
+				if modelInfo.Progress.TotalBytes > 0 {
+					percentage = float64(modelInfo.Progress.CompletedBytes) / float64(modelInfo.Progress.TotalBytes) * 100
+				}
+
+				progressList = append(progressList, NodeDownloadProgress{
+					Node:           nodeName,
+					Phase:          modelInfo.Progress.Phase,
+					TotalBytes:     modelInfo.Progress.TotalBytes,
+					CompletedBytes: modelInfo.Progress.CompletedBytes,
+					BytesPerSecond: modelInfo.Progress.BytesPerSecond,
+					RemainingTime:  modelInfo.Progress.RemainingTime,
+					Percentage:     percentage,
+				})
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"progress": progressList,
+		"total":    len(progressList),
 	})
 }

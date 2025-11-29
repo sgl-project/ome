@@ -1,6 +1,6 @@
 'use client'
 
-import { useModel, useDeleteModel } from '@/lib/hooks/useModels'
+import { useModel, useDeleteModel, useModelProgress } from '@/lib/hooks/useModels'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useState } from 'react'
@@ -15,6 +15,15 @@ import { SpecCard } from '@/components/ui/SpecCard'
 import { Icons } from '@/components/ui/Icons'
 import { exportAsYaml } from '@/lib/utils'
 
+// Helper to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
 export default function ModelDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -23,6 +32,16 @@ export default function ModelDetailPage() {
   const deleteModel = useDeleteModel()
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showRawSpec, setShowRawSpec] = useState(false)
+
+  // Determine if we should poll for progress (only when model is downloading)
+  const isDownloading =
+    model?.status?.state === 'In_Transit' || model?.status?.state === 'Importing'
+
+  // Use ConfigMap-based progress API for real-time updates
+  const { data: progressData } = useModelProgress(
+    name,
+    isDownloading // Only poll when downloading
+  )
 
   const handleDelete = async () => {
     try {
@@ -128,6 +147,47 @@ export default function ModelDetailPage() {
               </dd>
             </div>
           </div>
+
+          {/* Download Progress - shown when downloading */}
+          {isDownloading && progressData && progressData.progress.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Download Progress</h3>
+              <div className="space-y-2">
+                {progressData.progress.map((progress) => (
+                  <div key={progress.node} className="flex items-center gap-3 text-sm">
+                    <span className="text-gray-500 w-28 truncate font-mono text-xs">
+                      {progress.node}
+                    </span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(progress.percentage, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-gray-700 w-12 text-right">
+                      {progress.percentage.toFixed(1)}%
+                    </span>
+                    <span className="text-gray-500 w-20 text-right text-xs">
+                      {formatBytes(progress.bytesPerSecond)}/s
+                    </span>
+                    {progress.remainingTime > 0 && (
+                      <span className="text-gray-400 w-16 text-xs">
+                        {Math.ceil(progress.remainingTime)}s
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-gray-400">
+                {progressData.progress[0] && (
+                  <span>
+                    {formatBytes(progressData.progress[0].completedBytes)} /{' '}
+                    {formatBytes(progressData.progress[0].totalBytes)} per node
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Nodes Ready/Failed */}
           {model.status?.nodesReady && (

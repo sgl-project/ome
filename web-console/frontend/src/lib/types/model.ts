@@ -199,3 +199,66 @@ export interface CreateModelFormData {
   name: string
   spec: BaseModelSpec
 }
+
+// Model event from K8s
+export interface ModelEvent {
+  type: 'Normal' | 'Warning'
+  reason: string // e.g., DownloadProgress, FinalizerAdded
+  message: string
+  count: number
+  firstTimestamp: string
+  lastTimestamp: string
+  source: string
+}
+
+// Parsed download progress from event message
+export interface DownloadProgress {
+  node: string
+  percentage: number
+  completedBytes: number
+  totalBytes: number
+  speedBytesPerSec: number
+  eta?: string
+}
+
+// Helper to parse download progress from event message
+export function parseDownloadProgress(message: string): DownloadProgress | null {
+  // Format: "[10.0.119.255] Download progress: 42.3% (17.3 GB/40.9 GB) at 24.8 MB/s, ETA: 16m 13s"
+  const regex =
+    /\[([^\]]+)\] Download progress: ([\d.]+)% \(([\d.]+ [A-Z]+)\/([\d.]+ [A-Z]+)\) at ([\d.]+ [A-Z]+\/s)(?:, ETA: (.+))?/
+  const match = message.match(regex)
+  if (!match) return null
+
+  const parseBytes = (str: string): number => {
+    const [value, unit] = str.split(' ')
+    const num = parseFloat(value)
+    switch (unit) {
+      case 'B':
+        return num
+      case 'KB':
+        return num * 1024
+      case 'MB':
+        return num * 1024 * 1024
+      case 'GB':
+        return num * 1024 * 1024 * 1024
+      case 'TB':
+        return num * 1024 * 1024 * 1024 * 1024
+      default:
+        return num
+    }
+  }
+
+  const parseSpeed = (str: string): number => {
+    const speedStr = str.replace('/s', '')
+    return parseBytes(speedStr)
+  }
+
+  return {
+    node: match[1],
+    percentage: parseFloat(match[2]),
+    completedBytes: parseBytes(match[3]),
+    totalBytes: parseBytes(match[4]),
+    speedBytesPerSec: parseSpeed(match[5]),
+    eta: match[6] || undefined,
+  }
+}

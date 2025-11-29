@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlclientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -567,14 +566,10 @@ func TestBaseModelReconcile(t *testing.T) {
 			// Setup test mocks
 			tt.setupMocks(c)
 
-			// Create recorder
-			recorder := record.NewFakeRecorder(10)
-
 			// Run reconciliation
 			reconciler := &BaseModelReconciler{
-				Client:   c,
-				Scheme:   c.Scheme(),
-				Recorder: recorder,
+				Client: c,
+				Scheme: c.Scheme(),
 			}
 
 			result, err := reconciler.Reconcile(context.TODO(), ctrl.Request{
@@ -727,12 +722,10 @@ func TestClusterBaseModelReconcile(t *testing.T) {
 				tt.setupMocks(c)
 			}
 
-			recorder := record.NewFakeRecorder(10)
 			reconciler := &ClusterBaseModelReconciler{
-				Client:   c,
-				Log:      ctrl.Log.WithName("test"),
-				Scheme:   scheme,
-				Recorder: recorder,
+				Client: c,
+				Log:    ctrl.Log.WithName("test"),
+				Scheme: scheme,
 			}
 
 			req := ctrl.Request{
