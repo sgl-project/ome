@@ -11,9 +11,11 @@ use progress_tracking::{
 };
 use std::path::Path;
 use std::sync::Arc;
-use tracing::info;
+use tokio::sync::Mutex;
+use tracing::{debug, info};
 use ulid::Ulid;
 use utils::auth::{AuthConfig, TokenRefresher};
+use utils::errors::AuthError;
 use utils::normalized_path_from_user_string;
 use xet_core_data::configurations::{
     DataConfig, Endpoint, ProgressConfig, RepoInfo, ShardConfig, TranslatorConfig,
@@ -21,7 +23,55 @@ use xet_core_data::configurations::{
 use xet_core_data::FileDownloader;
 
 use crate::progress::OperationProgress;
-use crate::xet_integration::XetConnectionInfo;
+use crate::xet_integration::{XetConnectionInfo, XetFileData, XetTokenManager};
+
+/// Token refresher that uses XetTokenManager to refresh XET CAS tokens.
+///
+/// This implements the `TokenRefresher` trait required by xet-core's auth system.
+/// When the CAS client detects that a token is about to expire, it calls the
+/// `refresh()` method to obtain fresh credentials.
+struct HfTokenRefresher {
+    token_manager: Arc<Mutex<XetTokenManager>>,
+    file_data: XetFileData,
+}
+
+impl HfTokenRefresher {
+    fn new(token_manager: Arc<Mutex<XetTokenManager>>, file_data: XetFileData) -> Self {
+        Self {
+            token_manager,
+            file_data,
+        }
+    }
+}
+
+#[async_trait]
+impl TokenRefresher for HfTokenRefresher {
+    /// Refresh the XET CAS token by calling the HuggingFace refresh route.
+    ///
+    /// Returns a tuple of (access_token, expiration_unix_epoch).
+    async fn refresh(&self) -> Result<(String, u64), AuthError> {
+        debug!(
+            "[TokenRefresher] Refreshing XET token via route: {}",
+            self.file_data.refresh_route
+        );
+
+        let mut manager = self.token_manager.lock().await;
+        let connection_info = manager
+            .refresh_xet_connection_info(&self.file_data)
+            .await
+            .map_err(|e| AuthError::TokenRefreshFailure(e.to_string()))?;
+
+        debug!(
+            "[TokenRefresher] Token refreshed, new expiration: {}",
+            connection_info.expiration_unix_epoch
+        );
+
+        Ok((
+            connection_info.access_token,
+            connection_info.expiration_unix_epoch,
+        ))
+    }
+}
 
 /// XET Downloader that uses xet-core's FileDownloader for CAS operations
 pub struct XetDownloader {
@@ -31,18 +81,28 @@ pub struct XetDownloader {
 }
 
 impl XetDownloader {
-    /// Create a new XET downloader with connection info from HuggingFace
+    /// Create a new XET downloader with connection info from HuggingFace.
+    ///
+    /// # Arguments
+    /// * `connection_info` - Initial XET CAS connection info (endpoint, token, expiration)
+    /// * `file_data` - XET file metadata containing the refresh route for token renewal
+    /// * `token_manager` - Shared token manager for refreshing tokens when they expire
     pub async fn new(
         connection_info: &XetConnectionInfo,
-        _hf_token: Option<String>,
+        file_data: &XetFileData,
+        token_manager: Arc<Mutex<XetTokenManager>>,
     ) -> Result<Self> {
+        // Create a token refresher that will be called by xet-core when the token expires
+        let refresher: Arc<dyn TokenRefresher> =
+            Arc::new(HfTokenRefresher::new(token_manager, file_data.clone()));
+
         let config = create_xet_config(
             connection_info.endpoint.clone(),
             Some((
                 connection_info.access_token.clone(),
                 connection_info.expiration_unix_epoch,
             )),
-            None, // No token refresher for now
+            Some(refresher),
         )?;
 
         let config = Arc::new(config);
