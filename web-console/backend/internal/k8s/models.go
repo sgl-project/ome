@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -115,4 +116,38 @@ func (c *Client) UpdateBaseModel(ctx context.Context, namespace string, model *u
 // DeleteBaseModel deletes a BaseModel by name and namespace
 func (c *Client) DeleteBaseModel(ctx context.Context, namespace, name string) error {
 	return c.DynamicClient.Resource(BaseModelGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// GetClusterBaseModelEvents returns K8s events for a ClusterBaseModel
+// Since ClusterBaseModel is cluster-scoped, events are stored in the "default" namespace
+func (c *Client) GetClusterBaseModelEvents(ctx context.Context, name string) (*corev1.EventList, error) {
+	// For cluster-scoped resources, K8s stores events in the "default" namespace
+	// The events are linked via involvedObject with kind=ClusterBaseModel
+	fieldSelector := "involvedObject.kind=ClusterBaseModel,involvedObject.name=" + name
+	return c.Clientset.CoreV1().Events("default").List(ctx, metav1.ListOptions{
+		FieldSelector: fieldSelector,
+	})
+}
+
+// GetBaseModelEvents returns K8s events for a namespace-scoped BaseModel
+func (c *Client) GetBaseModelEvents(ctx context.Context, namespace, name string) (*corev1.EventList, error) {
+	fieldSelector := "involvedObject.kind=BaseModel,involvedObject.name=" + name
+	return c.Clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: fieldSelector,
+	})
+}
+
+const (
+	// ModelStatusConfigMapLabel is the label used to identify ConfigMaps containing model status
+	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
+	// OMENamespace is the namespace where model status ConfigMaps are stored
+	OMENamespace = "ome"
+)
+
+// GetModelStatusConfigMaps returns all ConfigMaps with model status data
+// These ConfigMaps are created by model-agent daemonsets and contain download progress
+func (c *Client) GetModelStatusConfigMaps(ctx context.Context) (*corev1.ConfigMapList, error) {
+	return c.Clientset.CoreV1().ConfigMaps(OMENamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: ModelStatusConfigMapLabel + "=true",
+	})
 }

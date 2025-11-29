@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { modelsApi } from '../api/models'
+import { modelsApi, ModelEventsResponse, ModelProgressResponse } from '../api/models'
 import { ClusterBaseModel } from '../types/model'
 import { DEFAULT_QUERY_CONFIG, queryKeys } from './createResourceHooks'
 
@@ -72,5 +72,42 @@ export function useDeleteModel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.all(RESOURCE_KEY) })
     },
+  })
+}
+
+/**
+ * Hook to fetch K8s events for a model.
+ * Used to display download progress and other events.
+ * Polls every 5 seconds when the model is in a downloading state.
+ */
+export function useModelEvents(name: string, enabled = true, refetchInterval?: number) {
+  return useQuery<ModelEventsResponse>({
+    queryKey: [...queryKeys.detail(RESOURCE_KEY, name), 'events'],
+    queryFn: () => modelsApi.getEvents(name),
+    enabled: !!name && enabled,
+    staleTime: 2000, // Events can change frequently during download
+    gcTime: DEFAULT_QUERY_CONFIG.gcTime,
+    retry: DEFAULT_QUERY_CONFIG.retry,
+    retryDelay: DEFAULT_QUERY_CONFIG.retryDelay,
+    refetchInterval: refetchInterval, // Allow caller to set polling interval
+  })
+}
+
+/**
+ * Hook to fetch real-time download progress from ConfigMaps.
+ * This reads directly from ConfigMaps written by model-agent daemonsets,
+ * providing more reliable progress updates than K8s events.
+ * Polls every 2 seconds when enabled.
+ */
+export function useModelProgress(name: string, enabled = true, refetchInterval = 2000) {
+  return useQuery<ModelProgressResponse>({
+    queryKey: [...queryKeys.detail(RESOURCE_KEY, name), 'progress'],
+    queryFn: () => modelsApi.getProgress(name),
+    enabled: !!name && enabled,
+    staleTime: 1000, // Progress changes frequently during download
+    gcTime: DEFAULT_QUERY_CONFIG.gcTime,
+    retry: DEFAULT_QUERY_CONFIG.retry,
+    retryDelay: DEFAULT_QUERY_CONFIG.retryDelay,
+    refetchInterval: enabled ? refetchInterval : undefined,
   })
 }
