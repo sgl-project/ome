@@ -827,6 +827,7 @@ func (c *ConfigMapReconciler) updateModelMetadataInConfigMap(ctx context.Context
 }
 
 // saveConfigMap creates or updates the ConfigMap in Kubernetes
+// Uses retry.RetryOnConflict to handle concurrent updates to the same ConfigMap
 func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *corev1.ConfigMap, modelInfo string, needCreate bool) error {
 	// Create or update the ConfigMap
 	if needCreate {
@@ -839,7 +840,30 @@ func (c *ConfigMapReconciler) saveConfigMap(ctx context.Context, configMap *core
 		c.logger.Infof("Successfully created ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
 	} else {
 		c.logger.Infof("Updating ConfigMap '%s' in namespace '%s' for %s", c.nodeName, c.namespace, modelInfo)
-		_, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+		// Store the data we want to apply - this is the caller's intended changes
+		dataToApply := configMap.Data
+
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			// Re-fetch the latest ConfigMap to get current ResourceVersion
+			latestCM, err := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Get(ctx, c.nodeName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			// Merge our data into the latest ConfigMap
+			// This preserves other keys that may have been updated concurrently
+			if latestCM.Data == nil {
+				latestCM.Data = make(map[string]string)
+			}
+			for key, value := range dataToApply {
+				latestCM.Data[key] = value
+			}
+
+			// Update with the merged data
+			_, updateErr := c.kubeClient.CoreV1().ConfigMaps(c.namespace).Update(ctx, latestCM, metav1.UpdateOptions{})
+			return updateErr
+		})
+
 		if err != nil {
 			c.logger.Errorf("Failed to update ConfigMap '%s' in namespace '%s' for %s: %v", c.nodeName, c.namespace, modelInfo, err)
 			return err
