@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,22 +34,19 @@ import (
 // +kubebuilder:rbac:groups=ome.io,resources=clusterbasemodels/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // BaseModelReconciler reconciles BaseModel objects
 type BaseModelReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 }
 
 // ClusterBaseModelReconciler reconciles ClusterBaseModel objects
 type ClusterBaseModelReconciler struct {
 	client.Client
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Log    logr.Logger
+	Scheme *runtime.Scheme
 }
 
 // Reconcile handles BaseModel reconciliation
@@ -82,21 +78,17 @@ func (r *BaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		controllerutil.AddFinalizer(baseModel, constants.BaseModelFinalizer)
 		if err := r.Update(ctx, baseModel); err != nil {
 			log.Error(err, "Failed to add finalizer")
-			r.Recorder.Event(baseModel, corev1.EventTypeWarning, "FinalizerAddFailed", "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(baseModel, corev1.EventTypeNormal, "FinalizerAdded", "Added finalizer")
 	}
 
 	// Update status based on ConfigMaps
 	if err := r.updateModelStatus(ctx, baseModel); err != nil {
 		log.Error(err, "Failed to update BaseModel status")
-		r.Recorder.Event(baseModel, corev1.EventTypeWarning, "StatusUpdateFailed", "Failed to update status")
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
 
-	// Requeue while downloading to ensure progress events are emitted regularly
-	// This is needed because controller-runtime's work queue deduplicates rapid ConfigMap updates
+	// Requeue while downloading to ensure status is updated regularly
 	if baseModel.Status.State == v1beta1.LifeCycleStateImporting || baseModel.Status.State == v1beta1.LifeCycleStateInTransit {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -133,21 +125,17 @@ func (r *ClusterBaseModelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		controllerutil.AddFinalizer(clusterBaseModel, constants.ClusterBaseModelFinalizer)
 		if err := r.Update(ctx, clusterBaseModel); err != nil {
 			log.Error(err, "Failed to add finalizer")
-			r.Recorder.Event(clusterBaseModel, corev1.EventTypeWarning, "FinalizerAddFailed", "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
-		r.Recorder.Event(clusterBaseModel, corev1.EventTypeNormal, "FinalizerAdded", "Added finalizer")
 	}
 
 	// Update status based on ConfigMaps
 	if err := r.updateModelStatus(ctx, clusterBaseModel); err != nil {
 		log.Error(err, "Failed to update ClusterBaseModel status")
-		r.Recorder.Event(clusterBaseModel, corev1.EventTypeWarning, "StatusUpdateFailed", "Failed to update status")
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
 
-	// Requeue while downloading to ensure progress events are emitted regularly
-	// This is needed because controller-runtime's work queue deduplicates rapid ConfigMap updates
+	// Requeue while downloading to ensure status is updated regularly
 	if clusterBaseModel.Status.State == v1beta1.LifeCycleStateImporting || clusterBaseModel.Status.State == v1beta1.LifeCycleStateInTransit {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -267,17 +255,6 @@ func (r *BaseModelReconciler) updateModelStatus(ctx context.Context, baseModel *
 		},
 		func(ctx context.Context, nodesReady, nodesFailed []string) error {
 			return r.updateStatusWithRetry(ctx, baseModel, nodesReady, nodesFailed)
-		},
-		func(node string, progress *modelagent.DownloadProgress) {
-			message := formatProgressMessage(node, progress)
-			if message != "" {
-				// Use percentage bucket in reason to prevent K8s event aggregation
-				// K8s aggregates events with same (source, object, reason) which causes
-				// progress updates to be lost. By using DownloadProgress0, DownloadProgress10, etc.
-				// we ensure each 10% bucket gets its own event.
-				reason := fmt.Sprintf("DownloadProgress%d", getProgressBucket(progress))
-				r.Recorder.Event(baseModel, corev1.EventTypeNormal, reason, message)
-			}
 		})
 }
 
@@ -289,25 +266,13 @@ func (r *ClusterBaseModelReconciler) updateModelStatus(ctx context.Context, clus
 		},
 		func(ctx context.Context, nodesReady, nodesFailed []string) error {
 			return r.updateStatusWithRetry(ctx, clusterBaseModel, nodesReady, nodesFailed)
-		},
-		func(node string, progress *modelagent.DownloadProgress) {
-			message := formatProgressMessage(node, progress)
-			if message != "" {
-				// Use percentage bucket in reason to prevent K8s event aggregation
-				reason := fmt.Sprintf("DownloadProgress%d", getProgressBucket(progress))
-				r.Recorder.Event(clusterBaseModel, corev1.EventTypeNormal, reason, message)
-			}
 		})
 }
-
-// ProgressEventFunc is a callback function for emitting progress events
-type ProgressEventFunc func(node string, progress *modelagent.DownloadProgress)
 
 // processModelStatus is a shared utility function for processing ConfigMaps and updating model status
 func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.Logger, namespace, name string, isClusterScope bool,
 	specUpdateFunc func(context.Context, *modelagent.ModelConfig) error,
-	statusUpdateFunc func(context.Context, []string, []string) error,
-	progressEventFunc ProgressEventFunc) error {
+	statusUpdateFunc func(context.Context, []string, []string) error) error {
 
 	modelInfo := name
 	if !isClusterScope {
@@ -366,13 +331,6 @@ func processModelStatus(ctx context.Context, kubeClient client.Client, log logr.
 		}
 
 		log.V(1).Info("Processing model entry", "node", configMap.Name, "status", modelEntry.Status, "hasConfig", modelEntry.Config != nil, "hasProgress", modelEntry.Progress != nil)
-
-		// Emit progress event if progress is available and we have a callback
-		// Only emit if TotalBytes > 0 (actual download has started)
-		if modelEntry.Progress != nil && progressEventFunc != nil && modelEntry.Progress.TotalBytes > 0 {
-			log.Info("Emitting download progress event", "node", configMap.Name, "percentage", modelEntry.Progress.Percentage())
-			progressEventFunc(configMap.Name, modelEntry.Progress)
-		}
 
 		// Update model spec with config if available
 		if modelEntry.Config != nil {
@@ -860,77 +818,4 @@ func updateSpecWithConfig(spec *v1beta1.BaseModelSpec, config *modelagent.ModelC
 	}
 
 	return updated
-}
-
-// formatBytes formats a byte count into a human-readable string
-func formatBytes(bytes uint64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := uint64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
-// formatSpeed formats bytes per second into a human-readable speed string
-func formatSpeed(bytesPerSec float64) string {
-	return formatBytes(uint64(bytesPerSec)) + "/s"
-}
-
-// formatDuration formats a duration into a human-readable string
-func formatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
-	}
-	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
-}
-
-// getProgressBucket returns the percentage bucket (0, 10, 20, ..., 100) for progress tracking.
-// This is used to prevent K8s event aggregation by creating different event reasons
-// for different progress levels (e.g., DownloadProgress0, DownloadProgress10, etc.)
-func getProgressBucket(progress *modelagent.DownloadProgress) int {
-	if progress == nil {
-		return 0
-	}
-	percentage := progress.Percentage()
-	// Round down to nearest 10
-	bucket := int(percentage) / 10 * 10
-	if bucket > 100 {
-		bucket = 100
-	}
-	return bucket
-}
-
-// formatProgressMessage creates a human-readable progress message for K8s events
-func formatProgressMessage(node string, progress *modelagent.DownloadProgress) string {
-	if progress == nil {
-		return ""
-	}
-
-	percentage := progress.Percentage()
-	speedStr := formatSpeed(progress.SpeedBytesPerSec)
-
-	message := fmt.Sprintf("[%s] Download progress: %.1f%% (%s/%s) at %s",
-		node,
-		percentage,
-		formatBytes(progress.CompletedBytes),
-		formatBytes(progress.TotalBytes),
-		speedStr,
-	)
-
-	// Add ETA if we have speed
-	if progress.SpeedBytesPerSec > 0 && progress.TotalBytes > progress.CompletedBytes {
-		remainingBytes := progress.TotalBytes - progress.CompletedBytes
-		etaSeconds := float64(remainingBytes) / progress.SpeedBytesPerSec
-		message += fmt.Sprintf(", ETA: %s", formatDuration(time.Duration(etaSeconds)*time.Second))
-	}
-
-	return message
 }

@@ -136,3 +136,18 @@ func (c *Client) GetBaseModelEvents(ctx context.Context, namespace, name string)
 		FieldSelector: fieldSelector,
 	})
 }
+
+const (
+	// ModelStatusConfigMapLabel is the label used to identify ConfigMaps containing model status
+	ModelStatusConfigMapLabel = "models.ome/basemodel-status"
+	// OMENamespace is the namespace where model status ConfigMaps are stored
+	OMENamespace = "ome"
+)
+
+// GetModelStatusConfigMaps returns all ConfigMaps with model status data
+// These ConfigMaps are created by model-agent daemonsets and contain download progress
+func (c *Client) GetModelStatusConfigMaps(ctx context.Context) (*corev1.ConfigMapList, error) {
+	return c.Clientset.CoreV1().ConfigMaps(OMENamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: ModelStatusConfigMapLabel + "=true",
+	})
+}
