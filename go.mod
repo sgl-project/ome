@@ -38,7 +38,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/fx v1.22.2
 	go.uber.org/zap v1.27.0
-	golang.org/x/oauth2 v0.29.0
+	golang.org/x/oauth2 v0.33.0
 	golang.org/x/sys v0.33.0
 	golang.org/x/term v0.31.0
 	gomodules.xyz/jsonpatch/v2 v2.4.0
