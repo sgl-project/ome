@@ -235,24 +235,64 @@ func UpdatePodSpecNodeSelector(b *BaseComponentFields, isvc *v1beta1.InferenceSe
 		labelKey = constants.GetBaseModelLabel(b.BaseModelMeta.Namespace, b.BaseModelMeta.Name)
 	}
 
-	// Initialize node selector if nil
-	if podSpec.NodeSelector == nil {
-		podSpec.NodeSelector = make(map[string]string)
+	// Add preferred node affinity for model readiness label.
+	// This allows cluster autoscaler to scale up nodes that don't yet have the model label
+	// (which is dynamically added after nodes join), while still preferring nodes where
+	// the model is already ready for optimal performance.
+	if podSpec.Affinity == nil {
+		podSpec.Affinity = &corev1.Affinity{}
+	}
+	if podSpec.Affinity.NodeAffinity == nil {
+		podSpec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
 	}
 
-	// Add node selector for model with "Ready" status
-	podSpec.NodeSelector[labelKey] = "Ready"
+	// Check if this model affinity term already exists to avoid duplicates during reconciliation
+	affinityExists := false
+	for _, term := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+		for _, expr := range term.Preference.MatchExpressions {
+			if expr.Key == labelKey {
+				affinityExists = true
+				break
+			}
+		}
+		if affinityExists {
+			break
+		}
+	}
+
+	if !affinityExists {
+		// Use max weight (100) to strongly prefer nodes with ready models
+		preferredTerm := corev1.PreferredSchedulingTerm{
+			Weight: 100,
+			Preference: corev1.NodeSelectorTerm{
+				MatchExpressions: []corev1.NodeSelectorRequirement{
+					{
+						Key:      labelKey,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{"Ready"},
+					},
+				},
+			},
+		}
+		podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(
+			podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			preferredTerm,
+		)
+	}
 
 	// Add node selector merged from AcceleratorClass if applicable
 	// Only add mergedNodeSelector to engine and decoder component.
 	mergedNodeSelector := isvcutils.MergeNodeSelector(b.Runtime, b.AcceleratorClass, isvc, componentType)
 	if len(mergedNodeSelector) > 0 {
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
 		for k, v := range mergedNodeSelector {
 			podSpec.NodeSelector[k] = v
 		}
 	}
 
-	b.Log.Info("Added node selector for model scheduling",
+	b.Log.Info("Added preferred node affinity for model scheduling",
 		"labelKey", labelKey,
 		"modelName", b.BaseModelMeta.Name,
 		"namespace", b.BaseModelMeta.Namespace,

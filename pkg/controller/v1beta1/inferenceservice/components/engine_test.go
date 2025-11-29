@@ -161,11 +161,24 @@ func TestEngineReconcile(t *testing.T) {
 				// since environment variables are only applied to the runner container
 				g.Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(gomega.BeEmpty())
 
-				// Check node selector was added for the base model
-				expectedNodeSelector := map[string]string{
-					"models.ome.io/default.basemodel.base-model-1": "Ready",
+				// Check preferred node affinity was added for the base model
+				g.Expect(deployment.Spec.Template.Spec.Affinity).NotTo(gomega.BeNil())
+				g.Expect(deployment.Spec.Template.Spec.Affinity.NodeAffinity).NotTo(gomega.BeNil())
+				preferredTerms := deployment.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+				g.Expect(preferredTerms).NotTo(gomega.BeEmpty())
+				// Find the model affinity term
+				var foundModelTerm bool
+				for _, term := range preferredTerms {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == "models.ome.io/default.basemodel.base-model-1" {
+							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							g.Expect(expr.Operator).To(gomega.Equal(v1.NodeSelectorOpIn))
+							g.Expect(expr.Values).To(gomega.Equal([]string{"Ready"}))
+							foundModelTerm = true
+						}
+					}
 				}
-				g.Expect(deployment.Spec.Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				g.Expect(foundModelTerm).To(gomega.BeTrue(), "Model affinity term not found")
 
 				// Check service was created
 				service := &v1.Service{}
@@ -272,12 +285,37 @@ func TestEngineReconcile(t *testing.T) {
 				g.Expect(lwsList.Items).To(gomega.HaveLen(1))
 				g.Expect(lwsList.Items[0].Spec.Replicas).To(gomega.Equal(int32Ptr(2)))
 
-				// Check node selector was added for both leader and worker pods
-				expectedNodeSelector := map[string]string{
-					"models.ome.io/default.basemodel.base-model-2": "Ready",
+				// Check preferred node affinity was added for both leader and worker pods
+				leaderAffinity := lwsList.Items[0].Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.Affinity
+				workerAffinity := lwsList.Items[0].Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.Affinity
+				g.Expect(leaderAffinity).NotTo(gomega.BeNil())
+				g.Expect(leaderAffinity.NodeAffinity).NotTo(gomega.BeNil())
+				g.Expect(workerAffinity).NotTo(gomega.BeNil())
+				g.Expect(workerAffinity.NodeAffinity).NotTo(gomega.BeNil())
+
+				// Verify leader pod has model affinity
+				var foundLeaderModelTerm bool
+				for _, term := range leaderAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == "models.ome.io/default.basemodel.base-model-2" {
+							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							foundLeaderModelTerm = true
+						}
+					}
 				}
-				g.Expect(lwsList.Items[0].Spec.LeaderWorkerTemplate.LeaderTemplate.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
-				g.Expect(lwsList.Items[0].Spec.LeaderWorkerTemplate.WorkerTemplate.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				g.Expect(foundLeaderModelTerm).To(gomega.BeTrue(), "Leader model affinity term not found")
+
+				// Verify worker pod has model affinity
+				var foundWorkerModelTerm bool
+				for _, term := range workerAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == "models.ome.io/default.basemodel.base-model-2" {
+							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							foundWorkerModelTerm = true
+						}
+					}
+				}
+				g.Expect(foundWorkerModelTerm).To(gomega.BeTrue(), "Worker model affinity term not found")
 			},
 		},
 		{
@@ -377,13 +415,38 @@ func TestEngineReconcile(t *testing.T) {
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 				g.Expect(rayCluster.Spec.HeadGroupSpec.Template.Spec.Containers[0].Image).To(gomega.Equal("ray-vllm:latest"))
 
-				// Check node selector was added
-				expectedNodeSelector := map[string]string{
-					"models.ome.io/default.basemodel.base-model-ray": "Ready",
+				// Check preferred node affinity was added for head and worker pods
+				headAffinity := rayCluster.Spec.HeadGroupSpec.Template.Spec.Affinity
+				g.Expect(headAffinity).NotTo(gomega.BeNil())
+				g.Expect(headAffinity.NodeAffinity).NotTo(gomega.BeNil())
+
+				// Verify head pod has model affinity
+				var foundHeadModelTerm bool
+				for _, term := range headAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == "models.ome.io/default.basemodel.base-model-ray" {
+							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							foundHeadModelTerm = true
+						}
+					}
 				}
-				g.Expect(rayCluster.Spec.HeadGroupSpec.Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				g.Expect(foundHeadModelTerm).To(gomega.BeTrue(), "Head model affinity term not found")
+
+				// Verify worker pod has model affinity if workers exist
 				if len(rayCluster.Spec.WorkerGroupSpecs) > 0 {
-					g.Expect(rayCluster.Spec.WorkerGroupSpecs[0].Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+					workerAffinity := rayCluster.Spec.WorkerGroupSpecs[0].Template.Spec.Affinity
+					g.Expect(workerAffinity).NotTo(gomega.BeNil())
+					g.Expect(workerAffinity.NodeAffinity).NotTo(gomega.BeNil())
+					var foundWorkerModelTerm bool
+					for _, term := range workerAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+						for _, expr := range term.Preference.MatchExpressions {
+							if expr.Key == "models.ome.io/default.basemodel.base-model-ray" {
+								g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+								foundWorkerModelTerm = true
+							}
+						}
+					}
+					g.Expect(foundWorkerModelTerm).To(gomega.BeTrue(), "Worker model affinity term not found")
 				}
 			},
 		},
@@ -614,11 +677,24 @@ func TestEngineReconcile(t *testing.T) {
 				}, deployment)
 				g.Expect(err).NotTo(gomega.HaveOccurred())
 
-				// Check node selector for ClusterBaseModel (no namespace in label)
-				expectedNodeSelector := map[string]string{
-					"models.ome.io/clusterbasemodel.cluster-base-model": "Ready",
+				// Check preferred node affinity for ClusterBaseModel (no namespace in label)
+				g.Expect(deployment.Spec.Template.Spec.Affinity).NotTo(gomega.BeNil())
+				g.Expect(deployment.Spec.Template.Spec.Affinity.NodeAffinity).NotTo(gomega.BeNil())
+				preferredTerms := deployment.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+				g.Expect(preferredTerms).NotTo(gomega.BeEmpty())
+				// Find the model affinity term
+				var foundModelTerm bool
+				for _, term := range preferredTerms {
+					for _, expr := range term.Preference.MatchExpressions {
+						if expr.Key == "models.ome.io/clusterbasemodel.cluster-base-model" {
+							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							g.Expect(expr.Operator).To(gomega.Equal(v1.NodeSelectorOpIn))
+							g.Expect(expr.Values).To(gomega.Equal([]string{"Ready"}))
+							foundModelTerm = true
+						}
+					}
 				}
-				g.Expect(deployment.Spec.Template.Spec.NodeSelector).To(gomega.Equal(expectedNodeSelector))
+				g.Expect(foundModelTerm).To(gomega.BeTrue(), "Model affinity term not found")
 			},
 		},
 		{
