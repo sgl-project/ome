@@ -243,8 +243,14 @@ func TestDecoderReconcile(t *testing.T) {
 					for _, expr := range term.Preference.MatchExpressions {
 						if expr.Key == "models.ome.io/default.basemodel.base-model-2" {
 							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							g.Expect(expr.Operator).To(gomega.Equal(v1.NodeSelectorOpIn))
+							g.Expect(expr.Values).To(gomega.Equal([]string{"Ready"}))
 							foundLeaderModelTerm = true
+							break
 						}
+					}
+					if foundLeaderModelTerm {
+						break
 					}
 				}
 				g.Expect(foundLeaderModelTerm).To(gomega.BeTrue(), "Leader model affinity term not found")
@@ -255,8 +261,14 @@ func TestDecoderReconcile(t *testing.T) {
 					for _, expr := range term.Preference.MatchExpressions {
 						if expr.Key == "models.ome.io/default.basemodel.base-model-2" {
 							g.Expect(term.Weight).To(gomega.Equal(int32(100)))
+							g.Expect(expr.Operator).To(gomega.Equal(v1.NodeSelectorOpIn))
+							g.Expect(expr.Values).To(gomega.Equal([]string{"Ready"}))
 							foundWorkerModelTerm = true
+							break
 						}
+					}
+					if foundWorkerModelTerm {
+						break
 					}
 				}
 				g.Expect(foundWorkerModelTerm).To(gomega.BeTrue(), "Worker model affinity term not found")

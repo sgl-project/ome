@@ -173,12 +173,16 @@ func TestUpdatePodSpecNodeSelector(t *testing.T) {
 
 			// Find the model affinity term
 			var foundModelTerm *v1.PreferredSchedulingTerm
-			for i, term := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			for i := range podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+				term := &podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution[i]
 				for _, expr := range term.Preference.MatchExpressions {
 					if expr.Key == tt.expectedLabelKey {
-						foundModelTerm = &podSpec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution[i]
+						foundModelTerm = term
 						break
 					}
+				}
+				if foundModelTerm != nil {
+					break
 				}
 			}
 
