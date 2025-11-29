@@ -24,6 +24,19 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+// Helper to format time duration
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)}s`
+  if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.ceil(seconds % 60)
+    return `${mins}m ${secs}s`
+  }
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  return `${hours}h ${mins}m`
+}
+
 export default function ModelDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -149,45 +162,109 @@ export default function ModelDetailPage() {
           </div>
 
           {/* Download Progress - shown when downloading */}
-          {isDownloading && progressData && progressData.progress.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">Download Progress</h3>
-              <div className="space-y-2">
-                {progressData.progress.map((progress) => (
-                  <div key={progress.node} className="flex items-center gap-3 text-sm">
-                    <span className="text-gray-500 w-28 truncate font-mono text-xs">
-                      {progress.node}
-                    </span>
-                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+          {isDownloading &&
+            progressData &&
+            progressData.progress.length > 0 &&
+            (() => {
+              // Calculate aggregate stats
+              const avgPercentage =
+                progressData.progress.reduce((sum, p) => sum + p.percentage, 0) /
+                progressData.progress.length
+              const minPercentage = Math.min(...progressData.progress.map((p) => p.percentage))
+              const totalSpeed = progressData.progress.reduce((sum, p) => sum + p.bytesPerSecond, 0)
+              const maxEta = Math.max(...progressData.progress.map((p) => p.remainingTime))
+              const firstProgress = progressData.progress[0]
+
+              return (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-gray-900">Download Progress</h3>
+                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <span>{progressData.progress.length} nodes</span>
+                      <span className="text-blue-600 font-medium">
+                        {formatBytes(totalSpeed)}/s total
+                      </span>
+                      {maxEta > 0 && <span>ETA: {formatDuration(maxEta)}</span>}
+                    </div>
+                  </div>
+
+                  {/* Aggregate progress bar */}
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">Overall Progress</span>
+                      <span className="text-sm font-semibold text-blue-600">
+                        {avgPercentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(progress.percentage, 100)}%` }}
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(avgPercentage, 100)}%` }}
+                      />
+                      {/* Min progress indicator */}
+                      <div
+                        className="absolute inset-y-0 w-0.5 bg-blue-800 opacity-50"
+                        style={{ left: `${Math.min(minPercentage, 100)}%` }}
+                        title={`Slowest node: ${minPercentage.toFixed(1)}%`}
                       />
                     </div>
-                    <span className="text-gray-700 w-12 text-right">
-                      {progress.percentage.toFixed(1)}%
-                    </span>
-                    <span className="text-gray-500 w-20 text-right text-xs">
-                      {formatBytes(progress.bytesPerSecond)}/s
-                    </span>
-                    {progress.remainingTime > 0 && (
-                      <span className="text-gray-400 w-16 text-xs">
-                        {Math.ceil(progress.remainingTime)}s
+                    <div className="flex justify-between mt-2 text-xs text-gray-500">
+                      <span>
+                        {formatBytes(firstProgress?.completedBytes || 0)} /{' '}
+                        {formatBytes(firstProgress?.totalBytes || 0)} per node
                       </span>
-                    )}
+                      <span>Min: {minPercentage.toFixed(1)}%</span>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div className="mt-2 text-xs text-gray-400">
-                {progressData.progress[0] && (
-                  <span>
-                    {formatBytes(progressData.progress[0].completedBytes)} /{' '}
-                    {formatBytes(progressData.progress[0].totalBytes)} per node
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+
+                  {/* Per-node progress */}
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {progressData.progress
+                      .sort((a, b) => a.percentage - b.percentage) // Show slowest first
+                      .map((progress) => {
+                        const pct = Math.min(progress.percentage, 100)
+                        const isSlower = progress.percentage < avgPercentage - 5
+
+                        return (
+                          <div
+                            key={progress.node}
+                            className={`flex items-center gap-3 p-2 rounded-lg text-sm ${isSlower ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+                          >
+                            <span
+                              className={`w-28 truncate font-mono text-xs ${isSlower ? 'text-amber-700' : 'text-gray-600'}`}
+                            >
+                              {progress.node}
+                            </span>
+                            <div className="flex-1 relative">
+                              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    isSlower ? 'bg-amber-500' : 'bg-blue-500'
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                            <span
+                              className={`w-14 text-right font-medium ${isSlower ? 'text-amber-700' : 'text-gray-700'}`}
+                            >
+                              {progress.percentage.toFixed(1)}%
+                            </span>
+                            <span className="text-gray-500 w-24 text-right text-xs">
+                              {formatBytes(progress.bytesPerSecond)}/s
+                            </span>
+                            <span className="text-gray-400 w-16 text-right text-xs">
+                              {progress.remainingTime > 0
+                                ? formatDuration(progress.remainingTime)
+                                : '-'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )
+            })()}
 
           {/* Nodes Ready/Failed */}
           {model.status?.nodesReady && (

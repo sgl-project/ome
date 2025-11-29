@@ -503,11 +503,10 @@ type ModelInfoFromConfigMap struct {
 	Name     string `json:"name"`
 	Status   string `json:"status"`
 	Progress *struct {
-		Phase          string  `json:"phase"`
-		TotalBytes     uint64  `json:"totalBytes"`
-		CompletedBytes uint64  `json:"completedBytes"`
-		BytesPerSecond float64 `json:"bytesPerSecond"`
-		RemainingTime  float64 `json:"remainingTime"`
+		Phase            string  `json:"phase"`
+		TotalBytes       uint64  `json:"totalBytes"`
+		CompletedBytes   uint64  `json:"completedBytes"`
+		SpeedBytesPerSec float64 `json:"speedBytesPerSec"`
 	} `json:"progress,omitempty"`
 }
 
@@ -538,12 +537,14 @@ func (h *ModelsHandler) GetProgress(c *gin.Context) {
 		}
 
 		// Look for the specific model in this ConfigMap's data
-		// The key format can be just the model name for ClusterBaseModels
-		// or namespace/name for namespaced BaseModels
+		// Key formats from constants.GetModelConfigMapKey:
+		// - ClusterBaseModel: "clusterbasemodel.{model_name}"
+		// - BaseModel: "{namespace}.basemodel.{model_name}"
 		for key, value := range cm.Data {
 			// Check if this entry is for our model
-			// Handle both "modelName" and potentially "namespace/modelName" formats
-			if key != modelName && key != "default/"+modelName {
+			clusterKey := "clusterbasemodel." + modelName
+			defaultNsKey := "default.basemodel." + modelName
+			if key != clusterKey && key != defaultNsKey {
 				continue
 			}
 
@@ -563,13 +564,20 @@ func (h *ModelsHandler) GetProgress(c *gin.Context) {
 					percentage = float64(modelInfo.Progress.CompletedBytes) / float64(modelInfo.Progress.TotalBytes) * 100
 				}
 
+				// Calculate remaining time from speed and remaining bytes
+				remainingTime := float64(0)
+				if modelInfo.Progress.SpeedBytesPerSec > 0 {
+					remainingBytes := modelInfo.Progress.TotalBytes - modelInfo.Progress.CompletedBytes
+					remainingTime = float64(remainingBytes) / modelInfo.Progress.SpeedBytesPerSec
+				}
+
 				progressList = append(progressList, NodeDownloadProgress{
 					Node:           nodeName,
 					Phase:          modelInfo.Progress.Phase,
 					TotalBytes:     modelInfo.Progress.TotalBytes,
 					CompletedBytes: modelInfo.Progress.CompletedBytes,
-					BytesPerSecond: modelInfo.Progress.BytesPerSecond,
-					RemainingTime:  modelInfo.Progress.RemainingTime,
+					BytesPerSecond: modelInfo.Progress.SpeedBytesPerSec,
+					RemainingTime:  remainingTime,
 					Percentage:     percentage,
 				})
 			}
