@@ -117,7 +117,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: docker.io/lmsysorg/sglang-router:v0.2.3
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
       resources:
         limits:
           cpu: "1"
