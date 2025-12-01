@@ -7,7 +7,7 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.42.0"
+        version: "4.50.3"
       modelFormat:
         name: safetensors
         version: "1.0.0"

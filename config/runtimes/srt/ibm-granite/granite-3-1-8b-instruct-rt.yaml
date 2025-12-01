@@ -7,11 +7,11 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.42.0"
+        version: "4.47.0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: LlamaForCausalLM
+      modelArchitecture: GraniteForCausalLM
       autoSelect: false
       priority: 1
   protocolVersions:
