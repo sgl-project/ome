@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - liuhaotian/llava-v1.5-13b
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

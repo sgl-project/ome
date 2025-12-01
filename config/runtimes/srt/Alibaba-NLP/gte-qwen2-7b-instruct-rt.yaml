@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - Alibaba-NLP/gte-Qwen2-7B-instruct
         - --is-embedding
       volumeMounts:
         - mountPath: /dev/shm

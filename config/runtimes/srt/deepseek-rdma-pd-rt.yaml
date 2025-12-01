@@ -109,6 +109,8 @@ spec:
           - --node-rank
           - $(LWS_WORKER_INDEX)
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --moe-dense-tp-size
           - "1"
           - --decode-log-interval
@@ -228,6 +230,8 @@ spec:
           - --node-rank
           - $(LWS_WORKER_INDEX)
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --moe-dense-tp-size
           - "1"
           - --decode-log-interval
@@ -342,6 +346,8 @@ spec:
           - --decode-log-interval
           - "1"
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --moe-dense-tp-size
           - "1"
           - --ep-num-redundant-experts
@@ -453,6 +459,8 @@ spec:
           - --decode-log-interval
           - "1"
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --moe-dense-tp-size
           - "1"
           - --ep-num-redundant-experts

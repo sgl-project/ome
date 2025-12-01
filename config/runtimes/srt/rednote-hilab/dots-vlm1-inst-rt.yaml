@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - rednote-hilab/dots.vlm1.inst
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

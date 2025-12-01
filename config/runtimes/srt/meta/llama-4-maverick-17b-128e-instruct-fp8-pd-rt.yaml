@@ -70,6 +70,8 @@ spec:
         - --attention-backend
         - fa3
         - --log-requests
+        - --served-model-name
+        - meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -158,6 +160,8 @@ spec:
         - --attention-backend
         - fa3
         - --log-requests
+        - --served-model-name
+        - meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

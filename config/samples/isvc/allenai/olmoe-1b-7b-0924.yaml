@@ -1,0 +1,12 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: olmoe-1b-7b-0924
+spec:
+  model:
+    modelId: allenai/OLMoE-1B-7B-0924
+    modelFormat: safetensors
+    modelFramework: transformers
+    resources:
+      limits:
+        nvidia.com/gpu: "1"

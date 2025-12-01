@@ -41,6 +41,8 @@ spec:
         - --tp-size
         - "1"
         - --is-embedding
+        - --served-model-name
+        - intfloat/e5-mistral-7b-instruct
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

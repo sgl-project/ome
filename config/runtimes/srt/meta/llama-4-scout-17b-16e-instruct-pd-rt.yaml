@@ -61,6 +61,8 @@ spec:
         - "4"
         - --mem-frac
         - "0.95"
+        - --served-model-name
+        - meta-llama/Llama-4-Scout-17B-16E-Instruct
         - --context-length
         - "128000"
         - --chat-template
@@ -151,6 +153,8 @@ spec:
         - "4"
         - --mem-frac
         - "0.95"
+        - --served-model-name
+        - meta-llama/Llama-4-Scout-17B-16E-Instruct
         - --context-length
         - "128000"
         - --chat-template

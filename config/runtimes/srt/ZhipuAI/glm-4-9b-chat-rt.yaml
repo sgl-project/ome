@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - ZhipuAI/glm-4-9b-chat
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

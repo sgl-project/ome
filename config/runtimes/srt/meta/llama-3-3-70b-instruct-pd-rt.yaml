@@ -62,6 +62,8 @@ spec:
         - "4"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - meta-llama/Llama-3.3-70B-Instruct
         - --disaggregation-mode
         - prefill
         - --disaggregation-ib-device
@@ -146,6 +148,8 @@ spec:
         - "4"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - meta-llama/Llama-3.3-70B-Instruct
         - --disaggregation-mode
         - decode
         - --disaggregation-ib-device

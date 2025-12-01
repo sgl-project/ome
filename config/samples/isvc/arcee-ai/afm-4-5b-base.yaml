@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: afm-4-5b-base
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: afm-4-5b-base
+  namespace: afm-4-5b-base
+spec:
+  model:
+    name: afm-4-5b-base
+  runtime:
+    name: srt-afm-4-5b-base
+  engine:
+    minReplicas: 1
+    maxReplicas: 1

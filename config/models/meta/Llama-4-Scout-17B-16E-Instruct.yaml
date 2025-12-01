@@ -20,4 +20,3 @@ spec:
   storage:
     storageUri: hf://meta-llama/Llama-4-Scout-17B-16E-Instruct
     path: /raid/models/meta/llama-4-scout-17b-16e-instruct
-    key: "hf-token"

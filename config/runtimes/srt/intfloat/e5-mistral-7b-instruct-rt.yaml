@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - intfloat/e5-mistral-7b-instruct
         - --is-embedding
       volumeMounts:
         - mountPath: /dev/shm

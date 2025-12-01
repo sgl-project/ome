@@ -68,6 +68,8 @@ spec:
         - fa3
         - --log-requests
         - --grpc-mode
+        - --served-model-name
+        - meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -159,6 +161,8 @@ spec:
         - fa3
         - --log-requests
         - --grpc-mode
+        - --served-model-name
+        - meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: smollm-1-7b
+  namespace: smollm-1-7b
+spec:
+  model:
+    name: smollm-1-7b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-smollm-1-7b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

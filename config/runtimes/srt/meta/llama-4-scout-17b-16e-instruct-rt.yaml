@@ -57,6 +57,8 @@ spec:
         - "4"
         - --mem-frac
         - "0.85"
+        - --served-model-name
+        - meta-llama/Llama-4-Scout-17B-16E-Instruct
         - --context-length
         - "196608"
         - --enable-multimodal

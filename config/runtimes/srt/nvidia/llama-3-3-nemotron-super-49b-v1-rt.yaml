@@ -57,6 +57,8 @@ spec:
         - "4"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - nvidia/Llama-3.3-Nemotron-70B-Instruct
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

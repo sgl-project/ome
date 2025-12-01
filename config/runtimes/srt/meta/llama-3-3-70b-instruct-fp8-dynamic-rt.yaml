@@ -57,6 +57,8 @@ spec:
         - "2"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - baichuan-inc/Baichuan2-13B-Chat
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

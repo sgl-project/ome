@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - zai-org/GLM-4.5V
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

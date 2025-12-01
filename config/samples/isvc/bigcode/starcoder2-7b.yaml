@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: starcoder2-7b
+  namespace: bigcode-test
+spec:
+  model:
+    name: starcoder2-7b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-starcoder2-7b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - allenai/OLMoE-1B-7B-0924
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

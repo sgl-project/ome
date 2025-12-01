@@ -1,0 +1,12 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mistral-small-3-1-24b-instruct-2503
+spec:
+  baseModelRef:
+    name: mistral-small-3-1-24b-instruct-2503
+  runtimeRef:
+    name: srt-mistral-small-3-1-24b-instruct-2503
+  scalingConfig:
+    minReplicas: 0
+    maxReplicas: 1

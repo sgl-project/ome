@@ -117,6 +117,8 @@ spec:
           - --node-rank
           - $(LWS_WORKER_INDEX)
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --enable-torch-compile
           - --torch-compile-max-bs
           - "1"
@@ -240,6 +242,8 @@ spec:
           - --node-rank
           - $(LWS_WORKER_INDEX)
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --enable-torch-compile
           - --torch-compile-max-bs
           - "1"

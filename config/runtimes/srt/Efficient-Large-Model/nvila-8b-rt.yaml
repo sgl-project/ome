@@ -57,6 +57,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - Efficient-Large-Model/NVILA-8B
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

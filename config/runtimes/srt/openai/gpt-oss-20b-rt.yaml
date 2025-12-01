@@ -57,6 +57,8 @@ spec:
         - "2"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - openai/gpt-oss-20b
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

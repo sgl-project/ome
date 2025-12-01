@@ -58,6 +58,8 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - meta-llama/Llama-3.1-8B-Instruct
         - --grpc-mode
       volumeMounts:
         - mountPath: /dev/shm

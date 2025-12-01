@@ -57,6 +57,8 @@ spec:
         - "2"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - mistralai/Mixtral-8x7B-Instruct-v0.1
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
