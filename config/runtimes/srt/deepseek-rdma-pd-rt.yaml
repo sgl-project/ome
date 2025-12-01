@@ -15,7 +15,7 @@ spec:
       version: "1.0.0"
       modelFramework:
         name: transformers
-        version: "4.46.3"
+        version: "4.33.1"
         operator: GreaterThanOrEqual
       modelArchitecture: DeepseekV3ForCausalLM
       quantization: "fp8"
