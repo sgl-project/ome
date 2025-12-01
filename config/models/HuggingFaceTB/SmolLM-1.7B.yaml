@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://HuggingFaceTB/SmolLM-1.7B
     path: /raid/models/HuggingFaceTB/SmolLM-1.7B
+    key: "hf-token"

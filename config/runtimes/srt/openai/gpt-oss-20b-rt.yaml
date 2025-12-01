@@ -12,13 +12,13 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: GptOssForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 18B
-    max: 22B
+    min: 10B
+    max: 15B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"

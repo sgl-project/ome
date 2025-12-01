@@ -11,14 +11,11 @@ spec:
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: MultiModalityCausalLM
+      modelArchitecture: JanusMultiModalityCausalLM
       autoSelect: false
       priority: 1
   protocolVersions:
     - openAI
-  modelSizeRange:
-    min: 6B
-    max: 8B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"

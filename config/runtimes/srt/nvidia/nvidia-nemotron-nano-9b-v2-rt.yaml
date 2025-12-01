@@ -56,7 +56,7 @@ spec:
         - --tp-size
         - "1"
         - --mem-frac
-        - "0.9"
+        - "0.5"
         - --served-model-name
         - nvidia/NVIDIA-Nemotron-Nano-9B-v2
       volumeMounts:
@@ -65,11 +65,11 @@ spec:
       resources:
         requests:
           cpu: 10
-          memory: 30Gi
+          memory: 40Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 10
-          memory: 30Gi
+          memory: 40Gi
           nvidia.com/gpu: 1
 
       readinessProbe:

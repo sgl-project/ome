@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://THUDM/chatglm2-6b
     path: /raid/models/THUDM/chatglm2-6b
+    key: hf-token

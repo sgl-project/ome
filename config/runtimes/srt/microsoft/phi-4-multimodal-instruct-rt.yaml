@@ -17,8 +17,8 @@ spec:
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 14B
-    max: 16B
+    min: 5B
+    max: 6B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -57,6 +57,7 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --trust-remote-code
         - --served-model-name
         - microsoft/Phi-4-multimodal-instruct
       volumeMounts:

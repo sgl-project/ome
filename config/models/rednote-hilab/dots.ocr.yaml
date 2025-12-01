@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://rednote-hilab/dots.ocr
     path: /raid/models/rednote-hilab/dots.ocr
+    key: hf-token

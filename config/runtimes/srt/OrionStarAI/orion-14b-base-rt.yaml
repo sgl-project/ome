@@ -12,7 +12,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: OrionForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
@@ -59,6 +59,7 @@ spec:
         - "0.9"
         - --served-model-name
         - OrionStarAI/Orion-14B-Base
+        - --trust-remote-code
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

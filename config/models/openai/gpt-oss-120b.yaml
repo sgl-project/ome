@@ -19,3 +19,4 @@ spec:
   storage:
     storageUri: hf://openai/gpt-oss-120b
     path: /raid/models/openai/gpt-oss-120b
+    key: "hf-token"

@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://meta-llama/Meta-Llama-3.1-70B-Instruct
     path: /raid/models/meta/llama-3-1-70b-instruct
+    key: "hf-token"

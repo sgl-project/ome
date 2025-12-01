@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: nvidia-nemotron-nano-9b-v2
+  namespace: nvidia-nemotron-nano-9b-v2
+spec:
+  model:
+    name: nvidia-nemotron-nano-9b-v2
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-nvidia-nemotron-nano-9b-v2
+  router:
+    minReplicas: 1
+    maxReplicas: 1

@@ -13,3 +13,4 @@ spec:
   storage:
     storageUri: hf://lmms-lab/llava-onevision-qwen2-7b-ov
     path: /raid/models/lmms-lab/llava-onevision-qwen2-7b-ov
+    key: hf-token

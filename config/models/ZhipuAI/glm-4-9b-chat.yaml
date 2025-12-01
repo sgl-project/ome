@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://ZhipuAI/glm-4-9b-chat
     path: /raid/models/ZhipuAI/glm-4-9b-chat
+    key: "hf-token"

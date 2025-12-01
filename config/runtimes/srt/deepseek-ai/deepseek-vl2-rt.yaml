@@ -11,7 +11,7 @@ spec:
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: DeepseekV2ForCausalLM
+      modelArchitecture: DeepseekVLV2ForCausalLM
       autoSelect: false
       priority: 1
   protocolVersions:

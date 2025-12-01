@@ -10,5 +10,6 @@ spec:
   storage:
     storageUri: hf://meta-llama/Meta-Llama-3-70B-Instruct
     path: /raid/models/meta/llama-3-70b-instruct
+    key: "hf-token"
   vendor: meta
   version: "1.0.0"

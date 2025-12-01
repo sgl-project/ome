@@ -3,10 +3,13 @@ kind: InferenceService
 metadata:
   name: mistral-7b-instruct-v0-2
 spec:
-  baseModelRef:
+  model:
     name: mistral-7b-instruct-v0-2
-  runtimeRef:
+  runtime:
     name: srt-mistral-7b-instruct-v0-2
-  scalingConfig:
+  engine:
     minReplicas: 0
+    maxReplicas: 1
+  router:
+    minReplicas: 1
     maxReplicas: 1

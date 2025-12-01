@@ -57,6 +57,7 @@ spec:
         - "1"
         - --mem-frac
         - "0.9"
+        - --trust-remote-code
         - --served-model-name
         - microsoft/Phi-3-vision-128k-instruct
       volumeMounts:

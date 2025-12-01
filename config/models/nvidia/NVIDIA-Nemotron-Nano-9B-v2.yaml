@@ -9,6 +9,13 @@ spec:
   displayName: nvidia.nvidia-nemotron-nano-9b-v2
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.47.0"
+  modelArchitecture: NemotronHForCausalLM
   storage:
     storageUri: hf://nvidia/NVIDIA-Nemotron-Nano-9B-v2
     path: /raid/models/nvidia/NVIDIA-Nemotron-Nano-9B-v2

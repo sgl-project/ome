@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://minimax/MiniMax-M2
     path: /raid/models/minimax/MiniMax-M2
+    key: "hf-token"

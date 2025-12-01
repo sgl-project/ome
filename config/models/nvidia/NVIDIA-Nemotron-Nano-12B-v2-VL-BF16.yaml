@@ -10,6 +10,14 @@ spec:
   displayName: nvidia.nvidia-nemotron-nano-12b-v2-vl-bf16
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.51.3"
+  modelArchitecture: NemotronVLForConditionalGeneration
   storage:
     storageUri: hf://nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16
     path: /raid/models/nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16
+    key: "hf-token"

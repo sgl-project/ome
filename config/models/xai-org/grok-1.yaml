@@ -9,6 +9,14 @@ spec:
   displayName: xai-org.grok-1
   disabled: false
   version: "1.0.0"
+  modelArchitecture: Grok1ModelForCausalLM
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.35.0"
   storage:
     storageUri: hf://xai-org/grok-1
     path: /raid/models/xai-org/grok-1
+    key: "hf-token"

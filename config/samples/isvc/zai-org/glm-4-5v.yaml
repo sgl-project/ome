@@ -1,0 +1,11 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: glm-4-5v-test
+  namespace: zai-org-test
+spec:
+  modelRef:
+    name: glm-4-5v
+  minReplicas: 1
+  maxReplicas: 1
+  scaleTarget: 1
