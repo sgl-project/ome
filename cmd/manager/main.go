@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 
+	v1beta1ocipostgresdbinstancecontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgresdbinstance"
+
 	v1beta1ocipostgresclustercontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgrescluster"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -457,6 +459,19 @@ func main() {
 		Recorder: postgresqlClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create postgresql cluster controller")
+		os.Exit(1)
+	}
+
+	postgresdbInstanceEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up postgres db instance controller")
+	postgresdbInstanceEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1ocipostgresdbinstancecontroller.PostgresDBInstanceReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("postgresDbInstance"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: postgresdbInstanceEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create postgresql db instance controller")
 		os.Exit(1)
 	}
 
