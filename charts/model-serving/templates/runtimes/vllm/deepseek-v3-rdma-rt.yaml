@@ -7,24 +7,24 @@ spec:
   {{- if or .Values.commonAnnotations .Values.deepseek_v3.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
-    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
     {{- if .Values.deepseek_v3.annotations }}
-    {{ toYaml .Values.deepseek_v3.annotations | nindent 6 }}
+    {{ toYaml .Values.deepseek_v3.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
   labels:
     logging-forward: enabled
     {{- if .Values.deepseek_v3.labels }}
-    {{ toYaml .Values.deepseek_v3.labels | nindent 6 }}
+    {{ toYaml .Values.deepseek_v3.labels | nindent 4 }}
     {{- end }}
   {{- if or .Values.commonTolerations .Values.deepseek_v3.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
-    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
     {{- end }}
     {{- if .Values.deepseek_v3.tolerations }}
-    {{ toYaml .Values.deepseek_v3.tolerations | nindent 6 }}
+    {{ toYaml .Values.deepseek_v3.tolerations | nindent 4 }}
     {{- end }}
   {{- end }}
   dnsPolicy: ClusterFirstWithHostNet

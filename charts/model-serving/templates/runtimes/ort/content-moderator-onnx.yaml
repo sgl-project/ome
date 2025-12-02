@@ -69,3 +69,59 @@ spec:
         periodSeconds: 6
         initialDelaySeconds: 60
         timeoutSeconds: 30
+  engineConfig:
+    labels:
+      logging-forward: enabled
+      sidecar.istio.io/inject: 'true'
+    annotations:
+      prometheus.io/port: '8080'
+      prometheus.io/scrape: 'true'
+    tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+    runner:
+      name: ome-container
+      image: "{{ .Values.content_moderator.image.repository }}:{{ .Values.content_moderator.image.tag }}"
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m content_moderator.app \
+          --model-path=/mnt/data/models/olm/content_moderator/ \
+          --port=8080
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+      resources:
+        requests:
+          cpu: 16
+          memory: 60Gi
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30

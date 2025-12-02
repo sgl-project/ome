@@ -1276,7 +1276,8 @@ grok_4_self_hosted:
   enabled: false
   enableH100: true
   enableH200: false
-  annotations: {}
+  annotations:
+    prometheus.io/port: "3001"
   labels: {}
   tolerations: []
   volumes: []
