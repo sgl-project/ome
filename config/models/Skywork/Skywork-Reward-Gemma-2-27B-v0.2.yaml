@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: skywork-reward-gemma-2-27b-v0-2
+spec:
+  modelCapabilities:
+    - REWARD_SCORING
+  vendor: skywork
+  disabled: false
+  version: "1.0.0"
+  displayName: skywork.skywork-reward-gemma-2-27b-v0.2
+  storage:
+    storageUri: hf://Skywork/Skywork-Reward-Gemma-2-27B-v0.2
+    path: /raid/models/skywork/skywork-reward-gemma-2-27b-v0-2

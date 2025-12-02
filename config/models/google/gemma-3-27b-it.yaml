@@ -1,0 +1,17 @@
+# This model is gated on HuggingFace
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gemma-3-27b-it
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+    - IMAGE_TO_TEXT
+  vendor: google
+  disabled: false
+  version: "1.0.0"
+  displayName: google.gemma-3-27b-it
+  storage:
+    storageUri: hf://google/gemma-3-27b-it
+    path: /raid/models/google/gemma-3-27b-it
+    key: "hf-token"
