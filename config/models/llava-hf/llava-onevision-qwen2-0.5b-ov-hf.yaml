@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llava-onevision-qwen2-0-5b-ov-hf
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: llava-hf
+  disabled: false
+  version: "1.0.0"
+  displayName: llava-hf.llava-onevision-qwen2-0.5b-ov-hf
+  storage:
+    storageUri: hf://llava-hf/llava-onevision-qwen2-0.5b-ov-hf
+    path: /raid/models/llava-hf/llava-onevision-qwen2-0.5b-ov-hf

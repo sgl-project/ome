@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: mamba-2-8b-hf
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: state-spaces
+  disabled: false
+  version: "1.0.0"
+  displayName: state-spaces.mamba-2.8b-hf
+  storage:
+    storageUri: hf://state-spaces/mamba-2.8b-hf
+    path: /raid/models/state-spaces/mamba-2.8b-hf

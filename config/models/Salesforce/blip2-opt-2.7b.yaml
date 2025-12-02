@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: blip2-opt-2-7b
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+  vendor: salesforce
+  disabled: false
+  version: "1.0.0"
+  displayName: salesforce.blip2-opt-2.7b
+  storage:
+    storageUri: hf://Salesforce/blip2-opt-2.7b
+    path: /raid/models/salesforce/blip2-opt-2.7b

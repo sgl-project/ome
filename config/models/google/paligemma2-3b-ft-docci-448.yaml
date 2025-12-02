@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: paligemma2-3b-ft-docci-448
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+  vendor: google
+  disabled: false
+  version: "1.0.0"
+  displayName: google.paligemma2-3b-ft-docci-448
+  storage:
+    storageUri: hf://google/paligemma2-3b-ft-docci-448
+    path: /raid/models/google/paligemma2-3b-ft-docci-448

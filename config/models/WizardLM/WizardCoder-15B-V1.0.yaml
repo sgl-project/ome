@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: wizardcoder-15b-v1-0
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: wizardlm
+  disabled: false
+  version: "1.0.0"
+  displayName: wizardlm.wizardcoder-15b-v1.0
+  storage:
+    storageUri: hf://WizardLM/WizardCoder-15B-V1.0
+    path: /raid/models/wizardlm/wizardcoder-15b-v1.0

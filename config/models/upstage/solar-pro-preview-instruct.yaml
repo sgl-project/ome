@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: solar-pro-preview-instruct
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: upstage
+  disabled: false
+  version: "1.0.0"
+  displayName: upstage.solar-pro-preview-instruct
+  storage:
+    storageUri: hf://upstage/solar-pro-preview-instruct
+    path: /raid/models/upstage/solar-pro-preview-instruct

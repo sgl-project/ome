@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: gpt-j-6b
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: eleutherai
+  disabled: false
+  version: "1.0.0"
+  displayName: eleutherai.gpt-j-6b
+  storage:
+    storageUri: hf://EleutherAI/gpt-j-6b
+    path: /raid/models/eleutherai/gpt-j-6b

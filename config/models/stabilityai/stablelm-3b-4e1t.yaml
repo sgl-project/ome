@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: stablelm-3b-4e1t
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: stabilityai
+  disabled: false
+  version: "1.0.0"
+  displayName: stabilityai.stablelm-3b-4e1t
+  storage:
+    storageUri: hf://stabilityai/stablelm-3b-4e1t
+    path: /raid/models/stabilityai/stablelm-3b-4e1t

@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: llava-next-video-7b-hf
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - VIDEO_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: llava-hf
+  disabled: false
+  version: "1.0.0"
+  displayName: llava-hf.llava-next-video-7b-hf
+  storage:
+    storageUri: hf://llava-hf/LLaVA-NeXT-Video-7B-hf
+    path: /raid/models/llava-hf/llava-next-video-7b-hf

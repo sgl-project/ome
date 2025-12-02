@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: molmo-72b-0924
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: allenai
+  disabled: false
+  version: "1.0.0"
+  displayName: allenai.molmo-72b-0924
+  storage:
+    storageUri: hf://allenai/Molmo-72B-0924
+    path: /raid/models/allenai/molmo-72b-0924
