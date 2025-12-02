@@ -13,3 +13,4 @@ spec:
   storage:
     storageUri: hf://google/gemma-3-4b-it
     path: /raid/models/google/gemma-3-4b-it
+    key: hf-token

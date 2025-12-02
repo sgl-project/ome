@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: granite-3-0-3b-a800m-instruct
+  namespace: granite-3-0-3b-a800m-instruct
+spec:
+  model:
+    name: granite-3-0-3b-a800m-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-granite-3-0-3b-a800m-instruct
+  router:
+    minReplicas: 1
+    maxReplicas: 1

@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://liuhaotian/llava-v1.5-13b
     path: /raid/models/liuhaotian/llava-v1.5-13b
+    key: hf-token

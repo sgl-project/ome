@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nvila-8b
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+  name: nvila-8b
+  namespace: nvila-8b
+spec:
+  model:
+    name: nvila-8b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1

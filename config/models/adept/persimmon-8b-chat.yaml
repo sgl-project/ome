@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://adept/persimmon-8b-chat
     path: /raid/models/adept/persimmon-8b-chat
+    key: "hf-token"

@@ -9,6 +9,14 @@ spec:
   displayName: nvidia.llama-3.1-nemotron-70b-instruct
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.48.3"
+  modelArchitecture: LlamaForCausalLM
   storage:
     storageUri: hf://nvidia/Llama-3.1-Nemotron-70B-Instruct
     path: /raid/models/nvidia/llama-3-1-nemotron-ultra-253b-v1
+    key: "hf-token"

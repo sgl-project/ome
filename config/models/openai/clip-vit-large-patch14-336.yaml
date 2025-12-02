@@ -13,3 +13,4 @@ spec:
   storage:
     storageUri: hf://openai/clip-vit-large-patch14-336
     path: /raid/models/openai/clip-vit-large-patch14-336
+    key: "hf-token"

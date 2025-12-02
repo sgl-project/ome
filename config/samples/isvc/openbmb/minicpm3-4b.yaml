@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minicpm3-4b
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+  name: minicpm3-4b
+  namespace: minicpm3-4b
+spec:
+  model:
+    name: minicpm3-4b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1

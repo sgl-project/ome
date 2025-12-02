@@ -9,6 +9,13 @@ spec:
   displayName: xverse.xverse-moe-a36b
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.30.0"
+  modelArchitecture: XverseMoeForCausalLM
   storage:
     storageUri: hf://xverse/XVERSE-MoE-A36B
     path: /raid/models/xverse/XVERSE-MoE-A36B

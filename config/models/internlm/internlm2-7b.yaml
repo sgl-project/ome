@@ -9,6 +9,14 @@ spec:
   displayName: internlm.internlm2-7b
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.41.0"
+  modelArchitecture: InternLM2ForCausalLM
   storage:
     storageUri: hf://internlm/internlm2-7b
     path: /raid/models/internlm/internlm2-7b
+    key: hf-token

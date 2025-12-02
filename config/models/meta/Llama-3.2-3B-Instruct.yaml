@@ -1,3 +1,4 @@
+# This model is gated on HuggingFace
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:

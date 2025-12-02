@@ -15,7 +15,7 @@ spec:
       version: "1.0.0"
       modelFramework:
         name: transformers
-        version: "4.46.3"
+        version: "4.33.1"
         operator: GreaterThanOrEqual
       modelArchitecture: DeepseekV3ForCausalLM
       quantization: "fp8"
@@ -26,7 +26,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: docker.io/lmsysorg/sglang-router:v0.2.3
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
       resources:
         limits:
           cpu: "1"
@@ -117,6 +117,8 @@ spec:
           - --node-rank
           - $(LWS_WORKER_INDEX)
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --enable-torch-compile
           - --torch-compile-max-bs
           - "1"
@@ -240,6 +242,8 @@ spec:
           - --node-rank
           - $(LWS_WORKER_INDEX)
           - --trust-remote-code
+          - --served-model-name
+          - deepseek-ai/DeepSeek-V3
           - --enable-torch-compile
           - --torch-compile-max-bs
           - "1"

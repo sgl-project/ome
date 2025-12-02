@@ -86,6 +86,8 @@ spec:
         - --context-length
         - "131072"
         - --grpc-mode
+        - --served-model-name
+        - openai/gpt-oss-120b
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -136,7 +138,7 @@ spec:
         effect: "NoSchedule"
     runner:
       name: router
-      image: docker.io/lmsysorg/sglang-router:v0.2.3
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
       resources:
         limits:
           cpu: "1"

@@ -1,0 +1,23 @@
+# ---
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: internlm2-7b
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: internlm2-7b
+  namespace: internlm2-7b
+spec:
+  model:
+    name: internlm2-7b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-internlm2-7b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

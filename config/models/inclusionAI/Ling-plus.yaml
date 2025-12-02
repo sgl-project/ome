@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://inclusionAI/Ling-plus
     path: /raid/models/inclusionAI/Ling-plus
+    key: "hf-token"

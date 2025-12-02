@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-vl2
+  namespace: deepseek-vl2
+spec:
+  model:
+    name: deepseek-vl2
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-deepseek-vl2
+  router:
+    minReplicas: 1
+    maxReplicas: 1

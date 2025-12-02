@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://upstage/SOLAR-10.7B-Instruct-v1.0
     path: /raid/models/upstage/SOLAR-10.7B-Instruct-v1.0
+    key: "hf-token"

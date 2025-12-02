@@ -62,6 +62,8 @@ spec:
         - "2"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - mistralai/Mixtral-8x7B-Instruct-v0.1
         - --disaggregation-mode
         - prefill
         - --disaggregation-ib-device
@@ -146,6 +148,8 @@ spec:
         - "2"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - mistralai/Mixtral-8x7B-Instruct-v0.1
         - --disaggregation-mode
         - decode
         - --disaggregation-ib-device
@@ -190,7 +194,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: docker.io/lmsysorg/sglang-router:v0.2.3
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
       resources:
         limits:
           cpu: "1"

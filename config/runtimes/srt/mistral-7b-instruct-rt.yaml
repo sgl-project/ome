@@ -7,7 +7,7 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.36.2"
+        version: "4.36.0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
@@ -57,6 +57,8 @@ spec:
         - "2"
         - --mem-frac
         - "0.9"
+        - --served-model-name
+        - mistralai/Mistral-7B-Instruct-v0.2
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -100,7 +102,7 @@ spec:
   routerConfig:
     runner:
       name: router
-      image: docker.io/lmsysorg/sglang-router:v0.2.3
+      image: fra.ocir.io/idqj093njucb/smg:v0.2.3.post1-dev
       resources:
         limits:
           cpu: "1"

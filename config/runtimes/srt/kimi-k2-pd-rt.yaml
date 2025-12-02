@@ -299,6 +299,8 @@ spec:
           - --decode-log-interval
           - "1"
           - --trust-remote-code
+          - --served-model-name
+          - moonshotai/Kimi-K2-Instruct
           - --moe-dense-tp-size
           - "1"
           - --ep-num-redundant-experts
@@ -393,6 +395,8 @@ spec:
           - --decode-log-interval
           - "1"
           - --trust-remote-code
+          - --served-model-name
+          - moonshotai/Kimi-K2-Instruct
           - --moe-dense-tp-size
           - "1"
           - --ep-num-redundant-experts

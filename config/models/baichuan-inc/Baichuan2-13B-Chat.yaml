@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://baichuan-inc/Baichuan2-13B-Chat
     path: /raid/models/baichuan-inc/Baichuan2-13B-Chat
+    key: "hf-token"

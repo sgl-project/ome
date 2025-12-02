@@ -9,6 +9,14 @@ spec:
   displayName: openai.gpt-oss-120b-bf16
   modelCapabilities:
     - TEXT_TO_TEXT
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.55.1"
+  modelArchitecture: GptOssForCausalLM
   storage:
     storageUri: hf://lmsys/gpt-oss-120b-bf16
     path: /raid/models/lmsys/gpt-oss-120b-bf16
+    key: "hf-token"

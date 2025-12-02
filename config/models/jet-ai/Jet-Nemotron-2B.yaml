@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://jet-ai/Jet-Nemotron-2B
     path: /raid/models/jet-ai/Jet-Nemotron-2B
+    key: "hf-token"
