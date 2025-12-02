@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qwen3-next-80b-a3b-instruct
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen3-next-80b-a3b-instruct
+  namespace: qwen3-next-80b-a3b-instruct
+spec:
+  model:
+    name: qwen3-next-80b-a3b-instruct
+  runtime:
+    name: srt-qwen3-next-80b-a3b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

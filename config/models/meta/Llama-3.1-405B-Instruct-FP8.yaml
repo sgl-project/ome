@@ -12,4 +12,3 @@ spec:
   storage:
     storageUri: hf://meta-llama/Llama-3.1-405B-Instruct-FP8
     path: /raid/models/meta/llama-3-1-405b-instruct-fp8
-    key: "hf-token"

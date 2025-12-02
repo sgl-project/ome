@@ -10,6 +10,7 @@ spec:
   displayName: Efficient-Large-Model.nvila-8b
   disabled: false
   version: "1.0.0"
+  modelParameterSize: "8B"
   storage:
     storageUri: hf://Efficient-Large-Model/NVILA-8B
     path: /raid/models/Efficient-Large-Model/NVILA-8B

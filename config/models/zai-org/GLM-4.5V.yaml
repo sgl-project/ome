@@ -13,3 +13,4 @@ spec:
   storage:
     storageUri: hf://zai-org/GLM-4.5V
     path: /raid/models/zai-org/GLM-4.5V
+    key: hf-token

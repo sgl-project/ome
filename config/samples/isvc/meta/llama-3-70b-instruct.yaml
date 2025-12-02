@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-70b-instruct
+  namespace: llama-3-70b-instruct
+spec:
+  model:
+    name: llama-3-70b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-llama-3-70b-instruct
+  router:
+    minReplicas: 1
+    maxReplicas: 1

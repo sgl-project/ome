@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://lmms-lab/llava-next-72b
     path: /raid/models/lmms-lab/llava-next-72b
+    key: hf-token

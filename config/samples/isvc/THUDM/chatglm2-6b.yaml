@@ -1,0 +1,17 @@
+---
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: chatglm2-6b
+  namespace: chatglm2-6b
+spec:
+  model:
+    name: chatglm2-6b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-chatglm2-6b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

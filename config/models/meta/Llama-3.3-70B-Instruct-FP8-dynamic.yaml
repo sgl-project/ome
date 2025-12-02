@@ -10,6 +10,5 @@ spec:
   storage:
     storageUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
     path: /raid/models/meta/llama-3-3-70b-instruct-fp8-dynamic
-    key: "hf-token"
   vendor: meta
   version: "1.0.0"

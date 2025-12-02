@@ -10,5 +10,6 @@ spec:
   storage:
     storageUri: hf://intfloat/e5-mistral-7b-instruct
     path: /raid/models/intfloat/e5-mistral-7b-instruct
+    key: "hf-token"
   vendor: intfloat
-  version: "0.0"
+  version: "1.0.0"

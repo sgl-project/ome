@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: exaone-3-5-7-8b-instruct
+  namespace: exaone-3-5-7-8b-instruct
+spec:
+  model:
+    name: exaone-3-5-7-8b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-exaone-3-5-7-8b-instruct
+  router:
+    minReplicas: 1
+    maxReplicas: 1

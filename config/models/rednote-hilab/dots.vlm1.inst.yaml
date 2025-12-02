@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://rednote-hilab/dots.vlm1.inst
     path: /raid/models/rednote-hilab/dots.vlm1.inst
+    key: hf-token

@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gemma-3-4b-it
+  namespace: gemma-3-4b-it
+spec:
+  model:
+    name: gemma-3-4b-it
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-gemma-3-4b-it
+  router:
+    minReplicas: 1
+    maxReplicas: 1

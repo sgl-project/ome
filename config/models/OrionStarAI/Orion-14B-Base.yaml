@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://OrionStarAI/Orion-14B-Base
     path: /raid/models/OrionStarAI/Orion-14B-Base
+    key: hf-token

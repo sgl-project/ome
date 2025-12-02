@@ -1,4 +1,3 @@
-# NEEDS_FIX: Model did not become ready: state=Failed, nodesReady=0 (2025-11-28 10:13:09)
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
@@ -13,3 +12,4 @@ spec:
   storage:
     storageUri: hf://CohereForAI/c4ai-command-r-v01
     path: /raid/models/CohereForAI/c4ai-command-r-v01
+    key: "hf-token"

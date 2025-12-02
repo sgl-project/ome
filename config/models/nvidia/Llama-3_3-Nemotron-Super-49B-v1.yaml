@@ -7,8 +7,16 @@ spec:
     - TEXT_TO_TEXT
   disabled: false
   displayName: nvidia.llama-3_3-nemotron-super-49b-v1
+  vendor: nvidia
+  version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.48.3"
+  modelArchitecture: DeciLMForCausalLM
   storage:
     storageUri: hf://nvidia/Llama-3.3-Nemotron-70B-Instruct
     path: /raid/models/nvidia/llama-3-3-nemotron-super-49b-v1
-  vendor: nvidia
-  version: "1.0.0"
+    key: "hf-token"

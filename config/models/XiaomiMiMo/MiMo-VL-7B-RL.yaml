@@ -12,3 +12,4 @@ spec:
   storage:
     storageUri: hf://XiaomiMiMo/MiMo-VL-7B-RL
     path: /raid/models/XiaomiMiMo/MiMo-VL-7B-RL
+    key: "hf-token"
