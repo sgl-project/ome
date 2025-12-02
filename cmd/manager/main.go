@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 
+	v1beta1ociredisclustercontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocirediscluster"
+
 	v1beta1ocipostgresdbinstancecontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgresdbinstance"
 
 	v1beta1ocipostgresclustercontroller "bitbucket.oci.oraclecorp.com/genaicore/ome/pkg/controller/v1beta1/ocipostgrescluster"
@@ -472,6 +474,19 @@ func main() {
 		Recorder: postgresdbInstanceEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create postgresql db instance controller")
+		os.Exit(1)
+	}
+
+	redisClusterEventBroadcaster := record.NewBroadcaster()
+	setupLog.Info("Setting up redis cluster controller")
+	redisClusterEventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: clientSet.CoreV1().Events("")})
+	if err = (&v1beta1ociredisclustercontroller.RedisClusterReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("redisCluster"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: redisClusterEventBroadcaster.NewRecorder(mgr.GetScheme(), v1.EventSource{Component: "v1beta1Controllers"}),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create redis cluster controller")
 		os.Exit(1)
 	}
 

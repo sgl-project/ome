@@ -292,6 +292,7 @@ rules:
   - inferenceservices/finalizers
   - ocipostgresclusters
   - ocipostgresdbinstances
+  - ociredisclusters
   - projects
   - ratelimits
   - replicationjobs
@@ -322,6 +323,8 @@ rules:
   - inferenceservices/status
   - ocipostgresclusters/status
   - ocipostgresdbinstances/status
+  - ociredisclusters/finalizers
+  - ociredisclusters/status
   - projects/finalizers
   - projects/status
   - ratelimits/finalizers
