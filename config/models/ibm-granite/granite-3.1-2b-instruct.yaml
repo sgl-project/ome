@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: granite-3-1-2b-instruct
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: ibm
+  disabled: false
+  version: "1.0.0"
+  displayName: ibm.granite-3.1-2b-instruct
+  storage:
+    storageUri: hf://ibm-granite/granite-3.1-2b-instruct
+    path: /raid/models/ibm/granite-3-1-2b-instruct

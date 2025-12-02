@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: mistral-7b-instruct-v0-3
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: mistral
+  disabled: false
+  version: "1.0.0"
+  displayName: mistral.mistral-7b-instruct-v0.3
+  storage:
+    storageUri: hf://mistralai/Mistral-7B-Instruct-v0.3
+    path: /raid/models/mistral/mistral-7b-instruct-v0-3

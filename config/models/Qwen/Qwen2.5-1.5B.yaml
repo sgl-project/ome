@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: qwen2-5-1-5b
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: qwen
+  disabled: false
+  version: "1.0.0"
+  displayName: qwen.qwen2.5-1.5b
+  storage:
+    storageUri: hf://Qwen/Qwen2.5-1.5B
+    path: /raid/models/qwen/qwen2-5-1-5b
