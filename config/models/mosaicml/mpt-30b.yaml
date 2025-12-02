@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: mpt-30b
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: mosaicml
+  disabled: false
+  version: "1.0.0"
+  displayName: mosaicml.mpt-30b
+  storage:
+    storageUri: hf://mosaicml/mpt-30b
+    path: /raid/models/mosaicml/mpt-30b

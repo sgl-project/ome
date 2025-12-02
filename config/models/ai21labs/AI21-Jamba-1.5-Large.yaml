@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: ai21-jamba-1-5-large
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: ai21labs
+  disabled: false
+  version: "1.0.0"
+  displayName: ai21labs.ai21-jamba-1.5-large
+  storage:
+    storageUri: hf://ai21labs/AI21-Jamba-1.5-Large
+    path: /raid/models/ai21labs/ai21-jamba-1.5-large

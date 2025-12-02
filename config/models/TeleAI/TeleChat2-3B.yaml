@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: telechat2-3b
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: teleai
+  disabled: false
+  version: "1.0.0"
+  displayName: teleai.telechat2-3b
+  storage:
+    storageUri: hf://TeleAI/TeleChat2-3B
+    path: /raid/models/teleai/telechat2-3b

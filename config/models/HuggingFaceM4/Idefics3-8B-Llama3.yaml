@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: idefics3-8b-llama3
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: huggingfacem4
+  disabled: false
+  version: "1.0.0"
+  displayName: huggingfacem4.idefics3-8b-llama3
+  storage:
+    storageUri: hf://HuggingFaceM4/Idefics3-8B-Llama3
+    path: /raid/models/huggingfacem4/idefics3-8b-llama3

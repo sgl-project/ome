@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: minicpm-llama3-v-2-5
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: openbmb
+  disabled: false
+  version: "1.0.0"
+  displayName: openbmb.minicpm-llama3-v-2.5
+  storage:
+    storageUri: hf://openbmb/MiniCPM-Llama3-V-2_5
+    path: /raid/models/openbmb/minicpm-llama3-v-2.5

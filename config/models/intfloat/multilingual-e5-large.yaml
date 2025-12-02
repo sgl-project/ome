@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: multilingual-e5-large
+spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
+  vendor: intfloat
+  disabled: false
+  version: "1.0.0"
+  displayName: intfloat.multilingual-e5-large
+  storage:
+    storageUri: hf://intfloat/multilingual-e5-large
+    path: /raid/models/intfloat/multilingual-e5-large

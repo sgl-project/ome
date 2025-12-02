@@ -1,8 +1,10 @@
-# SGLang Supported Models Reference
+# Supported Models Reference
 
-This document provides a comprehensive reference of all models supported by SGLang, their configurations, access requirements, and specifications.
+This document provides a comprehensive reference of all models supported by SGLang and vLLM, their configurations, access requirements, and specifications.
 
-> **Source**: [SGLang Documentation](https://docs.sglang.io/supported_models/)
+> **Sources**:
+> - [SGLang Documentation](https://docs.sglang.io/supported_models/)
+> - [vLLM Documentation](https://docs.vllm.ai/en/latest/models/supported_models/)
 
 ## Table of Contents
 
@@ -11,6 +13,7 @@ This document provides a comprehensive reference of all models supported by SGLa
 - [Embedding Models](#embedding-models)
 - [Reward Models](#reward-models)
 - [Rerank Models](#rerank-models)
+- [vLLM Additional Models](#vllm-additional-models)
 - [Model Status in OME](#model-status-in-ome)
 
 ---
@@ -282,6 +285,142 @@ This document provides a comprehensive reference of all models supported by SGLa
 
 ---
 
+## vLLM Additional Models
+
+The following models are supported by vLLM but may not be explicitly listed in SGLang documentation. Many share common architectures with SGLang-supported models.
+
+### vLLM Text-Only Generative Models
+
+| Model                | HuggingFace ID                            | Parameters            | Architecture              | Context | Token Required |
+|----------------------|-------------------------------------------|-----------------------|---------------------------|---------|----------------|
+| Aquila 7B            | `BAAI/Aquila-7B`                          | 7B                    | AquilaForCausalLM         | 2K      | No             |
+| AquilaChat 7B        | `BAAI/AquilaChat-7B`                      | 7B                    | AquilaForCausalLM         | 2K      | No             |
+| Arctic Base          | `Snowflake/snowflake-arctic-base`         | 480B (17B active)     | ArcticForCausalLM         | 4K      | No             |
+| Arctic Instruct      | `Snowflake/snowflake-arctic-instruct`     | 480B (17B active)     | ArcticForCausalLM         | 4K      | No             |
+| Bloom                | `bigscience/bloom`                        | 176B                  | BloomForCausalLM          | 2K      | No             |
+| Bloomz               | `bigscience/bloomz`                       | 176B                  | BloomForCausalLM          | 2K      | No             |
+| BART Base            | `facebook/bart-base`                      | 140M                  | BartForConditionalGen     | 1K      | No             |
+| BART Large CNN       | `facebook/bart-large-cnn`                 | 400M                  | BartForConditionalGen     | 1K      | No             |
+| ChatGLM3 6B          | `THUDM/chatglm3-6b`                       | 6B                    | ChatGLMModel              | 32K     | No             |
+| Cohere2 Command R7B  | `CohereForAI/c4ai-command-r7b-12-2024`    | 7B                    | Cohere2ForCausalLM        | 128K    | No             |
+| DeciLM 7B            | `Deci/DeciLM-7B`                          | 7B                    | DeciLMForCausalLM         | 8K      | No             |
+| DeciLM 7B Instruct   | `Deci/DeciLM-7B-instruct`                 | 7B                    | DeciLMForCausalLM         | 8K      | No             |
+| DeepSeek LLM 7B      | `deepseek-ai/deepseek-llm-7b-chat`        | 7B                    | DeepseekForCausalLM       | 4K      | No             |
+| DeepSeek LLM 67B     | `deepseek-ai/deepseek-llm-67b-base`       | 67B                   | DeepseekForCausalLM       | 4K      | No             |
+| Falcon 7B            | `tiiuae/falcon-7b`                        | 7B                    | FalconForCausalLM         | 2K      | No             |
+| Falcon 40B           | `tiiuae/falcon-40b`                       | 40B                   | FalconForCausalLM         | 2K      | No             |
+| Falcon RW 7B         | `tiiuae/falcon-rw-7b`                     | 7B                    | FalconForCausalLM         | 2K      | No             |
+| Falcon Mamba 7B      | `tiiuae/falcon-mamba-7b`                  | 7B                    | FalconMambaForCausalLM    | 8K      | No             |
+| GritLM 7B            | `parasail-ai/GritLM-7B-vllm`              | 7B                    | GritLM                    | 4K      | No             |
+| GPT-2                | `gpt2`                                    | 124M                  | GPT2LMHeadModel           | 1K      | No             |
+| GPT-2 XL             | `gpt2-xl`                                 | 1.5B                  | GPT2LMHeadModel           | 1K      | No             |
+| GPT-J 6B             | `EleutherAI/gpt-j-6b`                     | 6B                    | GPTJForCausalLM           | 2K      | No             |
+| GPT-NeoX 20B         | `EleutherAI/gpt-neox-20b`                 | 20B                   | GPTNeoXForCausalLM        | 2K      | No             |
+| Pythia 12B           | `EleutherAI/pythia-12b`                   | 12B                   | GPTNeoXForCausalLM        | 2K      | No             |
+| Dolly v2 12B         | `databricks/dolly-v2-12b`                 | 12B                   | GPTNeoXForCausalLM        | 2K      | No             |
+| InternLM 7B          | `internlm/internlm-7b`                    | 7B                    | InternLMForCausalLM       | 8K      | No             |
+| InternLM Chat 7B     | `internlm/internlm-chat-7b`               | 7B                    | InternLMForCausalLM       | 8K      | No             |
+| InternLM3 8B         | `internlm/internlm3-8b-instruct`          | 8B                    | InternLM3ForCausalLM      | 32K     | No             |
+| JAIS 13B             | `inceptionai/jais-13b`                    | 13B                   | JAISLMHeadModel           | 2K      | No             |
+| JAIS 30B v3          | `inceptionai/jais-30b-v3`                 | 30B                   | JAISLMHeadModel           | 8K      | No             |
+| Jamba 1.5 Large      | `ai21labs/AI21-Jamba-1.5-Large`           | 398B (94B active)     | JambaForCausalLM          | 256K    | No             |
+| Jamba 1.5 Mini       | `ai21labs/AI21-Jamba-1.5-Mini`            | 52B (12B active)      | JambaForCausalLM          | 256K    | No             |
+| Jamba v0.1           | `ai21labs/Jamba-v0.1`                     | 52B (12B active)      | JambaForCausalLM          | 256K    | No             |
+| Mamba 130M           | `state-spaces/mamba-130m-hf`              | 130M                  | MambaForCausalLM          | 2K      | No             |
+| Mamba 790M           | `state-spaces/mamba-790m-hf`              | 790M                  | MambaForCausalLM          | 2K      | No             |
+| Mamba 2.8B           | `state-spaces/mamba-2.8b-hf`              | 2.8B                  | MambaForCausalLM          | 2K      | No             |
+| MiniCPM 2B           | `openbmb/MiniCPM-2B-sft-bf16`             | 2B                    | MiniCPMForCausalLM        | 4K      | No             |
+| MiniCPM S 1B         | `openbmb/MiniCPM-S-1B-sft`                | 1B                    | MiniCPMForCausalLM        | 4K      | No             |
+| MPT 7B               | `mosaicml/mpt-7b`                         | 7B                    | MPTForCausalLM            | 2K      | No             |
+| MPT 30B              | `mosaicml/mpt-30b`                        | 30B                   | MPTForCausalLM            | 8K      | No             |
+| Minitron 8B          | `nvidia/Minitron-8B-Base`                 | 8B                    | NemotronForCausalLM       | 4K      | No             |
+| Nemotron 340B FP8    | `mgoin/Nemotron-4-340B-Base-hf-FP8`       | 340B                  | NemotronForCausalLM       | 4K      | No             |
+| OLMo 1B              | `allenai/OLMo-1B-hf`                      | 1B                    | OLMoForCausalLM           | 2K      | No             |
+| OLMo 7B              | `allenai/OLMo-7B-hf`                      | 7B                    | OLMoForCausalLM           | 2K      | No             |
+| OLMo2 7B             | `allenai/OLMo2-7B-1124`                   | 7B                    | OLMo2ForCausalLM          | 4K      | No             |
+| OPT 66B              | `facebook/opt-66b`                        | 66B                   | OPTForCausalLM            | 2K      | No             |
+| OPT IML Max 30B      | `facebook/opt-iml-max-30b`                | 30B                   | OPTForCausalLM            | 2K      | No             |
+| Qwen 7B              | `Qwen/Qwen-7B`                            | 7B                    | QWenLMHeadModel           | 8K      | No             |
+| Qwen 7B Chat         | `Qwen/Qwen-7B-Chat`                       | 7B                    | QWenLMHeadModel           | 8K      | No             |
+| QwQ 32B Preview      | `Qwen/QwQ-32B-Preview`                    | 32B                   | Qwen2ForCausalLM          | 32K     | No             |
+| Qwen1.5 MoE A2.7B    | `Qwen/Qwen1.5-MoE-A2.7B`                  | 14B (2.7B active)     | Qwen2MoeForCausalLM       | 32K     | No             |
+| StableLM 3B          | `stabilityai/stablelm-3b-4e1t`            | 3B                    | StableLmForCausalLM       | 4K      | No             |
+| Solar Pro Preview    | `upstage/solar-pro-preview-instruct`      | 22B                   | SolarForCausalLM          | 4K      | No             |
+| TeleChat2 3B         | `TeleAI/TeleChat2-3B`                     | 3B                    | TeleChat2ForCausalLM      | 8K      | No             |
+| TeleChat2 7B         | `TeleAI/TeleChat2-7B`                     | 7B                    | TeleChat2ForCausalLM      | 8K      | No             |
+| TeleChat2 35B        | `TeleAI/TeleChat2-35B`                    | 35B                   | TeleChat2ForCausalLM      | 8K      | No             |
+| XVERSE 7B Chat       | `xverse/XVERSE-7B-Chat`                   | 7B                    | XverseForCausalLM         | 8K      | No             |
+| XVERSE 13B Chat      | `xverse/XVERSE-13B-Chat`                  | 13B                   | XverseForCausalLM         | 8K      | No             |
+| XVERSE 65B Chat      | `xverse/XVERSE-65B-Chat`                  | 65B                   | XverseForCausalLM         | 16K     | No             |
+| Yi 34B               | `01-ai/Yi-34B`                            | 34B                   | LlamaForCausalLM          | 4K      | No             |
+| WizardCoder 15B      | `WizardLM/WizardCoder-15B-V1.0`           | 15B                   | GPTBigCodeForCausalLM     | 8K      | No             |
+| StarCoder            | `bigcode/starcoder`                       | 15B                   | GPTBigCodeForCausalLM     | 8K      | No             |
+| SantaCoder           | `bigcode/gpt_bigcode-santacoder`          | 1.1B                  | GPTBigCodeForCausalLM     | 2K      | No             |
+
+### vLLM Multimodal Models
+
+| Model                   | HuggingFace ID                              | Parameters        | Architecture                         | Context | Token Required |
+|-------------------------|---------------------------------------------|-------------------|--------------------------------------|---------|----------------|
+| Aria                    | `rhymes-ai/Aria`                            | 25B               | AriaForConditionalGeneration         | 64K     | No             |
+| Blip2 OPT 2.7B          | `Salesforce/blip2-opt-2.7b`                 | 3.8B              | Blip2ForConditionalGeneration        | 32      | No             |
+| Blip2 OPT 6.7B          | `Salesforce/blip2-opt-6.7b`                 | 7.8B              | Blip2ForConditionalGeneration        | 32      | No             |
+| Chameleon 7B            | `facebook/chameleon-7b`                     | 7B                | ChameleonForConditionalGen           | 4K      | No             |
+| DeepSeek-VL2 Tiny       | `deepseek-ai/deepseek-vl2-tiny`             | 3B                | DeepseekVLV2ForCausalLM              | 4K      | No             |
+| DeepSeek-VL2 Small      | `deepseek-ai/deepseek-vl2-small`            | 16B               | DeepseekVLV2ForCausalLM              | 4K      | No             |
+| Fuyu 8B                 | `adept/fuyu-8b`                             | 8B                | FuyuForCausalLM                      | 16K     | No             |
+| GLM-4V 9B               | `THUDM/glm-4v-9b`                           | 9B                | ChatGLMModel                         | 8K      | No             |
+| H2OVL Mississippi 800M  | `h2oai/h2ovl-mississippi-800m`              | 800M              | H2OVLChatModel                       | 4K      | No             |
+| H2OVL Mississippi 2B    | `h2oai/h2ovl-mississippi-2b`                | 2B                | H2OVLChatModel                       | 4K      | No             |
+| Idefics3 8B Llama3      | `HuggingFaceM4/Idefics3-8B-Llama3`          | 8B                | Idefics3ForConditionalGeneration     | 8K      | No             |
+| InternVL2.5 4B          | `OpenGVLab/InternVL2_5-4B`                  | 4B                | InternVLChatModel                    | 8K      | No             |
+| InternVL2 4B            | `OpenGVLab/InternVL2-4B`                    | 4B                | InternVLChatModel                    | 8K      | No             |
+| Mono-InternVL 2B        | `OpenGVLab/Mono-InternVL-2B`                | 2B                | InternVLChatModel                    | 8K      | No             |
+| LLaVA 1.5 7B HF         | `llava-hf/llava-1.5-7b-hf`                  | 7B                | LlavaForConditionalGeneration        | 4K      | No             |
+| LLaVA v1.6 Mistral 7B   | `llava-hf/llava-v1.6-mistral-7b-hf`         | 7B                | LlavaNextForConditionalGeneration    | 4K      | No             |
+| LLaVA-NeXT-Video 7B     | `llava-hf/LLaVA-NeXT-Video-7B-hf`           | 7B                | LlavaNextVideoForConditionalGen      | 4K      | No             |
+| LLaVA-OneVision 0.5B    | `llava-hf/llava-onevision-qwen2-0.5b-ov-hf` | 0.5B              | LlavaOnevisionForConditionalGen      | 32K     | No             |
+| Mantis 8B               | `TIGER-Lab/Mantis-8B-siglip-llama3`         | 8B                | LlavaForConditionalGeneration        | 8K      | No             |
+| MiniCPM-V 2             | `openbmb/MiniCPM-V-2`                       | 3B                | MiniCPMV                             | 2K      | No             |
+| MiniCPM-Llama3-V 2.5    | `openbmb/MiniCPM-Llama3-V-2_5`              | 8B                | MiniCPMV                             | 8K      | No             |
+| Molmo 7B D              | `allenai/Molmo-7B-D-0924`                   | 7B                | MolmoForCausalLM                     | 4K      | No             |
+| Molmo 72B               | `allenai/Molmo-72B-0924`                    | 72B               | MolmoForCausalLM                     | 4K      | No             |
+| NVLM-D 72B              | `nvidia/NVLM-D-72B`                         | 72B               | NVLM_D_Model                         | 4K      | No             |
+| PaliGemma 3B 224        | `google/paligemma-3b-pt-224`                | 3B                | PaliGemmaForConditionalGeneration    | 4K      | Yes            |
+| PaliGemma 3B Mix        | `google/paligemma-3b-mix-224`               | 3B                | PaliGemmaForConditionalGeneration    | 4K      | Yes            |
+| PaliGemma2 3B           | `google/paligemma2-3b-ft-docci-448`         | 3B                | PaliGemmaForConditionalGeneration    | 4K      | Yes            |
+| Phi-3.5 Vision          | `microsoft/Phi-3.5-vision-instruct`         | 4.2B              | Phi3VForCausalLM                     | 128K    | No             |
+| Pixtral 12B             | `mistralai/Pixtral-12B-2409`                | 12B               | PixtralForConditionalGeneration      | 128K    | No             |
+| Qwen2-Audio 7B          | `Qwen/Qwen2-Audio-7B-Instruct`              | 7B                | Qwen2AudioForConditionalGeneration   | 32K     | No             |
+| QVQ 72B Preview         | `Qwen/QVQ-72B-Preview`                      | 72B               | Qwen2VLForConditionalGeneration      | 32K     | No             |
+| Ultravox v0.3           | `fixie-ai/ultravox-v0_3`                    | 8B                | UltravoxModel                        | 4K      | No             |
+
+### vLLM Pooling/Embedding Models
+
+| Model                    | HuggingFace ID                           | Parameters | Architecture          | Type            |
+|--------------------------|------------------------------------------|------------|-----------------------|-----------------|
+| BGE Base EN v1.5         | `BAAI/bge-base-en-v1.5`                  | 110M       | BertModel             | Embedding       |
+| BGE Multilingual Gemma2  | `BAAI/bge-multilingual-gemma2`           | 9B         | Gemma2Model           | Embedding       |
+| Multilingual E5 Large    | `intfloat/multilingual-e5-large`         | 560M       | XLMRobertaModel       | Embedding       |
+| RoBERTa Large v1         | `sentence-transformers/all-roberta-large-v1` | 355M   | RobertaModel          | Embedding       |
+| Qwen2 7B Embed           | `ssmits/Qwen2-7B-Instruct-embed-base`    | 7B         | Qwen2Model            | Embedding       |
+| VLM2Vec Full             | `TIGER-Lab/VLM2Vec-Full`                 | 4B         | Phi3VForCausalLM      | Multimodal Emb  |
+| E5-V                     | `royokong/e5-v`                          | 7B         | LlavaNextForConditionalGen | Multimodal Emb |
+| DSE Qwen2 2B             | `MrLight/dse-qwen2-2b-mrl-v1`            | 2B         | Qwen2VLForConditionalGen | Multimodal Emb |
+
+### vLLM Reward/Classification Models
+
+| Model                    | HuggingFace ID                           | Parameters | Architecture                      | Type            |
+|--------------------------|------------------------------------------|------------|-----------------------------------|-----------------|
+| InternLM2 1.8B Reward    | `internlm/internlm2-1_8b-reward`         | 1.8B       | InternLM2ForRewardModel           | Reward          |
+| Math Shepherd 7B PRM     | `peiyi9979/math-shepherd-mistral-7b-prm` | 7B         | LlamaForCausalLM                  | Reward (PRM)    |
+| Qwen2.5 Math PRM 7B      | `Qwen/Qwen2.5-Math-PRM-7B`               | 7B         | Qwen2ForProcessRewardModel        | Reward (PRM)    |
+| Qwen2.5 Math PRM 72B     | `Qwen/Qwen2.5-Math-PRM-72B`              | 72B        | Qwen2ForProcessRewardModel        | Reward (PRM)    |
+| Jamba Tiny Reward        | `ai21labs/Jamba-tiny-reward-dev`         | 900M       | JambaForSequenceClassification    | Classification  |
+| MS Marco MiniLM L6       | `cross-encoder/ms-marco-MiniLM-L-6-v2`   | 23M        | BertForSequenceClassification     | Cross-Encoder   |
+| Quora RoBERTa Base       | `cross-encoder/quora-roberta-base`       | 125M       | RobertaForSequenceClassification  | Cross-Encoder   |
+
+---
+
 ## Model Status in OME
 
 ### Summary Statistics
@@ -374,9 +513,16 @@ spec:
 
 ## References
 
+### SGLang Documentation
 - [SGLang Generative Models](https://docs.sglang.io/supported_models/generative_models.html)
 - [SGLang Multimodal Models](https://docs.sglang.io/supported_models/multimodal_language_models.html)
 - [SGLang Embedding Models](https://docs.sglang.io/supported_models/embedding_models.html)
 - [SGLang Reward Models](https://docs.sglang.io/supported_models/reward_models.html)
 - [SGLang Rerank Models](https://docs.sglang.io/supported_models/rerank_models.html)
+
+### vLLM Documentation
+- [vLLM Supported Models](https://docs.vllm.ai/en/latest/models/supported_models/)
+- [vLLM Generative Models](https://docs.vllm.ai/en/latest/models/generative_models/)
+
+### Other Resources
 - [HuggingFace Model Hub](https://huggingface.co/models)

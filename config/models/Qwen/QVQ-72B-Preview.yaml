@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: qvq-72b-preview
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: qwen
+  disabled: false
+  version: "1.0.0"
+  displayName: qwen.qvq-72b-preview
+  storage:
+    storageUri: hf://Qwen/QVQ-72B-Preview
+    path: /raid/models/qwen/qvq-72b-preview

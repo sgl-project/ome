@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: minitron-8b-base
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: nvidia
+  disabled: false
+  version: "1.0.0"
+  displayName: nvidia.minitron-8b-base
+  storage:
+    storageUri: hf://nvidia/Minitron-8B-Base
+    path: /raid/models/nvidia/minitron-8b-base

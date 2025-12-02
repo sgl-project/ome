@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deepseek-vl2-tiny
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: deepseek
+  disabled: false
+  version: "1.0.0"
+  displayName: deepseek.deepseek-vl2-tiny
+  storage:
+    storageUri: hf://deepseek-ai/deepseek-vl2-tiny
+    path: /raid/models/deepseek/deepseek-vl2-tiny

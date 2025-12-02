@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: e5-v
+spec:
+  modelCapabilities:
+    - IMAGE_TO_EMBEDDING
+    - TEXT_TO_EMBEDDING
+  vendor: royokong
+  disabled: false
+  version: "1.0.0"
+  displayName: royokong.e5-v
+  storage:
+    storageUri: hf://royokong/e5-v
+    path: /raid/models/royokong/e5-v

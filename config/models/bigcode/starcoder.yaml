@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: starcoder
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: bigcode
+  disabled: false
+  version: "1.0.0"
+  displayName: bigcode.starcoder
+  storage:
+    storageUri: hf://bigcode/starcoder
+    path: /raid/models/bigcode/starcoder

@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: aria
+spec:
+  modelCapabilities:
+    - IMAGE_TO_TEXT
+    - TEXT_TO_TEXT
+  vendor: rhymes-ai
+  disabled: false
+  version: "1.0.0"
+  displayName: rhymes-ai.aria
+  storage:
+    storageUri: hf://rhymes-ai/Aria
+    path: /raid/models/rhymes-ai/aria

@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: jais-30b-v3
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: inceptionai
+  disabled: false
+  version: "1.0.0"
+  displayName: inceptionai.jais-30b-v3
+  storage:
+    storageUri: hf://inceptionai/jais-30b-v3
+    path: /raid/models/inceptionai/jais-30b-v3

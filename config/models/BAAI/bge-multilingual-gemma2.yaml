@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: bge-multilingual-gemma2
+spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
+  vendor: baai
+  disabled: false
+  version: "1.0.0"
+  displayName: baai.bge-multilingual-gemma2
+  storage:
+    storageUri: hf://BAAI/bge-multilingual-gemma2
+    path: /raid/models/baai/bge-multilingual-gemma2

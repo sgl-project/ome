@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: vlm2vec-full
+spec:
+  modelCapabilities:
+    - IMAGE_TO_EMBEDDING
+    - TEXT_TO_EMBEDDING
+  vendor: tiger-lab
+  disabled: false
+  version: "1.0.0"
+  displayName: tiger-lab.vlm2vec-full
+  storage:
+    storageUri: hf://TIGER-Lab/VLM2Vec-Full
+    path: /raid/models/tiger-lab/vlm2vec-full

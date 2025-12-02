@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: ms-marco-minilm-l-6-v2
+spec:
+  modelCapabilities:
+    - RERANKING
+  vendor: cross-encoder
+  disabled: false
+  version: "1.0.0"
+  displayName: cross-encoder.ms-marco-minilm-l-6-v2
+  storage:
+    storageUri: hf://cross-encoder/ms-marco-MiniLM-L-6-v2
+    path: /raid/models/cross-encoder/ms-marco-minilm-l-6-v2

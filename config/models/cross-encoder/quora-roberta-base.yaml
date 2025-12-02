@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: quora-roberta-base
+spec:
+  modelCapabilities:
+    - RERANKING
+  vendor: cross-encoder
+  disabled: false
+  version: "1.0.0"
+  displayName: cross-encoder.quora-roberta-base
+  storage:
+    storageUri: hf://cross-encoder/quora-roberta-base
+    path: /raid/models/cross-encoder/quora-roberta-base

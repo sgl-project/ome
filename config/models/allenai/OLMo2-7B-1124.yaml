@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: olmo2-7b-1124
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: allenai
+  disabled: false
+  version: "1.0.0"
+  displayName: allenai.olmo2-7b-1124
+  storage:
+    storageUri: hf://allenai/OLMo2-7B-1124
+    path: /raid/models/allenai/olmo2-7b-1124
