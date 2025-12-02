@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: bge-m3
+spec:
+  modelCapabilities:
+    - TEXT_TO_EMBEDDING
+  vendor: baai
+  disabled: false
+  version: "1.0.0"
+  displayName: baai.bge-m3
+  storage:
+    storageUri: hf://BAAI/bge-m3
+    path: /raid/models/baai/bge-m3

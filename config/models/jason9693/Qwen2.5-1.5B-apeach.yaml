@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: qwen2-5-1-5b-apeach
+spec:
+  modelCapabilities:
+    - REWARD_SCORING
+  vendor: jason9693
+  disabled: false
+  version: "1.0.0"
+  displayName: jason9693.qwen2.5-1.5b-apeach
+  storage:
+    storageUri: hf://jason9693/Qwen2.5-1.5B-apeach
+    path: /raid/models/jason9693/qwen2-5-1-5b-apeach

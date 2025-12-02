@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deepseek-r1-distill-qwen-14b
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: deepseek
+  disabled: false
+  version: "1.0.0"
+  displayName: deepseek.deepseek-r1-distill-qwen-14b
+  storage:
+    storageUri: hf://deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+    path: /raid/models/deepseek/deepseek-r1-distill-qwen-14b
