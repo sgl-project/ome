@@ -110,7 +110,7 @@ spec:
             --enable-metrics \
             --log-requests \
             --log-requests-level=1 \
-            --model-path=/mnt/data/models/openai/gpt-oss-20b \
+            --model-path="$MODEL_PATH" \
             --served-model-name=gpt-oss-20b \
             --tp 1 \
             --reasoning-parser=gpt-oss \
@@ -141,7 +141,7 @@ spec:
             --port "8080" \
             --policy cache_aware \
             --worker-urls "grpc://127.0.0.1:18080" \
-            --model-path "/mnt/data/models/openai/gpt-oss-20b" \
+            --model-path "$MODEL_PATH" \
             --log-level "debug" \
             --health-check-endpoint "/HealthCheck" \
             2>&1 &
