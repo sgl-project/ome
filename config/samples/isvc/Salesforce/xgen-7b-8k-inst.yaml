@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: xgen-7b-8k-inst
+  namespace: xgen-7b-8k-inst
+spec:
+  model:
+    name: xgen-7b-8k-inst
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-xgen-7b-8k-inst
+  router:
+    minReplicas: 1
+    maxReplicas: 1

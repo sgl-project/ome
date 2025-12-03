@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: deepseek-coder-7b-instruct-v1-5
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: deepseek
+  disabled: false
+  version: "1.5.0"
+  displayName: deepseek.deepseek-coder-7b-instruct-v1.5
+  storage:
+    storageUri: hf://deepseek-ai/deepseek-coder-7b-instruct-v1.5
+    path: /raid/models/deepseek/deepseek-coder-7b-instruct-v1.5

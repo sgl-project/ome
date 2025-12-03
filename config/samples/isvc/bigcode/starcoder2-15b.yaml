@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: starcoder2-15b
+  namespace: starcoder2-15b
+spec:
+  model:
+    name: starcoder2-15b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-starcoder2-15b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

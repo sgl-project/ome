@@ -54,12 +54,13 @@ spec:
         - --model-path
         - $(MODEL_PATH)
         - --tp-size
-        - "1"
+        - "2"
         - --mem-frac
         - "0.9"
         - --served-model-name
         - baichuan-inc/Baichuan2-13B-Chat
         - --trust-remote-code
+        - --disable-cuda-graph
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
@@ -67,11 +68,11 @@ spec:
         requests:
           cpu: 10
           memory: 60Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
         limits:
           cpu: 10
           memory: 60Gi
-          nvidia.com/gpu: 1
+          nvidia.com/gpu: 2
 
       readinessProbe:
         httpGet:

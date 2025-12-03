@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: c4ai-command-r-v01
+  namespace: c4ai-command-r-v01
+spec:
+  model:
+    name: c4ai-command-r-v01
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-c4ai-command-r-v01
+  router:
+    minReplicas: 1
+    maxReplicas: 1

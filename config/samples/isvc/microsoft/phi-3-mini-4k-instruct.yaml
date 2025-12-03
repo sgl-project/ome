@@ -1,0 +1,18 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+  name: phi-3-mini-4k-instruct
+  namespace: phi-3-mini-4k-instruct
+spec:
+  model:
+    name: phi-3-mini-4k-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-phi-3-mini-4k-instruct
+  router:
+    minReplicas: 1
+    maxReplicas: 1

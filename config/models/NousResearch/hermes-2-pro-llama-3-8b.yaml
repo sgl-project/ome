@@ -1,0 +1,21 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: hermes-2-pro-llama-3-8b
+spec:
+  vendor: NousResearch
+  disabled: false
+  version: "1.0.0"
+  displayName: NousResearch.Hermes-2-Pro-Llama-3-8B
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.42.3"
+  modelArchitecture: LlamaForCausalLM
+  storage:
+    storageUri: hf://NousResearch/Hermes-2-Pro-Llama-3-8B
+    path: /raid/models/NousResearch/hermes-2-pro-llama-3-8b

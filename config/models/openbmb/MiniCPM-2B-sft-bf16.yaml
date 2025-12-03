@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: ClusterBaseModel
+metadata:
+  name: minicpm-2b-sft-bf16
+spec:
+  modelCapabilities:
+    - TEXT_TO_TEXT
+  vendor: openbmb
+  displayName: openbmb.minicpm-2b-sft-bf16
+  disabled: false
+  version: "1.0.0"
+  storage:
+    storageUri: hf://openbmb/MiniCPM-2B-sft-bf16
+    path: /raid/models/openbmb/MiniCPM-2B-sft-bf16

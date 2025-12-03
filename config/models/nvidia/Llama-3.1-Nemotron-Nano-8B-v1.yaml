@@ -17,6 +17,6 @@ spec:
     version: "4.47.1"
   modelArchitecture: LlamaForCausalLM
   storage:
-    storageUri: hf://nvidia/Llama-3.1-Nemotron-Nano-8B-Instruct
+    storageUri: hf://nvidia/Llama-3.1-Nemotron-Nano-8B-v1
     path: /raid/models/nvidia/llama-3-1-nemotron-nano-8b-v1
     key: "hf-token"

@@ -1,0 +1,18 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+  name: phi-2-test
+  namespace: phi-2-test
+spec:
+  model:
+    name: phi-2
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-phi-2
+  router:
+    minReplicas: 1
+    maxReplicas: 1

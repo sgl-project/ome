@@ -9,6 +9,14 @@ spec:
   displayName: openbmb.minicpm-v-2_6
   disabled: false
   version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.40.0"
+  modelFormat:
+    name: safetensors
+  modelType: MiniCPMV
+  modelParameterSize: 8B
   storage:
     storageUri: hf://openbmb/MiniCPM-V-2_6
     path: /raid/models/openbmb/MiniCPM-V-2_6
+    key: "hf-token"

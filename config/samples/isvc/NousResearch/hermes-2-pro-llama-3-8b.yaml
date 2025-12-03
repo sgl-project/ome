@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: hermes-2-pro-llama-3-8b
+  namespace: hermes-2-pro-llama-3-8b
+spec:
+  model:
+    name: hermes-2-pro-llama-3-8b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-hermes-2-pro-llama-3-8b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

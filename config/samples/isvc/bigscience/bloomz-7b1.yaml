@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: bloomz-7b1
+  namespace: bloomz-7b1
+spec:
+  model:
+    name: bloomz-7b1
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-bloomz-7b1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
