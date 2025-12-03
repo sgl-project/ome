@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "grok-4-self-hosted" "osBucket" }}/o/{{ index .Values "grok-4-self-hosted" "vendor" }}/{{ index .Values "grok-4-self-hosted" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "grok-4-self-hosted" "vendor" }}/{{ index .Values "grok-4-self-hosted" "osPrefixOverride" }}"
+    {{- if index .Values "grok-4-self-hosted" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "grok-4-self-hosted" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: {{ index .Values "grok-4-self-hosted" "vendor" }}
   version: "1.0.0"
   modelFormat:

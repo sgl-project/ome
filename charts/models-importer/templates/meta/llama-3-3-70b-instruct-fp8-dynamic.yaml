@@ -20,6 +20,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "osBucket" }}/o/{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "vendor" }}/{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "osPrefixOverride" }}"
+    {{- if index .Values "llama-3-3-70b-instruct-fp8-dynamic" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "llama-3-3-70b-instruct-fp8-dynamic" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: meta
   version: "1.0.0"
   modelFramework:

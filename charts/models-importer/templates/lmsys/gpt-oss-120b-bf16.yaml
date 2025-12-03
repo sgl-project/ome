@@ -23,6 +23,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "gpt-oss-120b-bf16" "osBucket" }}/o/{{ index .Values "gpt-oss-120b-bf16" "vendor" }}/{{ index .Values "gpt-oss-120b-bf16" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "gpt-oss-120b-bf16" "vendor" }}/{{ index .Values "gpt-oss-120b-bf16" "osPrefixOverride" }}"
+    {{- if index .Values "gpt-oss-120b-bf16" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "gpt-oss-120b-bf16" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: lmsys
   version: "1.0.0"
   modelFramework:

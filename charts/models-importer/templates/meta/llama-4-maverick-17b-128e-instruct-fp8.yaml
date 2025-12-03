@@ -36,6 +36,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "osBucket" }}/o/{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "vendor" }}/{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "vendor" }}/{{ index .Values "llama-4-maverick-17b-128e-instruct-fp8" "osPrefixOverride" }}"
+    {{- if index .Values "llama-4-maverick-17b-128e-instruct-fp8" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "llama-4-maverick-17b-128e-instruct-fp8" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:

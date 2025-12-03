@@ -48,6 +48,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "deepseek-r1" "osBucket" }}/o/{{ index .Values "deepseek-r1" "vendor" }}/{{ index .Values "deepseek-r1" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "deepseek-r1" "vendor" }}/{{ index .Values "deepseek-r1" "osPrefixOverride" }}"
+    {{- if index .Values "deepseek-r1" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "deepseek-r1" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   modelConfiguration:
     {
       "architectures": [

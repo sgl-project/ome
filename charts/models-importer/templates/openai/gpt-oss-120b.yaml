@@ -23,6 +23,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "gpt-oss-120b" "osBucket" }}/o/{{ index .Values "gpt-oss-120b" "vendor" }}/{{ index .Values "gpt-oss-120b" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "gpt-oss-120b" "vendor" }}/{{ index .Values "gpt-oss-120b" "osPrefixOverride" }}"
+    {{- if index .Values "gpt-oss-120b" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "gpt-oss-120b" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: openai
   version: "1.0.0"
   modelFramework:

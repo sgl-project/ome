@@ -21,6 +21,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "grok-3-mini-low" "osBucket" }}/o/{{ index .Values "grok-3-mini-low" "vendor" }}/{{ index .Values "grok-3-mini-low" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "grok-3-mini-low" "vendor" }}/{{ index .Values "grok-3-mini-low" "osPrefixOverride" }}"
+    {{- if index .Values "grok-3-mini-low" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "grok-3-mini-low" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   vendor: {{ index .Values "grok-3-mini-low" "vendor" }}
   version: "1.0.0"
   modelFormat:

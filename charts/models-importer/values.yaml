@@ -29,10 +29,23 @@ llama-3-1-405b-instruct-fp8:
   enabled: false
   singleNode: true
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
 
 llama-3-1-70b-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.A100-v2.8
+    - BM.GPU.B4.8
+    - BM.GPU.H100-NC.8
+    - BM.GPU.H100.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H200.8
+    - BM.GPU4.8
 
 llama-3-1-8b-instruct:
   enabled: false
@@ -58,6 +71,14 @@ llama-3-70b-instruct-ft:
 llama-3-3-70b-instruct-fp8-dynamic:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.A100-v2.8
+    - BM.GPU.H100-NC.8
+    - BM.GPU.H100.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H200.8
+    - BM.GPU.B4.8
+    - BM.GPU4.8
 
 llama-3-2-90b-vision-instruct-fp8-dynamic:
   enabled: false
@@ -75,10 +96,23 @@ llama-3-70b-instruct:
 llama-4-scout-17b-16e-instruct:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
+    - BM.GPU.A100-v2.8
+    - BM.GPU.B4.8
+    - BM.GPU4.8
 
 llama-4-maverick-17b-128e-instruct-fp8:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
 
 llama-guard-4-12b:
   enabled: false
@@ -150,6 +184,14 @@ nl2sql-m1-premium-70b:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "LARGE_GENERIC_V2"
+  nodeAffinity:
+    - BM.GPU.A100-v2.8
+    - BM.GPU.B4.8
+    - BM.GPU.H100-NC.8
+    - BM.GPU.H100.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H200.8
+    - BM.GPU4.8
 
 llama-3-2-11b-vision-ft-chat:
   enabled: false
@@ -325,12 +367,22 @@ deepseek-r1:
   singleNode: false
   lifecyclePhase: "ACTIVE"
   commitHash: "5dde110d1a9ee857b90a6710b7138f9130ce6fa0"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
 
 deepseek-v3:
   enabled: false
   singleNode: false
   lifecyclePhase: "ACTIVE"
   commitHash: "1d044fd82b15f1cedb197a288e50cc96a2c27205"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
 
 gpt-4o:
   enabled: false
@@ -470,6 +522,14 @@ gpt-oss-120b:
   enabled: false
   lifecyclePhase: "ACTIVE"
   compatibleDACShapes: "OAI_H100_X2"
+  nodeAffinity:
+    - BM.GPU.A100-v2.8
+    - BM.GPU.B4.8
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H100-NC.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU4.8
 
 gpt-oss-20b:
   enabled: false
@@ -479,6 +539,9 @@ gpt-oss-20b:
 gpt-oss-120b-bf16:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H100-NC.8
 
 gpt-oss-20b-bf16:
   enabled: false
@@ -595,6 +658,11 @@ grok-3-mini:
 grok-3-mini-low:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
 
 grok-3-fast:
   enabled: false
@@ -619,10 +687,17 @@ grok-4-fast-non-reasoning:
 grok-4-fast-self-hosted:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
+    - BM.GPU.H200.8
+    - BM.GPU.H200-NC.8
+    - BM.GPU.H100-NC.8
 
 grok-4-self-hosted:
   enabled: false
   lifecyclePhase: "ACTIVE"
+  nodeAffinity:
+    - BM.GPU.H100.8
 
 grok-code-fast-1:
   enabled: false

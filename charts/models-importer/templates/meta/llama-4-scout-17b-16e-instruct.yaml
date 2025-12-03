@@ -35,6 +35,18 @@ spec:
   storage:
     storageUri: "oci://n/{{ .Values.osnamespace }}/b/{{ index .Values "llama-4-scout-17b-16e-instruct" "osBucket" }}/o/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
     path: "/mnt/data/models/{{ index .Values "llama-4-scout-17b-16e-instruct" "vendor" }}/{{ index .Values "llama-4-scout-17b-16e-instruct" "osPrefixOverride" }}"
+    {{- if index .Values "llama-4-scout-17b-16e-instruct" "nodeAffinity" }}
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                {{- range index .Values "llama-4-scout-17b-16e-instruct" "nodeAffinity" }}
+                  - {{ . }}
+                {{- end }}
+    {{- end }}
   additionalMetadata:
     {{ if index .Values "llama-4-scout-17b-16e-instruct" "isA100Only" }}
     dacShapeConfigs: |-
