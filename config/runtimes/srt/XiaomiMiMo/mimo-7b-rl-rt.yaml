@@ -59,6 +59,7 @@ spec:
         - "0.9"
         - --served-model-name
         - XiaomiMiMo/MiMo-7B-RL
+        - --trust-remote-code
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

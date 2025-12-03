@@ -1,3 +1,6 @@
+# Note: The correct HuggingFace repository is zai-org/glm-4-9b-chat-hf
+# (not ZhipuAI/glm-4-9b-chat which returns 401/404)
+# Original model published by THUDM, redirected to zai-org on HuggingFace
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
@@ -10,6 +13,5 @@ spec:
   disabled: false
   version: "1.0.0"
   storage:
-    storageUri: hf://ZhipuAI/glm-4-9b-chat
+    storageUri: hf://zai-org/glm-4-9b-chat-hf
     path: /raid/models/ZhipuAI/glm-4-9b-chat
-    key: "hf-token"

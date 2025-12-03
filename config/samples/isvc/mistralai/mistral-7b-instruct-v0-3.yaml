@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mistral-7b-instruct-v0-3
+  namespace: mistral-7b-instruct-v0-3
+spec:
+  model:
+    name: mistral-7b-instruct-v0-3
+  runtime:
+    name: srt-mistral-7b-instruct-v0-3
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

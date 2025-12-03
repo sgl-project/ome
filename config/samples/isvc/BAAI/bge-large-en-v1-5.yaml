@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: bge-large-en-v1-5
+  namespace: bge-large-en-v1-5
+spec:
+  model:
+    name: bge-large-en-v1-5
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-bge-large-en-v1-5
+  router:
+    minReplicas: 1
+    maxReplicas: 1

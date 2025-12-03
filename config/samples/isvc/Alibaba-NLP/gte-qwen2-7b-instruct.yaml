@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gte-qwen2-7b-instruct
+spec:
+  model:
+    name: gte-qwen2-7b-instruct
+  runtime:
+    name: srt-gte-qwen2-7b-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

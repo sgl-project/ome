@@ -1,12 +1,23 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: olmoe-1b-7b-0924
+---
+
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
   name: olmoe-1b-7b-0924
+  namespace: olmoe-1b-7b-0924
 spec:
   model:
-    modelId: allenai/OLMoE-1B-7B-0924
-    modelFormat: safetensors
-    modelFramework: transformers
-    resources:
-      limits:
-        nvidia.com/gpu: "1"
+    name: olmoe-1b-7b-0924
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-olmoe-1b-7b-0924
+  router:
+    minReplicas: 1
+    maxReplicas: 1

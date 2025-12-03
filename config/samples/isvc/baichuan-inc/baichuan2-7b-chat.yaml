@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: baichuan2-7b-chat
+  namespace: baichuan2-7b-chat
+spec:
+  model:
+    name: baichuan2-7b-chat
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-baichuan2-7b-chat
+  router:
+    minReplicas: 1
+    maxReplicas: 1

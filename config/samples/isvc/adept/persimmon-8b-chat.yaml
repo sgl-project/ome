@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: persimmon-8b-chat-test
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: persimmon-8b-chat-test
+  namespace: persimmon-8b-chat-test
+spec:
+  # model is required, if kind is not specified, the controller will automatically use ClusterBaseModel
+  model:
+    name: persimmon-8b-chat
+  # runtime is optional, if not specified, the controller will automatically select a compatible runtime
+  # otherwise, please ensure that the runtime is compatible with the model and actually exists
+  runtime:
+    name: srt-persimmon-8b-chat
+  engine:
+    minReplicas: 1
+    maxReplicas: 1

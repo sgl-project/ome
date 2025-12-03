@@ -1,0 +1,22 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minicpm-2b-sft-bf16
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    ome.io/deploymentMode: RawDeployment
+  name: minicpm-2b-sft-bf16
+  namespace: minicpm-2b-sft-bf16
+spec:
+  model:
+    name: minicpm-2b-sft-bf16
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-minicpm-2b-sft-bf16

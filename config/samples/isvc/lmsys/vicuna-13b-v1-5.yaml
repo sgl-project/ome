@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: vicuna-13b-v1-5
+  namespace: vicuna-13b-v1-5
+spec:
+  model:
+    name: vicuna-13b-v1-5
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-vicuna-13b-v1-5
+  router:
+    minReplicas: 1
+    maxReplicas: 1

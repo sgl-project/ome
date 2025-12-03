@@ -58,7 +58,7 @@ spec:
         - --mem-frac
         - "0.9"
         - --served-model-name
-        - nvidia/Llama-3.1-Nemotron-Nano-8B-Instruct
+        - nvidia/Llama-3.1-Nemotron-Nano-8B-v1
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

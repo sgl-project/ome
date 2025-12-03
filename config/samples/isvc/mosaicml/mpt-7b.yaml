@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mpt-7b
+  namespace: mpt-7b
+spec:
+  model:
+    name: mpt-7b
+  runtime:
+    name: srt-mpt-7b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

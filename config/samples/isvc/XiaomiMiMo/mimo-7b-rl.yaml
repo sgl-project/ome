@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mimo-7b-rl
+  namespace: mimo-7b-rl
+spec:
+  model:
+    name: mimo-7b-rl
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-mimo-7b-rl
+  router:
+    minReplicas: 1
+    maxReplicas: 1

@@ -1,0 +1,15 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mixtral-8x7b-instruct-v0-1
+spec:
+  model:
+    name: mixtral-8x7b-instruct-v0-1
+  runtime:
+    name: srt-mixtral-8x7b-instruct
+  engine:
+    minReplicas: 0
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
