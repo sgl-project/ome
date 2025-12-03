@@ -38,7 +38,7 @@ spec:
   maxTokens: 131072
   quantization: mxfp4
   additionalMetadata:
-    {{- $cfg := default "OAI_H100_X2" (index .Values "gpt-oss-120b" "compatibleDACShapes") -}}
+    {{- $cfg := default "OAI_H100_X2" (index .Values "gpt-oss-120b" "compatibleDACShapes") }}
     dacShapeConfigs: |-
       compatibleDACShapes:
         - name: {{ $cfg }}
