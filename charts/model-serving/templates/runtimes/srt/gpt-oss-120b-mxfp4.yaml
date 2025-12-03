@@ -7,28 +7,28 @@ spec:
   {{- if or .Values.commonAnnotations .Values.gpt_oss_120b.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
-    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
     {{- if .Values.gpt_oss_120b.annotations }}
-    {{ toYaml .Values.gpt_oss_120b.annotations | nindent 6 }}
+    {{ toYaml .Values.gpt_oss_120b.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
   {{- if or .Values.commonLabels .Values.gpt_oss_120b.labels }}
   labels:
     {{- if .Values.commonLabels }}
-    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
     {{- end }}
     {{- if .Values.gpt_oss_120b.labels }}
-    {{ toYaml .Values.gpt_oss_120b.labels | nindent 6 }}
+    {{ toYaml .Values.gpt_oss_120b.labels | nindent 4 }}
     {{- end }}
   {{- end }}
   {{- if or .Values.commonTolerations .Values.gpt_oss_120b.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
-    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
     {{- end }}
     {{- if .Values.gpt_oss_120b.tolerations }}
-    {{ toYaml .Values.gpt_oss_120b.tolerations | nindent 6 }}
+    {{ toYaml .Values.gpt_oss_120b.tolerations | nindent 4 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -42,7 +42,7 @@ spec:
         type: Directory
     {{- end }}
   {{ with .Values.gpt_oss_120b }}
-  affinity: {{ .affinity | toYaml | nindent 6 }}
+  affinity: {{ .affinity | toYaml | nindent 4 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
@@ -63,6 +63,177 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
+      image: {{ .Values.gpt_oss_120b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+
+          # --- Config ---
+          DELAY="${DELAY:-120}"   # seconds to wait after starting process 1
+
+          # Track child PIDs so we can stop them cleanly
+          pid1=""
+          pid2=""
+
+          # Forward signals to both children and wait
+          _term() {
+            [ -n "$pid2" ] && kill -TERM "$pid2" 2>/dev/null || true
+            [ -n "$pid1" ] && kill -TERM "$pid1" 2>/dev/null || true
+            wait || true
+          }
+          trap _term SIGINT SIGTERM
+
+          # --------------------------
+          # Process 1: sglang server
+          # --------------------------
+          PYTHONUNBUFFERED=1 python3 -u -m sglang.launch_server \
+            --host=127.0.0.1 \
+            --port=18080 \
+            --enable-metrics \
+            --log-requests \
+            --log-requests-level=1 \
+            --model-path="$MODEL_PATH" \
+            --served-model-name=gpt-oss-120b \
+            --tp 2 \
+            --reasoning-parser=gpt-oss \
+            --context-length=131072 \
+            --grpc-mode \
+            2>&1 &
+
+          pid1=$!
+          printf '[%s] started sglang-server pid=%s\n' "$(date -Is)" "$pid1" >&2
+
+          # --- Delay, then Process 2 ---
+          sleep "$DELAY"
+
+          # If process 1 died during the delay, exit with its status instead of starting 2
+          if ! kill -0 "$pid1" 2>/dev/null; then
+            status=0
+            wait "$pid1" || status=$?
+            printf '[%s] sglang-server exited during delay; not starting router (status=%s)\n' \
+              "$(date -Is)" "${status:-1}" >&2
+            exit "${status:-1}"
+          fi
+
+          # --------------------------
+          # Process 2: sglang router
+          # --------------------------
+          PYTHONUNBUFFERED=1 python3 -u -m sglang_router.launch_router \
+            --host "0.0.0.0" \
+            --port "8080" \
+            --policy cache_aware \
+            --worker-urls "grpc://127.0.0.1:18080" \
+            --model-path "$MODEL_PATH" \
+            --log-level "debug" \
+            --health-check-endpoint "/HealthCheck" \
+            2>&1 &
+
+          pid2=$!
+          printf '[%s] started sglang-router pid=%s\n' "$(date -Is)" "$pid2" >&2
+
+          # --- Exit when the first of the two exits; stop the other cleanly ---
+          status=0
+          wait -n || status=$?
+
+          # Whichever is still running, stop it
+          if kill -0 "${pid1:-0}" 2>/dev/null; then kill -TERM "$pid1" 2>/dev/null || true; fi
+          if kill -0 "${pid2:-0}" 2>/dev/null; then kill -TERM "$pid2" 2>/dev/null || true; fi
+
+          wait || true
+          exit "$status"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 2
+        limits:
+          cpu: 30
+          memory: 100Gi
+          nvidia.com/gpu: 2
+
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+  engineConfig:
+    schedulerName: {{ .Values.commonSchedulerName }}
+    {{- if or .Values.commonAnnotations .Values.gpt_oss_120b.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gpt_oss_120b.annotations }}
+      {{ toYaml .Values.gpt_oss_120b.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.gpt_oss_120b.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gpt_oss_120b.labels }}
+      {{ toYaml .Values.gpt_oss_120b.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.gpt_oss_120b.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.gpt_oss_120b.tolerations }}
+      {{ toYaml .Values.gpt_oss_120b.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+        {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+        {{- end }}
+    {{ with .Values.gpt_oss_120b }}
+    affinity: {{ .affinity | toYaml | nindent 6 }}
+    {{ end }}
+    runner:
+      name: ome-container
       image: {{ .Values.gpt_oss_120b.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.gpt_oss_120b.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}

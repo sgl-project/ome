@@ -7,28 +7,28 @@ spec:
   {{- if or .Values.commonAnnotations .Values.qwen_2_5_vl_32b_instruct.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
-    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
     {{- if .Values.qwen_2_5_vl_32b_instruct.annotations }}
-    {{ toYaml .Values.qwen_2_5_vl_32b_instruct.annotations | nindent 6 }}
+    {{ toYaml .Values.qwen_2_5_vl_32b_instruct.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
   {{- if or .Values.commonLabels .Values.qwen_2_5_vl_32b_instruct.labels }}
   labels:
     {{- if .Values.commonLabels }}
-    {{ toYaml .Values.commonLabels | nindent 6 }}
+    {{ toYaml .Values.commonLabels | nindent 4 }}
     {{- end }}
     {{- if .Values.qwen_2_5_vl_32b_instruct.labels }}
-    {{ toYaml .Values.qwen_2_5_vl_32b_instruct.labels | nindent 6 }}
+    {{ toYaml .Values.qwen_2_5_vl_32b_instruct.labels | nindent 4 }}
     {{- end }}
   {{- end }}
   {{- if or .Values.commonTolerations .Values.qwen_2_5_vl_32b_instruct.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
-    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
     {{- end }}
     {{- if .Values.qwen_2_5_vl_32b_instruct.tolerations }}
-    {{ toYaml .Values.qwen_2_5_vl_32b_instruct.tolerations | nindent 6 }}
+    {{ toYaml .Values.qwen_2_5_vl_32b_instruct.tolerations | nindent 4 }}
     {{- end }}
   {{- end }}
   volumes:
@@ -42,7 +42,7 @@ spec:
         type: Directory
     {{- end }}
   {{ with .Values.qwen_2_5_vl_32b_instruct }}
-  affinity: {{ .affinity | toYaml | nindent 6 }}
+  affinity: {{ .affinity | toYaml | nindent 4 }}
   {{ end }}
   supportedModelFormats:
     - modelFramework:
@@ -63,6 +63,110 @@ spec:
   schedulerName: {{ .Values.commonSchedulerName }}
   containers:
     - name: ome-container
+      image: {{ .Values.qwen_2_5_vl_32b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_2_5_vl_32b_instruct.image.tag | default .Values.sglang.commonImage.tag }}
+      ports:
+        - containerPort: {{ .Values.sglang.port }}
+          name: http1
+          protocol: TCP
+      command:
+        - /bin/bash
+        - '-lc'
+        - --
+      args:
+        - |
+          python3 -m sglang.launch_server \
+          --host=0.0.0.0 \
+          --port={{ .Values.sglang.port }} \
+          --model-path "$MODEL_PATH" \
+          --tp-size 2 \
+          --mem-fraction-static 0.82 \
+          --context-length=128000 \
+          --log-requests \
+          --log-requests-level=1 \
+          --trust-remote-code \
+          --enable-multimodal \
+          --enable-metrics
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+      resources:
+        requests:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 2
+        limits:
+          cpu: 10
+          memory: 60Gi
+          nvidia.com/gpu: 2
+      readinessProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 3
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 200
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 60
+        timeoutSeconds: 60
+      startupProbe:
+        httpGet:
+          path: /health_generate
+          port: 8080
+        failureThreshold: 150
+        successThreshold: 1
+        periodSeconds: 6
+        initialDelaySeconds: 60
+        timeoutSeconds: 30
+  engineConfig:
+    schedulerName: {{ .Values.commonSchedulerName }}
+    {{- if or .Values.commonAnnotations .Values.qwen_2_5_vl_32b_instruct.annotations }}
+    annotations:
+      {{- if .Values.commonAnnotations }}
+      {{ toYaml .Values.commonAnnotations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.qwen_2_5_vl_32b_instruct.annotations }}
+      {{ toYaml .Values.qwen_2_5_vl_32b_instruct.annotations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonLabels .Values.qwen_2_5_vl_32b_instruct.labels }}
+    labels:
+      {{- if .Values.commonLabels }}
+      {{ toYaml .Values.commonLabels | nindent 6 }}
+      {{- end }}
+      {{- if .Values.qwen_2_5_vl_32b_instruct.labels }}
+      {{ toYaml .Values.qwen_2_5_vl_32b_instruct.labels | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    {{- if or .Values.commonTolerations .Values.qwen_2_5_vl_32b_instruct.tolerations }}
+    tolerations:
+      {{- if .Values.commonTolerations }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
+      {{- end }}
+      {{- if .Values.qwen_2_5_vl_32b_instruct.tolerations }}
+      {{ toYaml .Values.qwen_2_5_vl_32b_instruct.tolerations | nindent 6 }}
+      {{- end }}
+    {{- end }}
+    volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+        {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+        {{- end }}
+    {{ with .Values.qwen_2_5_vl_32b_instruct }}
+    affinity: {{ .affinity | toYaml | nindent 6 }}
+    {{ end }}
+    runner:
+      name: ome-container
       image: {{ .Values.qwen_2_5_vl_32b_instruct.image.repository | default .Values.sglang.commonImage.repository }}:{{ .Values.qwen_2_5_vl_32b_instruct.image.tag | default .Values.sglang.commonImage.tag }}
       ports:
         - containerPort: {{ .Values.sglang.port }}

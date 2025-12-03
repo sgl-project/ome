@@ -7,24 +7,24 @@ spec:
   {{- if or .Values.commonAnnotations .Values.deepseek_r1.annotations }}
   annotations:
     {{- if .Values.commonAnnotations }}
-    {{ toYaml .Values.commonAnnotations | nindent 6 }}
+    {{ toYaml .Values.commonAnnotations | nindent 4 }}
     {{- end }}
     {{- if .Values.deepseek_r1.annotations }}
-    {{ toYaml .Values.deepseek_r1.annotations | nindent 6 }}
+    {{ toYaml .Values.deepseek_r1.annotations | nindent 4 }}
     {{- end }}
   {{- end }}
   labels:
     logging-forward: enabled
     {{- if .Values.deepseek_r1.labels }}
-    {{ toYaml .Values.deepseek_r1.labels | nindent 6 }}
+    {{ toYaml .Values.deepseek_r1.labels | nindent 4 }}
     {{- end }}
   {{- if or .Values.commonTolerations .Values.deepseek_r1.tolerations }}
   tolerations:
     {{- if .Values.commonTolerations }}
-    {{ toYaml .Values.commonTolerations | nindent 6 }}
+    {{ toYaml .Values.commonTolerations | nindent 4 }}
     {{- end }}
     {{- if .Values.deepseek_r1.tolerations }}
-    {{ toYaml .Values.deepseek_r1.tolerations | nindent 6 }}
+    {{ toYaml .Values.deepseek_r1.tolerations | nindent 4 }}
     {{- end }}
   {{- end }}
   dnsPolicy: ClusterFirstWithHostNet
@@ -175,10 +175,10 @@ spec:
     {{- if or .Values.commonTolerations .Values.deepseek_r1.tolerations }}
     tolerations:
       {{- if .Values.commonTolerations }}
-      {{ toYaml .Values.commonTolerations | nindent 8 }}
+      {{ toYaml .Values.commonTolerations | nindent 6 }}
       {{- end }}
       {{- if .Values.deepseek_r1.tolerations }}
-      {{ toYaml .Values.deepseek_r1.tolerations | nindent 8 }}
+      {{ toYaml .Values.deepseek_r1.tolerations | nindent 6 }}
       {{- end }}
     {{- end }}
     dnsPolicy: ClusterFirstWithHostNet
