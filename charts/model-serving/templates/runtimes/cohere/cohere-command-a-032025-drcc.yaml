@@ -83,3 +83,71 @@ spec:
         {{- toYaml .Values.cohere.livenessProbe | nindent 8 }}
       startupProbe:
         {{- toYaml .Values.cohere.startupProbe | nindent 8 }}
+  engineConfig:
+    annotations:
+      prometheus.io/port: '8002'
+      prometheus.io/scrape: 'true'
+      ome.io/disable-blocklist: 'true'
+      ome.io/inject-model-init: 'true'
+    {{- with .Values.cohere.commonLabels }}
+    labels:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.commonTolerations }}
+    tolerations:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node.kubernetes.io/instance-type
+                  operator: In
+                  values:
+                    - BM.GPU.B4.8
+                    - BM.GPU4.8
+    schedulerName: {{ .Values.commonSchedulerName }}
+    volumes:
+      - name: shared-memory
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi
+      - name: model-empty-dir
+        emptyDir:
+          medium: Memory
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      - name: etc-pki
+        hostPath:
+          path: /etc/pki
+          type: Directory
+      {{- end }}
+    runner:
+      name: ome-container
+      {{- if or (eq .Values.oci.realm "oc5") (eq .Values.oci.realm "oc6") }}
+      env:
+        - name: "OPENSSL_FORCE_FIPS_MODE"
+          value: "0"
+      {{- end}}
+      image: "{{ .Values.cohere.commandAImage.repository }}:{{ .Values.cohere.commandAImage.tag }}"
+      ports:
+        - containerPort: 8080
+          name: http1
+      resources:
+        limits:
+          nvidia.com/gpu: "4"
+        requests:
+          cpu: 16
+          memory: 120Gi
+          nvidia.com/gpu: "4"
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: shared-memory
+        - mountPath: /opt/ml/model
+          name: model-empty-dir
+      readinessProbe:
+        {{- toYaml .Values.cohere.readinessProbe | nindent 8 }}
+      livenessProbe:
+        {{- toYaml .Values.cohere.livenessProbe | nindent 8 }}
+      startupProbe:
+        {{- toYaml .Values.cohere.startupProbe | nindent 8 }}
