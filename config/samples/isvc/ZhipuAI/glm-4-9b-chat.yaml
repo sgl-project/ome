@@ -1,0 +1,17 @@
+---
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: glm-4-9b-chat
+  namespace: glm-4-9b-chat
+spec:
+  model:
+    name: glm-4-9b-chat
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-glm-4-9b-chat
+  router:
+    minReplicas: 1
+    maxReplicas: 1

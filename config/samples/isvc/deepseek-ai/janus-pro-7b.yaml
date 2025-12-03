@@ -1,8 +1,8 @@
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: janus-pro-7b
-  namespace: janus-pro-7b
+  name: janus-pro-7b-test
+  namespace: janus-pro-7b-test
 spec:
   model:
     name: janus-pro-7b

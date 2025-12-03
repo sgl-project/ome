@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: orion-14b-base
+  namespace: orion-14b-base
+spec:
+  model:
+    name: orion-14b-base
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-orion-14b-base
+  router:
+    minReplicas: 1
+    maxReplicas: 1

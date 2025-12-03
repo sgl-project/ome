@@ -1,8 +1,8 @@
 apiVersion: ome.io/v1beta1
 kind: InferenceService
 metadata:
-  name: granite-3-0-3b-a800m-instruct
-  namespace: granite-3-0-3b-a800m-instruct
+  name: granite-3-0-3b-a800m-instruct-test
+  namespace: granite-3-0-3b-a800m-instruct-test
 spec:
   model:
     name: granite-3-0-3b-a800m-instruct

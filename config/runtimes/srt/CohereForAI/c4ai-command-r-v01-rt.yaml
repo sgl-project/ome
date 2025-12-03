@@ -7,7 +7,7 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.39.1"
+        version: "4.38.2"
       modelFormat:
         name: safetensors
         version: "1.0.0"
@@ -59,6 +59,8 @@ spec:
         - "0.9"
         - --served-model-name
         - CohereForAI/c4ai-command-r-v01
+        - --chat-template
+        - "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% set messages = messages[1:] %}{% else %}{% set system_message = '' %}{% endif %}{% if system_message != '' %}<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{{ system_message }}<|END_OF_TURN_TOKEN|>{% endif %}{% for message in messages %}{% if message['role'] == 'user' %}<|START_OF_TURN_TOKEN|><|USER_TOKEN|>{{ message['content'] }}<|END_OF_TURN_TOKEN|>{% elif message['role'] == 'assistant' %}<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{{ message['content'] }}<|END_OF_TURN_TOKEN|>{% endif %}{% endfor %}{% if add_generation_prompt %}<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>{% endif %}"
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

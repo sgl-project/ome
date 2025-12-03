@@ -1,0 +1,23 @@
+# ---
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: stablelm-2-12b-chat
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: stablelm-2-12b-chat
+  namespace: stablelm-2-12b-chat
+spec:
+  model:
+    name: stablelm-2-12b-chat
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-stablelm-2-12b-chat
+  router:
+    minReplicas: 1
+    maxReplicas: 1

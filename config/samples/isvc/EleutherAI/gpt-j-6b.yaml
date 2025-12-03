@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gpt-j-6b
+  namespace: gpt-j-6b
+spec:
+  model:
+    name: gpt-j-6b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-gpt-j-6b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

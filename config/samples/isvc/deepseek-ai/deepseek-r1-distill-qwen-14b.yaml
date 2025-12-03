@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-r1-distill-qwen-14b
+  namespace: deepseek-r1-distill-qwen-14b
+spec:
+  model:
+    name: deepseek-r1-distill-qwen-14b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-deepseek-r1-distill-qwen-14b
+  router:
+    minReplicas: 1
+    maxReplicas: 1

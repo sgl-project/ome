@@ -18,3 +18,5 @@ spec:
   engine:
     minReplicas: 1
     maxReplicas: 1
+  runtime:
+    name: srt-minicpm3-4b

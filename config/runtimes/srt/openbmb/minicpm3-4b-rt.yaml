@@ -56,7 +56,11 @@ spec:
         - --tp-size
         - "1"
         - --mem-frac
-        - "0.9"
+        - "0.7"
+        - --disable-cuda-graph
+        - --attention-backend
+        - triton
+        - --trust-remote-code
         - --served-model-name
         - openbmb/MiniCPM3-4B
       volumeMounts:
