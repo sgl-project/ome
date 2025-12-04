@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-03 20:30:00 UTC
+**Last Updated**: 2025-12-04 01:05:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -11,11 +11,11 @@
 | Metric | Count |
 |--------|-------|
 | **Total Models** | 148 |
-| **Passed** | 53 |
-| **Failed** | 25 |
+| **Passed** | 54 |
+| **Failed** | 26 |
 | **Skipped** | 2 |
-| **Not Tested** | 68 |
-| **Pass Rate** | 35.8% |
+| **Not Tested** | 66 |
+| **Pass Rate** | 36.5% |
 
 ---
 
@@ -74,6 +74,7 @@
 | Qwen | Qwen2.5-Coder-7B-Instruct | 7B | Code | 1 | 2025-12-03 | Download: 13.2min, Startup: 17.6min, Inference: OK (chat completions endpoint). Created model, runtime and isvc configs. Transformers 4.44.0. |
 | google | gemma-3-12b-it | 12B | Instruct | 2 | 2025-12-03 | Download: ~12min (13 nodes), Startup: 64s, Inference: OK (chat completions endpoint). TP=2. Required --mem-frac 0.75 (0.85 caused CUDA OOM). Transformers 4.50.0.dev0. |
 | mistralai | Mixtral-8x7B-Instruct-v0.1 | 47B | MoE | 4 | 2025-12-03 | Download: ~12min (13 nodes, 93.4GB), Startup: 152s (~2.5min), Inference: OK (chat completions endpoint). 8x7B MoE with TP=4. Transformers 4.36.0.dev0. |
+| Alibaba-NLP | gte-qwen2-7b-instruct | 7B | Embedding | 1 | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). Embedding model with --is-embedding flag. Transformers 4.41.2. |
 
 <!-- PASSED_END -->
 
@@ -105,6 +106,7 @@
 | XiaomiMiMo | MiMo-VL-7B-RL | 7B | VLM | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. |
 | openbmb | MiniCPM-V-2_6 | 8B | VLM | 1 | 2025-12-03 | HTTP 403 Forbidden: Model requires HuggingFace license acceptance before download. Config fixed with modelFramework, modelFormat, modelType, and key fields. User must accept license at HuggingFace. |
 | internlm | internlm2-7b-reward | 7B | Reward | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. |
+| Alibaba-NLP | gme-qwen2-vl-2b-instruct | 2B | Vision+Embedding | 1 | 2025-12-04 | Warmup failure: Server starts but warmup fails because vision embedding model requires image input. SGLang default warmup sends text-only request which is rejected. Server stuck in unhealthy state (503). Model loaded successfully (4.48GB). Requires --skip-server-warmup flag or custom warmup config. |
 <!-- FAILED_END -->
 
 ### Skipped Models (Gated/Access Issues)
@@ -129,11 +131,11 @@
 |-------|--------|-----------|-------|
 | afm-4-5b-base | ✅ Passed | 2025-12-03 | Download: ~11min (2 nodes), Startup: 104s, completions only, transformers 4.53.2, RoPE scaling warning |
 
-### Alibaba-NLP (0/2)
+### Alibaba-NLP (1/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| gte-qwen2-1-5b-instruct | ⏳ Not Tested | - | - |
-| gme-qwen2-vl-2b-instruct | ⏳ Not Tested | - | - |
+| gte-qwen2-7b-instruct | ✅ Passed | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, embeddings endpoint, transformers 4.41.2 |
+| gme-qwen2-vl-2b-instruct | ❌ Failed | 2025-12-04 | Warmup failure: Vision embedding model requires image input, SGLang warmup fails with text-only |
 
 ### allenai (2/2)
 | Model | Status | Test Date | Notes |
@@ -550,3 +552,5 @@ Update the `Last Updated` timestamp at the top.
 | 2025-12-03 20:15 | Claude Code (Parallel Agent 2) | XiaomiMiMo/MiMo-VL-7B-RL | ❌ Failed - Model download timeout: VLM model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. Same issue as Llama-3.2-11B-Vision. Cleanup completed (model deleted). |
 | 2025-12-03 20:15 | Claude Code (Parallel Agent 3) | openbmb/MiniCPM-V-2_6 | ❌ Failed - HTTP 403 Forbidden: Model requires HuggingFace license acceptance before download. Config fixed with modelFramework, modelFormat, modelType, and key fields. User must accept license at HuggingFace Hub. Cleanup completed (model deleted). |
 | 2025-12-03 20:15 | Claude Code (Parallel Agent 4) | internlm/internlm2-7b-reward | ❌ Failed - Model download timeout: Reward model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. Cleanup completed (model deleted). |
+| 2025-12-04 00:45 | Claude Code | Alibaba-NLP/gte-Qwen2-7B-instruct | ✅ Passed - Download: ~30s (4 nodes ready, model was cached), Startup: ~30s, embeddings endpoint works correctly. 7B Embedding model with --is-embedding flag. Model framework: transformers 4.41.2, Qwen2ForCausalLM architecture. Memory usage: 14.44GB model, 56.38GB KV cache. Config files existed. Full cleanup completed. |
+| 2025-12-04 01:00 | Claude Code | Alibaba-NLP/gme-Qwen2-VL-2B-Instruct | ❌ Failed - Warmup failure: Vision embedding model (IMAGE_TEXT_TO_EMBEDDING) requires image input but SGLang default warmup sends text-only request. Server starts, model loads successfully (4.48GB), but warmup assertion fails: "At least one of text, input_ids, or image should be provided". Server stuck in unhealthy state (503 on all endpoints). Model framework: transformers 4.45.0.dev0, Qwen2VLForConditionalGeneration architecture. Fix: add --skip-server-warmup flag to runtime config. Resources NOT cleaned up (per user request). |
