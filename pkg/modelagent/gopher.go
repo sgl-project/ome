@@ -884,6 +884,10 @@ func (s *Gopher) verifyDownloadedFiles(ociOSDataStore *ociobjectstore.OCIOSDataS
 }
 
 func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
+	if s.isReservingModelArtifact(task) {
+		return nil
+	}
+
 	startTime := time.Now()
 
 	err := os.RemoveAll(destPath)
@@ -902,6 +906,20 @@ func (s *Gopher) deleteModel(destPath string, task *GopherTask) error {
 	}
 
 	return err
+}
+
+// isReservingModelArtifact reports whether the model's artifact directory should be preserved during deletion.
+// It returns true when the BaseModel has the label constants.ReserveModelArtifact set to "true" (case-insensitive).
+// In all other cases, it logs that the artifact will be deleted and returns false.
+// Note: Only BaseModel labels are considered by this helper; ClusterBaseModel labels are not checked here.
+func (s *Gopher) isReservingModelArtifact(task *GopherTask) bool {
+	if val, exists := task.BaseModel.Labels[constants.ReserveModelArtifact]; exists && strings.EqualFold(val, "true") {
+		s.logger.Infof("Model artifact will be reserved as model has matched label")
+		return true
+	} else {
+		s.logger.Infof("Model artifact will be deleted")
+		return false
+	}
 }
 
 // processHuggingFaceModel handles downloading models from Hugging Face Hub.
