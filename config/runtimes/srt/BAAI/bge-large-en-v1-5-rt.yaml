@@ -12,7 +12,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: BertModel
-      autoSelect: false
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
@@ -60,17 +60,20 @@ spec:
         - --served-model-name
         - BAAI/bge-large-en-v1.5
         - --is-embedding
+        - --skip-server-warmup
+        - --attention-backend
+        - triton
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
           cpu: 4
-          memory: 8Gi
+          memory: 24Gi
           nvidia.com/gpu: 1
         limits:
           cpu: 4
-          memory: 8Gi
+          memory: 24Gi
           nvidia.com/gpu: 1
 
       readinessProbe:
