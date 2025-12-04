@@ -22,22 +22,22 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status
       name: Ready
       type: string
-    - jsonPath: .spec.predictor.model.baseModel
+    - jsonPath: .spec.model.name
       name: BaseModel
       type: string
-    - jsonPath: .spec.predictor.model.runtime
+    - jsonPath: .spec.runtime.name
       name: Runtime
       type: string
-    - jsonPath: .status.components.predictor.traffic[?(@.tag=='prev')].percent
+    - jsonPath: .status.components.engine.traffic[?(@.tag=='prev')].percent
       name: Prev
       type: integer
-    - jsonPath: .status.components.predictor.traffic[?(@.latestRevision==true)].percent
+    - jsonPath: .status.components.engine.traffic[?(@.latestRevision==true)].percent
       name: Latest
       type: integer
-    - jsonPath: .status.components.predictor.traffic[?(@.tag=='prev')].revisionName
+    - jsonPath: .status.components.engine.traffic[?(@.tag=='prev')].revisionName
       name: PrevRolledoutRevision
       type: string
-    - jsonPath: .status.components.predictor.traffic[?(@.latestRevision==true)].revisionName
+    - jsonPath: .status.components.engine.traffic[?(@.latestRevision==true)].revisionName
       name: LatestReadyRevision
       type: string
     - jsonPath: .metadata.creationTimestamp

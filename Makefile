@@ -108,16 +108,17 @@ manifests: controller-gen yq ## 📄 Generate WebhookConfiguration, ClusterRole 
 	@mkdir -p config/crd/opensource-temp
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) paths=github.com/sgl-project/ome/pkg/apis/ome/v1beta1 output:crd:dir=config/crd/opensource-temp
 	@echo "  • Overwriting model and runtime CRDs with opensource definitions..."
-	@echo "    (BaseModel, ClusterBaseModel, FineTunedWeight, ServingRuntime, ClusterServingRuntime, AcceleratorClass)"
+	@echo "    (BaseModel, ClusterBaseModel, FineTunedWeight, ServingRuntime, ClusterServingRuntime, AcceleratorClass, InferenceService)"
 	@if [ -f config/crd/opensource-temp/ome.io_basemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_basemodels.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_clusterbasemodels.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterbasemodels.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_finetunedweights.yaml ]; then cp config/crd/opensource-temp/ome.io_finetunedweights.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_servingruntimes.yaml ]; then cp config/crd/opensource-temp/ome.io_servingruntimes.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_clusterservingruntimes.yaml ]; then cp config/crd/opensource-temp/ome.io_clusterservingruntimes.yaml config/crd/full/; fi
 	@if [ -f config/crd/opensource-temp/ome.io_acceleratorclasses.yaml ]; then cp config/crd/opensource-temp/ome.io_acceleratorclasses.yaml config/crd/full/; fi
+	@if [ -f config/crd/opensource-temp/ome.io_inferenceservices.yaml ]; then cp config/crd/opensource-temp/ome.io_inferenceservices.yaml config/crd/full/; fi
 	@echo "  • Cleaning up temporary directory..."
 	@rm -rf config/crd/opensource-temp
-	@echo "✅ CRD manifests generated (model, runtime and acceleratorClass CRDs from opensource, all others from internal)"
+	@echo "✅ CRD manifests generated (model, runtime , acceleratorClass and inferenceService CRDs from opensource, all others from internal)"
 
 	@echo "\n🔑 Step 2: Generating RBAC manifests..."
 	@$(CONTROLLER_GEN) rbac:roleName=ome-manager-role paths=./pkg/controller/... output:rbac:artifacts:config=config/rbac
@@ -538,7 +539,7 @@ artifacts: kustomize ## Generate artifacts for release.
 .PHONY: integration-test
 integration-test: fmt vet manifests envtest ## 🧪 Run integration tests
 	@echo "🧪 Running integration tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" CGO_ENABLED=0 $(GO_CMD) test \
 		-v ./integration_tests/... \
 		-ginkgo.v -ginkgo.trace
 	@echo "✅ Integration tests passed"
@@ -550,7 +551,7 @@ test: test-cmd test-pkg test-internal ## 🧪 Run all tests
 .PHONY: test-cmd
 test-cmd: fmt vet manifests envtest ## 🧪 Run cmd tests with coverage
 	@echo "🧪 Running command tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" CGO_ENABLED=0 $(GO_CMD) test \
 		./cmd/... \
 		-coverprofile=coverage-cmd.out.tmp \
 		--covermode=atomic
@@ -562,7 +563,7 @@ test-cmd: fmt vet manifests envtest ## 🧪 Run cmd tests with coverage
 .PHONY: test-pkg
 test-pkg: fmt vet manifests envtest ## 🧪 Run pkg tests with coverage
 	@echo "🧪 Running package tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" CGO_ENABLED=0 $(GO_CMD) test \
 		$$(go list ./pkg/... | grep -v ./pkg/apis |grep -v ./pkg/client | grep -v ./pkg/openapi/openapi_generated.go | grep -v ./pkg/apis/ome/v1beta1/zz_generated.deepcopy.go | grep -v ./pkg/testing) \
 		-coverprofile=coverage-pkg.out.tmp \
 		--covermode=atomic
@@ -574,7 +575,7 @@ test-pkg: fmt vet manifests envtest ## 🧪 Run pkg tests with coverage
 .PHONY: test-internal
 test-internal: fmt vet manifests envtest ## 🧪 Run internal tests with coverage
 	@echo "🧪 Running internal tests..."
-	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" $(GO_CMD) test \
+	@KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" CGO_ENABLED=0 $(GO_CMD) test \
 		./internal/... \
 		-coverprofile=coverage-internal.out.tmp \
 		--covermode=atomic
