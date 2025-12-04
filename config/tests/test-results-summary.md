@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-04 01:05:00 UTC
+**Last Updated**: 2025-12-04 18:45:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -10,12 +10,12 @@
 
 | Metric | Count |
 |--------|-------|
-| **Total Models** | 148 |
-| **Passed** | 54 |
-| **Failed** | 26 |
-| **Skipped** | 2 |
-| **Not Tested** | 66 |
-| **Pass Rate** | 36.5% |
+| **Total Models** | 149 |
+| **Passed** | 56 |
+| **Failed** | 25 |
+| **Skipped** | 3 |
+| **Not Tested** | 65 |
+| **Pass Rate** | 37.6% |
 
 ---
 
@@ -75,6 +75,8 @@
 | google | gemma-3-12b-it | 12B | Instruct | 2 | 2025-12-03 | Download: ~12min (13 nodes), Startup: 64s, Inference: OK (chat completions endpoint). TP=2. Required --mem-frac 0.75 (0.85 caused CUDA OOM). Transformers 4.50.0.dev0. |
 | mistralai | Mixtral-8x7B-Instruct-v0.1 | 47B | MoE | 4 | 2025-12-03 | Download: ~12min (13 nodes, 93.4GB), Startup: 152s (~2.5min), Inference: OK (chat completions endpoint). 8x7B MoE with TP=4. Transformers 4.36.0.dev0. |
 | Alibaba-NLP | gte-qwen2-7b-instruct | 7B | Embedding | 1 | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). Embedding model with --is-embedding flag. Transformers 4.41.2. |
+| BAAI | bge-large-en-v1.5 | 335M | Embedding | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). BertModel architecture. Required fixes: --attention-backend triton (flashinfer hangs), --skip-server-warmup, memory 24Gi. Health probes: /health_generate (readiness/startup), /health (liveness). Auto-select: working. Transformers 4.30.0. |
+| BAAI | bge-reranker-v2-m3 | 567M | Reranker | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (rerank endpoint /v1/rerank). XLMRobertaForSequenceClassification architecture. Required fixes: --attention-backend triton, --skip-server-warmup, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi. Scores correctly rank documents by relevance. Auto-select: working. Transformers 4.38.1. |
 
 <!-- PASSED_END -->
 
@@ -88,7 +90,6 @@
 | stabilityai | stablelm-tuned-alpha-7b | 7B | Chat | 1 | 2025-12-02 | AttributeError: GPTNeoXConfig has no 'num_key_value_heads' attribute. SGLang v0.5.5.post3 incompatible with GPTNeoXForCausalLM architecture. Pod crash-loops with 4+ restarts. |
 | THUDM | chatglm2-6b | 6B | Chat | 1 | 2025-12-02 | TypeError: ChatGLMTokenizer._pad() incompatible with SGLang. Custom tokenizer doesn't support 'padding_side' parameter. Fundamental incompatibility requiring different runtime (vLLM/TGI). |
 | deepseek-ai | DeepSeek-V3 | 671B | MoE | 32+ | 2025-12-02 | CUDA Out of Memory: Model requires 32+ GPUs but runtime configured for only 8 GPUs. Insufficient GPU resources. Each H100 80GB GPU exhausted trying to allocate model weights. |
-| BAAI | bge-large-en-v1-5 | Small | Embedding | 1 | 2025-12-02 | Pod CrashLoopBackOff: Server starts successfully but crashes during warmup. Health probe issue - /health_generate endpoint incompatible with embedding models. Model loaded correctly (11 nodes ready), runtime needs embedding-specific health check configuration. |
 | tiiuae | falcon-7b-instruct | 7B | Instruct | 1 | 2025-12-03 | ValueError: FalconForCausalLM has no SGLang implementation and is not compatible with SGLang. Model downloaded successfully (13 nodes), but SGLang runtime incompatible with Falcon architecture. Requires alternative runtime (vLLM/TGI). |
 | nvidia | nvidia-nemotron-nano-9b-v2 | 9B | Base | 1 | 2025-12-03 | RuntimeError: Not enough memory for KV cache despite mem_fraction_static=0.9. NemotronHForCausalLM architecture disables radix cache causing memory allocation failure. Model loads successfully (16.68GB on 78.68GB GPU) but KV cache initialization fails. SGLang v0.5.5.post3 incompatible with NemotronH architecture. |
 | baichuan-inc | Baichuan2-13B-Chat | 13B | Chat | 2 | 2025-12-03 | Warmup timeout: Server starts successfully (application startup complete, transformers 4.29.2) but warmup request hangs indefinitely. Model loads correctly with TP=2 (13.08GB per GPU, 2 GPUs). CUDA graph disabled due to view/stride incompatibility. Warmup request times out after 4s repeatedly. SGLang v0.5.5.post3 likely incompatible with Baichuan model + TP=2 configuration. |
@@ -143,12 +144,12 @@
 | olmo-2-1124-7b-instruct | ✅ Passed | 2025-12-02 | Download: Already cached (11 nodes), Startup: 12s, chat completions endpoint |
 | olmoe-1b-7b-0924 | ✅ Passed | 2025-12-03 | Download: ~30s (13 nodes), Startup: 58s, completions only (no chat template), fixed isvc config, transformers 4.43.0.dev0 |
 
-### BAAI (0/3)
+### BAAI (2/3)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| bge-large-en-v1-5 | ❌ Failed | 2025-12-02 | Pod CrashLoopBackOff: Health probe /health_generate incompatible with embedding models, runtime needs fix |
-| bge-m3 | ⏳ Not Tested | - | - |
-| bge-reranker-v2-m3 | ⏳ Not Tested | - | - |
+| bge-large-en-v1-5 | ✅ Passed | 2025-12-04 | Startup: ~30s, embeddings endpoint. BertModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi |
+| bge-m3 | ⏳ Not Tested | - | No runtime exists |
+| bge-reranker-v2-m3 | ✅ Passed | 2025-12-04 | Startup: ~30s, rerank endpoint. XLMRobertaForSequenceClassification. Fixed: triton backend, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi |
 
 ### baichuan-inc (1/2)
 | Model | Status | Test Date | Notes |
