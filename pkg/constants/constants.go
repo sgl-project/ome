@@ -483,6 +483,7 @@ var (
 	ModelsLabelPrefix                = "models.ome/"
 	TargetInstanceShapes             = "models.ome.io/target-instance-shapes"
 	ModelStatusConfigMapLabel        = "models.ome/basemodel-status"
+	ReserveModelArtifact             = "models.ome/reserve-model-artifact"
 
 	ModelLabelDomain          = "models.ome.io"
 	ClusterBaseModelLabelType = "clusterbasemodel"
