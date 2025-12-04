@@ -91,6 +91,7 @@
 | THUDM | chatglm2-6b | 6B | Chat | 1 | 2025-12-02 | TypeError: ChatGLMTokenizer._pad() incompatible with SGLang. Custom tokenizer doesn't support 'padding_side' parameter. Fundamental incompatibility requiring different runtime (vLLM/TGI). |
 | deepseek-ai | DeepSeek-V3 | 671B | MoE | 32+ | 2025-12-02 | CUDA Out of Memory: Model requires 32+ GPUs but runtime configured for only 8 GPUs. Insufficient GPU resources. Each H100 80GB GPU exhausted trying to allocate model weights. |
 | tiiuae | falcon-7b-instruct | 7B | Instruct | 1 | 2025-12-03 | ValueError: FalconForCausalLM has no SGLang implementation and is not compatible with SGLang. Model downloaded successfully (13 nodes), but SGLang runtime incompatible with Falcon architecture. Requires alternative runtime (vLLM/TGI). |
+| bigscience | bloomz-7b1 | 7B | Base | 1 | 2025-12-04 | ValueError: BloomForCausalLM has no SGLang implementation and the Transformers implementation is not compatible with SGLang. Model downloaded successfully (~2min, 4 nodes). Runtime auto-select working. Requires alternative runtime (vLLM/TGI). |
 | nvidia | nvidia-nemotron-nano-9b-v2 | 9B | Base | 1 | 2025-12-03 | RuntimeError: Not enough memory for KV cache despite mem_fraction_static=0.9. NemotronHForCausalLM architecture disables radix cache causing memory allocation failure. Model loads successfully (16.68GB on 78.68GB GPU) but KV cache initialization fails. SGLang v0.5.5.post3 incompatible with NemotronH architecture. |
 | baichuan-inc | Baichuan2-13B-Chat | 13B | Chat | 2 | 2025-12-03 | Warmup timeout: Server starts successfully (application startup complete, transformers 4.29.2) but warmup request hangs indefinitely. Model loads correctly with TP=2 (13.08GB per GPU, 2 GPUs). CUDA graph disabled due to view/stride incompatibility. Warmup request times out after 4s repeatedly. SGLang v0.5.5.post3 likely incompatible with Baichuan model + TP=2 configuration. |
 | LGAI-EXAONE | EXAONE-3.5-7.8B-Instruct | 7.8B | Instruct | 1 | 2025-12-02 | Model download timeout: Model stuck in "In_Transit" state for 24+ minutes with no node downloads started (0 nodes throughout). Model size: 31.3GB (31273795584 bytes). Expected download time: ~5-10 minutes. Model download system appears non-functional or model previously created may be blocking. System-level issue with model download controller. |
@@ -166,7 +167,7 @@
 ### bigscience (0/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| bloomz-7b1 | ⏳ Not Tested | - | - |
+| bloomz-7b1 | ❌ Failed | 2025-12-04 | BloomForCausalLM not supported by SGLang. Download: ~2min (4 nodes). Auto-select: working. Requires vLLM/TGI runtime |
 
 ### CohereForAI (0/1)
 | Model | Status | Test Date | Notes |
