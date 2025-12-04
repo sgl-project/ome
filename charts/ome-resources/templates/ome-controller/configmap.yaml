@@ -55,7 +55,9 @@ data:
         "compartmentId": "{{ .Values.ome.omeAgent.compartmentId }}",
         "authType" : "{{ .Values.ome.omeAgent.authType }}",
         "vaultId": "{{ .Values.ome.omeAgent.vaultId }}",
-        "region": "{{ .Values.ome.omeAgent.region }}"
+        "region": "{{ .Values.ome.omeAgent.region }}",
+        "extraEnvVars": {{ toJson .Values.ome.omeAgent.modelInit.extraEnvVars }},
+        "extraVolumeMounts": {{ toJson .Values.ome.omeAgent.modelInit.extraVolumeMounts }}
     }
   servingSidecar: |-
     {

@@ -19,15 +19,17 @@ const (
 
 // ModelInitInjector represents configuration parameters for the Model Init container.
 type ModelInitInjector struct {
-	Image         string `json:"image" validate:"required"`
-	MemoryRequest string `json:"memoryRequest"`
-	MemoryLimit   string `json:"memoryLimit"`
-	CpuRequest    string `json:"cpuRequest"`
-	CpuLimit      string `json:"cpuLimit"`
-	CompartmentId string `json:"compartmentId" validate:"required"`
-	AuthType      string `json:"authType" validate:"required"`
-	VaultId       string `json:"vaultId" validate:"required"`
-	Region        string `json:"region"`
+	Image             string            `json:"image" validate:"required"`
+	MemoryRequest     string            `json:"memoryRequest"`
+	MemoryLimit       string            `json:"memoryLimit"`
+	CpuRequest        string            `json:"cpuRequest"`
+	CpuLimit          string            `json:"cpuLimit"`
+	CompartmentId     string            `json:"compartmentId" validate:"required"`
+	AuthType          string            `json:"authType" validate:"required"`
+	VaultId           string            `json:"vaultId" validate:"required"`
+	Region            string            `json:"region"`
+	ExtraVolumeMounts *[]v1.VolumeMount `json:"extraVolumeMounts"`
+	ExtraEnvVars      *[]v1.EnvVar      `json:"extraEnvVars"`
 }
 
 // newModelInitInjector initializes a ModelInitInjector from a ConfigMap.
@@ -116,7 +118,7 @@ func (mi *ModelInitInjector) validate() error {
 // getVolumeMounts defines and returns volume mounts for the Model Init container.
 func (mi *ModelInitInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMount {
 	baseModelName := pod.ObjectMeta.Annotations[constants.BaseModelName]
-	return []v1.VolumeMount{
+	volumeMounts := []v1.VolumeMount{
 		{
 			Name:      constants.ModelEmptyDirVolumeName,
 			MountPath: constants.ModelDefaultMountPath,
@@ -127,6 +129,12 @@ func (mi *ModelInitInjector) getVolumeMounts(pod *v1.Pod) []v1.VolumeMount {
 			MountPath: constants.ModelDefaultSourcePath,
 		},
 	}
+
+	// Append extra volume mounts
+	if mi.ExtraVolumeMounts != nil {
+		volumeMounts = append(volumeMounts, *mi.ExtraVolumeMounts...)
+	}
+	return volumeMounts
 }
 
 // getMainContainerSecurityContext finds and returns the security context of the main container.
@@ -185,6 +193,11 @@ func (mi *ModelInitInjector) getModelInitEnvs(pod *v1.Pod) ([]v1.EnvVar, error) 
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentNumOfGPUEnvVarKey, Value: mi.getGPUCount(pod)})
 	} else {
 		envVars = append(envVars, v1.EnvVar{Name: constants.AgentModelFrameworkEnvVarKey, Value: modelFormat})
+	}
+
+	// Append extra environment variables
+	if mi.ExtraEnvVars != nil {
+		envVars = append(envVars, *mi.ExtraEnvVars...)
 	}
 
 	return envVars, nil
