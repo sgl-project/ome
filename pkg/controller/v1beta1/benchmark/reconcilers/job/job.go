@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
@@ -10,30 +11,31 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/sgl-project/ome/pkg/constants"
 )
 
-var log = logf.Log.WithName("JobReconciler")
-
+// JobReconciler reconciles batch/v1 Job resources for benchmarks
 type JobReconciler struct {
 	client client.Client
 	scheme *runtime.Scheme
+	log    logr.Logger
 	Job    *batchv1.Job
 }
 
-func NewJobReconciler(client client.Client,
+// NewJobReconciler creates a new JobReconciler with the given parameters
+func NewJobReconciler(
+	client client.Client,
 	scheme *runtime.Scheme,
 	objMeta metav1.ObjectMeta,
 	podSpec *corev1.PodSpec,
 ) *JobReconciler {
-
 	return &JobReconciler{
 		client: client,
 		scheme: scheme,
+		log:    logf.Log.WithName("JobReconciler").WithValues("name", objMeta.Name, "namespace", objMeta.Namespace),
 		Job:    createJob(podSpec, objMeta),
 	}
 }
@@ -51,34 +53,49 @@ func createJob(podSpec *corev1.PodSpec, objMeta metav1.ObjectMeta) *batchv1.Job 
 	}
 }
 
-// Reconcile handles the reconciliation of BenchmarkJob resources
-func (r *JobReconciler) Reconcile() (ctrl.Result, error) {
-	log.Info("Reconciling Job", "name", r.Job.Name, "namespace", r.Job.Namespace)
-	checkResult, _, err := r.checkJobExist()
+// Reconcile creates the Job if it doesn't exist. Jobs are immutable after creation,
+// so updates are not supported - the job must be deleted and recreated if changes are needed.
+func (r *JobReconciler) Reconcile(ctx context.Context) error {
+	exists, err := r.jobExists(ctx)
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
-	if checkResult == constants.CheckResultCreate {
-		if err := r.client.Create(context.TODO(), r.Job); err != nil {
-			return ctrl.Result{}, err
+	if !exists {
+		r.log.Info("Creating Job")
+		if err := r.client.Create(ctx, r.Job); err != nil {
+			r.log.Error(err, "Failed to create Job")
+			return err
 		}
 	}
-	return ctrl.Result{}, nil
+
+	return nil
 }
 
-func (r *JobReconciler) checkJobExist() (constants.CheckResultType, *batchv1.Job, error) {
-	existingJob := &batchv1.Job{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Namespace: r.Job.ObjectMeta.Namespace,
-		Name:      r.Job.ObjectMeta.Name,
-	}, existingJob)
-	if err != nil {
-		if apierr.IsNotFound(err) {
-			return constants.CheckResultCreate, nil, nil
-		}
-		return constants.CheckResultUnknown, nil, err
-	}
+// jobExists checks if the job already exists in the cluster
+func (r *JobReconciler) jobExists(ctx context.Context) (bool, error) {
+	err := r.client.Get(ctx, types.NamespacedName{
+		Namespace: r.Job.Namespace,
+		Name:      r.Job.Name,
+	}, &batchv1.Job{})
 
-	return constants.CheckResultExisted, existingJob, nil
+	if apierr.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// CheckResult returns the reconciliation action needed for backward compatibility
+func (r *JobReconciler) CheckResult(ctx context.Context) (constants.CheckResultType, error) {
+	exists, err := r.jobExists(ctx)
+	if err != nil {
+		return constants.CheckResultUnknown, err
+	}
+	if exists {
+		return constants.CheckResultExisted, nil
+	}
+	return constants.CheckResultCreate, nil
 }

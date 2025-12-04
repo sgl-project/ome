@@ -286,7 +286,7 @@ func TestBenchmarkJobReconciler_reconcileJob(t *testing.T) {
 				Scheme: scheme,
 			}
 
-			_, err := r.reconcileJob(tt.benchmarkJob, tt.podSpec, tt.meta)
+			err := r.reconcileJob(context.TODO(), tt.benchmarkJob, tt.podSpec, tt.meta)
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -296,7 +296,7 @@ func TestBenchmarkJobReconciler_reconcileJob(t *testing.T) {
 	}
 }
 
-func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
+func TestBenchmarkJobReconciler_createPodSpec(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1beta1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
@@ -331,7 +331,7 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 					TrafficScenarios:        []string{"scenario1", "scenario2"},
 					NumConcurrency:          []int{1, 2, 4},
 					OutputLocation: &v1beta1.StorageSpec{
-						StorageUri: StringPtr("oci://bucket/path"),
+						StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
 					},
 				},
 			},
@@ -393,7 +393,7 @@ func TestBenchmarkJobReconciler_reconcilePodSpec(t *testing.T) {
 				Scheme: scheme,
 			}
 
-			_, podSpec, err := r.reconcilePodSpec(tt.benchmarkJob, tt.benchmarkConfig)
+			podSpec, err := r.createPodSpec(context.TODO(), tt.benchmarkJob, tt.benchmarkConfig)
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -438,7 +438,7 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 						GpuCount: 1,
 					},
 					OutputLocation: &v1beta1.StorageSpec{
-						StorageUri: StringPtr("oci://bucket/path"),
+						StorageUri: StringPtr("oci://n/my-namespace/b/my-bucket/o/results"),
 					},
 				},
 			},
@@ -497,7 +497,7 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 				Client: client,
 			}
 
-			command, args, err := r.buildBenchmarkCommand(tt.benchmarkJob)
+			command, args, err := r.buildBenchmarkCommand(context.TODO(), tt.benchmarkJob)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildBenchmarkCommand() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -1,6 +1,7 @@
 package benchmarkutils
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -388,7 +389,7 @@ func TestGetInferenceService(t *testing.T) {
 			}
 			c := client.Build()
 
-			got, err := GetInferenceService(c, tt.ref)
+			got, err := GetInferenceService(context.TODO(), c, tt.ref)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetInferenceService() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -454,7 +455,7 @@ func TestBuildInferenceServiceArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-			got, err := BuildInferenceServiceArgs(client, tt.endpointSpec, tt.namespace)
+			got, err := BuildInferenceServiceArgs(context.TODO(), client, tt.endpointSpec, tt.namespace)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildInferenceServiceArgs() error = %v, wantErr %v", err, tt.wantErr)
 				return
