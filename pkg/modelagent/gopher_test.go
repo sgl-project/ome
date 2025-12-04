@@ -524,3 +524,47 @@ func TestIsPathReferencedByOtherModels(t *testing.T) {
 		})
 	}
 }
+
+// TestIsReservingModelArtifact tests isReservingModelArtifact method
+func TestIsReservingModelArtifact(t *testing.T) {
+	// Create a test logger
+	logger, _ := zap.NewDevelopment()
+	sugaredLogger := logger.Sugar()
+	defer func(sugaredLogger *zap.SugaredLogger) {
+		_ = sugaredLogger.Sync()
+	}(sugaredLogger)
+
+	s := &Gopher{logger: sugaredLogger}
+
+	cases := []struct {
+		name   string
+		labels map[string]string
+		want   bool
+	}{
+		{"nil labels", nil, false},
+		{"true lower", map[string]string{"models.ome/reserve-model-artifact": "true"}, true},
+		{"true upper", map[string]string{"models.ome/reserve-model-artifact": "TRUE"}, true},
+		{"true mixed", map[string]string{"models.ome/reserve-model-artifact": "TrUe"}, true},
+		{"not containing matched key", map[string]string{"models.ome/reserve-model": "true"}, false},
+		{"false", map[string]string{"models.ome/reserve-model-artifact": "false"}, false},
+		{"empty", map[string]string{"models.ome/reserve-model-artifact": ""}, false},
+		{"other value", map[string]string{"models.ome/reserve-model-artifact": "otherValues"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bm := &v1beta1.BaseModel{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tc.labels,
+				},
+			}
+			task := &GopherTask{
+				TaskType:  Download, // value not important for this helper
+				BaseModel: bm,
+			}
+
+			got := s.isReservingModelArtifact(task)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
