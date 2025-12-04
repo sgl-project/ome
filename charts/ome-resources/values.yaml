@@ -76,6 +76,8 @@ ome:
       memoryLimit: 180Gi
       cpuRequest: 15
       cpuLimit: 15
+      extraEnvVars: []
+      extraVolumeMounts: []
     fineTunedAdapter:
       memoryRequest: 300Gi
       memoryLimit: 320Gi
