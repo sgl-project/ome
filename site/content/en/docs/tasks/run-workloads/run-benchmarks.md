@@ -147,7 +147,7 @@ spec:
     inferenceService:
       name: deepseek-r1
       namespace: deepseek-r1
-  task: text-to-text-reasoning
+  task: text-to-text
   trafficScenarios:
     - "reasoning_short"     # Short reasoning tasks
     - "reasoning_medium"    # Medium complexity reasoning
