@@ -134,7 +134,7 @@
 ### Alibaba-NLP (1/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| gte-qwen2-7b-instruct | ✅ Passed | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, embeddings endpoint, transformers 4.41.2 |
+| gte-qwen2-7b-instruct | ✅ Passed | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, embeddings endpoint, transformers 4.41.2, **Auto-select verified** |
 | gme-qwen2-vl-2b-instruct | ❌ Failed | 2025-12-04 | Warmup failure: Vision embedding model requires image input, SGLang warmup fails with text-only |
 
 ### allenai (2/2)
@@ -553,4 +553,5 @@ Update the `Last Updated` timestamp at the top.
 | 2025-12-03 20:15 | Claude Code (Parallel Agent 3) | openbmb/MiniCPM-V-2_6 | ❌ Failed - HTTP 403 Forbidden: Model requires HuggingFace license acceptance before download. Config fixed with modelFramework, modelFormat, modelType, and key fields. User must accept license at HuggingFace Hub. Cleanup completed (model deleted). |
 | 2025-12-03 20:15 | Claude Code (Parallel Agent 4) | internlm/internlm2-7b-reward | ❌ Failed - Model download timeout: Reward model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. Cleanup completed (model deleted). |
 | 2025-12-04 00:45 | Claude Code | Alibaba-NLP/gte-Qwen2-7B-instruct | ✅ Passed - Download: ~30s (4 nodes ready, model was cached), Startup: ~30s, embeddings endpoint works correctly. 7B Embedding model with --is-embedding flag. Model framework: transformers 4.41.2, Qwen2ForCausalLM architecture. Memory usage: 14.44GB model, 56.38GB KV cache. Config files existed. Full cleanup completed. |
+| 2025-12-04 01:20 | Claude Code | Alibaba-NLP/gte-Qwen2-7B-instruct | ✅ Passed (Auto-Select Test) - Runtime auto-selection worked: "Runtime srt-gte-qwen2-7b-instruct will be auto-selected". InferenceService created WITHOUT runtime field. Download: ~2min, Startup: ~60s, embeddings endpoint works. Runtime kept after cleanup (not deleted). |
 | 2025-12-04 01:00 | Claude Code | Alibaba-NLP/gme-Qwen2-VL-2B-Instruct | ❌ Failed - Warmup failure: Vision embedding model (IMAGE_TEXT_TO_EMBEDDING) requires image input but SGLang default warmup sends text-only request. Server starts, model loads successfully (4.48GB), but warmup assertion fails: "At least one of text, input_ids, or image should be provided". Server stuck in unhealthy state (503 on all endpoints). Model framework: transformers 4.45.0.dev0, Qwen2VLForConditionalGeneration architecture. Fix: add --skip-server-warmup flag to runtime config. Resources NOT cleaned up (per user request). |
