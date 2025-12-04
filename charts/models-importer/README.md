@@ -178,6 +178,8 @@ A Helm chart for importing ome base models
 | grok-3-mini.lifecyclePhase                                          | string | `"ACTIVE"`                                   |             |
 | grok-3.enabled                                                      | bool   | `false`                                      |             |
 | grok-3.lifecyclePhase                                               | string | `"ACTIVE"`                                   |             |
+| grok-voice-agent.enabled                                            | bool   | `false`                                      |             |
+| grok-voice-agent.lifecyclePhase                                     | string | `"ACTIVE"`                                   |             |
 | llama-3-1-405b-instruct-fp8.enabled                                 | bool   | `false`                                      |             |
 | llama-3-1-405b-instruct-fp8.lifecyclePhase                          | string | `"ACTIVE"`                                   |             |
 | llama-3-1-405b-instruct-fp8.singleNode                              | bool   | `true`                                       |             |
