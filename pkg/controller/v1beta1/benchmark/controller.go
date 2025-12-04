@@ -314,9 +314,6 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		return &v1.PodSpec{
 			Containers: []v1.Container{defaultContainer},
 			Volumes:    volumes,
-			NodeSelector: map[string]string{
-				"nvidia.com/gpu": "true",
-			},
 			Tolerations: []v1.Toleration{
 				{
 					Key:      "nvidia.com/gpu",
@@ -364,9 +361,6 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 	defaultPodSpec := &v1.PodSpec{
 		Containers: []v1.Container{mergedContainer},
 		Volumes:    volumes,
-		NodeSelector: map[string]string{
-			"nvidia.com/gpu": "true",
-		},
 		Tolerations: []v1.Toleration{
 			{
 				Key:      "nvidia.com/gpu",
