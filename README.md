@@ -4,6 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/sgl-project/ome?include_prereleases)](https://github.com/sgl-project/ome/releases/latest)
 [![API Reference](https://img.shields.io/badge/API-v1beta1-blue)](https://sgl-project.github.io/ome/docs/reference/ome.v1beta1/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/sgl-project/ome)
 
 <div align="center">
   <a href="https://github.com/sgl-project/ome">
