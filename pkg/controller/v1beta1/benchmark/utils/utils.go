@@ -14,18 +14,16 @@ import (
 )
 
 // GetInferenceService fetches the InferenceService based on the provided InferenceServiceReference.
-func GetInferenceService(c client.Client, ref *v1beta1.InferenceServiceReference) (*v1beta1.InferenceService, error) {
+func GetInferenceService(ctx context.Context, c client.Client, ref *v1beta1.InferenceServiceReference) (*v1beta1.InferenceService, error) {
 	if ref == nil {
 		return nil, fmt.Errorf("inferenceservice reference is nil")
 	}
 
-	namespacedName := types.NamespacedName{
+	inferenceService := &v1beta1.InferenceService{}
+	if err := c.Get(ctx, types.NamespacedName{
 		Name:      ref.Name,
 		Namespace: ref.Namespace,
-	}
-
-	inferenceService := &v1beta1.InferenceService{}
-	if err := c.Get(context.TODO(), namespacedName, inferenceService); err != nil {
+	}, inferenceService); err != nil {
 		return nil, fmt.Errorf("failed to get InferenceService %s/%s: %w",
 			ref.Namespace, ref.Name, err)
 	}
@@ -33,49 +31,48 @@ func GetInferenceService(c client.Client, ref *v1beta1.InferenceServiceReference
 	return inferenceService, nil
 }
 
+// GetBaseModelName extracts the base model name from an InferenceService
+func GetBaseModelName(isvc *v1beta1.InferenceService) string {
+	if isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
+		return *isvc.Spec.Predictor.Model.BaseModel
+	}
+	if isvc.Spec.Model != nil {
+		return isvc.Spec.Model.Name
+	}
+	return ""
+}
+
 // BuildInferenceServiceArgs constructs a map of arguments for the benchmark command
 // based on either a direct Endpoint or an InferenceService reference in the EndpointSpec.
-func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpec, namespace string) (map[string]string, error) {
+func BuildInferenceServiceArgs(ctx context.Context, c client.Client, endpointSpec v1beta1.EndpointSpec, namespace string) (map[string]string, error) {
 	if endpointSpec.Endpoint != nil {
 		return buildArgsFromEndpoint(endpointSpec.Endpoint), nil
 	}
 
 	if endpointSpec.InferenceService != nil {
 		ref := endpointSpec.InferenceService
-		inferenceService, err := GetInferenceService(c, ref)
+		inferenceService, err := GetInferenceService(ctx, c, ref)
 		if err != nil {
 			return nil, err
 		}
 
-		args := make(map[string]string)
-		// TODO: Use actual service account key later
-		args["--api-key"] = "sample-key"
-
-		var baseModelName string
-		if inferenceService.Spec.Predictor.Model != nil &&
-			inferenceService.Spec.Predictor.Model.BaseModel != nil {
-			baseModelName = *inferenceService.Spec.Predictor.Model.BaseModel
-		} else if inferenceService.Spec.Model != nil {
-			baseModelName = inferenceService.Spec.Model.Name
-		} else {
+		baseModelName := GetBaseModelName(inferenceService)
+		if baseModelName == "" {
 			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", ref.Namespace, ref.Name)
 		}
 
-		// Use a generic model name and set the model-tokenizer if BaseModel is defined
-		if baseModelName != "" {
-			baseModel, _, err := isvcutils.GetBaseModel(c, baseModelName, inferenceService.Namespace)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get BaseModel %s: %w", baseModelName, err)
-			}
-			if baseModel.Storage == nil || baseModel.Storage.Path == nil {
-				return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", baseModelName)
-			}
-			args["--api-model-name"] = "vllm-model" // Or derive from somewhere?
-			args["--model-tokenizer"] = *baseModel.Storage.Path
-		} else {
-			// Handle case where BaseModel is not specified but needed?
-			// Or maybe model name comes from somewhere else?
-			args["--api-model-name"] = "some-default-model" // Placeholder
+		baseModel, _, err := isvcutils.GetBaseModel(c, baseModelName, inferenceService.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get BaseModel %s: %w", baseModelName, err)
+		}
+		if baseModel.Storage == nil || baseModel.Storage.Path == nil {
+			return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", baseModelName)
+		}
+
+		args := map[string]string{
+			"--api-key":         "sample-key", // TODO: Use actual service account key later
+			"--api-model-name":  "vllm-model",
+			"--model-tokenizer": *baseModel.Storage.Path,
 		}
 
 		// Use protocol version if available
@@ -118,13 +115,11 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 
 // buildArgsFromEndpoint constructs the arguments map when an Endpoint is directly provided.
 func buildArgsFromEndpoint(endpoint *v1beta1.Endpoint) map[string]string {
-	args := make(map[string]string)
-	args["--api-backend"] = endpoint.APIFormat
-	args["--api-model-name"] = endpoint.ModelName
-	args["--api-base"] = endpoint.URL
-
-	// TODO: add --model-tokenizer once available
-	return args
+	return map[string]string{
+		"--api-backend":    endpoint.APIFormat,
+		"--api-model-name": endpoint.ModelName,
+		"--api-base":       endpoint.URL,
+	}
 }
 
 // UpdateVolumeMounts updates the volume mounts for the benchmark container if a base model is defined.

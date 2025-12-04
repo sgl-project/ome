@@ -497,7 +497,7 @@ func TestBenchmarkJobReconciler_buildBenchmarkCommand(t *testing.T) {
 				Client: client,
 			}
 
-			command, args, err := r.buildBenchmarkCommand(tt.benchmarkJob)
+			command, args, err := r.buildBenchmarkCommand(context.TODO(), tt.benchmarkJob)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildBenchmarkCommand() error = %v, wantErr %v", err, tt.wantErr)
 				return

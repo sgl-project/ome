@@ -97,7 +97,7 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !controllerutil.ContainsFinalizer(benchmarkJob, finalizerName) {
 		controllerutil.AddFinalizer(benchmarkJob, finalizerName)
 		if err := r.Update(ctx, benchmarkJob); err != nil {
-			r.Log.Error(err, "Failed to add finalizer to BenchmarkJob")
+			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
 	}
@@ -108,15 +108,13 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	var isvcRef *v1beta1.InferenceService
 	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
-		isvcRef, err = benchmarkutils.GetInferenceService(r.Client, benchmarkJob.Spec.Endpoint.InferenceService)
+		isvc, err := benchmarkutils.GetInferenceService(ctx, r.Client, benchmarkJob.Spec.Endpoint.InferenceService)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		isReady := isvcRef.Status.IsReady()
-		if !isReady {
-			log.Info("InferenceService is not ready, re-queuing", "name", benchmarkJob.Name, "namespace", benchmarkJob.Namespace)
+		if !isvc.Status.IsReady() {
+			log.Info("InferenceService is not ready, re-queuing")
 			return ctrl.Result{RequeueAfter: requeueAfterNotReady}, nil
 		}
 	}
@@ -160,7 +158,7 @@ func (r *BenchmarkJobReconciler) handleDeletion(ctx context.Context, benchmarkJo
 		// Perform cleanup logic here
 		controllerutil.RemoveFinalizer(benchmarkJob, finalizerName)
 		if err := r.Update(ctx, benchmarkJob); err != nil {
-			r.Log.Error(err, "Failed to remove finalizer from BenchmarkJob")
+			r.Log.Error(err, "Failed to remove finalizer")
 			return ctrl.Result{}, err
 		}
 	}
@@ -205,7 +203,7 @@ func defaultGPUToleration() v1.Toleration {
 
 // createPodSpec creates a PodSpec for the BenchmarkJob by combining defaults with any user overrides
 func (r *BenchmarkJobReconciler) createPodSpec(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *controllerconfig.BenchmarkJobConfig) (*v1.PodSpec, error) {
-	container, err := r.buildDefaultContainer(benchmarkJob, benchmarkConfig)
+	container, err := r.buildDefaultContainer(ctx, benchmarkJob, benchmarkConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +222,7 @@ func (r *BenchmarkJobReconciler) createPodSpec(ctx context.Context, benchmarkJob
 }
 
 // buildDefaultContainer creates the default benchmark container with resources and env vars
-func (r *BenchmarkJobReconciler) buildDefaultContainer(benchmarkJob *v1beta1.BenchmarkJob, config *controllerconfig.BenchmarkJobConfig) (*v1.Container, error) {
+func (r *BenchmarkJobReconciler) buildDefaultContainer(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, config *controllerconfig.BenchmarkJobConfig) (*v1.Container, error) {
 	resources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse(config.PodConfig.CPURequest),
@@ -249,7 +247,7 @@ func (r *BenchmarkJobReconciler) buildDefaultContainer(benchmarkJob *v1beta1.Ben
 		})
 	}
 
-	cmd, args, err := r.buildBenchmarkCommand(benchmarkJob)
+	cmd, args, err := r.buildBenchmarkCommand(ctx, benchmarkJob)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +268,7 @@ func (r *BenchmarkJobReconciler) buildVolumes(ctx context.Context, benchmarkJob 
 
 	// Add InferenceService model volume if specified
 	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
-		vol, err := r.buildInferenceServiceVolume(benchmarkJob, container)
+		vol, err := r.buildInferenceServiceVolume(ctx, benchmarkJob, container)
 		if err != nil {
 			return nil, err
 		}
@@ -293,14 +291,14 @@ func (r *BenchmarkJobReconciler) buildVolumes(ctx context.Context, benchmarkJob 
 }
 
 // buildInferenceServiceVolume creates volume for the base model from InferenceService
-func (r *BenchmarkJobReconciler) buildInferenceServiceVolume(benchmarkJob *v1beta1.BenchmarkJob, container *v1.Container) (*v1.Volume, error) {
+func (r *BenchmarkJobReconciler) buildInferenceServiceVolume(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, container *v1.Container) (*v1.Volume, error) {
 	ref := benchmarkJob.Spec.Endpoint.InferenceService
-	inferenceService, err := benchmarkutils.GetInferenceService(r.Client, ref)
+	inferenceService, err := benchmarkutils.GetInferenceService(ctx, r.Client, ref)
 	if err != nil {
 		return nil, err
 	}
 
-	baseModelName := r.getBaseModelName(inferenceService)
+	baseModelName := benchmarkutils.GetBaseModelName(inferenceService)
 	if baseModelName == "" {
 		return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", inferenceService.Name, inferenceService.Namespace)
 	}
@@ -321,17 +319,6 @@ func (r *BenchmarkJobReconciler) buildInferenceServiceVolume(benchmarkJob *v1bet
 			HostPath: &v1.HostPathVolumeSource{Path: *baseModel.Storage.Path},
 		},
 	}, nil
-}
-
-// getBaseModelName extracts the base model name from an InferenceService
-func (r *BenchmarkJobReconciler) getBaseModelName(isvc *v1beta1.InferenceService) string {
-	if isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
-		return *isvc.Spec.Predictor.Model.BaseModel
-	}
-	if isvc.Spec.Model != nil {
-		return isvc.Spec.Model.Name
-	}
-	return ""
 }
 
 // buildPVCVolume creates volume and mount for PVC-based output storage
@@ -472,10 +459,10 @@ func (r *BenchmarkJobReconciler) mergePodSpec(base *v1.PodSpec, override *v1beta
 }
 
 // buildBenchmarkCommand constructs the command line arguments for the benchmark container.
-func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.BenchmarkJob) ([]string, []string, error) {
+func (r *BenchmarkJobReconciler) buildBenchmarkCommand(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob) ([]string, []string, error) {
 	command := []string{benchmarkCommand}
 
-	inferenceArgs, err := benchmarkutils.BuildInferenceServiceArgs(r.Client, benchmarkJob.Spec.Endpoint, benchmarkJob.Namespace)
+	inferenceArgs, err := benchmarkutils.BuildInferenceServiceArgs(ctx, r.Client, benchmarkJob.Spec.Endpoint, benchmarkJob.Namespace)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -484,12 +471,18 @@ func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.Ben
 		benchmarkSubcommand,
 		"--api-backend", inferenceArgs["--api-backend"],
 		"--api-base", inferenceArgs["--api-base"],
-		"--api-key", inferenceArgs["--api-key"],
 		"--api-model-name", inferenceArgs["--api-model-name"],
 		"--task", benchmarkJob.Spec.Task,
 		"--max-time-per-run", strconv.Itoa(*benchmarkJob.Spec.MaxTimePerIteration),
 		"--max-requests-per-run", strconv.Itoa(*benchmarkJob.Spec.MaxRequestsPerIteration),
-		"--model-tokenizer", inferenceArgs["--model-tokenizer"],
+	}
+
+	// Add optional args only if present
+	if v := inferenceArgs["--api-key"]; v != "" {
+		args = append(args, "--api-key", v)
+	}
+	if v := inferenceArgs["--model-tokenizer"]; v != "" {
+		args = append(args, "--model-tokenizer", v)
 	}
 
 	// Add traffic scenarios
