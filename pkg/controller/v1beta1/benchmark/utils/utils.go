@@ -14,18 +14,16 @@ import (
 )
 
 // GetInferenceService fetches the InferenceService based on the provided InferenceServiceReference.
-func GetInferenceService(c client.Client, ref *v1beta1.InferenceServiceReference) (*v1beta1.InferenceService, error) {
+func GetInferenceService(ctx context.Context, c client.Client, ref *v1beta1.InferenceServiceReference) (*v1beta1.InferenceService, error) {
 	if ref == nil {
 		return nil, fmt.Errorf("inferenceservice reference is nil")
 	}
 
-	namespacedName := types.NamespacedName{
+	inferenceService := &v1beta1.InferenceService{}
+	if err := c.Get(ctx, types.NamespacedName{
 		Name:      ref.Name,
 		Namespace: ref.Namespace,
-	}
-
-	inferenceService := &v1beta1.InferenceService{}
-	if err := c.Get(context.TODO(), namespacedName, inferenceService); err != nil {
+	}, inferenceService); err != nil {
 		return nil, fmt.Errorf("failed to get InferenceService %s/%s: %w",
 			ref.Namespace, ref.Name, err)
 	}
@@ -33,49 +31,48 @@ func GetInferenceService(c client.Client, ref *v1beta1.InferenceServiceReference
 	return inferenceService, nil
 }
 
+// GetBaseModelName extracts the base model name from an InferenceService
+func GetBaseModelName(isvc *v1beta1.InferenceService) string {
+	if isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
+		return *isvc.Spec.Predictor.Model.BaseModel
+	}
+	if isvc.Spec.Model != nil {
+		return isvc.Spec.Model.Name
+	}
+	return ""
+}
+
 // BuildInferenceServiceArgs constructs a map of arguments for the benchmark command
 // based on either a direct Endpoint or an InferenceService reference in the EndpointSpec.
-func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpec, namespace string) (map[string]string, error) {
+func BuildInferenceServiceArgs(ctx context.Context, c client.Client, endpointSpec v1beta1.EndpointSpec, namespace string) (map[string]string, error) {
 	if endpointSpec.Endpoint != nil {
 		return buildArgsFromEndpoint(endpointSpec.Endpoint), nil
 	}
 
 	if endpointSpec.InferenceService != nil {
 		ref := endpointSpec.InferenceService
-		inferenceService, err := GetInferenceService(c, ref)
+		inferenceService, err := GetInferenceService(ctx, c, ref)
 		if err != nil {
 			return nil, err
 		}
 
-		args := make(map[string]string)
-		// TODO: Use actual service account key later
-		args["--api-key"] = "sample-key"
-
-		var baseModelName string
-		if inferenceService.Spec.Predictor.Model != nil &&
-			inferenceService.Spec.Predictor.Model.BaseModel != nil {
-			baseModelName = *inferenceService.Spec.Predictor.Model.BaseModel
-		} else if inferenceService.Spec.Model != nil {
-			baseModelName = inferenceService.Spec.Model.Name
-		} else {
+		baseModelName := GetBaseModelName(inferenceService)
+		if baseModelName == "" {
 			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", ref.Namespace, ref.Name)
 		}
 
-		// Use a generic model name and set the model-tokenizer if BaseModel is defined
-		if baseModelName != "" {
-			baseModel, _, err := isvcutils.GetBaseModel(c, baseModelName, inferenceService.Namespace)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get BaseModel %s: %w", baseModelName, err)
-			}
-			if baseModel.Storage == nil || baseModel.Storage.Path == nil {
-				return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", baseModelName)
-			}
-			args["--api-model-name"] = "vllm-model" // Or derive from somewhere?
-			args["--model-tokenizer"] = *baseModel.Storage.Path
-		} else {
-			// Handle case where BaseModel is not specified but needed?
-			// Or maybe model name comes from somewhere else?
-			args["--api-model-name"] = "some-default-model" // Placeholder
+		baseModel, _, err := isvcutils.GetBaseModel(c, baseModelName, inferenceService.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get BaseModel %s: %w", baseModelName, err)
+		}
+		if baseModel.Storage == nil || baseModel.Storage.Path == nil {
+			return nil, fmt.Errorf("BaseModel %s has missing Storage or Path information", baseModelName)
+		}
+
+		args := map[string]string{
+			"--api-key":         "sample-key", // TODO: Use actual service account key later
+			"--api-model-name":  "vllm-model",
+			"--model-tokenizer": *baseModel.Storage.Path,
 		}
 
 		// Use protocol version if available
@@ -118,13 +115,11 @@ func BuildInferenceServiceArgs(c client.Client, endpointSpec v1beta1.EndpointSpe
 
 // buildArgsFromEndpoint constructs the arguments map when an Endpoint is directly provided.
 func buildArgsFromEndpoint(endpoint *v1beta1.Endpoint) map[string]string {
-	args := make(map[string]string)
-	args["--api-backend"] = endpoint.APIFormat
-	args["--api-model-name"] = endpoint.ModelName
-	args["--api-base"] = endpoint.URL
-
-	// TODO: add --model-tokenizer once available
-	return args
+	return map[string]string{
+		"--api-backend":    endpoint.APIFormat,
+		"--api-model-name": endpoint.ModelName,
+		"--api-base":       endpoint.URL,
+	}
 }
 
 // UpdateVolumeMounts updates the volume mounts for the benchmark container if a base model is defined.
@@ -146,6 +141,30 @@ func UpdateVolumeMounts(container *v1.Container, baseModelName string, baseModel
 	})
 }
 
+// storageArgsBuilder is a function type for building storage-specific arguments
+type storageArgsBuilder func(uri string, params map[string]string) ([]string, error)
+
+// storageBuilders maps storage types to their argument builders
+var storageBuilders = map[storage.StorageType]storageArgsBuilder{
+	storage.StorageTypeOCI:    buildOCIArgs,
+	storage.StorageTypePVC:    buildPVCArgs,
+	storage.StorageTypeS3:     buildS3Args,
+	storage.StorageTypeAzure:  buildAzureArgs,
+	storage.StorageTypeGCS:    buildGCSArgs,
+	storage.StorageTypeGitHub: buildGitHubArgs,
+}
+
+// addParam appends a flag and value to args if the key exists in params
+func addParam(args []string, params map[string]string, key, flag string) []string {
+	if params == nil {
+		return args
+	}
+	if v, ok := params[key]; ok {
+		return append(args, flag, v)
+	}
+	return args
+}
+
 // BuildStorageArgs builds command line arguments for storage configuration
 func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 	if storageSpec == nil {
@@ -155,185 +174,154 @@ func BuildStorageArgs(storageSpec *v1beta1.StorageSpec) ([]string, error) {
 		return nil, fmt.Errorf("storageUri cannot be nil")
 	}
 
-	// Try to determine storage type
 	storageType, err := storage.GetStorageType(*storageSpec.StorageUri)
 	if err != nil {
 		return nil, fmt.Errorf("invalid storage URI: %v", err)
 	}
 
-	var args []string
-
-	switch storageType {
-	case storage.StorageTypeOCI:
-		// Parse and add OCI storage URI components
-		components, err := storage.ParseOCIStorageURI(*storageSpec.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("invalid OCI storage URI: %v", err)
-		}
-		args = append(args, "--upload-results")
-		args = append(args,
-			"--namespace", components.Namespace,
-			"--storage-bucket", components.Bucket,
-			"--storage-prefix", components.Prefix,
-		)
-
-		// Handle storage parameters
-		if storageSpec.Parameters != nil {
-			params := *storageSpec.Parameters
-			// Add auth type
-			if authType, ok := params["auth"]; ok {
-				args = append(args, "--auth", authType)
-			}
-			// Add config file path if specified
-			if configFile, ok := params["config_file"]; ok {
-				args = append(args, "--config-file", configFile)
-			}
-			// Add profile if specified
-			if profile, ok := params["profile"]; ok {
-				args = append(args, "--profile", profile)
-			}
-			// Add security token if specified
-			if securityToken, ok := params["security_token"]; ok {
-				args = append(args, "--security-token", securityToken)
-			}
-			// Add region if specified
-			if region, ok := params["region"]; ok {
-				args = append(args, "--region", region)
-			}
-		}
-
-	case storage.StorageTypePVC:
-		// For PVC storage, we don't need to add any command line arguments
-		// The storage will be handled by mounting the PVC to the pod
-		// We'll just validate that the URI is correct
-		components, err := storage.ParsePVCStorageURI(*storageSpec.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("invalid PVC storage URI: %v", err)
-		}
-		args = append(args, "--experiment-base-dir", "/"+components.SubPath)
-
-	case storage.StorageTypeS3:
-		// Parse and add S3 storage URI components
-		components, err := storage.ParseS3StorageURI(*storageSpec.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("invalid S3 storage URI: %v", err)
-		}
-		args = append(args, "--upload-results")
-		args = append(args, "--storage-provider", "aws")
-		args = append(args, "--storage-bucket", components.Bucket)
-		if components.Prefix != "" {
-			args = append(args, "--storage-prefix", components.Prefix)
-		}
-
-		// Handle storage parameters
-		if storageSpec.Parameters != nil {
-			params := *storageSpec.Parameters
-			// AWS credentials
-			if accessKey, ok := params["aws_access_key_id"]; ok {
-				args = append(args, "--storage-aws-access-key-id", accessKey)
-			}
-			if secretKey, ok := params["aws_secret_access_key"]; ok {
-				args = append(args, "--storage-aws-secret-access-key", secretKey)
-			}
-			if profile, ok := params["aws_profile"]; ok {
-				args = append(args, "--storage-aws-profile", profile)
-			}
-			if region, ok := params["aws_region"]; ok {
-				args = append(args, "--storage-aws-region", region)
-			} else if components.Region != "" {
-				args = append(args, "--storage-aws-region", components.Region)
-			}
-		}
-
-	case storage.StorageTypeAzure:
-		// Parse and add Azure storage URI components
-		components, err := storage.ParseAzureStorageURI(*storageSpec.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Azure storage URI: %v", err)
-		}
-		args = append(args, "--upload-results")
-		args = append(args, "--storage-provider", "azure")
-		args = append(args, "--storage-bucket", components.ContainerName)
-		if components.BlobPath != "" {
-			args = append(args, "--storage-prefix", components.BlobPath)
-		}
-
-		// Always add the account name
-		if storageSpec.Parameters != nil {
-			params := *storageSpec.Parameters
-			// Check if account name is provided in parameters
-			if accountName, ok := params["azure_account_name"]; ok {
-				args = append(args, "--storage-azure-account-name", accountName)
-			} else {
-				args = append(args, "--storage-azure-account-name", components.AccountName)
-			}
-			// Azure credentials
-			if accountKey, ok := params["azure_account_key"]; ok {
-				args = append(args, "--storage-azure-account-key", accountKey)
-			}
-			if connString, ok := params["azure_connection_string"]; ok {
-				args = append(args, "--storage-azure-connection-string", connString)
-			}
-			if sasToken, ok := params["azure_sas_token"]; ok {
-				args = append(args, "--storage-azure-sas-token", sasToken)
-			}
-		} else {
-			// Even without parameters, we need to add the account name
-			args = append(args, "--storage-azure-account-name", components.AccountName)
-		}
-
-	case storage.StorageTypeGCS:
-		// Parse and add GCS storage URI components
-		components, err := storage.ParseGCSStorageURI(*storageSpec.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("invalid GCS storage URI: %v", err)
-		}
-		args = append(args, "--upload-results")
-		args = append(args, "--storage-provider", "gcp")
-		args = append(args, "--storage-bucket", components.Bucket)
-		if components.Object != "" {
-			args = append(args, "--storage-prefix", components.Object)
-		}
-
-		// Handle storage parameters
-		if storageSpec.Parameters != nil {
-			params := *storageSpec.Parameters
-			// GCP credentials
-			if projectID, ok := params["gcp_project_id"]; ok {
-				args = append(args, "--storage-gcp-project-id", projectID)
-			}
-			if credsPath, ok := params["gcp_credentials_path"]; ok {
-				args = append(args, "--storage-gcp-credentials-path", credsPath)
-			}
-		}
-
-	case storage.StorageTypeGitHub:
-		// Parse and add GitHub storage URI components
-		components, err := storage.ParseGitHubStorageURI(*storageSpec.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("invalid GitHub storage URI: %v", err)
-		}
-		args = append(args, "--upload-results")
-		args = append(args, "--storage-provider", "github")
-		// GitHub doesn't use bucket/prefix model, but owner/repo
-		args = append(args, "--github-owner", components.Owner)
-		args = append(args, "--github-repo", components.Repository)
-		if components.Tag != "latest" {
-			args = append(args, "--github-tag", components.Tag)
-		}
-
-		// Handle storage parameters
-		if storageSpec.Parameters != nil {
-			params := *storageSpec.Parameters
-			// GitHub token
-			if token, ok := params["github_token"]; ok {
-				args = append(args, "--github-token", token)
-			}
-		}
-
-	default:
+	builder, ok := storageBuilders[storageType]
+	if !ok {
 		return nil, fmt.Errorf("unsupported storage type: %s", storageType)
 	}
+
+	var params map[string]string
+	if storageSpec.Parameters != nil {
+		params = *storageSpec.Parameters
+	}
+
+	return builder(*storageSpec.StorageUri, params)
+}
+
+func buildOCIArgs(uri string, params map[string]string) ([]string, error) {
+	components, err := storage.ParseOCIStorageURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid OCI storage URI: %v", err)
+	}
+
+	args := []string{
+		"--upload-results",
+		"--namespace", components.Namespace,
+		"--storage-bucket", components.Bucket,
+		"--storage-prefix", components.Prefix,
+	}
+
+	args = addParam(args, params, "auth", "--auth")
+	args = addParam(args, params, "config_file", "--config-file")
+	args = addParam(args, params, "profile", "--profile")
+	args = addParam(args, params, "security_token", "--security-token")
+	args = addParam(args, params, "region", "--region")
+
+	return args, nil
+}
+
+func buildPVCArgs(uri string, _ map[string]string) ([]string, error) {
+	components, err := storage.ParsePVCStorageURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid PVC storage URI: %v", err)
+	}
+	return []string{"--experiment-base-dir", "/" + components.SubPath}, nil
+}
+
+func buildS3Args(uri string, params map[string]string) ([]string, error) {
+	components, err := storage.ParseS3StorageURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid S3 storage URI: %v", err)
+	}
+
+	args := []string{
+		"--upload-results",
+		"--storage-provider", "aws",
+		"--storage-bucket", components.Bucket,
+	}
+
+	if components.Prefix != "" {
+		args = append(args, "--storage-prefix", components.Prefix)
+	}
+
+	args = addParam(args, params, "aws_access_key_id", "--storage-aws-access-key-id")
+	args = addParam(args, params, "aws_secret_access_key", "--storage-aws-secret-access-key")
+	args = addParam(args, params, "aws_profile", "--storage-aws-profile")
+
+	// Region from params takes precedence over URI-derived region
+	if region, ok := params["aws_region"]; ok {
+		args = append(args, "--storage-aws-region", region)
+	} else if components.Region != "" {
+		args = append(args, "--storage-aws-region", components.Region)
+	}
+
+	return args, nil
+}
+
+func buildAzureArgs(uri string, params map[string]string) ([]string, error) {
+	components, err := storage.ParseAzureStorageURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Azure storage URI: %v", err)
+	}
+
+	args := []string{
+		"--upload-results",
+		"--storage-provider", "azure",
+		"--storage-bucket", components.ContainerName,
+	}
+
+	if components.BlobPath != "" {
+		args = append(args, "--storage-prefix", components.BlobPath)
+	}
+
+	// Account name from params takes precedence
+	if accountName, ok := params["azure_account_name"]; ok {
+		args = append(args, "--storage-azure-account-name", accountName)
+	} else {
+		args = append(args, "--storage-azure-account-name", components.AccountName)
+	}
+
+	args = addParam(args, params, "azure_account_key", "--storage-azure-account-key")
+	args = addParam(args, params, "azure_connection_string", "--storage-azure-connection-string")
+	args = addParam(args, params, "azure_sas_token", "--storage-azure-sas-token")
+
+	return args, nil
+}
+
+func buildGCSArgs(uri string, params map[string]string) ([]string, error) {
+	components, err := storage.ParseGCSStorageURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid GCS storage URI: %v", err)
+	}
+
+	args := []string{
+		"--upload-results",
+		"--storage-provider", "gcp",
+		"--storage-bucket", components.Bucket,
+	}
+
+	if components.Object != "" {
+		args = append(args, "--storage-prefix", components.Object)
+	}
+
+	args = addParam(args, params, "gcp_project_id", "--storage-gcp-project-id")
+	args = addParam(args, params, "gcp_credentials_path", "--storage-gcp-credentials-path")
+
+	return args, nil
+}
+
+func buildGitHubArgs(uri string, params map[string]string) ([]string, error) {
+	components, err := storage.ParseGitHubStorageURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("invalid GitHub storage URI: %v", err)
+	}
+
+	args := []string{
+		"--upload-results",
+		"--storage-provider", "github",
+		"--github-owner", components.Owner,
+		"--github-repo", components.Repository,
+	}
+
+	if components.Tag != "latest" {
+		args = append(args, "--github-tag", components.Tag)
+	}
+
+	args = addParam(args, params, "github_token", "--github-token")
 
 	return args, nil
 }

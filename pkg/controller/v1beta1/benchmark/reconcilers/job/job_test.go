@@ -93,7 +93,7 @@ func TestJobReconciler_Reconcile(t *testing.T) {
 			}
 
 			reconciler := NewJobReconciler(client, scheme, objMeta, podSpec)
-			_, err := reconciler.Reconcile()
+			err := reconciler.Reconcile(context.TODO())
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -117,7 +117,7 @@ func TestJobReconciler_Reconcile(t *testing.T) {
 	}
 }
 
-func TestJobReconciler_checkJobExist(t *testing.T) {
+func TestJobReconciler_CheckResult(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = batchv1.AddToScheme(scheme)
 
@@ -165,19 +165,13 @@ func TestJobReconciler_checkJobExist(t *testing.T) {
 				},
 			}
 
-			result, job, err := reconciler.checkJobExist()
+			result, err := reconciler.CheckResult(context.TODO())
 
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedType, result.String())
-				if tt.existingJob != nil {
-					assert.NotNil(t, job)
-					assert.Equal(t, tt.existingJob.Name, job.Name)
-				} else {
-					assert.Nil(t, job)
-				}
 			}
 		})
 	}
