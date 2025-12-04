@@ -33,6 +33,24 @@ import (
 
 const (
 	finalizerName = "benchmarkjob.finalizers"
+
+	// Container and volume names
+	benchmarkCommand        = "genai-bench"
+	benchmarkSubcommand     = "benchmark"
+	outputStorageVolumeName = "benchmark-output-storage"
+
+	// Environment variable names
+	envEnableUI          = "ENABLE_UI"
+	envHuggingFaceAPIKey = "HUGGINGFACE_API_KEY"
+
+	// Benchmark job states
+	statePending   = "Pending"
+	stateRunning   = "Running"
+	stateCompleted = "Completed"
+	stateFailed    = "Failed"
+
+	// Requeue duration when waiting for dependencies
+	requeueAfterNotReady = time.Minute
 )
 
 // +kubebuilder:rbac:groups=ome.io,resources=benchmarkjobs,verbs=get;list;watch;create;update;patch;delete
@@ -99,10 +117,7 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		isReady := isvcRef.Status.IsReady()
 		if !isReady {
 			log.Info("InferenceService is not ready, re-queuing", "name", benchmarkJob.Name, "namespace", benchmarkJob.Namespace)
-			return ctrl.Result{
-				Requeue:      true,
-				RequeueAfter: time.Minute,
-			}, nil
+			return ctrl.Result{RequeueAfter: requeueAfterNotReady}, nil
 		}
 	}
 
@@ -112,14 +127,14 @@ func (r *BenchmarkJobReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	meta := r.buildMetadata(benchmarkJob)
-	_, podSpec, err := r.reconcilePodSpec(benchmarkJob, config)
+	podSpec, err := r.createPodSpec(ctx, benchmarkJob, config)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile Job
-	if _, err := r.reconcileJob(benchmarkJob, podSpec, meta); err != nil {
+	meta := r.buildMetadata(benchmarkJob)
+	if err := r.reconcileJob(ctx, benchmarkJob, podSpec, meta); err != nil {
 		// Attempt status update on failure
 		if uErr := r.updateStatus(ctx, benchmarkJob); uErr != nil {
 			return ctrl.Result{}, uErr
@@ -152,26 +167,17 @@ func (r *BenchmarkJobReconciler) handleDeletion(ctx context.Context, benchmarkJo
 	return ctrl.Result{}, nil
 }
 
-// reconcileJob creates or updates the Job resource associated with the BenchmarkJob.
-func (r *BenchmarkJobReconciler) reconcileJob(benchmarkJob *v1beta1.BenchmarkJob, podSpec *v1.PodSpec, meta metav1.ObjectMeta) (ctrl.Result, error) {
+// reconcileJob creates the Job resource associated with the BenchmarkJob.
+func (r *BenchmarkJobReconciler) reconcileJob(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, podSpec *v1.PodSpec, meta metav1.ObjectMeta) error {
 	jobReconciler := job.NewJobReconciler(r.Client, r.Scheme, meta, podSpec)
 	if err := controllerutil.SetControllerReference(benchmarkJob, jobReconciler.Job, r.Scheme); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
-	if _, err := jobReconciler.Reconcile(); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to reconcile benchmark job")
+	if err := jobReconciler.Reconcile(ctx); err != nil {
+		return errors.Wrapf(err, "failed to reconcile benchmark job")
 	}
-	return ctrl.Result{}, nil
-}
-
-// reconcilePodSpec creates the final PodSpec by merging defaults and overrides.
-func (r *BenchmarkJobReconciler) reconcilePodSpec(benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *controllerconfig.BenchmarkJobConfig) (ctrl.Result, *v1.PodSpec, error) {
-	podSpec, err := r.createPodSpec(benchmarkJob, benchmarkConfig)
-	if err != nil {
-		return ctrl.Result{}, nil, err
-	}
-	return ctrl.Result{}, podSpec, nil
+	return nil
 }
 
 // buildMetadata creates the ObjectMeta for associated resources.
@@ -188,35 +194,56 @@ func (r *BenchmarkJobReconciler) buildMetadata(benchmarkJob *v1beta1.BenchmarkJo
 	}
 }
 
+// defaultGPUToleration returns the default GPU toleration for benchmark pods
+func defaultGPUToleration() v1.Toleration {
+	return v1.Toleration{
+		Key:      "nvidia.com/gpu",
+		Operator: v1.TolerationOpExists,
+		Effect:   v1.TaintEffectNoSchedule,
+	}
+}
+
 // createPodSpec creates a PodSpec for the BenchmarkJob by combining defaults with any user overrides
-func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *controllerconfig.BenchmarkJobConfig) (*v1.PodSpec, error) {
-	// Build default container spec
+func (r *BenchmarkJobReconciler) createPodSpec(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, benchmarkConfig *controllerconfig.BenchmarkJobConfig) (*v1.PodSpec, error) {
+	container, err := r.buildDefaultContainer(benchmarkJob, benchmarkConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	volumes, err := r.buildVolumes(ctx, benchmarkJob, container)
+	if err != nil {
+		return nil, err
+	}
+
+	podSpec := r.buildBasePodSpec(container, volumes)
+
+	if benchmarkJob.Spec.PodOverride != nil {
+		return r.applyPodOverrides(podSpec, benchmarkJob.Spec.PodOverride)
+	}
+	return podSpec, nil
+}
+
+// buildDefaultContainer creates the default benchmark container with resources and env vars
+func (r *BenchmarkJobReconciler) buildDefaultContainer(benchmarkJob *v1beta1.BenchmarkJob, config *controllerconfig.BenchmarkJobConfig) (*v1.Container, error) {
 	resources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse(benchmarkConfig.PodConfig.CPURequest),
-			v1.ResourceMemory: resource.MustParse(benchmarkConfig.PodConfig.MemoryRequest),
+			v1.ResourceCPU:    resource.MustParse(config.PodConfig.CPURequest),
+			v1.ResourceMemory: resource.MustParse(config.PodConfig.MemoryRequest),
 		},
 		Limits: v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse(benchmarkConfig.PodConfig.CPULimit),
-			v1.ResourceMemory: resource.MustParse(benchmarkConfig.PodConfig.MemoryLimit),
+			v1.ResourceCPU:    resource.MustParse(config.PodConfig.CPULimit),
+			v1.ResourceMemory: resource.MustParse(config.PodConfig.MemoryLimit),
 		},
 	}
 
-	env := []v1.EnvVar{
-		{
-			Name:  "ENABLE_UI",
-			Value: "false",
-		},
-	}
-	if benchmarkJob.Spec.HuggingFaceSecretReference != nil && benchmarkJob.Spec.HuggingFaceSecretReference.Name != "" {
+	env := []v1.EnvVar{{Name: envEnableUI, Value: "false"}}
+	if ref := benchmarkJob.Spec.HuggingFaceSecretReference; ref != nil && ref.Name != "" {
 		env = append(env, v1.EnvVar{
-			Name: "HUGGINGFACE_API_KEY",
+			Name: envHuggingFaceAPIKey,
 			ValueFrom: &v1.EnvVarSource{
 				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: benchmarkJob.Spec.HuggingFaceSecretReference.Name,
-					},
-					Key: "HUGGINGFACE_API_KEY",
+					LocalObjectReference: v1.LocalObjectReference{Name: ref.Name},
+					Key:                  envHuggingFaceAPIKey,
 				},
 			},
 		})
@@ -227,185 +254,226 @@ func (r *BenchmarkJobReconciler) createPodSpec(benchmarkJob *v1beta1.BenchmarkJo
 		return nil, err
 	}
 
-	// Create base container
-	defaultContainer := v1.Container{
+	return &v1.Container{
 		Name:      benchmarkJob.Name,
-		Image:     benchmarkConfig.PodConfig.Image,
+		Image:     config.PodConfig.Image,
 		Resources: resources,
 		Env:       env,
 		Command:   cmd,
 		Args:      args,
-	}
+	}, nil
+}
 
-	// Create volumes if InferenceService is specified
+// buildVolumes creates volumes for the benchmark pod (InferenceService model + PVC storage)
+func (r *BenchmarkJobReconciler) buildVolumes(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob, container *v1.Container) ([]v1.Volume, error) {
 	var volumes []v1.Volume
-	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
-		inferenceService, err := benchmarkutils.GetInferenceService(r.Client, benchmarkJob.Spec.Endpoint.InferenceService)
-		if err != nil {
-			return nil, err
-		}
-		var baseModelName string
-		if inferenceService.Spec.Predictor.Model != nil &&
-			inferenceService.Spec.Predictor.Model.BaseModel != nil {
-			baseModelName = *inferenceService.Spec.Predictor.Model.BaseModel
-		} else if inferenceService.Spec.Model != nil {
-			baseModelName = inferenceService.Spec.Model.Name
-		}
-		if baseModelName == "" {
-			return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", inferenceService.Name, inferenceService.Namespace)
-		}
-		baseModel, _, err := isvcutils.GetBaseModel(r.Client, baseModelName, inferenceService.Namespace)
-		if err != nil {
-			return nil, err
-		}
-		benchmarkutils.UpdateVolumeMounts(&defaultContainer, baseModelName, baseModel)
 
-		volumes = append(volumes, v1.Volume{
-			Name: baseModelName,
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{
-					Path: *baseModel.Storage.Path,
-				},
-			},
-		})
+	// Add InferenceService model volume if specified
+	if benchmarkJob.Spec.Endpoint.InferenceService != nil {
+		vol, err := r.buildInferenceServiceVolume(benchmarkJob, container)
+		if err != nil {
+			return nil, err
+		}
+		if vol != nil {
+			volumes = append(volumes, *vol)
+		}
 	}
 
-	// Handle storage PVC if specified
+	// Add PVC volume if storage type is PVC
+	pvcVol, pvcMount, err := r.buildPVCVolume(ctx, benchmarkJob)
+	if err != nil {
+		return nil, err
+	}
+	if pvcVol != nil {
+		volumes = append(volumes, *pvcVol)
+		container.VolumeMounts = append(container.VolumeMounts, *pvcMount)
+	}
+
+	return volumes, nil
+}
+
+// buildInferenceServiceVolume creates volume for the base model from InferenceService
+func (r *BenchmarkJobReconciler) buildInferenceServiceVolume(benchmarkJob *v1beta1.BenchmarkJob, container *v1.Container) (*v1.Volume, error) {
+	ref := benchmarkJob.Spec.Endpoint.InferenceService
+	inferenceService, err := benchmarkutils.GetInferenceService(r.Client, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelName := r.getBaseModelName(inferenceService)
+	if baseModelName == "" {
+		return nil, fmt.Errorf("InferenceService %s/%s has no Model defined", inferenceService.Name, inferenceService.Namespace)
+	}
+
+	baseModel, _, err := isvcutils.GetBaseModel(r.Client, baseModelName, inferenceService.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	if baseModel.Storage == nil || baseModel.Storage.Path == nil {
+		return nil, fmt.Errorf("BaseModel %s has no storage path configured", baseModelName)
+	}
+
+	benchmarkutils.UpdateVolumeMounts(container, baseModelName, baseModel)
+
+	return &v1.Volume{
+		Name: baseModelName,
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{Path: *baseModel.Storage.Path},
+		},
+	}, nil
+}
+
+// getBaseModelName extracts the base model name from an InferenceService
+func (r *BenchmarkJobReconciler) getBaseModelName(isvc *v1beta1.InferenceService) string {
+	if isvc.Spec.Predictor.Model != nil && isvc.Spec.Predictor.Model.BaseModel != nil {
+		return *isvc.Spec.Predictor.Model.BaseModel
+	}
+	if isvc.Spec.Model != nil {
+		return isvc.Spec.Model.Name
+	}
+	return ""
+}
+
+// buildPVCVolume creates volume and mount for PVC-based output storage
+func (r *BenchmarkJobReconciler) buildPVCVolume(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob) (*v1.Volume, *v1.VolumeMount, error) {
 	storageType, err := storage.GetStorageType(*benchmarkJob.Spec.OutputLocation.StorageUri)
 	if err != nil {
-		return nil, fmt.Errorf("error determining storage type: %v", err)
+		return nil, nil, fmt.Errorf("error determining storage type: %w", err)
 	}
 
-	if storageType == storage.StorageTypePVC {
-		components, err := storage.ParsePVCStorageURI(*benchmarkJob.Spec.OutputLocation.StorageUri)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing PVC storage URI: %v", err)
-		}
-
-		// Check if PVC exists
-		pvc := &v1.PersistentVolumeClaim{}
-		if err := r.Client.Get(context.Background(), types.NamespacedName{
-			Name:      components.PVCName,
-			Namespace: benchmarkJob.Namespace,
-		}, pvc); err != nil {
-			return nil, fmt.Errorf("PVC %s not found: %v", components.PVCName, err)
-		}
-
-		// Add volume for PVC
-		volumes = append(volumes, v1.Volume{
-			Name: "benchmark-output-storage",
-			VolumeSource: v1.VolumeSource{
-				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: components.PVCName,
-				},
-			},
-		})
-
-		// Add volume mount to container
-		defaultContainer.VolumeMounts = append(defaultContainer.VolumeMounts, v1.VolumeMount{
-			Name:      "benchmark-output-storage",
-			MountPath: "/" + components.SubPath,
-			SubPath:   components.SubPath,
-		})
+	if storageType != storage.StorageTypePVC {
+		return nil, nil, nil
 	}
 
-	// If no overrides, return default spec
-	if benchmarkJob.Spec.PodOverride == nil {
-		return &v1.PodSpec{
-			Containers: []v1.Container{defaultContainer},
-			Volumes:    volumes,
-			Tolerations: []v1.Toleration{
-				{
-					Key:      "nvidia.com/gpu",
-					Operator: v1.TolerationOpExists,
-					Effect:   v1.TaintEffectNoSchedule,
-				},
-			},
-			RestartPolicy: v1.RestartPolicyNever,
-		}, nil
-	}
-
-	// First merge container specs
-	defaultContainerJSON, err := json.Marshal(defaultContainer)
+	components, err := storage.ParsePVCStorageURI(*benchmarkJob.Spec.OutputLocation.StorageUri)
 	if err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("error parsing PVC storage URI: %w", err)
 	}
 
-	overrideContainer := v1.Container{
-		Name:         "genai-bench",
-		Image:        benchmarkJob.Spec.PodOverride.Image,
-		Env:          benchmarkJob.Spec.PodOverride.Env,
-		EnvFrom:      benchmarkJob.Spec.PodOverride.EnvFrom,
-		VolumeMounts: benchmarkJob.Spec.PodOverride.VolumeMounts,
-	}
-	if benchmarkJob.Spec.PodOverride.Resources != nil {
-		overrideContainer.Resources = *benchmarkJob.Spec.PodOverride.Resources
+	// Verify PVC exists
+	pvc := &v1.PersistentVolumeClaim{}
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Name:      components.PVCName,
+		Namespace: benchmarkJob.Namespace,
+	}, pvc); err != nil {
+		return nil, nil, fmt.Errorf("PVC %s not found: %w", components.PVCName, err)
 	}
 
-	overrideContainerJSON, err := json.Marshal(overrideContainer)
-	if err != nil {
-		return nil, err
-	}
-
-	mergedContainerJSON, err := strategicpatch.StrategicMergePatch(defaultContainerJSON, overrideContainerJSON, v1.Container{})
-	if err != nil {
-		return nil, err
-	}
-
-	var mergedContainer v1.Container
-	if err := json.Unmarshal(mergedContainerJSON, &mergedContainer); err != nil {
-		return nil, err
-	}
-
-	// Create and merge pod specs
-	defaultPodSpec := &v1.PodSpec{
-		Containers: []v1.Container{mergedContainer},
-		Volumes:    volumes,
-		Tolerations: []v1.Toleration{
-			{
-				Key:      "nvidia.com/gpu",
-				Operator: v1.TolerationOpExists,
-				Effect:   v1.TaintEffectNoSchedule,
+	volume := &v1.Volume{
+		Name: outputStorageVolumeName,
+		VolumeSource: v1.VolumeSource{
+			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+				ClaimName: components.PVCName,
 			},
 		},
+	}
+
+	mount := &v1.VolumeMount{
+		Name:      outputStorageVolumeName,
+		MountPath: "/" + components.SubPath,
+		SubPath:   components.SubPath,
+	}
+
+	return volume, mount, nil
+}
+
+// buildBasePodSpec creates the base pod spec with container, volumes and defaults
+func (r *BenchmarkJobReconciler) buildBasePodSpec(container *v1.Container, volumes []v1.Volume) *v1.PodSpec {
+	return &v1.PodSpec{
+		Containers:    []v1.Container{*container},
+		Volumes:       volumes,
+		Tolerations:   []v1.Toleration{defaultGPUToleration()},
+		RestartPolicy: v1.RestartPolicyNever,
+	}
+}
+
+// applyPodOverrides merges user-provided overrides into the pod spec
+func (r *BenchmarkJobReconciler) applyPodOverrides(podSpec *v1.PodSpec, override *v1beta1.PodOverride) (*v1.PodSpec, error) {
+	// Merge container
+	mergedContainer, err := r.mergeContainer(&podSpec.Containers[0], override)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create pod spec with merged container
+	basePodSpec := &v1.PodSpec{
+		Containers:    []v1.Container{*mergedContainer},
+		Volumes:       podSpec.Volumes,
+		Tolerations:   podSpec.Tolerations,
 		RestartPolicy: v1.RestartPolicyNever,
 	}
 
-	defaultPodJSON, err := json.Marshal(defaultPodSpec)
+	// Merge pod-level overrides
+	return r.mergePodSpec(basePodSpec, override)
+}
+
+// strategicMergePatch applies a strategic merge patch and returns the merged result.
+func strategicMergePatch[T any](base, override T, dataStruct T) (T, error) {
+	var zero T
+	baseJSON, err := json.Marshal(base)
+	if err != nil {
+		return zero, err
+	}
+
+	overrideJSON, err := json.Marshal(override)
+	if err != nil {
+		return zero, err
+	}
+
+	mergedJSON, err := strategicpatch.StrategicMergePatch(baseJSON, overrideJSON, dataStruct)
+	if err != nil {
+		return zero, err
+	}
+
+	var merged T
+	if err := json.Unmarshal(mergedJSON, &merged); err != nil {
+		return zero, err
+	}
+	return merged, nil
+}
+
+// mergeContainer applies container-level overrides using strategic merge patch
+func (r *BenchmarkJobReconciler) mergeContainer(base *v1.Container, override *v1beta1.PodOverride) (*v1.Container, error) {
+	overrideContainer := v1.Container{
+		Name:         benchmarkCommand,
+		Image:        override.Image,
+		Env:          override.Env,
+		EnvFrom:      override.EnvFrom,
+		VolumeMounts: override.VolumeMounts,
+	}
+	if override.Resources != nil {
+		overrideContainer.Resources = *override.Resources
+	}
+
+	merged, err := strategicMergePatch(*base, overrideContainer, v1.Container{})
+	if err != nil {
+		return nil, err
+	}
+	return &merged, nil
+}
+
+// mergePodSpec applies pod-level overrides using strategic merge patch
+func (r *BenchmarkJobReconciler) mergePodSpec(base *v1.PodSpec, override *v1beta1.PodOverride) (*v1.PodSpec, error) {
+	overridePodSpec := v1.PodSpec{
+		Volumes:      override.Volumes,
+		Affinity:     override.Affinity,
+		NodeSelector: override.NodeSelector,
+		Tolerations:  override.Tolerations,
+	}
+
+	merged, err := strategicMergePatch(*base, overridePodSpec, v1.PodSpec{})
 	if err != nil {
 		return nil, err
 	}
 
-	overridePodSpec := &v1.PodSpec{
-		Volumes:      benchmarkJob.Spec.PodOverride.Volumes,
-		Affinity:     benchmarkJob.Spec.PodOverride.Affinity,
-		NodeSelector: benchmarkJob.Spec.PodOverride.NodeSelector,
-		Tolerations:  benchmarkJob.Spec.PodOverride.Tolerations,
-	}
-
-	overridePodJSON, err := json.Marshal(overridePodSpec)
-	if err != nil {
-		return nil, err
-	}
-
-	mergedPodJSON, err := strategicpatch.StrategicMergePatch(defaultPodJSON, overridePodJSON, v1.PodSpec{})
-	if err != nil {
-		return nil, err
-	}
-
-	var mergedPodSpec v1.PodSpec
-	if err := json.Unmarshal(mergedPodJSON, &mergedPodSpec); err != nil {
-		return nil, err
-	}
-	// Update container, since this will be the only container
-	mergedPodSpec.Containers = []v1.Container{mergedContainer}
-
-	return &mergedPodSpec, nil
+	// Preserve the merged container (strategic merge doesn't handle this well)
+	merged.Containers = base.Containers
+	return &merged, nil
 }
 
 // buildBenchmarkCommand constructs the command line arguments for the benchmark container.
 func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.BenchmarkJob) ([]string, []string, error) {
-	command := []string{"genai-bench"}
+	command := []string{benchmarkCommand}
 
 	inferenceArgs, err := benchmarkutils.BuildInferenceServiceArgs(r.Client, benchmarkJob.Spec.Endpoint, benchmarkJob.Namespace)
 	if err != nil {
@@ -413,7 +481,7 @@ func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.Ben
 	}
 
 	args := []string{
-		"benchmark",
+		benchmarkSubcommand,
 		"--api-backend", inferenceArgs["--api-backend"],
 		"--api-base", inferenceArgs["--api-base"],
 		"--api-key", inferenceArgs["--api-key"],
@@ -449,106 +517,94 @@ func (r *BenchmarkJobReconciler) buildBenchmarkCommand(benchmarkJob *v1beta1.Ben
 		)
 	}
 
-	storageArgs, _ := benchmarkutils.BuildStorageArgs(benchmarkJob.Spec.OutputLocation)
+	storageArgs, err := benchmarkutils.BuildStorageArgs(benchmarkJob.Spec.OutputLocation)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build storage args: %w", err)
+	}
 	args = append(args, storageArgs...)
 
 	return command, args, nil
 }
 
-// updateStatus updates the status of the BenchmarkJob. Currently, no additional logic.
+// updateStatus updates the BenchmarkJob status based on the underlying Job's state.
 func (r *BenchmarkJobReconciler) updateStatus(ctx context.Context, benchmarkJob *v1beta1.BenchmarkJob) error {
-	job := &batchv1.Job{}
+	k8sJob := &batchv1.Job{}
 	err := r.Get(ctx, client.ObjectKey{
 		Namespace: benchmarkJob.Namespace,
 		Name:      benchmarkJob.Name,
-	}, job)
+	}, k8sJob)
 
-	now := metav1.Now()
-	benchmarkStatus := &benchmarkJob.Status
-
-	if err != nil && apierr.IsNotFound(err) {
-		// If the Job does not exist, consider the BenchmarkJob Pending.
-		if benchmarkStatus.State != "Pending" {
-			benchmarkStatus.State = "Pending"
-			benchmarkStatus.StartTime = nil
-			benchmarkStatus.CompletionTime = nil
-			benchmarkStatus.FailureMessage = ""
-			benchmarkStatus.LastReconcileTime = &now
-		}
+	if apierr.IsNotFound(err) {
+		r.setStatusPending(benchmarkJob)
 	} else if err != nil {
-		// If there's another error fetching the Job, we can't update status meaningfully.
 		return err
 	} else {
-		// The Job exists. Determine its status from conditions.
-		// Possible conditions for a Job include:
-		// - Complete
-		// - Failed
-		var isComplete, isFailed bool
-		var completionTime *metav1.Time
+		r.syncStatusFromJob(benchmarkJob, k8sJob)
+	}
 
-		// A job is considered completed if it has a completion time or a condition that indicates completion.
-		if job.Status.CompletionTime != nil {
-			isComplete = true
-			completionTime = job.Status.CompletionTime
-		} else {
-			for _, cond := range job.Status.Conditions {
-				if cond.Type == batchv1.JobComplete && cond.Status == v1.ConditionTrue {
-					isComplete = true
-					completionTime = &cond.LastTransitionTime
-					break
-				}
-			}
-		}
+	return r.Status().Update(ctx, benchmarkJob)
+}
 
-		// A job is considered failed if it has backoffLimit reached or conditions show failure.
-		for _, cond := range job.Status.Conditions {
-			if cond.Type == batchv1.JobFailed && cond.Status == v1.ConditionTrue {
-				isFailed = true
-				completionTime = &cond.LastTransitionTime
-				benchmarkStatus.FailureMessage = cond.Message
-				break
-			}
-		}
+// setStatusPending sets the benchmark job status to pending (no underlying job exists yet).
+func (r *BenchmarkJobReconciler) setStatusPending(benchmarkJob *v1beta1.BenchmarkJob) {
+	if benchmarkJob.Status.State == statePending {
+		return
+	}
+	now := metav1.Now()
+	benchmarkJob.Status.State = statePending
+	benchmarkJob.Status.StartTime = nil
+	benchmarkJob.Status.CompletionTime = nil
+	benchmarkJob.Status.FailureMessage = ""
+	benchmarkJob.Status.LastReconcileTime = &now
+}
 
-		// Map job conditions to benchmark job states
-		switch {
-		case isFailed:
-			// Failed - check this first as a job can be both complete and failed
-			if benchmarkStatus.State != "Failed" {
-				benchmarkStatus.State = "Failed"
-				if benchmarkStatus.StartTime == nil && job.Status.StartTime != nil {
-					benchmarkStatus.StartTime = job.Status.StartTime
-				}
-				benchmarkStatus.CompletionTime = completionTime
-				benchmarkStatus.LastReconcileTime = &now
-			}
-		case isComplete:
-			// Completed - only if not failed
-			if benchmarkStatus.State != "Completed" {
-				benchmarkStatus.State = "Completed"
-				if benchmarkStatus.StartTime == nil && job.Status.StartTime != nil {
-					benchmarkStatus.StartTime = job.Status.StartTime
-				}
-				benchmarkStatus.CompletionTime = completionTime
-				benchmarkStatus.LastReconcileTime = &now
-			}
-		default:
-			// If not complete or failed, consider it running.
-			if benchmarkStatus.State != "Running" {
-				benchmarkStatus.State = "Running"
-				if benchmarkStatus.StartTime == nil && job.Status.StartTime != nil {
-					benchmarkStatus.StartTime = job.Status.StartTime
-				}
-				benchmarkStatus.CompletionTime = nil
-				benchmarkStatus.FailureMessage = ""
-				benchmarkStatus.LastReconcileTime = &now
-			}
+// syncStatusFromJob updates the benchmark job status based on the k8s Job's conditions.
+func (r *BenchmarkJobReconciler) syncStatusFromJob(benchmarkJob *v1beta1.BenchmarkJob, k8sJob *batchv1.Job) {
+	state, completionTime, failureMsg := r.parseJobStatus(k8sJob)
+
+	if benchmarkJob.Status.State == state {
+		return
+	}
+
+	now := metav1.Now()
+	benchmarkJob.Status.State = state
+	benchmarkJob.Status.LastReconcileTime = &now
+
+	if benchmarkJob.Status.StartTime == nil && k8sJob.Status.StartTime != nil {
+		benchmarkJob.Status.StartTime = k8sJob.Status.StartTime
+	}
+
+	switch state {
+	case stateFailed, stateCompleted:
+		benchmarkJob.Status.CompletionTime = completionTime
+		benchmarkJob.Status.FailureMessage = failureMsg
+	case stateRunning:
+		benchmarkJob.Status.CompletionTime = nil
+		benchmarkJob.Status.FailureMessage = ""
+	}
+}
+
+// parseJobStatus extracts the state, completion time, and failure message from a Job.
+func (r *BenchmarkJobReconciler) parseJobStatus(k8sJob *batchv1.Job) (state string, completionTime *metav1.Time, failureMsg string) {
+	// Check for failure first (takes precedence)
+	for _, cond := range k8sJob.Status.Conditions {
+		if cond.Type == batchv1.JobFailed && cond.Status == v1.ConditionTrue {
+			return stateFailed, &cond.LastTransitionTime, cond.Message
 		}
 	}
 
-	// Update the BenchmarkJob status on the cluster if changed.
-	// This ensures the status is stored and reflected in the resource.
-	return r.Status().Update(ctx, benchmarkJob)
+	// Check for completion
+	if k8sJob.Status.CompletionTime != nil {
+		return stateCompleted, k8sJob.Status.CompletionTime, ""
+	}
+	for _, cond := range k8sJob.Status.Conditions {
+		if cond.Type == batchv1.JobComplete && cond.Status == v1.ConditionTrue {
+			return stateCompleted, &cond.LastTransitionTime, ""
+		}
+	}
+
+	// Default to running
+	return stateRunning, nil, ""
 }
 
 // SetupWithManager sets up the controller with the Manager.
