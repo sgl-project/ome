@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	isutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -87,9 +88,17 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	}
 
 	// Reconcile object metadata
-	objectMeta, err := r.reconcileObjectMeta(isvc)
+	objectMetaNormal, err := r.reconcileObjectMeta(isvc, false)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	objectMetaPod, err := r.reconcileObjectMeta(isvc, true)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	objectMetaPack := isutils.ObjectMetaPack{
+		Normal: objectMetaNormal,
+		Pod:    objectMetaPod,
 	}
 
 	// Reconcile RBAC resources (ServiceAccount, Role, RoleBinding)

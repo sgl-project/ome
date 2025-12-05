@@ -3,8 +3,6 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/sgl-project/ome/pkg/apis/ome/v1beta1"
@@ -61,10 +59,4 @@ func GetValueFromRawExtension(raw runtime.RawExtension, key string) (interface{}
 	}
 
 	return val, nil
-}
-
-// ObjectMetaPack contains metav1.ObjectMeta for various cases
-type ObjectMetaPack struct {
-	normal metav1.ObjectMeta
-	pod    metav1.ObjectMeta
 }
