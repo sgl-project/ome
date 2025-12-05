@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-05 21:20:00 UTC
+**Last Updated**: 2025-12-05 21:50:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -13,9 +13,9 @@
 | **Total Models** | 139 |
 | **Passed** | 95  |
 | **Failed** | 39  |
-| **Skipped** | 4   |
-| **Not Tested** | 1  |
-| **Pass Rate** | 71.4% |
+| **Skipped** | 5   |
+| **Not Tested** | 0  |
+| **Pass Rate** | 70.9% |
 
 ---
 
@@ -174,6 +174,8 @@
 | Qwen    | qwen2-5-0-5b-instruct | 0.5B | Instruct | -    | Missing config files (model, runtime, isvc) |
 | Qwen    | qwen3-0-6b            | 0.6B | Base     | 1    | Missing config files (runtime, isvc)        |
 | xai-org | grok-1                | 314B | MoE      | -    | Config.json not found                       |
+| WizardLMTeam | wizardlm-2-7b    | 7B   | Instruct | -    | Model not found on HuggingFace              |
+| NousResearch | meta-llama-3-1-8b-instruct | 8B | Instruct | - | Not in the test plan                        |
 <!-- SKIPPED_END -->
 
 ---
@@ -359,7 +361,7 @@
 | mpt-7b | ❌ Failed | 2025-12-03 | Download timeout: 55+ min stuck in "In_Transit" with 0 nodes, system-wide download issue, transformers 4.28.1, MPTForCausalLM |
 | mpt-30b | ❌ Failed | 2025-12-05 | SGLang incompatible with MPT custom attention code. FileNotFoundError: flash_attn_triton.py missing. MPTForCausalLM uses dynamic custom code. Model downloaded successfully, auto-select worked (transformers 4.28.1, TP=2, 2 GPUs, 80Gi). Requires alternative runtime (vLLM/TGI). |
 
-### NousResearch (0/2)
+### NousResearch (0/2, 1 skipped)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | hermes-2-pro-llama-3-8b | ❌ Failed | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state for 60+ minutes with no completion, system-level download controller issue |
@@ -397,7 +399,7 @@
 |-------|--------|-----------|-------|
 | orion-14b-base | ✅ Passed | 2025-12-02 | Download: 287s, Startup: 138s, completions only, gated model, 11 nodes ready |
 
-### Qwen (20/23, 2 skipped)
+### Qwen (20/22, 2 skipped)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | qwen-7b-chat | ✅ Passed | 2025-12-05 | Download: <1s (cached), Startup: ~4min, completions only (no chat template). Transformers 4.32.0, QWenLMHeadModel. Required --trust-remote-code flag. Legacy Qwen 1.0 model |
@@ -469,10 +471,10 @@
 |-------|--------|-----------|-------|
 | solar-10-7b-instruct-v1-0 | ✅ Passed | 2025-12-02 | Download: 49s, Startup: 68s, completions only (no chat template) |
 
-### WizardLMTeam (0/1)
+### WizardLMTeam (0/1, 1 skipped)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| wizardlm-2-7b | ⏳ Not Tested | - | - |
+| wizardlm-2-7b | ⏭️ Skipped | - | Model not found on HuggingFace |
 
 ### xai-org (1/2, 1 skipped)
 | Model | Status | Test Date | Notes                                                                                                 |
