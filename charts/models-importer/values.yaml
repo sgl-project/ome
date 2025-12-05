@@ -79,7 +79,6 @@ llama-3-3-70b-instruct-fp8-dynamic:
     - BM.GPU.H200.8
     - BM.GPU.B4.8
     - BM.GPU4.8
-  compatibleDACShapes: "MEDIUM_GENERIC_V1"
 
 llama-3-2-90b-vision-instruct-fp8-dynamic:
   enabled: false
