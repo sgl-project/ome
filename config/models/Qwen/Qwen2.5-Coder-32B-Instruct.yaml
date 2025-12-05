@@ -1,12 +1,12 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: qwen2-5-32b-instruct
+  name: qwen2-5-coder-32b-instruct
 spec:
   modelCapabilities:
     - TEXT_TO_TEXT
   vendor: Qwen
-  displayName: qwen.qwen2.5-32b-instruct
+  displayName: qwen.qwen2.5-coder-32b-instruct
   disabled: false
   version: "1.0.0"
   modelArchitecture: Qwen2ForCausalLM
@@ -18,6 +18,6 @@ spec:
     version: "4.43.1"
   modelParameterSize: 32B
   storage:
-    storageUri: hf://Qwen/Qwen2.5-32B-Instruct
-    path: /raid/models/Qwen/Qwen2.5-32B-Instruct
+    storageUri: hf://Qwen/Qwen2.5-Coder-32B-Instruct
+    path: /raid/models/Qwen/Qwen2.5-Coder-32B-Instruct
     key: "hf-token"

@@ -1,0 +1,21 @@
+# ---
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: grok-2
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: grok-2
+  namespace: grok-2
+spec:
+  model:
+    name: grok-2
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
