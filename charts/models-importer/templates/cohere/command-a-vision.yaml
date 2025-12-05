@@ -40,7 +40,7 @@ spec:
   additionalMetadata:
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LLAMA2_70
+        - name: LARGE_COHERE_V3
           quotaUnit: 1
           default: true
     internalName: "command-a-vision"

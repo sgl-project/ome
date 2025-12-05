@@ -38,20 +38,11 @@ spec:
     - "CHAT"
   maxTokens: 256000
   additionalMetadata:
-    {{/* this model will use LARGE_COHERE only in regions with no H100, LARGE_COHERE_V2 in other regions*/}}
-    {{- if index .Values "command-a-reasoning" "isA100Only" -}}
     dacShapeConfigs: |-
       compatibleDACShapes:
-        - name: LARGE_COHERE
+        - name: LARGE_COHERE_V2_2
           quotaUnit: 1
           default: true
-    {{- else }}
-    dacShapeConfigs: |-
-      compatibleDACShapes:
-        - name: LARGE_COHERE_V2
-          quotaUnit: 1
-          default: true
-    {{- end }}
     internalName: "command-a-reasoning"
     type: "Serving"
 {{- end }}
