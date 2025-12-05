@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-v2-lite-chat
+  namespace: deepseek-v2-lite-chat
+spec:
+  model:
+    name: deepseek-v2-lite-chat
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-deepseek-v2-lite-chat
+  router:
+    minReplicas: 1
+    maxReplicas: 1

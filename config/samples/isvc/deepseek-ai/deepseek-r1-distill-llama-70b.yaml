@@ -1,0 +1,16 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: deepseek-r1-distill-llama-70b
+  namespace: deepseek-r1-distill-llama-70b
+spec:
+  model:
+    name: deepseek-r1-distill-llama-70b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  runtime:
+    name: srt-deepseek-r1-distill-llama-70b
+  router:
+    minReplicas: 1
+    maxReplicas: 1
