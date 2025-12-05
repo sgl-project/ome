@@ -99,19 +99,27 @@ func (d *Decoder) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error)
 	}
 
 	// Reconcile object metadata
-	objectMeta, err := d.reconcileObjectMeta(isvc)
+	objectMetaNormal, err := d.reconcileObjectMeta(isvc, false)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
 	}
+	objectMetaPod, err := d.reconcileObjectMeta(isvc, true)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	objectMetaPack := isvcutils.ObjectMetaPack{
+		Normal: objectMetaNormal,
+		Pod:    objectMetaPod,
+	}
 
 	// Reconcile pod spec
-	podSpec, err := d.reconcilePodSpec(isvc, &objectMeta)
+	podSpec, err := d.reconcilePodSpec(isvc, &objectMetaPack.Normal)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile pod spec")
 	}
 
 	// Reconcile worker pod spec if needed
-	workerPodSpec, err := d.reconcileWorkerPodSpec(isvc, &objectMeta)
+	workerPodSpec, err := d.reconcileWorkerPodSpec(isvc, &objectMetaPack.Normal)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile worker pod spec")
 	}
@@ -120,12 +128,12 @@ func (d *Decoder) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error)
 	size := d.getWorkerSize()
 
 	// Reconcile deployment based on deployment mode
-	if result, err := d.reconcileDeployment(isvc, objectMeta, podSpec, size, workerPodSpec); err != nil {
+	if result, err := d.reconcileDeployment(isvc, objectMetaPack, podSpec, size, workerPodSpec); err != nil {
 		return result, err
 	}
 
 	// Update decoder status
-	if err := d.updateDecoderStatus(isvc, objectMeta); err != nil {
+	if err := d.updateDecoderStatus(isvc, objectMetaPack.Normal); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -148,16 +156,16 @@ func (d *Decoder) getWorkerSize() int {
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes
-func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta isvcutils.ObjectMetaPack, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
 	switch d.DeploymentMode {
 	case constants.RawDeployment:
 		return d.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNode:
-		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta.Normal, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNodeRayVLLM:
-		return d.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+		return d.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta.Normal, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.Serverless:
-		return d.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+		return d.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta.Normal, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for decoder")
 	}
@@ -177,13 +185,13 @@ func (d *Decoder) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMe
 }
 
 // reconcileObjectMeta creates the object metadata for the decoder component
-func (d *Decoder) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
+func (d *Decoder) reconcileObjectMeta(isvc *v1beta1.InferenceService, modePod bool) (metav1.ObjectMeta, error) {
 	decoderName, err := d.determineDecoderName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
 
-	annotations, err := d.processAnnotations(isvc)
+	annotations, err := d.processAnnotations(isvc, modePod)
 	if err != nil {
 		return metav1.ObjectMeta{
 			Name:      decoderName,
@@ -210,14 +218,14 @@ func (d *Decoder) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Ob
 }
 
 // processAnnotations processes the annotations for the decoder
-func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
+func (d *Decoder) processAnnotations(isvc *v1beta1.InferenceService, modePod bool) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
 	// Merge with decoder annotations
 	mergedAnnotations := annotations
-	if d.decoderSpec != nil {
+	if d.decoderSpec != nil && modePod {
 		decoderAnnotations := d.decoderSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, decoderAnnotations)
 	}
