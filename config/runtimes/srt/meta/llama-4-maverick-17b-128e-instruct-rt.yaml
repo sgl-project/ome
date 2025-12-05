@@ -7,7 +7,7 @@ spec:
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.51.0"
+        version: "4.51.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
@@ -17,8 +17,8 @@ spec:
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 15B
-    max: 20B
+    min: 400B
+    max: 402B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -53,24 +53,33 @@ spec:
         - --log-requests
         - --model-path
         - $(MODEL_PATH)
-        - --tp-size
-        - "4"
+        - --tp
+        - "16"
         - --mem-frac
-        - "0.9"
+        - "0.85"
         - --served-model-name
         - meta-llama/Llama-4-Maverick-17B-128E-Instruct
+        - --context-length
+        - "131072"
+        - --enable-multimodal
+        - --tool-call-parser
+        - pythonic
+        - --chat-template
+        - llama-4
+        - --attention-backend
+        - fa3
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 20
-          memory: 200Gi
-          nvidia.com/gpu: 4
+          cpu: 128
+          memory: 1024Gi
+          nvidia.com/gpu: 16
         limits:
-          cpu: 20
-          memory: 200Gi
-          nvidia.com/gpu: 4
+          cpu: 128
+          memory: 1024Gi
+          nvidia.com/gpu: 16
 
       readinessProbe:
         httpGet:

@@ -57,6 +57,12 @@ spec:
         - "8"
         - --mem-frac
         - "0.9"
+        - --attention-backend
+        - fa3
+        - --quantization
+        - fp8
+        - --kv-cache-dtype
+        - fp8_e5m2
         - --served-model-name
         - meta-llama/Llama-3.1-405B-Instruct-FP8
       volumeMounts:
