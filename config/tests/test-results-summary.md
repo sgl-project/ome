@@ -92,6 +92,7 @@
 | deepseek-ai | DeepSeek-V3 | 671B | MoE | 32+ | 2025-12-02 | CUDA Out of Memory: Model requires 32+ GPUs but runtime configured for only 8 GPUs. Insufficient GPU resources. Each H100 80GB GPU exhausted trying to allocate model weights. |
 | tiiuae | falcon-7b-instruct | 7B | Instruct | 1 | 2025-12-03 | ValueError: FalconForCausalLM has no SGLang implementation and is not compatible with SGLang. Model downloaded successfully (13 nodes), but SGLang runtime incompatible with Falcon architecture. Requires alternative runtime (vLLM/TGI). |
 | bigscience | bloomz-7b1 | 7B | Base | 1 | 2025-12-04 | ValueError: BloomForCausalLM has no SGLang implementation and the Transformers implementation is not compatible with SGLang. Model downloaded successfully (~2min, 4 nodes). Runtime auto-select working. Requires alternative runtime (vLLM/TGI). |
+| databricks | dbrx-instruct | 132B | MoE | 8 | 2025-12-04 | Model download timeout: Very large model (~262GB) stuck in "In_Transit" state for 11+ minutes with 0 nodes downloading. Added hf-token for gated model access, still no progress. System-level download issue for large models. |
 | nvidia | nvidia-nemotron-nano-9b-v2 | 9B | Base | 1 | 2025-12-03 | RuntimeError: Not enough memory for KV cache despite mem_fraction_static=0.9. NemotronHForCausalLM architecture disables radix cache causing memory allocation failure. Model loads successfully (16.68GB on 78.68GB GPU) but KV cache initialization fails. SGLang v0.5.5.post3 incompatible with NemotronH architecture. |
 | baichuan-inc | Baichuan2-13B-Chat | 13B | Chat | 2 | 2025-12-03 | Warmup timeout: Server starts successfully (application startup complete, transformers 4.29.2) but warmup request hangs indefinitely. Model loads correctly with TP=2 (13.08GB per GPU, 2 GPUs). CUDA graph disabled due to view/stride incompatibility. Warmup request times out after 4s repeatedly. SGLang v0.5.5.post3 likely incompatible with Baichuan model + TP=2 configuration. |
 | LGAI-EXAONE | EXAONE-3.5-7.8B-Instruct | 7.8B | Instruct | 1 | 2025-12-02 | Model download timeout: Model stuck in "In_Transit" state for 24+ minutes with no node downloads started (0 nodes throughout). Model size: 31.3GB (31273795584 bytes). Expected download time: ~5-10 minutes. Model download system appears non-functional or model previously created may be blocking. System-level issue with model download controller. |
@@ -177,34 +178,34 @@
 ### databricks (0/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| dbrx-instruct | ⏳ Not Tested | - | - |
+| dbrx-instruct | ❌ Failed | 2025-12-04 | Download timeout: Model (132B MoE, ~262GB) stuck in In_Transit 11+ min with 0 nodes. Added hf-token, still stuck. Very large model may need special handling. |
 | dolly-v2-12b | ❌ Failed | 2025-12-03 | Download: Unable to verify (In_Transit 40+ min, 0 nodes), Startup attempt: crashed, GPTNeoXConfig architecture incompatible with SGLang v0.5.5.post3, transformers 4.25.1 |
 
-### deepseek-ai (5/10)
+### deepseek-ai (10/10)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | deepseek-coder-7b-instruct-v1-5 | ✅ Passed | 2025-12-03 | Download: 51s, Startup: 7s, chat completions endpoint, transformers 4.35.2 |
-| deepseek-llm-7b-chat | ⏳ Not Tested | - | - |
-| deepseek-v2-lite-chat | ⏳ Not Tested | - | - |
+| deepseek-llm-7b-chat | ✅ Passed | 2025-12-04 | Download: 30s, Startup: 75s, chat completions working, configs newly created |
+| deepseek-v2-lite-chat | ✅ Passed | 2025-12-04 | Download: 60s, Startup: 104s, MoE model (DeepseekV2ForCausalLM), 2 GPUs, configs newly created |
 | deepseek-v3 | ❌ Failed | 2025-12-02 | CUDA OOM: Requires 32+ GPUs, runtime only configured for 8 GPUs |
 | deepseek-r1-distill-llama-8b | ✅ Passed | 2025-12-03 | Download: 55min (10 nodes), Startup: 63s, reasoning model, transformers 4.43.0.dev0 |
-| deepseek-r1-distill-llama-70b | ⏳ Not Tested | - | - |
+| deepseek-r1-distill-llama-70b | ✅ Passed | 2025-12-04 | Download: 15min, Startup: 3min, reasoning model, 4 GPUs TP=4, 160Gi, configs newly created |
 | deepseek-r1-distill-qwen-1-5b | ✅ Passed | 2025-12-02 | Download: ~3min (9 nodes), Startup: ~2min, reasoning model, transformers 4.44.0 |
 | deepseek-r1-distill-qwen-7b | ✅ Passed | 2025-12-03 | Download: ~5min (7 nodes), Startup: 46s, reasoning model with <think> tags, transformers 4.44.0 |
-| deepseek-r1-distill-qwen-14b | ⏳ Not Tested | - | - |
-| deepseek-r1-distill-qwen-32b | ⏳ Not Tested | - | - |
+| deepseek-r1-distill-qwen-14b | ✅ Passed | 2025-12-04 | Download: ~3min (3 nodes), Startup: ~2min, reasoning model, 2 GPUs, model config newly created |
+| deepseek-r1-distill-qwen-32b | ✅ Passed | 2025-12-04 | Download: ~10min (1 node), Startup: ~2min, reasoning model, 2 GPUs, model config newly created |
 | janus-pro-7b | ✅ Passed | 2025-12-03 | Download: 510s (~8.5min, 1 node), Startup: 99s, VLM model, chat completions endpoint, transformers 4.33.1 |
 
 ### DAMO-NLP-SG (0/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| videollama2-7b | ⏳ Not Tested | - | - |
+| videollama2-7b | ❌ Failed | 2025-12-05 | Videollama2MistralForCausalLM not supported by SGLang. Supported video VLMs: Qwen-VL, GLM-4v, NVILA, LLaVA-NeXT-Video, LLaVA-OneVision |
 
 ### EleutherAI (0/2)
 | Model | Status | Test Date | Notes |
-|-------|--------|-----------|-------|
-| gpt-j-6b | ❌ Failed | 2025-12-03 | Model download blocked: 14+ min In_Transit, SIZE=0, cluster-wide download issue, configs created successfully |
-| pythia-6-9b | ⏳ Not Tested | - | - |
+|-------|--------|-----------|------|-
+| gpt-j-6b | ❌ Failed | 2025-12-05 | GPTJForCausalLM not supported by SGLang: "has no SGlang implementation and Transformers implementation is not compatible" |
+| pythia-6-9b | ❌ Failed | 2025-12-05 | GPTNeoXForCausalLM not supported by SGLang (same as dolly-v2-12b), requires vLLM/TGI |
 
 ### HuggingFaceTB (1/1)
 | Model | Status | Test Date | Notes |
