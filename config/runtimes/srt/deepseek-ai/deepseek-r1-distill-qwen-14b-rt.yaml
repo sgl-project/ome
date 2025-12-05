@@ -12,7 +12,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: Qwen2ForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
