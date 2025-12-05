@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-05 07:40:00 UTC
+**Last Updated**: 2025-12-05 08:30:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -10,12 +10,12 @@
 
 | Metric | Count |
 |--------|-------|
-| **Total Models** | 149 |
-| **Passed** | 68 |
-| **Failed** | 30 |
-| **Skipped** | 3 |
-| **Not Tested** | 48 |
-| **Pass Rate** | 45.6% |
+| **Total Models** | 127 |
+| **Passed** | 62 |
+| **Failed** | 28 |
+| **Skipped** | 5 |
+| **Not Tested** | 32 |
+| **Pass Rate** | 48.8% |
 
 ---
 
@@ -305,28 +305,28 @@
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | mpt-7b | ❌ Failed | 2025-12-03 | Download timeout: 55+ min stuck in "In_Transit" with 0 nodes, system-wide download issue, transformers 4.28.1, MPTForCausalLM |
-| mpt-30b | ⏳ Not Tested | - | - |
+| mpt-30b | ❌ Failed | 2025-12-05 | SGLang incompatible with MPT custom attention code. FileNotFoundError: flash_attn_triton.py missing. MPTForCausalLM uses dynamic custom code. Model downloaded successfully, auto-select worked (transformers 4.28.1, TP=2, 2 GPUs, 80Gi). Requires alternative runtime (vLLM/TGI). |
 
 ### NousResearch (0/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | hermes-2-pro-llama-3-8b | ❌ Failed | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state for 60+ minutes with no completion, system-level download controller issue |
-| meta-llama-3-1-8b-instruct | ⏳ Not Tested | - | - |
+| meta-llama-3-1-8b-instruct | ⏭️ Skipped | - | not in the test plan |
 
 ### jet-ai (1/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | jet-nemotron-2b | ✅ Passed | 2025-12-02 | Download: N/A (timeout, system-wide controller issue), Startup: 118s, Inference: OK (direct engine access), transformers 4.51.3 |
 
-### nvidia (1/6)
+### nvidia (3/6)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| llama-3-1-nemotron-70b-instruct-hf | ⏳ Not Tested | - | - |
+| llama-3-1-nemotron-70b-instruct-hf | ✅ Passed | 2025-12-05 | Auto-select: srt-llama-3-1-nemotron-70b-instruct-hf, 70.55B LlamaForCausalLM, TP=4, inference verified |
 | llama-3-1-nemotron-nano-8b-v1 | ✅ Passed | 2025-12-02 | Download: 16s (cached), Startup: 69s, Fixed HF model ID |
 | nvidia-nemotron-nano-9b-v2 | ❌ Failed | 2025-12-03 | RuntimeError: KV cache memory allocation failure, NemotronHForCausalLM incompatible with SGLang v0.5.5.post3 |
-| llama-3-3-nemotron-super-49b-v1 | ⏳ Not Tested | - | - |
-| nvlm-d-72b | ⏳ Not Tested | - | - |
-| llama-3-1-nemotron-ultra-253b-v1 | ⏳ Not Tested | - | - |
+| llama-3-3-nemotron-super-49b-v1 | ✅ Passed | 2025-12-05 | Auto-select: srt-llama-3-3-nemotron-super-49b-v1, 49.87B DeciLMForCausalLM, required --trust-remote-code, TP=4 |
+| nvlm-d-72b | ❌ Failed | 2025-12-05 | Auto-select worked, NVLM_D 79.38B VLM, SGLang config error: "Unsupported architecture: None" in custom model config |
+| llama-3-1-nemotron-ultra-253b-v1 | ❌ Failed | 2025-12-05 | Gated model, download failed on all nodes, requires HuggingFace token authentication |
 
 ### openbmb (1/3)
 | Model | Status | Test Date | Notes |
