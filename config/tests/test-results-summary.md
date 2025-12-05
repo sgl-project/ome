@@ -207,7 +207,7 @@
 ### BAAI (3/3)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| bge-large-en-v1-5 | ✅ Passed | 2025-12-04 | Startup: ~30s, embeddings endpoint. BertModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi |
+| bge-large-en-v1.5 | ✅ Passed | 2025-12-04 | Startup: ~30s, embeddings endpoint. BertModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi |
 | bge-m3 | ✅ Passed | 2025-12-05 | Startup: ~70s, embeddings endpoint. XLMRobertaModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi. Auto-select working |
 | bge-reranker-v2-m3 | ✅ Passed | 2025-12-04 | Startup: ~30s, rerank endpoint. XLMRobertaForSequenceClassification. Fixed: triton backend, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi |
 
