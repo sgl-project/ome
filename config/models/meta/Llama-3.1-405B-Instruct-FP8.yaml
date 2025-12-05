@@ -9,6 +9,15 @@ spec:
   displayName: meta.llama-3.1-405b-instruct-fp8
   disabled: false
   version: "1.0.0"
+  modelFormat:
+    name: safetensors
+    version: "1.0.0"
+  modelFramework:
+    name: transformers
+    version: "4.43.0"
+  modelType: llama
+  modelArchitecture: LlamaForCausalLM
   storage:
     storageUri: hf://meta-llama/Llama-3.1-405B-Instruct-FP8
     path: /raid/models/meta/llama-3-1-405b-instruct-fp8
+    key: "hf-token"

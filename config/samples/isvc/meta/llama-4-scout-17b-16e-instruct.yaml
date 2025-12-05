@@ -15,6 +15,11 @@ metadata:
 spec:
   model:
     name: llama-4-scout-17b-16e-instruct
+  runtime:
+    name: srt-llama-4-scout-17b-16e-instruct
   engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
     minReplicas: 1
     maxReplicas: 1
