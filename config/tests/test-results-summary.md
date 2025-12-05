@@ -11,11 +11,11 @@
 | Metric | Count |
 |--------|-------|
 | **Total Models** | 139 |
-| **Passed** | 93  |
-| **Failed** | 37  |
+| **Passed** | 94  |
+| **Failed** | 39  |
 | **Skipped** | 4   |
-| **Not Tested** | 5  |
-| **Pass Rate** | 71.5% |
+| **Not Tested** | 2  |
+| **Pass Rate** | 70.7% |
 
 ---
 
@@ -443,7 +443,6 @@
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | chatglm2-6b | ❌ Failed | 2025-12-02 | ChatGLMTokenizer incompatible with SGLang, requires trust-remote-code, transformers 4.27.1 |
-| glm-4-9b-chat | ✅ Passed | 2025-12-03 | Download: ~15min (13 nodes), Startup: ~3min, chat completions endpoint, transformers 4.46.0.dev0, GlmForCausalLM architecture, Transformers backend fallback (no native SGLang support) |
 | glm-4v-9b | ❌ Failed | 2025-12-05 | KeyError: 'transformer.vision.boi' - SGLang ChatGLM model loader doesn't support vision weights. Vision-language model requires alternative runtime. |
 
 ### tiiuae (1/4)
