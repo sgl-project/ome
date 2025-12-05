@@ -154,11 +154,11 @@ func (e *Engine) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta 
 	case constants.RawDeployment:
 		return e.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.MultiNode:
-		return e.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
+		return e.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta.Normal, podSpec, workerSize, workerPodSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.MultiNodeRayVLLM:
-		return e.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
+		return e.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta.Normal, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	case constants.Serverless:
-		return e.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
+		return e.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta.Normal, podSpec, &e.engineSpec.ComponentExtensionSpec, v1beta1.EngineComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for engine")
 	}
