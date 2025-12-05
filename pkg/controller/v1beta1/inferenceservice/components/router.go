@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+
 	isutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 
 	"github.com/pkg/errors"
