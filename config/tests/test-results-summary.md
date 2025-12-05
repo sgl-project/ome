@@ -11,11 +11,11 @@
 | Metric | Count |
 |--------|-------|
 | **Total Models** | 148 |
-| **Passed** | 72  |
-| **Failed** | 30  |
-| **Skipped** | 3   |
-| **Not Tested** | 43  |
-| **Pass Rate** | 48.6% |
+| **Passed** | 93  |
+| **Failed** | 38  |
+| **Skipped** | 4   |
+| **Not Tested** | 6  |
+| **Pass Rate** | 71.0% |
 
 ---
 
@@ -209,7 +209,7 @@
 | dbrx-instruct | ❌ Failed | 2025-12-04 | Download timeout: Model (132B MoE, ~262GB) stuck in In_Transit 11+ min with 0 nodes. Added hf-token, still stuck. Very large model may need special handling. |
 | dolly-v2-12b | ❌ Failed | 2025-12-03 | Download: Unable to verify (In_Transit 40+ min, 0 nodes), Startup attempt: crashed, GPTNeoXConfig architecture incompatible with SGLang v0.5.5.post3, transformers 4.25.1 |
 
-### deepseek-ai (10/10)
+### deepseek-ai (10/11)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | deepseek-coder-7b-instruct-v1-5 | ✅ Passed | 2025-12-03 | Download: 51s, Startup: 7s, chat completions endpoint, transformers 4.35.2 |
@@ -279,7 +279,7 @@
 | vicuna-7b-v1-5 | ✅ Passed | 2025-12-03 | Download: 329s (11 nodes), Startup: 150s, chat completions endpoint, created all configs |
 | vicuna-13b-v1-5 | ✅ Passed | 2025-12-03 | Download: ~27min (13 nodes), Startup: ~6min (TP=2), chat completions, transformers 4.55.1, created all configs |
 
-### meta-llama (13/16)
+### meta-llama (16/19)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | llama-2-7b | ✅ Passed | 2025-12-05 | Download: ~60s (3 nodes), Startup: ~2min, base model, completions endpoint works, transformers 4.31.0.dev0, **auto-select working** with modelSizeRange 5B-10B |
@@ -369,7 +369,7 @@
 |-------|--------|-----------|-------|
 | orion-14b-base | ✅ Passed | 2025-12-02 | Download: 287s, Startup: 138s, completions only, gated model, 11 nodes ready |
 
-### Qwen (20/22, 2 skipped)
+### Qwen (20/23, 2 skipped)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | qwen-7b-chat | ✅ Passed | 2025-12-05 | Download: <1s (cached), Startup: ~4min, completions only (no chat template). Transformers 4.32.0, QWenLMHeadModel. Required --trust-remote-code flag. Legacy Qwen 1.0 model |
