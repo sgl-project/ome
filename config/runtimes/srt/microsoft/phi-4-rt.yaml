@@ -1,13 +1,13 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-phi-3-5-mini-instruct
+  name: srt-phi-4
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.3"
+        version: "4.47.0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
@@ -17,8 +17,8 @@ spec:
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 2B
-    max: 5B
+    min: 14B
+    max: 16B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -58,21 +58,19 @@ spec:
         - --mem-frac
         - "0.9"
         - --trust-remote-code
-        - --attention-backend
-        - triton
         - --served-model-name
-        - microsoft/Phi-3.5-mini-instruct
+        - microsoft/phi-4
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 8
-          memory: 32Gi
+          cpu: 16
+          memory: 64Gi
           nvidia.com/gpu: 1
         limits:
-          cpu: 8
-          memory: 32Gi
+          cpu: 16
+          memory: 64Gi
           nvidia.com/gpu: 1
 
       readinessProbe:

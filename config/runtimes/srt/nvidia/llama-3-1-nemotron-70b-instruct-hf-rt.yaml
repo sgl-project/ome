@@ -1,24 +1,24 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-phi-3-5-mini-instruct
+  name: srt-llama-3-1-nemotron-70b-instruct-hf
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.3"
+        version: "4.40.0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: Phi3ForCausalLM
+      modelArchitecture: LlamaForCausalLM
       autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 2B
-    max: 5B
+    min: 68B
+    max: 75B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -54,26 +54,23 @@ spec:
         - --model-path
         - $(MODEL_PATH)
         - --tp-size
-        - "1"
+        - "4"
         - --mem-frac
         - "0.9"
-        - --trust-remote-code
-        - --attention-backend
-        - triton
         - --served-model-name
-        - microsoft/Phi-3.5-mini-instruct
+        - nvidia/Llama-3.1-Nemotron-70B-Instruct-HF
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 8
-          memory: 32Gi
-          nvidia.com/gpu: 1
+          cpu: 32
+          memory: 160Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 8
-          memory: 32Gi
-          nvidia.com/gpu: 1
+          cpu: 32
+          memory: 160Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:

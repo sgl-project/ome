@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mixtral-8x7b-v0-1
+  namespace: mixtral-8x7b-v0-1
+spec:
+  model:
+    name: mixtral-8x7b-v0-1
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
