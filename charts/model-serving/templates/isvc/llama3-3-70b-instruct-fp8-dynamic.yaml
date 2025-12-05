@@ -10,6 +10,9 @@ spec:
     annotations: {{ toYaml . | nindent 6 }}
     {{- end }}
     model:
+      {{- if .Values.llama_3_3_70b_instruct_fp8_dynamic.useSmallRuntime }}
+      runtime: srt-llama-3-3-70b-instruct-fp8-dynamic-small
+      {{- end }}
       baseModel: llama-3-3-70b-instruct-fp8-dynamic
       protocolVersion: openAI
     minReplicas: {{ .Values.llama_3_3_70b_instruct_fp8_dynamic.minReplicas}}

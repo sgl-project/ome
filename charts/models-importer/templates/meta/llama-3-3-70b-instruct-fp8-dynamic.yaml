@@ -8,7 +8,11 @@ metadata:
 {{ include "models-importer.genaiModelLabels" (dict "root" $ "model" "llama-3-3-70b-instruct-fp8-dynamic") | nindent 4 }}
   annotations:
     # TODO clean up annotations after migration, which is used in MP
+    {{- if eq (index .Values "llama-3-3-70b-instruct-fp8-dynamic" "compatibleDACShapes") "MEDIUM_GENERIC_V1" }}
+    models.ome.io/runtime: "srt-llama-3-3-70b-instruct-fp8-dynamic-small"
+    {{- else}}
     models.ome.io/runtime: "srt-llama-3-3-70b-instruct-fp8-dynamic"
+    {{- end}}
     models.ome.io/category: "LARGE"
     models.ome.io/experimental: "{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "isExperimental" }}"
     models.ome.io/internal: "{{ index .Values "llama-3-3-70b-instruct-fp8-dynamic" "isInternal" }}"
