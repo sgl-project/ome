@@ -12,7 +12,7 @@ spec:
         name: safetensors
         version: "1.0.0"
       modelArchitecture: DeciLMForCausalLM
-      autoSelect: false
+      autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
@@ -58,7 +58,8 @@ spec:
         - --mem-frac
         - "0.9"
         - --served-model-name
-        - nvidia/Llama-3.3-Nemotron-70B-Instruct
+        - nvidia/Llama-3.3-Nemotron-Super-49B-v1
+        - --trust-remote-code
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm

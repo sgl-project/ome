@@ -1,24 +1,24 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-phi-3-5-mini-instruct
+  name: srt-mixtral-8x7b
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.3"
+        version: "4.36.0.dev0"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: Phi3ForCausalLM
+      modelArchitecture: MixtralForCausalLM
       autoSelect: true
       priority: 1
   protocolVersions:
     - openAI
   modelSizeRange:
-    min: 2B
-    max: 5B
+    min: 40B
+    max: 50B
   engineConfig:
     annotations:
       prometheus.io/scrape: "true"
@@ -54,26 +54,23 @@ spec:
         - --model-path
         - $(MODEL_PATH)
         - --tp-size
-        - "1"
+        - "4"
         - --mem-frac
         - "0.9"
-        - --trust-remote-code
-        - --attention-backend
-        - triton
         - --served-model-name
-        - microsoft/Phi-3.5-mini-instruct
+        - mistralai/Mixtral-8x7B-v0.1
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 8
-          memory: 32Gi
-          nvidia.com/gpu: 1
+          cpu: 20
+          memory: 100Gi
+          nvidia.com/gpu: 4
         limits:
-          cpu: 8
-          memory: 32Gi
-          nvidia.com/gpu: 1
+          cpu: 20
+          memory: 100Gi
+          nvidia.com/gpu: 4
 
       readinessProbe:
         httpGet:

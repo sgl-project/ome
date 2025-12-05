@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-3-1-nemotron-70b-instruct-hf
+  namespace: llama-3-1-nemotron-70b-instruct-hf
+spec:
+  model:
+    name: llama-3-1-nemotron-70b-instruct-hf
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
