@@ -136,12 +136,12 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes
-func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
+func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta isutils.ObjectMetaPack, podSpec *v1.PodSpec) (ctrl.Result, error) {
 	switch r.DeploymentMode {
 	case constants.RawDeployment:
 		return r.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
 	case constants.Serverless:
-		return r.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
+		return r.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta.Normal, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for router")
 	}

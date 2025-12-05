@@ -3,6 +3,7 @@ package common
 import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	isutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +32,7 @@ type DeploymentReconciler struct {
 // ReconcileRawDeployment handles raw Kubernetes deployment
 func (r *DeploymentReconciler) ReconcileRawDeployment(
 	isvc *v1beta1.InferenceService,
-	objectMeta metav1.ObjectMeta,
+	objectMeta isutils.ObjectMetaPack,
 	podSpec *v1.PodSpec,
 	componentSpec *v1beta1.ComponentExtensionSpec,
 	componentType v1beta1.ComponentType,
