@@ -105,7 +105,7 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	r.rbacReconciler = rbac.NewRBACReconciler(
 		r.Client,
 		r.Scheme,
-		objectMeta,
+		objectMetaNormal,
 		v1beta1.RouterComponent,
 		isvc.Name,
 	)
@@ -114,7 +114,7 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	}
 
 	// Reconcile pod spec
-	podSpec, err := r.reconcilePodSpec(isvc, &objectMeta)
+	podSpec, err := r.reconcilePodSpec(isvc, &objectMetaNormal)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile pod spec")
 	}
@@ -123,12 +123,12 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	podSpec.ServiceAccountName = r.rbacReconciler.GetServiceAccountName()
 
 	// Reconcile deployment based on deployment mode
-	if result, err := r.reconcileDeployment(isvc, objectMeta, podSpec); err != nil {
+	if result, err := r.reconcileDeployment(isvc, objectMetaPack, podSpec); err != nil {
 		return result, err
 	}
 
 	// Update router status
-	if err := r.updateRouterStatus(isvc, objectMeta); err != nil {
+	if err := r.updateRouterStatus(isvc, objectMetaNormal); err != nil {
 		return ctrl.Result{}, err
 	}
 
