@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-05 14:00:00 UTC
+**Last Updated**: 2025-12-05 21:20:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -11,11 +11,11 @@
 | Metric | Count |
 |--------|-------|
 | **Total Models** | 139 |
-| **Passed** | 94  |
+| **Passed** | 95  |
 | **Failed** | 39  |
 | **Skipped** | 4   |
-| **Not Tested** | 2  |
-| **Pass Rate** | 70.7% |
+| **Not Tested** | 1  |
+| **Pass Rate** | 71.4% |
 
 ---
 
@@ -80,6 +80,7 @@
 | mistralai | Mixtral-8x7B-Instruct-v0.1 | 47B | MoE | 4 | 2025-12-03 | Download: ~12min (13 nodes, 93.4GB), Startup: 152s (~2.5min), Inference: OK (chat completions endpoint). 8x7B MoE with TP=4. Transformers 4.36.0.dev0. |
 | Alibaba-NLP | gte-qwen2-7b-instruct | 7B | Embedding | 1 | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). Embedding model with --is-embedding flag. Transformers 4.41.2. |
 | BAAI | bge-large-en-v1.5 | 335M | Embedding | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). BertModel architecture. Required fixes: --attention-backend triton (flashinfer hangs), --skip-server-warmup, memory 24Gi. Health probes: /health_generate (readiness/startup), /health (liveness). Auto-select: working. Transformers 4.30.0. |
+| BAAI | bge-m3 | 567M | Embedding | 1 | 2025-12-05 | Download: cached (4 nodes), Startup: ~70s, Inference: OK (embeddings endpoint /v1/embeddings). XLMRobertaModel architecture. Required fixes: --attention-backend triton, --skip-server-warmup, memory 24Gi. Auto-select: working. Transformers 4.33.0. |
 | BAAI | bge-reranker-v2-m3 | 567M | Reranker | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (rerank endpoint /v1/rerank). XLMRobertaForSequenceClassification architecture. Required fixes: --attention-backend triton, --skip-server-warmup, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi. Scores correctly rank documents by relevance. Auto-select: working. Transformers 4.38.1. |
 | meta-llama | Llama-4-Scout-17B-16E-Instruct | 109B | MoE | 4 | 2025-12-05 | Download: model ready on nodes, Startup: ~10min (50 shards + MoE init), Inference: OK (chat completions endpoint). Llama4ForConditionalGeneration MoE (109B total), TP=4, 256Gi mem, FA3 attention, 196K context, multimodal, pythonic tool call parser. Transformers 4.51.0.dev0. |
 | meta-llama | Llama-4-Maverick-17B-128E-Instruct-FP8 | 401.65B | MoE FP8 | 8 | 2025-12-05 | Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (84 shards + CUDA graph), Inference: OK (chat completions endpoint). Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables fit on 8 GPUs. Transformers 4.51.0.dev0. |
@@ -201,11 +202,11 @@
 | olmo-2-1124-7b-instruct | ✅ Passed | 2025-12-02 | Download: Already cached (11 nodes), Startup: 12s, chat completions endpoint |
 | olmoe-1b-7b-0924 | ✅ Passed | 2025-12-03 | Download: ~30s (13 nodes), Startup: 58s, completions only (no chat template), fixed isvc config, transformers 4.43.0.dev0 |
 
-### BAAI (2/3)
+### BAAI (3/3)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | bge-large-en-v1-5 | ✅ Passed | 2025-12-04 | Startup: ~30s, embeddings endpoint. BertModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi |
-| bge-m3 | ⏳ Not Tested | - | No runtime exists |
+| bge-m3 | ✅ Passed | 2025-12-05 | Startup: ~70s, embeddings endpoint. XLMRobertaModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi. Auto-select working |
 | bge-reranker-v2-m3 | ✅ Passed | 2025-12-04 | Startup: ~30s, rerank endpoint. XLMRobertaForSequenceClassification. Fixed: triton backend, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi |
 
 ### baichuan-inc (1/2)
@@ -671,3 +672,4 @@ Update the `Last Updated` timestamp at the top.
 | 2025-12-05 02:15 | Claude Code                    | OpenGVLab/InternVL2_5-8B                      | ✅ Passed - Download: <1s (cached, 3 nodes ready), Startup: ~1.5min, chat completions endpoint works correctly. 8B vision-language model (IMAGE_TEXT_TO_TEXT). InternVLChatModel architecture, transformers 4.37.2, 1 GPU. Uses SGLang runtime with --trust-remote-code flag. Model responds: "I am an AI assistant whose name is InternVL, developed jointly by Shanghai AI Lab, Tsinghua University and other partners." First successful OpenGVLab model test! |
 | 2025-12-05 02:30 | Claude Code                    | openbmb/MiniCPM-2B-sft-bf16                   | ❌ Failed - Download: ~4.5min (4 nodes ready), Startup: Failed. Model downloads successfully but engine pod crashes during inference warmup. SGLang scheduler exception: `apply_rope_with_cos_sin_cache_inplace` failed in rotary_embedding.py. RuntimeError: Exception raised in callback on ScheduleEventType.SCHEDULE_FINISHED. Model framework: transformers 4.36.0, MiniCPMForCausalLM architecture, 1 GPU, 20Gi memory. Runtime uses --disable-cuda-graph and --attention-backend triton flags. Startup probe failed: context deadline exceeded on /health_generate. SGLang v0.5.5.post3 incompatible with MiniCPMForCausalLM rotary embedding implementation. Note: MiniCPM3-4B passed with same flags - issue specific to MiniCPM-2B-sft-bf16. Requires alternative runtime or SGLang update. |
 | 2025-12-05 02:35 | Claude Code                    | zai-org/glm-4v-9b (THUDM)                     | ❌ Failed - Download: ~8min (4 nodes ready), Startup: Failed. KeyError: 'transformer.vision.boi' during model weight loading. SGLang ChatGLM model loader doesn't support vision component weights (vision.boi, vision.eoi). This is a vision-language model (IMAGE_TEXT_TO_TEXT) that requires GLM-4V-specific support in the runtime. Model framework: transformers 4.44.0, ChatGLMModel architecture. All config files created. Requires alternative runtime implementation with GLM-4V multimodal support. Full cleanup completed. |
+| 2025-12-05 21:18 | Claude Code                    | BAAI/bge-m3                                   | ✅ Passed - Download: cached (4 nodes ready), Startup: ~70s, embeddings endpoint works correctly (/v1/embeddings returns 1024-dim vectors). XLMRobertaModel architecture (embedding model). Required fixes: --attention-backend triton (flashinfer hangs), --skip-server-warmup (incompatible with embedding models), memory 24Gi (8Gi insufficient for KV cache ~11GB in /dev/shm). Runtime auto-select working (srt-bge-m3). Transformers version mismatch fix: 4.30.0→4.33.0 to match model. All config files created (model existed, runtime, isvc). |
