@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: internvl2-5-8b
+  namespace: internvl2-5-8b
+spec:
+  model:
+    name: internvl2-5-8b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
