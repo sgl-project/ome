@@ -278,18 +278,18 @@
 | llama-4-maverick-17b-128e-instruct | ❌ Failed | 2025-12-05 | CUDA OOM + No Multi-Node: BF16 model (693GB, 128 experts) requires 16 GPUs. 8 GPU: OOM. 16 GPU: No single node has 16 GPUs, needs MultiNode mode (not configured). |
 | llama-4-maverick-17b-128e-instruct-fp8 | ✅ Passed | 2025-12-05 | Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (84 shards + CUDA graph), chat completions works. Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, 8 GPUs, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables single-node deployment. Transformers 4.51.0.dev0. |
 
-### microsoft (0/7)
+### microsoft (5/7)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | phi-2 | ❌ Failed | 2025-12-02 | ModuleNotFoundError: vllm module missing in sglang image for phi-2 |
 | phi-3-mini-4k-instruct | ❌ Failed | 2025-12-03 | ModuleNotFoundError: vllm._custom_ops missing, Phi3ForCausalLM incompatible with SGLang image |
-| phi-3-5-mini-instruct | ⏳ Not Tested | - | - |
-| phi-3-5-moe-instruct | ⏳ Not Tested | - | - |
-| phi-4 | ⏳ Not Tested | - | - |
-| phi-4-mini-instruct | ⏳ Not Tested | - | - |
-| phi-4-multimodal-instruct | ⏳ Not Tested | - | - |
+| phi-3-5-mini-instruct | ✅ Passed | 2025-12-05 | Required `--attention-backend triton` (head_dim=96 not supported by flashinfer), auto-select works |
+| phi-3-5-moe-instruct | ✅ Passed | 2025-12-05 | 41.87B MoE, 4 GPUs, TP=4, auto-select works |
+| phi-4 | ✅ Passed | 2025-12-05 | 14B, 1 GPU, auto-select works |
+| phi-4-mini-instruct | ✅ Passed | 2025-12-05 | 3.8B, 1 GPU, auto-select works |
+| phi-4-multimodal-instruct | ✅ Passed | 2025-12-05 | 5.57B multimodal, 1 GPU, auto-select works |
 
-### mistralai (4/8)
+### mistralai (6/8)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | Mistral-7B-Instruct-v0.2 | ✅ Passed | 2025-12-02 | Download: 701s (~12min), Startup: 92s, 321.78 tok/s |
@@ -297,8 +297,8 @@
 | Mistral-Nemo-Instruct-2407 | ✅ Passed | 2025-12-03 | Download: 456s (~7.6min, 7 nodes), Startup: 124s (~2min), transformers 4.43.0.dev0 |
 | Mistral-Small-3.1-24B-Instruct-2503 | ❌ Failed | 2025-12-02 | Download timeout: 48GB model remained in "In_Transit" for 40+ min, download incomplete. Config correct (TP=2, 2 GPUs, transformers 4.50.0.dev0). |
 | Mixtral-8x7B-Instruct-v0.1 | ✅ Passed | 2025-12-03 | Download: ~12min (13 nodes, 93.4GB), Startup: 152s, TP=4, 8x7B MoE, transformers 4.36.0.dev0 |
-| Mixtral-8x22B-v0.1 | ⏳ Not Tested | - | - |
-| Mixtral-8x7B-v0.1 | ⏳ Not Tested | - | - |
+| Mixtral-8x22B-v0.1 | ✅ Passed | 2025-12-05 | 140.62B MoE, TP=8, 8 GPUs, 320Gi, transformers 4.38.0, auto-select works |
+| Mixtral-8x7B-v0.1 | ✅ Passed | 2025-12-05 | 46.7B MoE, TP=4, 4 GPUs, 100Gi, transformers 4.36.0.dev0, auto-select works |
 | Mistral-7B-v0.1 | ❌ Failed | 2025-12-03 | Model download timeout: 30+ min stuck in "In_Transit" with 0 nodes, system-level download issue |
 
 ### mosaicml (0/2)
