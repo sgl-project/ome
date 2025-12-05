@@ -10,17 +10,12 @@ kind: InferenceService
 metadata:
   name: llama-4-maverick-17b-128e-instruct-fp8
   namespace: llama-4-maverick-17b-128e-instruct-fp8
-  annotations:
-    ome.io/ingress-disable-creation: "true"
 spec:
   model:
     name: llama-4-maverick-17b-128e-instruct-fp8
   runtime:
-    name: srt-llama-4-maverick-17b-128e-instruct-fp8-pd
+    name: srt-llama-4-maverick-17b-128e-instruct-fp8
   engine:
-    minReplicas: 1
-    maxReplicas: 1
-  decoder:
     minReplicas: 1
     maxReplicas: 1
   router:

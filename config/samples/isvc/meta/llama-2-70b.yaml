@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-2-70b
+  namespace: llama-2-70b
+spec:
+  model:
+    name: llama-2-70b-hf
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

@@ -11,8 +11,13 @@ metadata:
   name: llama-3-1-405b-instruct-fp8
   namespace: llama-3-1-405b-instruct-fp8
 spec:
+  model:
+    name: llama-3-1-405b-instruct-fp8
+  runtime:
+    name: srt-llama-3-1-405b-instruct-fp8
   engine:
     minReplicas: 1
     maxReplicas: 1
-  model:
-    name: llama-3-1-405b-instruct-fp8
+  router:
+    minReplicas: 1
+    maxReplicas: 1

@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-guard-3-8b
+  namespace: llama-guard-3-8b
+spec:
+  model:
+    name: llama-guard-3-8b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1

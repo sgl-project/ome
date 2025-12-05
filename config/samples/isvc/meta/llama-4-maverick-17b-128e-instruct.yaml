@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-4-maverick-17b-128e-instruct
+---
+
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: llama-4-maverick-17b-128e-instruct
+  namespace: llama-4-maverick-17b-128e-instruct
+spec:
+  model:
+    name: llama-4-maverick-17b-128e-instruct
+  runtime:
+    name: srt-llama-4-maverick-17b-128e-instruct
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
