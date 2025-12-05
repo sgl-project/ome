@@ -1,0 +1,14 @@
+apiVersion: ome.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen3-embedding-0-6b
+  namespace: qwen3-embedding-0-6b
+spec:
+  model:
+    name: qwen3-embedding-0-6b
+  engine:
+    minReplicas: 1
+    maxReplicas: 1
+  router:
+    minReplicas: 1
+    maxReplicas: 1
