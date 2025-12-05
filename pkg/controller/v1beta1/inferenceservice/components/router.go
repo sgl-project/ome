@@ -152,13 +152,13 @@ func (r *Router) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 }
 
 // reconcileObjectMeta creates the object metadata for the router component
-func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
+func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService, modePod bool) (metav1.ObjectMeta, error) {
 	routerName, err := r.determineRouterName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
 
-	annotations, err := r.processAnnotations(isvc)
+	annotations, err := r.processAnnotations(isvc, modePod)
 	if err != nil {
 		return metav1.ObjectMeta{
 			Name:      routerName,
@@ -185,14 +185,14 @@ func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 }
 
 // processAnnotations processes the annotations for the router
-func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
+func (r *Router) processAnnotations(isvc *v1beta1.InferenceService, modePod bool) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
 	// Merge with router annotations
 	mergedAnnotations := annotations
-	if r.routerSpec != nil {
+	if r.routerSpec != nil && modePod {
 		routerAnnotations := r.routerSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, routerAnnotations)
 	}
