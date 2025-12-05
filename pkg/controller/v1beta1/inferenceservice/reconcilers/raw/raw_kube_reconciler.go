@@ -1,6 +1,7 @@
 package raw
 
 import (
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,13 +31,7 @@ type RawKubeReconciler struct {
 }
 
 // NewRawKubeReconciler creates raw kubernetes resource reconciler.
-func NewRawKubeReconciler(client client.Client,
-	clientset kubernetes.Interface,
-	scheme *runtime.Scheme,
-	componentMeta metav1.ObjectMeta,
-	inferenceServiceSpec *v1beta1.InferenceServiceSpec,
-	podSpec *corev1.PodSpec,
-) (*RawKubeReconciler, error) {
+func NewRawKubeReconciler(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme, componentMeta isvcutils.ObjectMetaPack, inferenceServiceSpec *v1beta1.InferenceServiceSpec, podSpec *corev1.PodSpec) (*RawKubeReconciler, error) {
 	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
