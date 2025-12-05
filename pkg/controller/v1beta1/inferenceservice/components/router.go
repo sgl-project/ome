@@ -3,6 +3,8 @@ package components
 import (
 	"context"
 
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,16 +89,24 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	}
 
 	// Reconcile object metadata
-	objectMeta, err := r.reconcileObjectMeta(isvc)
+	objectMetaNormal, err := r.reconcileObjectMeta(isvc, false)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	objectMetaPod, err := r.reconcileObjectMeta(isvc, true)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	objectMetaPack := isvcutils.ObjectMetaPack{
+		Normal: objectMetaNormal,
+		Pod:    objectMetaPod,
 	}
 
 	// Reconcile RBAC resources (ServiceAccount, Role, RoleBinding)
 	r.rbacReconciler = rbac.NewRBACReconciler(
 		r.Client,
 		r.Scheme,
-		objectMeta,
+		objectMetaNormal,
 		v1beta1.RouterComponent,
 		isvc.Name,
 	)
@@ -105,7 +115,7 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	}
 
 	// Reconcile pod spec
-	podSpec, err := r.reconcilePodSpec(isvc, &objectMeta)
+	podSpec, err := r.reconcilePodSpec(isvc, &objectMetaNormal)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile pod spec")
 	}
@@ -114,12 +124,12 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	podSpec.ServiceAccountName = r.rbacReconciler.GetServiceAccountName()
 
 	// Reconcile deployment based on deployment mode
-	if result, err := r.reconcileDeployment(isvc, objectMeta, podSpec); err != nil {
+	if result, err := r.reconcileDeployment(isvc, objectMetaPack, podSpec); err != nil {
 		return result, err
 	}
 
 	// Update router status
-	if err := r.updateRouterStatus(isvc, objectMeta); err != nil {
+	if err := r.updateRouterStatus(isvc, objectMetaNormal); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -127,12 +137,12 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes
-func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec) (ctrl.Result, error) {
+func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta isvcutils.ObjectMetaPack, podSpec *v1.PodSpec) (ctrl.Result, error) {
 	switch r.DeploymentMode {
 	case constants.RawDeployment:
 		return r.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
 	case constants.Serverless:
-		return r.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
+		return r.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta.Normal, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for router")
 	}
@@ -152,13 +162,13 @@ func (r *Router) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 }
 
 // reconcileObjectMeta creates the object metadata for the router component
-func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
+func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService, modePod bool) (metav1.ObjectMeta, error) {
 	routerName, err := r.determineRouterName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
 
-	annotations, err := r.processAnnotations(isvc)
+	annotations, err := r.processAnnotations(isvc, modePod)
 	if err != nil {
 		return metav1.ObjectMeta{
 			Name:      routerName,
@@ -185,14 +195,14 @@ func (r *Router) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 }
 
 // processAnnotations processes the annotations for the router
-func (r *Router) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
+func (r *Router) processAnnotations(isvc *v1beta1.InferenceService, modePod bool) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
 	// Merge with router annotations
 	mergedAnnotations := annotations
-	if r.routerSpec != nil {
+	if r.routerSpec != nil && modePod {
 		routerAnnotations := r.routerSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, routerAnnotations)
 	}
