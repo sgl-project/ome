@@ -1,12 +1,12 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterBaseModel
 metadata:
-  name: qwen2-5-32b-instruct
+  name: qwen2-72b-instruct
 spec:
   modelCapabilities:
     - TEXT_TO_TEXT
   vendor: Qwen
-  displayName: qwen.qwen2.5-32b-instruct
+  displayName: qwen.qwen2-72b-instruct
   disabled: false
   version: "1.0.0"
   modelArchitecture: Qwen2ForCausalLM
@@ -15,9 +15,9 @@ spec:
     version: "1.0.0"
   modelFramework:
     name: transformers
-    version: "4.43.1"
-  modelParameterSize: 32B
+    version: "4.40.1"
+  modelParameterSize: 72B
   storage:
-    storageUri: hf://Qwen/Qwen2.5-32B-Instruct
-    path: /raid/models/Qwen/Qwen2.5-32B-Instruct
+    storageUri: hf://Qwen/Qwen2-72B-Instruct
+    path: /raid/models/Qwen/Qwen2-72B-Instruct
     key: "hf-token"
