@@ -148,16 +148,16 @@ func (d *Decoder) getWorkerSize() int {
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes
-func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta metav1.ObjectMeta, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
+func (d *Decoder) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta isvcutils.ObjectMetaPack, podSpec *v1.PodSpec, workerSize int, workerPodSpec *v1.PodSpec) (ctrl.Result, error) {
 	switch d.DeploymentMode {
 	case constants.RawDeployment:
 		return d.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNode:
-		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+		return d.deploymentReconciler.ReconcileMultiNodeDeployment(isvc, objectMeta.Normal, podSpec, workerSize, workerPodSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.MultiNodeRayVLLM:
-		return d.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+		return d.deploymentReconciler.ReconcileMultiNodeRayVLLMDeployment(isvc, objectMeta.Normal, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	case constants.Serverless:
-		return d.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
+		return d.deploymentReconciler.ReconcileKnativeDeployment(isvc, objectMeta.Normal, podSpec, &d.decoderSpec.ComponentExtensionSpec, v1beta1.DecoderComponent)
 	default:
 		return ctrl.Result{}, errors.New("invalid deployment mode for decoder")
 	}
