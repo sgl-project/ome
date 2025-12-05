@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-05 02:45:00 UTC
+**Last Updated**: 2025-12-05 21:50:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -10,12 +10,12 @@
 
 | Metric | Count |
 |--------|-------|
-| **Total Models** | 148 |
-| **Passed** | 73  |
-| **Failed** | 32  |
-| **Skipped** | 3   |
-| **Not Tested** | 40  |
-| **Pass Rate** | 49.3% |
+| **Total Models** | 139 |
+| **Passed** | 95  |
+| **Failed** | 39  |
+| **Skipped** | 5   |
+| **Not Tested** | 0  |
+| **Pass Rate** | 70.9% |
 
 ---
 
@@ -49,10 +49,13 @@
 | google | gemma-2-9b-it | 9B | Instruct | 1 | 2025-12-03 | Download: 485s (~8min, 13 nodes), Startup: 71s, Inference: OK (chat completions endpoint). Created model, runtime and isvc configs. Transformers 4.42.0.dev0. |
 | mistralai | Mistral-7B-Instruct-v0.3 | 7B | Instruct | 1 | 2025-12-03 | Download: 271s (~4.5min, 12 nodes), Startup: 210s (~3.5min), Inference: OK (chat completions endpoint). Created runtime and isvc configs. Transformers 4.42.0.dev0. |
 | Qwen | Qwen2.5-3B | 3B | Base | 1 | 2025-12-02 | Download: 278s (~4.6min, 1 node), Startup: 3s, Inference: OK (chat completions endpoint). Created runtime and isvc configs. Transformers 4.40.1. |
-| Qwen | Qwen3-8B | 8B | Base | 1 | 2025-12-02 | Download: ~3-5min (13 nodes, cached), Startup: 84s, Inference: OK (chat completions endpoint with reasoning traces). Created runtime and isvc configs. Transformers 4.51.0. |
 | internlm | internlm2-20b | 20B | Base | 2 | 2025-12-03 | Download: ~3min (9 nodes), Startup: 144s (~2.4min), Inference: OK (completions only, no chat template). Created runtime and isvc configs. Transformers 4.41.0. |
 | deepseek-ai | DeepSeek-R1-Distill-Qwen-7B | 7B | Distill | 1 | 2025-12-03 | Download: 300s (~5min, 7 nodes), Startup: 46s, Inference: OK (reasoning model with <think> tags, chat completions endpoint). Created runtime and isvc configs. Transformers 4.44.0. |
 | deepseek-ai | DeepSeek-R1-Distill-Qwen-14B | 14B | Distill | 2 | 2025-12-03 | Download: ~28min (5 nodes), Startup: ~2min (TP=2), Inference: OK (reasoning model with <think> tags, chat completions endpoint). Created runtime and isvc configs. Transformers 4.43.1. Router service discovery issue, tested via direct engine. |
+| deepseek-ai | DeepSeek-R1-Distill-Qwen-32B | 32B | Distill | 2 | 2025-12-04 | Download: ~10min (1 node), Startup: ~2min, Inference: OK (reasoning model, chat completions endpoint). 2 GPUs. |
+| deepseek-ai | DeepSeek-R1-Distill-Llama-70B | 70B | Distill | 4 | 2025-12-04 | Download: ~15min (1 node), Startup: ~3min, Inference: OK (reasoning model, chat completions endpoint). TP=4, 160Gi. |
+| deepseek-ai | deepseek-llm-7b-chat | 7B | Chat | 1 | 2025-12-04 | Download: ~30s (2 nodes), Startup: ~75s, Inference: OK (chat completions endpoint). LlamaForCausalLM architecture. Auto-select working. |
+| deepseek-ai | deepseek-v2-lite-chat | 16B | Chat MoE | 2 | 2025-12-04 | Download: ~60s (1 node), Startup: ~104s, Inference: OK (chat completions endpoint). DeepseekV2ForCausalLM MoE architecture, 2 GPUs. Auto-select working. |
 | mistralai | Mistral-Nemo-Instruct-2407 | 12B | Instruct | 2 | 2025-12-03 | Download: 456s (~7.6min, 7 nodes), Startup: 124s (~2min), Inference: OK (chat completions endpoint). Created runtime and isvc configs. Transformers 4.43.0.dev0. |
 | google | gemma-2-2b-it | 2B | Instruct | 1 | 2025-12-03 | Download: 523s (~8.7min, 11 nodes), Startup: 69s, Inference: OK (chat completions endpoint). Created model, runtime and isvc configs. Transformers 4.42.4. |
 | bigcode | starcoder2-15b | 15B | Code | 1 | 2025-12-03 | Download: ~6min (11 nodes), Startup: ~2.5min, Inference: OK (completions endpoint). TP=1 (not TP=2), CUDA graph disabled. Created runtime and isvc configs. Transformers 4.37.0.dev0. |
@@ -61,6 +64,7 @@
 | deepseek-ai | Janus-Pro-7B | 7B | VLM | 1 | 2025-12-03 | Download: 510s (~8.5min, 1 node), Startup: 99s, Inference: OK (chat completions endpoint, vision-language model). Transformers 4.33.1. Router service discovery issue (known limitation). |
 | arcee-ai | AFM-4.5B-Base | 4.5B | Base | 1 | 2025-12-03 | Download: ~11min (2 nodes), Startup: 104s, Inference: OK (completions only, no chat template). Transformers 4.53.2. RoPE scaling warning present. |
 | ibm-granite | granite-3.1-8b-instruct | 8B | Instruct | 1 | 2025-12-03 | Download: 290s (~4.8min, 1 node), Startup: 80s, Inference: OK (chat completions endpoint). Transformers 4.47.0. |
+| ibm-granite | granite-3.0-3b-a800m-instruct | 3B | MoE | 1 | 2025-12-02 | Download: Already cached (11 nodes), Startup: 125s, Inference: OK (native /generate endpoint). |
 | HuggingFaceTB | SmolLM-1.7B | 1.7B | Base | 1 | 2025-12-03 | Download: 510s (~8.5min, 11 nodes), Startup: 60-80s, Inference: OK (completions endpoint). Base model without chat template. Transformers 4.39.3. |
 | meta | Llama-3-70B-Instruct | 70B | Instruct | 4 | 2025-12-03 | Download: ~8min (13 nodes), Startup: 76s, Inference: OK (chat completions endpoint). 70B model with TP=4, transformers 4.40.0.dev0. Required runtime version update. |
 | google | gemma-2-27b-it | 27B | Instruct | 2 | 2025-12-03 | Download: ~18min (1 node), Startup: ~2min, Inference: OK (generate endpoint, no chat template). 27B model with TP=2, transformers 4.42.0.dev0. Router service discovery known limitation. |
@@ -74,6 +78,19 @@
 | Qwen | Qwen2.5-Coder-7B-Instruct | 7B | Code | 1 | 2025-12-03 | Download: 13.2min, Startup: 17.6min, Inference: OK (chat completions endpoint). Created model, runtime and isvc configs. Transformers 4.44.0. |
 | google | gemma-3-12b-it | 12B | Instruct | 2 | 2025-12-03 | Download: ~12min (13 nodes), Startup: 64s, Inference: OK (chat completions endpoint). TP=2. Required --mem-frac 0.75 (0.85 caused CUDA OOM). Transformers 4.50.0.dev0. |
 | mistralai | Mixtral-8x7B-Instruct-v0.1 | 47B | MoE | 4 | 2025-12-03 | Download: ~12min (13 nodes, 93.4GB), Startup: 152s (~2.5min), Inference: OK (chat completions endpoint). 8x7B MoE with TP=4. Transformers 4.36.0.dev0. |
+| Alibaba-NLP | gte-qwen2-7b-instruct | 7B | Embedding | 1 | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). Embedding model with --is-embedding flag. Transformers 4.41.2. |
+| BAAI | bge-large-en-v1.5 | 335M | Embedding | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). BertModel architecture. Required fixes: --attention-backend triton (flashinfer hangs), --skip-server-warmup, memory 24Gi. Health probes: /health_generate (readiness/startup), /health (liveness). Auto-select: working. Transformers 4.30.0. |
+| BAAI | bge-m3 | 567M | Embedding | 1 | 2025-12-05 | Download: cached (4 nodes), Startup: ~70s, Inference: OK (embeddings endpoint /v1/embeddings). XLMRobertaModel architecture. Required fixes: --attention-backend triton, --skip-server-warmup, memory 24Gi. Auto-select: working. Transformers 4.33.0. |
+| BAAI | bge-reranker-v2-m3 | 567M | Reranker | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (rerank endpoint /v1/rerank). XLMRobertaForSequenceClassification architecture. Required fixes: --attention-backend triton, --skip-server-warmup, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi. Scores correctly rank documents by relevance. Auto-select: working. Transformers 4.38.1. |
+| meta-llama | Llama-4-Scout-17B-16E-Instruct | 109B | MoE | 4 | 2025-12-05 | Download: model ready on nodes, Startup: ~10min (50 shards + MoE init), Inference: OK (chat completions endpoint). Llama4ForConditionalGeneration MoE (109B total), TP=4, 256Gi mem, FA3 attention, 196K context, multimodal, pythonic tool call parser. Transformers 4.51.0.dev0. |
+| meta-llama | Llama-4-Maverick-17B-128E-Instruct-FP8 | 401.65B | MoE FP8 | 8 | 2025-12-05 | Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (84 shards + CUDA graph), Inference: OK (chat completions endpoint). Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables fit on 8 GPUs. Transformers 4.51.0.dev0. |
+| meta-llama | Llama-2-7b | 7B | Base | 1 | 2025-12-05 | Download: ~60s (3 nodes), Startup: ~2min, Inference: OK (completions endpoint). LlamaForCausalLM, transformers 4.31.0.dev0. Auto-select working with modelSizeRange 5B-10B. |
+| meta-llama | Llama-2-7b-chat-hf | 7B | Chat | 1 | 2025-12-05 | Download: ~2min (2 nodes), Startup: ~90s, Inference: OK (chat completions endpoint). LlamaForCausalLM, transformers 4.32.0.dev0. Auto-select working with modelSizeRange 5B-10B. |
+| meta-llama | Llama-2-13b | 13B | Base | 1 | 2025-12-05 | Startup: ~75s, Inference: OK (completions endpoint). LlamaForCausalLM, transformers 4.32.0.dev0, 50Gi mem, 1 GPU. Auto-select working with modelSizeRange 10B-15B. |
+| meta-llama | Llama-2-13b-chat | 13B | Chat | 1 | 2025-12-05 | Startup: ~74s, Inference: OK (chat completions endpoint). LlamaForCausalLM, transformers 4.32.0.dev0. Auto-select working with modelSizeRange 10B-15B. |
+| meta-llama | Llama-2-70b | 70B | Base | 4 | 2025-12-05 | Download: ~7min, Startup: ~99s, Inference: OK (completions endpoint). LlamaForCausalLM, TP=4, 160Gi mem, 4 GPUs, transformers 4.32.0.dev0. Auto-select working with modelSizeRange 65B-75B. |
+| meta-llama | Llama-2-70b-chat | 70B | Chat | 4 | 2025-12-05 | Download: ~7min, Startup: ~99s, Inference: OK (chat completions endpoint). LlamaForCausalLM, TP=4, 160Gi mem, 4 GPUs, transformers 4.31.0.dev0. Auto-select working with modelSizeRange 65B-75B. |
+| meta-llama | Llama-Guard-3-8B | 8B | Guard | 1 | 2025-12-05 | Download: ~3min, Startup: ~74s, Inference: OK (chat completions endpoint). Content moderation model (returns "safe"/"unsafe"). LlamaForCausalLM, transformers 4.43.0.dev0. Auto-select working with modelSizeRange 7B-9B. |
 | unsloth | Llama-3.2-11B-Vision-Instruct | 11B | VLM | 1 | 2025-12-04 | Download: <10s (3 nodes), Startup: 76s, Inference: OK (chat completions endpoint). Vision-language model with MllamaForConditionalGeneration architecture. Transformers 4.46.3. Gated model. |
 | tiiuae | Falcon3-10B-Instruct | 10B | Instruct | 1 | 2025-12-04 | Download: <1min (4 nodes), Startup: ~2min, Inference: OK (chat completions endpoint). Transformers 4.46.1, LlamaForCausalLM architecture, gated model. |
 | Skywork | Skywork-OR1-7B-Preview | 7B | Reasoning | 1 | 2025-12-04 | Download: <1min (4 nodes), Startup: ~2min, Inference: OK (chat completions endpoint with reasoning). Transformers 4.45.2, Qwen2ForCausalLM architecture, gated model. Reasoning model with <think> tags. |
@@ -93,6 +110,15 @@
 | Qwen | Qwen1.5-110B-Chat | 110B | Chat | 8 | 2025-12-05 | Download: ~3min (2 nodes), Startup: ~3.8min, Inference: OK (chat completions endpoint). Transformers 4.37.2, Qwen2ForCausalLM architecture, TP=8. 110B model with 8x H100 GPUs. |
 | Qwen | Qwen1.5-72B-Chat | 72B | Chat | 8 | 2025-12-05 | Download: ~4min (3 nodes), Startup: ~3.5min, Inference: OK (chat completions endpoint). Transformers 4.37.0, Qwen2ForCausalLM architecture, TP=8. |
 | Qwen | Qwen1.5-32B-Chat | 32B | Chat | 4 | 2025-12-05 | Download: <1s (cached, 1 node), Startup: ~2min, Inference: OK (chat completions endpoint). Transformers 4.37.2, Qwen2ForCausalLM architecture, TP=4. Runtime auto-select worked correctly. |
+| microsoft | phi-3-5-mini-instruct | 3.8B | Instruct | 1 | 2025-12-05 | Inference: OK (chat completions endpoint). Phi3ForCausalLM architecture. Required --attention-backend triton (head_dim=96 not supported by flashinfer). Auto-select working. |
+| microsoft | phi-3-5-moe-instruct | 41.87B | MoE | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). PhiMoEForCausalLM MoE architecture, TP=4, 4 GPUs. Auto-select working. |
+| microsoft | phi-4 | 14B | Instruct | 1 | 2025-12-05 | Inference: OK (chat completions endpoint). Phi3ForCausalLM architecture, 1 GPU. Auto-select working. |
+| microsoft | phi-4-mini-instruct | 3.8B | Instruct | 1 | 2025-12-05 | Inference: OK (chat completions endpoint). Phi3ForCausalLM architecture, 1 GPU. Auto-select working. |
+| microsoft | phi-4-multimodal-instruct | 5.57B | VLM | 1 | 2025-12-05 | Inference: OK (chat completions endpoint). Phi3VForCausalLM multimodal architecture, 1 GPU. Auto-select working. |
+| mistralai | Mixtral-8x22B-v0.1 | 140.62B | MoE | 8 | 2025-12-05 | Inference: OK (chat completions endpoint). MixtralForCausalLM MoE architecture, TP=8, 8 GPUs, 320Gi mem. Transformers 4.38.0. Auto-select working. |
+| mistralai | Mixtral-8x7B-v0.1 | 46.7B | MoE | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). MixtralForCausalLM MoE architecture, TP=4, 4 GPUs, 100Gi mem. Transformers 4.36.0.dev0. Auto-select working. |
+| nvidia | Llama-3.1-Nemotron-70B-Instruct-HF | 70.55B | Instruct | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). LlamaForCausalLM architecture, TP=4, 4 GPUs. Auto-select working (srt-llama-3-1-nemotron-70b-instruct-hf). |
+| nvidia | Llama-3.3-Nemotron-Super-49B-v1 | 49.87B | Instruct | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). DeciLMForCausalLM architecture, TP=4, 4 GPUs. Required --trust-remote-code. Auto-select working. |
 | OpenGVLab | InternVL2_5-8B | 8B | VLM | 1 | 2025-12-05 | Download: <1s (cached, 3 nodes), Startup: ~1.5min, Inference: OK (chat completions endpoint). Vision-language model (IMAGE_TEXT_TO_TEXT). InternVLChatModel architecture, transformers 4.37.2. Response: "I am an AI assistant whose name is InternVL". |
 <!-- PASSED_END -->
 
@@ -106,29 +132,37 @@
 | stabilityai | stablelm-tuned-alpha-7b | 7B | Chat | 1 | 2025-12-02 | AttributeError: GPTNeoXConfig has no 'num_key_value_heads' attribute. SGLang v0.5.5.post3 incompatible with GPTNeoXForCausalLM architecture. Pod crash-loops with 4+ restarts. |
 | THUDM | chatglm2-6b | 6B | Chat | 1 | 2025-12-02 | TypeError: ChatGLMTokenizer._pad() incompatible with SGLang. Custom tokenizer doesn't support 'padding_side' parameter. Fundamental incompatibility requiring different runtime (vLLM/TGI). |
 | deepseek-ai | DeepSeek-V3 | 671B | MoE | 32+ | 2025-12-02 | CUDA Out of Memory: Model requires 32+ GPUs but runtime configured for only 8 GPUs. Insufficient GPU resources. Each H100 80GB GPU exhausted trying to allocate model weights. |
-| BAAI | bge-large-en-v1-5 | Small | Embedding | 1 | 2025-12-02 | Pod CrashLoopBackOff: Server starts successfully but crashes during warmup. Health probe issue - /health_generate endpoint incompatible with embedding models. Model loaded correctly (11 nodes ready), runtime needs embedding-specific health check configuration. |
 | tiiuae | falcon-7b-instruct | 7B | Instruct | 1 | 2025-12-03 | ValueError: FalconForCausalLM has no SGLang implementation and is not compatible with SGLang. Model downloaded successfully (13 nodes), but SGLang runtime incompatible with Falcon architecture. Requires alternative runtime (vLLM/TGI). |
+| bigscience | bloomz-7b1 | 7B | Base | 1 | 2025-12-04 | ValueError: BloomForCausalLM has no SGLang implementation and the Transformers implementation is not compatible with SGLang. Model downloaded successfully (~2min, 4 nodes). Runtime auto-select working. Requires alternative runtime (vLLM/TGI). |
+| databricks | dbrx-instruct | 132B | MoE | 8 | 2025-12-04 | Model download timeout: Very large model (~262GB) stuck in "In_Transit" state for 11+ minutes with 0 nodes downloading. Added hf-token for gated model access, still no progress. System-level download issue for large models. |
 | nvidia | nvidia-nemotron-nano-9b-v2 | 9B | Base | 1 | 2025-12-03 | RuntimeError: Not enough memory for KV cache despite mem_fraction_static=0.9. NemotronHForCausalLM architecture disables radix cache causing memory allocation failure. Model loads successfully (16.68GB on 78.68GB GPU) but KV cache initialization fails. SGLang v0.5.5.post3 incompatible with NemotronH architecture. |
 | baichuan-inc | Baichuan2-13B-Chat | 13B | Chat | 2 | 2025-12-03 | Warmup timeout: Server starts successfully (application startup complete, transformers 4.29.2) but warmup request hangs indefinitely. Model loads correctly with TP=2 (13.08GB per GPU, 2 GPUs). CUDA graph disabled due to view/stride incompatibility. Warmup request times out after 4s repeatedly. SGLang v0.5.5.post3 likely incompatible with Baichuan model + TP=2 configuration. |
 | LGAI-EXAONE | EXAONE-3.5-7.8B-Instruct | 7.8B | Instruct | 1 | 2025-12-02 | Model download timeout: Model stuck in "In_Transit" state for 24+ minutes with no node downloads started (0 nodes throughout). Model size: 31.3GB (31273795584 bytes). Expected download time: ~5-10 minutes. Model download system appears non-functional or model previously created may be blocking. System-level issue with model download controller. |
 | mistralai | Mistral-Small-3.1-24B-Instruct-2503 | 24B | Instruct | 2 | 2025-12-02 | Download timeout: Model (48GB) remained in "In_Transit" state for 40+ minutes without completing download from HuggingFace. Download rate appears insufficient for large models (expected ~80min for 48GB at 600MB/min rate). All configurations correct (TP=2, 2 GPUs, transformers 4.50.0.dev0). |
+| meta-llama | Llama-4-Maverick-17B-128E-Instruct | 400B | MoE | 16 | 2025-12-05 | CUDA Out of Memory + No Multi-Node Support: Non-FP8 BF16 model (693GB, 128 experts) requires 16 GPUs but cluster nodes have max 8 GPUs each. 8 GPU config: OOM during MoE weight loading. 16 GPU config: Pod pending "Insufficient nvidia.com/gpu" - no single node has 16 GPUs. Would require MultiNode deployment mode (LeaderWorkerSet) across 2 nodes, but no SGLang multi-node runtime configured. Transformers 4.51.0.dev0. |
 | Salesforce | xgen-7b-8k-inst | 7B | Instruct | 1 | 2025-12-03 | Model format incompatibility: Model only available in PyTorch bin format, runtime requires safetensors. Download: 69s (13 nodes), config parsing error (num_key_value_heads=0), runtime validation fails with 'mt:pytorch:1.0.0' format mismatch. |
 | Salesforce | codegen-16B-multi | 16B | Code | 1 | 2025-12-04 | ValueError: CodeGenForCausalLM has no SGLang implementation and is not compatible with SGLang. Model downloaded successfully (2 nodes ready). Runtime and InferenceService created successfully, but engine pod crashes immediately during initialization. Transformers 4.21.0.dev0. SGLang v0.5.5.post3 does not support CodeGen architecture. Same issue as Falcon models (FalconForCausalLM) and BLOOM (BloomForCausalLM). Requires alternative runtime (vLLM/TGI). Created all config files (model, runtime, isvc). |
 | EleutherAI | gpt-j-6b | 6B | Base | 1 | 2025-12-03 | Model download system blocked: Model stuck in "In_Transit" state for 14+ minutes with SIZE=0 (download never started). Cluster-wide download issue affecting 6+ models (some stuck for 4+ hours). System infrastructure issue, not model-specific. Created all configs successfully. Expected: 1-5min download, 60-120s startup, completions endpoint. |
 | databricks | dolly-v2-12b | 12B | Instruct | 2 | 2025-12-03 | AttributeError: GPTNeoXConfig has no 'num_key_value_heads' attribute. SGLang v0.5.5.post3 incompatible with GPTNeoXForCausalLM architecture. Same issue as stabilityai/stablelm-tuned-alpha-7b. Model stuck in "In_Transit" for 40+ min with 0 nodes downloading. Pod created and crashed immediately. Transformers 4.25.1. Requires alternative runtime (vLLM/TGI). Created all config files. |
 | mosaicml | mpt-7b | 7B | Base | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state for 55+ minutes with no node downloads started (0 nodes throughout). System-level issue with model download controller. InferenceService created successfully after removing modelSizeRange constraint and fixing transformers version (4.37.0→4.28.1), pods deployed but engine failed with FileNotFoundError for flash_attn_triton.py due to incomplete model download. Created all config files (model, runtime, isvc). Transformers 4.28.1, MPTForCausalLM architecture. |
 | NousResearch | Hermes-2-Pro-Llama-3-8B | 8B | Instruct | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state for 60+ minutes with no completion (0% progress throughout test). System-level download controller issue affecting cluster-wide model downloads. Model size: 16.06GB (16061046784 bytes), 8.03B params. Created all config files (model, runtime, isvc) successfully. Config: 1 GPU, transformers 4.42.3, LlamaForCausalLM architecture. Same cluster-wide download issue affecting 5+ other models. Expected: 1-3min download based on cluster patterns. Requires investigation of model download system/controller. |
-| bigscience | bloomz-7b1 | 7.07B | Instruct | 1 | 2025-12-03 | ValueError: BloomForCausalLM has no SGLang implementation and is not compatible with SGLang. Model downloaded successfully (13 nodes, ~3min first node, ~8min for 3+ nodes), transformers 4.21.0.dev0. Runtime applied successfully, InferenceService created but engine pod crashes immediately during initialization. SGLang v0.5.5.post3 does not support BLOOM architecture. Requires alternative runtime (vLLM/TGI). Created all config files (model, runtime, isvc). |
 | stabilityai | stablelm-2-12b-chat | 12B | Chat | 2 | 2025-12-04 | ModuleNotFoundError: SGLang incompatible with StableLmForCausalLM architecture. SGLang image does not support StableLM model architecture, missing vllm._custom_ops module required for the model. Download: ~14s (4 nodes ready), transformers 4.40.0, TP=2. Engine pod fails with ImagePullBackOff. Runtime image lmsysorg/sglang:v0.5.5.post3-cu129-vllm-amd64 incompatible with StableLM architecture. Requires alternative runtime (vLLM/TGI). |
 | togethercomputer | redpajama-incite-7b-chat | 7B | Chat | 1 | 2025-12-04 | AttributeError: GPTNeoXConfig has no 'num_key_value_heads' attribute. SGLang v0.5.5.post3 incompatible with GPTNeoXForCausalLM architecture. Same issue as stabilityai/stablelm-tuned-alpha-7b and databricks/dolly-v2-12b. Download: ~14s (4 nodes ready), transformers 4.28.1. Pod crash-loops with 2+ restarts. Model loads but crashes during initialization. Requires alternative runtime (vLLM/TGI). |
 | tiiuae | falcon-40b-instruct | 40B | Instruct | 1 | 2025-12-04 | CUDA error: Invalid device ordinal. Runtime configuration mismatch: runtime specifies 1 GPU with TP=1, but SGLang automatically sets tp_size=4 for 40B model, requiring 4 GPUs. Download: ~2min (3 nodes ready), transformers 4.26.0, FalconForCausalLM architecture. InferenceService created but engine pod crashes with CrashLoopBackOff. Runtime needs 4 GPUs and tp-size=4. Additionally, FalconForCausalLM is incompatible with SGLang (same as falcon-7b-instruct). Requires runtime config fix and alternative runtime (vLLM/TGI). |
 | tiiuae | falcon-180B-chat | 180B | Chat | 8+ | 2025-12-04 | Gated model blocked: Model is access-restricted on HuggingFace Hub, requiring user agreement to FALCON 180B TII license terms. |
-| meta-llama | Llama-2-7b-chat-hf | 7B | Chat | 1 | 2025-12-03 | Gated model download blocked: Model stuck in "In_Transit" state for 10+ minutes with 0 nodes downloading. HuggingFace token not configured for gated model access. Model requires authentication via hf-token secret. Created model, runtime and isvc configs. Expected behavior once token configured: 1-5min download, 60-120s startup, chat completions endpoint. |
 | mistralai | Mistral-7B-v0.1 | 7B | Base | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state for 30+ minutes with 0 nodes downloading. System-level download controller issue. Model size: 14.48GB, transformers 4.34.0.dev0, MistralForCausalLM architecture. |
 | meta-llama | Llama-3.2-11B-Vision-Instruct | 11B | VLM | 2 | 2025-12-03 | Model download timeout: Gated model stuck in "In_Transit" state for 60+ minutes with 0 nodes downloading. Model requires HuggingFace token (hf-token) for gated access. Config fixed to add key: "hf-token". System-level download controller issue. |
 | XiaomiMiMo | MiMo-VL-7B-RL | 7B | VLM | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. |
 | openbmb | MiniCPM-V-2_6 | 8B | VLM | 1 | 2025-12-03 | HTTP 403 Forbidden: Model requires HuggingFace license acceptance before download. Config fixed with modelFramework, modelFormat, modelType, and key fields. User must accept license at HuggingFace. |
 | internlm | internlm2-7b-reward | 7B | Reward | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. |
+| Alibaba-NLP | gme-qwen2-vl-2b-instruct | 2B | Vision+Embedding | 1 | 2025-12-04 | Warmup failure: Server starts but warmup fails because vision embedding model requires image input. SGLang default warmup sends text-only request which is rejected. Server stuck in unhealthy state (503). Model loaded successfully (4.48GB). Requires --skip-server-warmup flag or custom warmup config. |
+| meta-llama | Llama-3.1-405B-Instruct-FP8 | 405B | Instruct | 8 | 2025-12-05 | NaN during inference: Model loads successfully (~3min, 109 safetensor shards), CUDA graphs captured, server starts but inference returns NaN ("!!!!!!!!" with output_ids=[0,0,0,0...]). Tested with: --attention-backend fa3, --quantization fp8, --kv-cache-dtype fp8_e5m2 - all failed. FP8 dynamic quantization from RedHatAI/Llama-3.1-405B-Instruct-FP8-dynamic incompatible with sglang v0.5.5.post3-cu129. Transformers 4.43.0. |
+| nvidia | NVLM-D-72B | 79.38B | VLM | 4 | 2025-12-05 | SGLang config error: "Unsupported architecture: None" in custom model config. Auto-select worked (srt-nvlm-d-72b). NVLM_D multimodal model. Model loaded but architecture not recognized by SGLang. |
+| nvidia | Llama-3.1-Nemotron-Ultra-253B-v1 | 253B | Instruct | 8 | 2025-12-05 | Gated model download failed: Model requires HuggingFace token authentication. Download failed on all nodes. |
+| DAMO-NLP-SG | videollama2-7b | 7B | VLM | 1 | 2025-12-05 | Videollama2MistralForCausalLM not supported by SGLang. Supported video VLMs: Qwen-VL, GLM-4v, NVILA, LLaVA-NeXT-Video, LLaVA-OneVision. |
+| EleutherAI | pythia-6-9b | 6.9B | Base | 1 | 2025-12-05 | GPTNeoXForCausalLM not supported by SGLang (same as dolly-v2-12b). Requires vLLM/TGI runtime. |
+| jason9693 | yi-6b-llama | 6B | Base | 1 | 2025-12-05 | Model download failed on all nodes (401 Unauthorized). Model may not exist or requires authentication on HuggingFace. |
+| mosaicml | mpt-30b | 30B | Base | 2 | 2025-12-05 | SGLang incompatible with MPT custom attention code. FileNotFoundError: flash_attn_triton.py missing. MPTForCausalLM uses dynamic custom code. Model downloaded successfully, auto-select worked. Requires alternative runtime (vLLM/TGI). |
 | THUDM | glm-4v-9b | 9B | VLM | 1 | 2025-12-05 | KeyError: 'transformer.vision.boi' - SGLang ChatGLM model loader doesn't support vision component weights (vision.boi, vision.eoi). Vision-language model (IMAGE_TEXT_TO_TEXT) requires alternative runtime with GLM-4V support. Model downloads successfully (4 nodes). transformers 4.44.0, ChatGLMModel architecture. |
 | openbmb | MiniCPM-2B-sft-bf16 | 2B | LLM | 1 | 2025-12-05 | SGLang scheduler exception: `apply_rope_with_cos_sin_cache_inplace` failed in rotary_embedding.py during inference warmup. Model downloads successfully (4 nodes), server starts but crashes during warmup request. RuntimeError: Exception raised in callback on ScheduleEventType.SCHEDULE_FINISHED. Uses --disable-cuda-graph and --attention-backend triton flags. transformers 4.36.0, MiniCPMForCausalLM architecture. Startup probe timeout: context deadline exceeded on /health_generate. |
 <!-- FAILED_END -->
@@ -140,6 +174,8 @@
 | Qwen    | qwen2-5-0-5b-instruct | 0.5B | Instruct | -    | Missing config files (model, runtime, isvc) |
 | Qwen    | qwen3-0-6b            | 0.6B | Base     | 1    | Missing config files (runtime, isvc)        |
 | xai-org | grok-1                | 314B | MoE      | -    | Config.json not found                       |
+| WizardLMTeam | wizardlm-2-7b    | 7B   | Instruct | -    | Model not found on HuggingFace              |
+| NousResearch | meta-llama-3-1-8b-instruct | 8B | Instruct | - | Not in the test plan                        |
 <!-- SKIPPED_END -->
 
 ---
@@ -156,11 +192,11 @@
 |-------|--------|-----------|-------|
 | afm-4-5b-base | ✅ Passed | 2025-12-03 | Download: ~11min (2 nodes), Startup: 104s, completions only, transformers 4.53.2, RoPE scaling warning |
 
-### Alibaba-NLP (0/2)
+### Alibaba-NLP (1/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| gte-qwen2-1-5b-instruct | ⏳ Not Tested | - | - |
-| gme-qwen2-vl-2b-instruct | ⏳ Not Tested | - | - |
+| gte-qwen2-7b-instruct | ✅ Passed | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, embeddings endpoint, transformers 4.41.2, **Auto-select verified** |
+| gme-qwen2-vl-2b-instruct | ❌ Failed | 2025-12-04 | Warmup failure: Vision embedding model requires image input, SGLang warmup fails with text-only |
 
 ### allenai (2/2)
 | Model | Status | Test Date | Notes |
@@ -168,12 +204,12 @@
 | olmo-2-1124-7b-instruct | ✅ Passed | 2025-12-02 | Download: Already cached (11 nodes), Startup: 12s, chat completions endpoint |
 | olmoe-1b-7b-0924 | ✅ Passed | 2025-12-03 | Download: ~30s (13 nodes), Startup: 58s, completions only (no chat template), fixed isvc config, transformers 4.43.0.dev0 |
 
-### BAAI (0/3)
+### BAAI (3/3)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| bge-large-en-v1-5 | ❌ Failed | 2025-12-02 | Pod CrashLoopBackOff: Health probe /health_generate incompatible with embedding models, runtime needs fix |
-| bge-m3 | ⏳ Not Tested | - | - |
-| bge-reranker-v2-m3 | ⏳ Not Tested | - | - |
+| bge-large-en-v1-5 | ✅ Passed | 2025-12-04 | Startup: ~30s, embeddings endpoint. BertModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi |
+| bge-m3 | ✅ Passed | 2025-12-05 | Startup: ~70s, embeddings endpoint. XLMRobertaModel. Fixed: --attention-backend triton, --skip-server-warmup, memory 24Gi. Auto-select working |
+| bge-reranker-v2-m3 | ✅ Passed | 2025-12-04 | Startup: ~30s, rerank endpoint. XLMRobertaForSequenceClassification. Fixed: triton backend, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi |
 
 ### baichuan-inc (1/2)
 | Model | Status | Test Date | Notes |
@@ -190,7 +226,7 @@
 ### bigscience (0/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| bloomz-7b1 | ⏳ Not Tested | - | - |
+| bloomz-7b1 | ❌ Failed | 2025-12-04 | BloomForCausalLM not supported by SGLang. Download: ~2min (4 nodes). Auto-select: working. Requires vLLM/TGI runtime |
 
 ### CohereForAI (0/1)
 | Model | Status | Test Date | Notes |
@@ -200,34 +236,34 @@
 ### databricks (0/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| dbrx-instruct | ⏳ Not Tested | - | - |
+| dbrx-instruct | ❌ Failed | 2025-12-04 | Download timeout: Model (132B MoE, ~262GB) stuck in In_Transit 11+ min with 0 nodes. Added hf-token, still stuck. Very large model may need special handling. |
 | dolly-v2-12b | ❌ Failed | 2025-12-03 | Download: Unable to verify (In_Transit 40+ min, 0 nodes), Startup attempt: crashed, GPTNeoXConfig architecture incompatible with SGLang v0.5.5.post3, transformers 4.25.1 |
 
-### deepseek-ai (5/10)
+### deepseek-ai (10/11)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | deepseek-coder-7b-instruct-v1-5 | ✅ Passed | 2025-12-03 | Download: 51s, Startup: 7s, chat completions endpoint, transformers 4.35.2 |
-| deepseek-llm-7b-chat | ⏳ Not Tested | - | - |
-| deepseek-v2-lite-chat | ⏳ Not Tested | - | - |
+| deepseek-llm-7b-chat | ✅ Passed | 2025-12-04 | Download: 30s, Startup: 75s, chat completions working, configs newly created |
+| deepseek-v2-lite-chat | ✅ Passed | 2025-12-04 | Download: 60s, Startup: 104s, MoE model (DeepseekV2ForCausalLM), 2 GPUs, configs newly created |
 | deepseek-v3 | ❌ Failed | 2025-12-02 | CUDA OOM: Requires 32+ GPUs, runtime only configured for 8 GPUs |
 | deepseek-r1-distill-llama-8b | ✅ Passed | 2025-12-03 | Download: 55min (10 nodes), Startup: 63s, reasoning model, transformers 4.43.0.dev0 |
-| deepseek-r1-distill-llama-70b | ⏳ Not Tested | - | - |
+| deepseek-r1-distill-llama-70b | ✅ Passed | 2025-12-04 | Download: 15min, Startup: 3min, reasoning model, 4 GPUs TP=4, 160Gi, configs newly created |
 | deepseek-r1-distill-qwen-1-5b | ✅ Passed | 2025-12-02 | Download: ~3min (9 nodes), Startup: ~2min, reasoning model, transformers 4.44.0 |
 | deepseek-r1-distill-qwen-7b | ✅ Passed | 2025-12-03 | Download: ~5min (7 nodes), Startup: 46s, reasoning model with <think> tags, transformers 4.44.0 |
-| deepseek-r1-distill-qwen-14b | ⏳ Not Tested | - | - |
-| deepseek-r1-distill-qwen-32b | ⏳ Not Tested | - | - |
+| deepseek-r1-distill-qwen-14b | ✅ Passed | 2025-12-04 | Download: ~3min (3 nodes), Startup: ~2min, reasoning model, 2 GPUs, model config newly created |
+| deepseek-r1-distill-qwen-32b | ✅ Passed | 2025-12-04 | Download: ~10min (1 node), Startup: ~2min, reasoning model, 2 GPUs, model config newly created |
 | janus-pro-7b | ✅ Passed | 2025-12-03 | Download: 510s (~8.5min, 1 node), Startup: 99s, VLM model, chat completions endpoint, transformers 4.33.1 |
 
 ### DAMO-NLP-SG (0/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| videollama2-7b | ⏳ Not Tested | - | - |
+| videollama2-7b | ❌ Failed | 2025-12-05 | Videollama2MistralForCausalLM not supported by SGLang. Supported video VLMs: Qwen-VL, GLM-4v, NVILA, LLaVA-NeXT-Video, LLaVA-OneVision |
 
 ### EleutherAI (0/2)
 | Model | Status | Test Date | Notes |
-|-------|--------|-----------|-------|
-| gpt-j-6b | ❌ Failed | 2025-12-03 | Model download blocked: 14+ min In_Transit, SIZE=0, cluster-wide download issue, configs created successfully |
-| pythia-6-9b | ⏳ Not Tested | - | - |
+|-------|--------|-----------|------|-
+| gpt-j-6b | ❌ Failed | 2025-12-05 | GPTJForCausalLM not supported by SGLang: "has no SGlang implementation and Transformers implementation is not compatible" |
+| pythia-6-9b | ❌ Failed | 2025-12-05 | GPTNeoXForCausalLM not supported by SGLang (same as dolly-v2-12b), requires vLLM/TGI |
 
 ### HuggingFaceTB (1/1)
 | Model | Status | Test Date | Notes |
@@ -260,7 +296,7 @@
 ### jason9693 (0/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| yi-6b-llama | ⏳ Not Tested | - | - |
+| yi-6b-llama | ❌ Failed | 2025-12-05 | Model download failed on all nodes (401 Unauthorized). Model may not exist or requires authentication on HuggingFace. |
 
 ### LGAI-EXAONE (0/1)
 | Model | Status | Test Date | Notes |
@@ -273,39 +309,41 @@
 | vicuna-7b-v1-5 | ✅ Passed | 2025-12-03 | Download: 329s (11 nodes), Startup: 150s, chat completions endpoint, created all configs |
 | vicuna-13b-v1-5 | ✅ Passed | 2025-12-03 | Download: ~27min (13 nodes), Startup: ~6min (TP=2), chat completions, transformers 4.55.1, created all configs |
 
-### meta-llama (7/16)
+### meta-llama (16/19)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| llama-2-7b | ⏳ Not Tested | - | - |
-| llama-2-7b-chat | ⏳ Not Tested | - | - |
-| llama-2-7b-chat-hf | ❌ Failed | 2025-12-03 | Model download blocked: Gated model requires HuggingFace token configuration |
-| llama-2-13b | ⏳ Not Tested | - | - |
-| llama-2-13b-chat | ⏳ Not Tested | - | - |
-| llama-2-70b | ⏳ Not Tested | - | - |
-| llama-2-70b-chat | ⏳ Not Tested | - | - |
+| llama-2-7b | ✅ Passed | 2025-12-05 | Download: ~60s (3 nodes), Startup: ~2min, base model, completions endpoint works, transformers 4.31.0.dev0, **auto-select working** with modelSizeRange 5B-10B |
+| llama-2-7b-chat-hf | ✅ Passed | 2025-12-05 | Download: ~2min (2 nodes), Startup: ~90s, chat completions works, transformers 4.32.0.dev0, **auto-select working** with modelSizeRange 5B-10B |
+| llama-2-13b | ✅ Passed | 2025-12-05 | Startup: ~75s, base model, completions endpoint works, transformers 4.32.0.dev0, 50Gi mem, 1 GPU, **auto-select working** with modelSizeRange 10B-15B |
+| llama-2-13b-chat | ✅ Passed | 2025-12-05 | Startup: ~74s, chat completions works, transformers 4.32.0.dev0, **auto-select working** with modelSizeRange 10B-15B |
+| llama-2-70b | ✅ Passed | 2025-12-05 | Download: ~7min, Startup: ~99s, base model, completions endpoint works, TP=4, 160Gi mem, 4 GPUs, transformers 4.32.0.dev0, **auto-select working** with modelSizeRange 65B-75B |
+| llama-2-70b-chat | ✅ Passed | 2025-12-05 | Download: ~7min, Startup: ~99s, chat completions works, TP=4, 160Gi mem, 4 GPUs, transformers 4.31.0.dev0, **auto-select working** with modelSizeRange 65B-75B |
 | llama-3-8b-instruct | ✅ Passed | 2025-12-03 | Download: 116s (12 nodes), Startup: 105s, chat completions endpoint, transformers 4.40.0.dev0 |
 | llama-3-70b-instruct | ✅ Passed | 2025-12-03 | Download: ~8min (13 nodes), Startup: 76s, 70B model with TP=4, transformers 4.40.0.dev0, chat completions endpoint |
 | llama-3-1-8b-instruct | ✅ Passed | 2025-12-03 | Download: 1827s (~30.5min, 13 nodes), Startup: 54s, chat completions endpoint, transformers 4.42.3 |
 | llama-3-1-70b-instruct | ✅ Passed | 2025-12-03 | Download: ~10.5min (3+ nodes), Startup: ~2.75min (TP=4), chat completions endpoint, transformers 4.42.3, gated model, runtime version update |
-| llama-3-1-405b-instruct | ⏳ Not Tested | - | - |
 | llama-3-2-1b-instruct | ✅ Passed | 2025-12-02 | Download: ~30min, Startup: 43s |
 | llama-3-2-3b-instruct | ✅ Passed | 2025-12-02 | Download: 110s, Startup: 47s |
 | llama-3-3-70b-instruct | ✅ Passed | 2025-12-03 | Download: Unable to verify (In_Transit status), Startup: ~30min (TP=4), chat completions endpoint, transformers 4.47.0.dev0, gated model, runtime version update (4.45.0->4.47.0) |
 | llama-3-2-11b-vision-instruct | ❌ Failed | 2025-12-03 | Model download timeout: Gated VLM model, 60+ min stuck in "In_Transit", requires hf-token, system download issue |
-| llama-guard-3-8b | ⏳ Not Tested | - | - |
+| llama-guard-3-8b | ✅ Passed | 2025-12-05 | Download: ~3min, Startup: ~74s, chat completions works, content moderation model (returns "safe"/"unsafe"), transformers 4.43.0.dev0, **auto-select working** with modelSizeRange 7B-9B |
+| llama-4-scout-17b-16e-instruct | ✅ Passed | 2025-12-05 | Download: model ready on nodes, Startup: ~10min (includes model loading 50 shards + MoE init), TP=4, 256Gi mem, 4 GPUs, chat completions works. Llama4ForConditionalGeneration (MoE 109B), FA3 attention, 196K context, multimodal, pythonic tool call parser, transformers 4.51.0.dev0. |
+| llama-3-1-405b-instruct-fp8 | ❌ Failed | 2025-12-05 | NaN during inference: Model loads but inference returns NaN ("!!!!!!!!" with output_ids=[0,0,0,0...]). FP8 dynamic quantization incompatible with sglang v0.5.5.post3-cu129. TP=8, 640Gi mem, 8 GPUs. |
+| llama-4-maverick-17b-128e-instruct | ❌ Failed | 2025-12-05 | CUDA OOM + No Multi-Node: BF16 model (693GB, 128 experts) requires 16 GPUs. 8 GPU: OOM. 16 GPU: No single node has 16 GPUs, needs MultiNode mode (not configured). |
+| llama-4-maverick-17b-128e-instruct-fp8 | ✅ Passed | 2025-12-05 | Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (84 shards + CUDA graph), chat completions works. Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, 8 GPUs, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables single-node deployment. Transformers 4.51.0.dev0. |
 
-### microsoft (0/7)
+### microsoft (5/7)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | phi-2 | ❌ Failed | 2025-12-02 | ModuleNotFoundError: vllm module missing in sglang image for phi-2 |
 | phi-3-mini-4k-instruct | ❌ Failed | 2025-12-03 | ModuleNotFoundError: vllm._custom_ops missing, Phi3ForCausalLM incompatible with SGLang image |
-| phi-3-5-mini-instruct | ⏳ Not Tested | - | - |
-| phi-3-5-moe-instruct | ⏳ Not Tested | - | - |
-| phi-4 | ⏳ Not Tested | - | - |
-| phi-4-mini-instruct | ⏳ Not Tested | - | - |
-| phi-4-multimodal-instruct | ⏳ Not Tested | - | - |
+| phi-3-5-mini-instruct | ✅ Passed | 2025-12-05 | Required `--attention-backend triton` (head_dim=96 not supported by flashinfer), auto-select works |
+| phi-3-5-moe-instruct | ✅ Passed | 2025-12-05 | 41.87B MoE, 4 GPUs, TP=4, auto-select works |
+| phi-4 | ✅ Passed | 2025-12-05 | 14B, 1 GPU, auto-select works |
+| phi-4-mini-instruct | ✅ Passed | 2025-12-05 | 3.8B, 1 GPU, auto-select works |
+| phi-4-multimodal-instruct | ✅ Passed | 2025-12-05 | 5.57B multimodal, 1 GPU, auto-select works |
 
-### mistralai (4/8)
+### mistralai (6/8)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | Mistral-7B-Instruct-v0.2 | ✅ Passed | 2025-12-02 | Download: 701s (~12min), Startup: 92s, 321.78 tok/s |
@@ -313,36 +351,36 @@
 | Mistral-Nemo-Instruct-2407 | ✅ Passed | 2025-12-03 | Download: 456s (~7.6min, 7 nodes), Startup: 124s (~2min), transformers 4.43.0.dev0 |
 | Mistral-Small-3.1-24B-Instruct-2503 | ❌ Failed | 2025-12-02 | Download timeout: 48GB model remained in "In_Transit" for 40+ min, download incomplete. Config correct (TP=2, 2 GPUs, transformers 4.50.0.dev0). |
 | Mixtral-8x7B-Instruct-v0.1 | ✅ Passed | 2025-12-03 | Download: ~12min (13 nodes, 93.4GB), Startup: 152s, TP=4, 8x7B MoE, transformers 4.36.0.dev0 |
-| Mixtral-8x22B-v0.1 | ⏳ Not Tested | - | - |
-| Mixtral-8x7B-v0.1 | ⏳ Not Tested | - | - |
+| Mixtral-8x22B-v0.1 | ✅ Passed | 2025-12-05 | 140.62B MoE, TP=8, 8 GPUs, 320Gi, transformers 4.38.0, auto-select works |
+| Mixtral-8x7B-v0.1 | ✅ Passed | 2025-12-05 | 46.7B MoE, TP=4, 4 GPUs, 100Gi, transformers 4.36.0.dev0, auto-select works |
 | Mistral-7B-v0.1 | ❌ Failed | 2025-12-03 | Model download timeout: 30+ min stuck in "In_Transit" with 0 nodes, system-level download issue |
 
 ### mosaicml (0/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | mpt-7b | ❌ Failed | 2025-12-03 | Download timeout: 55+ min stuck in "In_Transit" with 0 nodes, system-wide download issue, transformers 4.28.1, MPTForCausalLM |
-| mpt-30b | ⏳ Not Tested | - | - |
+| mpt-30b | ❌ Failed | 2025-12-05 | SGLang incompatible with MPT custom attention code. FileNotFoundError: flash_attn_triton.py missing. MPTForCausalLM uses dynamic custom code. Model downloaded successfully, auto-select worked (transformers 4.28.1, TP=2, 2 GPUs, 80Gi). Requires alternative runtime (vLLM/TGI). |
 
-### NousResearch (0/2)
+### NousResearch (0/2, 1 skipped)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | hermes-2-pro-llama-3-8b | ❌ Failed | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state for 60+ minutes with no completion, system-level download controller issue |
-| meta-llama-3-1-8b-instruct | ⏳ Not Tested | - | - |
+| meta-llama-3-1-8b-instruct | ⏭️ Skipped | - | not in the test plan |
 
 ### jet-ai (1/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | jet-nemotron-2b | ✅ Passed | 2025-12-02 | Download: N/A (timeout, system-wide controller issue), Startup: 118s, Inference: OK (direct engine access), transformers 4.51.3 |
 
-### nvidia (1/6)
+### nvidia (3/6)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| llama-3-1-nemotron-70b-instruct-hf | ⏳ Not Tested | - | - |
+| llama-3-1-nemotron-70b-instruct-hf | ✅ Passed | 2025-12-05 | Auto-select: srt-llama-3-1-nemotron-70b-instruct-hf, 70.55B LlamaForCausalLM, TP=4, inference verified |
 | llama-3-1-nemotron-nano-8b-v1 | ✅ Passed | 2025-12-02 | Download: 16s (cached), Startup: 69s, Fixed HF model ID |
 | nvidia-nemotron-nano-9b-v2 | ❌ Failed | 2025-12-03 | RuntimeError: KV cache memory allocation failure, NemotronHForCausalLM incompatible with SGLang v0.5.5.post3 |
-| llama-3-3-nemotron-super-49b-v1 | ⏳ Not Tested | - | - |
-| nvlm-d-72b | ⏳ Not Tested | - | - |
-| llama-3-1-nemotron-ultra-253b-v1 | ⏳ Not Tested | - | - |
+| llama-3-3-nemotron-super-49b-v1 | ✅ Passed | 2025-12-05 | Auto-select: srt-llama-3-3-nemotron-super-49b-v1, 49.87B DeciLMForCausalLM, required --trust-remote-code, TP=4 |
+| nvlm-d-72b | ❌ Failed | 2025-12-05 | Auto-select worked, NVLM_D 79.38B VLM, SGLang config error: "Unsupported architecture: None" in custom model config |
+| llama-3-1-nemotron-ultra-253b-v1 | ❌ Failed | 2025-12-05 | Gated model, download failed on all nodes, requires HuggingFace token authentication |
 
 ### openbmb (1/3)
 | Model | Status | Test Date | Notes |
@@ -404,11 +442,10 @@
 | stablelm-tuned-alpha-7b | ❌ Failed | 2025-12-02 | SGLang incompatible with GPTNeoXForCausalLM architecture, AttributeError on num_key_value_heads |
 | stablelm-2-12b-chat | ❌ Failed | 2025-12-04 | SGLang incompatible with StableLmForCausalLM, missing vllm._custom_ops, engine pod ImagePullBackOff |
 
-### THUDM (1/3)
+### THUDM (0/2)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | chatglm2-6b | ❌ Failed | 2025-12-02 | ChatGLMTokenizer incompatible with SGLang, requires trust-remote-code, transformers 4.27.1 |
-| glm-4-9b-chat | ✅ Passed | 2025-12-03 | Download: ~15min (13 nodes), Startup: ~3min, chat completions endpoint, transformers 4.46.0.dev0, GlmForCausalLM architecture, Transformers backend fallback (no native SGLang support) |
 | glm-4v-9b | ❌ Failed | 2025-12-05 | KeyError: 'transformer.vision.boi' - SGLang ChatGLM model loader doesn't support vision weights. Vision-language model requires alternative runtime. |
 
 ### tiiuae (1/4)
@@ -434,10 +471,10 @@
 |-------|--------|-----------|-------|
 | solar-10-7b-instruct-v1-0 | ✅ Passed | 2025-12-02 | Download: 49s, Startup: 68s, completions only (no chat template) |
 
-### WizardLMTeam (0/1)
+### WizardLMTeam (0/1, 1 skipped)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| wizardlm-2-7b | ⏳ Not Tested | - | - |
+| wizardlm-2-7b | ⏭️ Skipped | - | Model not found on HuggingFace |
 
 ### xai-org (1/2, 1 skipped)
 | Model | Status | Test Date | Notes                                                                                                 |
@@ -601,7 +638,40 @@ Update the `Last Updated` timestamp at the top.
 | 2025-12-05 01:30 | Claude Code                    | Qwen/Qwen2-7B-Instruct                        | ✅ Passed - Download: <1s (cached), Startup: ~2min, chat completions endpoint works correctly. Required explicit runtime specification in isvc (auto-select chose wrong runtime srt-gte-qwen2-7b-instruct). Transformers 4.41.2, Qwen2ForCausalLM architecture. |
 | 2025-12-05 01:30 | Claude Code                    | Qwen/Qwen1.5-7B-Chat                          | ✅ Passed - Download: <1s (cached), Startup: ~2min, chat completions endpoint works correctly. Runtime auto-select worked correctly (srt-qwen1-5-7b-chat). Transformers 4.37.0, Qwen2ForCausalLM architecture. |
 | 2025-12-05 01:30 | Claude Code                    | Qwen/Qwen-7B-Chat                             | ✅ Passed (Partial) - Download: <1s (cached), Startup: ~4min, completions only (no chat template). Required --trust-remote-code flag for legacy Qwen 1.0 model. Chat completions fail due to missing chat_template. Transformers 4.32.0, QWenLMHeadModel architecture. |
+| 2025-12-05 02:05 | Claude Code                    | Qwen/Qwen1.5-32B-Chat                         | ✅ Passed - Download: <1s (cached, 1 node), Startup: ~2min, chat completions endpoint works correctly. 32B model with TP=4 (4x H100 GPUs). Model framework: transformers 4.37.2, Qwen2ForCausalLM architecture. Runtime auto-select worked correctly (srt-qwen1-5-32b-chat). Full cleanup pending. |
+| 2025-12-04 15:00 | Claude Code                    | deepseek-ai/deepseek-llm-7b-chat              | ✅ Passed - Download: ~30s (2 nodes), Startup: ~75s, chat completions endpoint works correctly. LlamaForCausalLM architecture, transformers 4.33.1. Runtime auto-select worked correctly. |
+| 2025-12-04 15:30 | Claude Code                    | deepseek-ai/DeepSeek-V2-Lite-Chat             | ✅ Passed - Download: ~60s (1 node), Startup: ~104s, chat completions endpoint works correctly. DeepseekV2ForCausalLM MoE architecture, 2 GPUs, transformers 4.33.1. Runtime auto-select worked correctly. |
+| 2025-12-04 16:00 | Claude Code                    | deepseek-ai/DeepSeek-R1-Distill-Llama-70B     | ✅ Passed - Download: ~15min (1 node), Startup: ~3min, reasoning model with chat completions endpoint. TP=4, 4 GPUs, 160Gi mem. |
+| 2025-12-04 16:30 | Claude Code                    | deepseek-ai/DeepSeek-R1-Distill-Qwen-14B      | ✅ Passed - Download: ~3min (3 nodes), Startup: ~2min, reasoning model with chat completions endpoint. 2 GPUs. |
+| 2025-12-04 17:00 | Claude Code                    | deepseek-ai/DeepSeek-R1-Distill-Qwen-32B      | ✅ Passed - Download: ~10min (1 node), Startup: ~2min, reasoning model with chat completions endpoint. 2 GPUs. |
+| 2025-12-05 08:00 | Claude Code                    | meta-llama/Llama-2-7b                         | ✅ Passed - Download: ~60s (3 nodes), Startup: ~2min, base model completions endpoint works correctly. LlamaForCausalLM, transformers 4.31.0.dev0. Auto-select working with modelSizeRange 5B-10B. |
+| 2025-12-05 08:10 | Claude Code                    | meta-llama/Llama-2-7b-chat-hf                 | ✅ Passed - Download: ~2min (2 nodes), Startup: ~90s, chat completions endpoint works correctly. LlamaForCausalLM, transformers 4.32.0.dev0. Auto-select working with modelSizeRange 5B-10B. |
+| 2025-12-05 08:20 | Claude Code                    | meta-llama/Llama-2-13b                        | ✅ Passed - Startup: ~75s, base model completions endpoint works correctly. LlamaForCausalLM, transformers 4.32.0.dev0, 50Gi mem, 1 GPU. Auto-select working with modelSizeRange 10B-15B. |
+| 2025-12-05 08:25 | Claude Code                    | meta-llama/Llama-2-13b-chat                   | ✅ Passed - Startup: ~74s, chat completions endpoint works correctly. LlamaForCausalLM, transformers 4.32.0.dev0. Auto-select working with modelSizeRange 10B-15B. |
+| 2025-12-05 08:40 | Claude Code                    | meta-llama/Llama-2-70b                        | ✅ Passed - Download: ~7min, Startup: ~99s, base model completions endpoint works correctly. LlamaForCausalLM, TP=4, 160Gi mem, 4 GPUs, transformers 4.32.0.dev0. Auto-select working with modelSizeRange 65B-75B. |
+| 2025-12-05 08:50 | Claude Code                    | meta-llama/Llama-2-70b-chat                   | ✅ Passed - Download: ~7min, Startup: ~99s, chat completions endpoint works correctly. LlamaForCausalLM, TP=4, 160Gi mem, 4 GPUs, transformers 4.31.0.dev0. Auto-select working with modelSizeRange 65B-75B. |
+| 2025-12-05 09:00 | Claude Code                    | meta-llama/Llama-Guard-3-8B                   | ✅ Passed - Download: ~3min, Startup: ~74s, chat completions endpoint works correctly. Content moderation model (returns "safe"/"unsafe"). LlamaForCausalLM, transformers 4.43.0.dev0. Auto-select working with modelSizeRange 7B-9B. |
+| 2025-12-05 09:30 | Claude Code                    | meta-llama/Llama-4-Scout-17B-16E-Instruct     | ✅ Passed - Download: model ready, Startup: ~10min (50 shards + MoE init), chat completions endpoint works correctly. Llama4ForConditionalGeneration MoE (109B total), TP=4, 256Gi mem, FA3 attention, 196K context, multimodal, pythonic tool call parser. Transformers 4.51.0.dev0. |
+| 2025-12-05 10:00 | Claude Code                    | meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 | ✅ Passed - Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (CUDA graph), chat completions endpoint works correctly. Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables fit on 8 GPUs. Transformers 4.51.0.dev0. |
+| 2025-12-05 10:15 | Claude Code                    | meta-llama/Llama-3.1-405B-Instruct-FP8        | ❌ Failed - NaN during inference: Model loads (~3min, 109 shards), CUDA graphs captured, server starts but inference returns NaN. FP8 dynamic quantization from RedHatAI incompatible with sglang v0.5.5.post3-cu129. TP=8, 640Gi mem. |
+| 2025-12-05 10:20 | Claude Code                    | meta-llama/Llama-4-Maverick-17B-128E-Instruct | ❌ Failed - CUDA OOM + No Multi-Node: BF16 model (693GB, 128 experts) requires 16 GPUs. No single node has 16 GPUs, needs MultiNode mode (not configured). |
+| 2025-12-05 11:00 | Claude Code                    | microsoft/phi-3-5-mini-instruct               | ✅ Passed - Chat completions endpoint works correctly. Phi3ForCausalLM architecture, 3.8B, 1 GPU. Required --attention-backend triton (head_dim=96 not supported by flashinfer). Auto-select working. |
+| 2025-12-05 11:10 | Claude Code                    | microsoft/phi-3-5-moe-instruct                | ✅ Passed - Chat completions endpoint works correctly. PhiMoEForCausalLM MoE architecture, 41.87B, TP=4, 4 GPUs. Auto-select working. |
+| 2025-12-05 11:15 | Claude Code                    | microsoft/phi-4                               | ✅ Passed - Chat completions endpoint works correctly. Phi3ForCausalLM architecture, 14B, 1 GPU. Auto-select working. |
+| 2025-12-05 11:20 | Claude Code                    | microsoft/phi-4-mini-instruct                 | ✅ Passed - Chat completions endpoint works correctly. Phi3ForCausalLM architecture, 3.8B, 1 GPU. Auto-select working. |
+| 2025-12-05 11:25 | Claude Code                    | microsoft/phi-4-multimodal-instruct           | ✅ Passed - Chat completions endpoint works correctly. Phi4MMForCausalLM multimodal architecture, 5.57B, 1 GPU. Auto-select working. |
+| 2025-12-05 12:00 | Claude Code                    | mistralai/Mixtral-8x22B-v0.1                  | ✅ Passed - Runtime auto-selected correctly. MixtralForCausalLM MoE architecture, 140.62B, TP=8, 8 GPUs, 320Gi mem. Transformers 4.38.0. |
+| 2025-12-05 12:10 | Claude Code                    | mistralai/Mixtral-8x7B-v0.1                   | ✅ Passed - Runtime auto-selected correctly. MixtralForCausalLM MoE architecture, 46.7B, TP=4, 4 GPUs, 100Gi mem. Transformers 4.36.0.dev0. |
+| 2025-12-05 12:30 | Claude Code                    | nvidia/Llama-3.1-Nemotron-70B-Instruct-HF     | ✅ Passed - Chat completions endpoint works correctly. LlamaForCausalLM architecture, 70.55B, TP=4, 4 GPUs. Runtime auto-selected (srt-llama-3-1-nemotron-70b-instruct-hf). Transformers 4.40.0. |
+| 2025-12-05 12:45 | Claude Code                    | nvidia/Llama-3.3-Nemotron-Super-49B-v1        | ✅ Passed - Chat completions endpoint works correctly after fix. DeciLMForCausalLM architecture, 49.87B, TP=4, 4 GPUs. Required --trust-remote-code flag. Transformers 4.48.3. |
+| 2025-12-05 13:00 | Claude Code                    | nvidia/NVLM-D-72B                             | ❌ Failed - SGLang config error: "Unsupported architecture: None" in custom model config. Auto-select worked (srt-nvlm-d-72b). NVLM_D multimodal model, 79.38B. Model loaded but architecture not recognized by SGLang. |
+| 2025-12-05 13:15 | Claude Code                    | nvidia/Llama-3.1-Nemotron-Ultra-253B-v1       | ❌ Failed - Gated model download failed: Model requires HuggingFace token authentication. Download failed on all nodes. 253B model. |
+| 2025-12-04 11:30 | Claude Code                    | BAAI/bge-large-en-v1.5                        | ✅ Passed - Download: cached (4 nodes), Startup: ~30s, embeddings endpoint works correctly. BertModel architecture, 1024-dim embeddings. Required --attention-backend triton, --skip-server-warmup, 24Gi memory. Auto-select working. |
+| 2025-12-04 11:45 | Claude Code                    | BAAI/bge-reranker-v2-m3                       | ✅ Passed - Download: cached (4 nodes), Startup: ~30s, rerank endpoint works correctly. XLMRobertaForSequenceClassification architecture. Required --attention-backend triton, --skip-server-warmup, --disable-radix-cache, --chunked-prefill-size -1, 24Gi memory. Auto-select working. |
+| 2025-12-04 12:00 | Claude Code                    | bigscience/bloomz-7b1                         | ❌ Failed - ValueError: BloomForCausalLM has no SGLang implementation. Download: ~2min (4 nodes), engine pod CrashLoopBackOff. Transformers 4.21.0.dev0. Runtime auto-select worked. Requires alternative runtime (vLLM/TGI). |
+| 2025-12-04 12:30 | Claude Code                    | databricks/dbrx-instruct                      | ❌ Failed - Model download timeout: Stuck in "In_Transit" for 11+ min with 0 nodes downloading. Very large 132B MoE model (~262GB). System-level download controller issue. Gated model with hf-token configured but still failed. |
 | 2025-12-05 02:05 | Claude Code                    | Qwen/Qwen1.5-32B-Chat                         | ✅ Passed - Download: <1s (cached, 1 node), Startup: ~2min, chat completions endpoint works correctly. 32B model with TP=4 (4x H100 GPUs). Model framework: transformers 4.37.2, Qwen2ForCausalLM architecture. Runtime auto-select worked correctly (srt-qwen1-5-32b-chat). Full cleanup pending.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | 2025-12-05 02:15 | Claude Code                    | OpenGVLab/InternVL2_5-8B                      | ✅ Passed - Download: <1s (cached, 3 nodes ready), Startup: ~1.5min, chat completions endpoint works correctly. 8B vision-language model (IMAGE_TEXT_TO_TEXT). InternVLChatModel architecture, transformers 4.37.2, 1 GPU. Uses SGLang runtime with --trust-remote-code flag. Model responds: "I am an AI assistant whose name is InternVL, developed jointly by Shanghai AI Lab, Tsinghua University and other partners." First successful OpenGVLab model test! |
 | 2025-12-05 02:30 | Claude Code                    | openbmb/MiniCPM-2B-sft-bf16                   | ❌ Failed - Download: ~4.5min (4 nodes ready), Startup: Failed. Model downloads successfully but engine pod crashes during inference warmup. SGLang scheduler exception: `apply_rope_with_cos_sin_cache_inplace` failed in rotary_embedding.py. RuntimeError: Exception raised in callback on ScheduleEventType.SCHEDULE_FINISHED. Model framework: transformers 4.36.0, MiniCPMForCausalLM architecture, 1 GPU, 20Gi memory. Runtime uses --disable-cuda-graph and --attention-backend triton flags. Startup probe failed: context deadline exceeded on /health_generate. SGLang v0.5.5.post3 incompatible with MiniCPMForCausalLM rotary embedding implementation. Note: MiniCPM3-4B passed with same flags - issue specific to MiniCPM-2B-sft-bf16. Requires alternative runtime or SGLang update. |
 | 2025-12-05 02:35 | Claude Code                    | zai-org/glm-4v-9b (THUDM)                     | ❌ Failed - Download: ~8min (4 nodes ready), Startup: Failed. KeyError: 'transformer.vision.boi' during model weight loading. SGLang ChatGLM model loader doesn't support vision component weights (vision.boi, vision.eoi). This is a vision-language model (IMAGE_TEXT_TO_TEXT) that requires GLM-4V-specific support in the runtime. Model framework: transformers 4.44.0, ChatGLMModel architecture. All config files created. Requires alternative runtime implementation with GLM-4V multimodal support. Full cleanup completed. |
+| 2025-12-05 21:18 | Claude Code                    | BAAI/bge-m3                                   | ✅ Passed - Download: cached (4 nodes ready), Startup: ~70s, embeddings endpoint works correctly (/v1/embeddings returns 1024-dim vectors). XLMRobertaModel architecture (embedding model). Required fixes: --attention-backend triton (flashinfer hangs), --skip-server-warmup (incompatible with embedding models), memory 24Gi (8Gi insufficient for KV cache ~11GB in /dev/shm). Runtime auto-select working (srt-bge-m3). Transformers version mismatch fix: 4.30.0→4.33.0 to match model. All config files created (model existed, runtime, isvc). |
