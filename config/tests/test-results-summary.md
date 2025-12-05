@@ -1,6 +1,6 @@
 # Model Test Results Summary
 
-**Last Updated**: 2025-12-04 18:45:00 UTC
+**Last Updated**: 2025-12-05 07:40:00 UTC
 
 **Cluster**: 14x H100 nodes (8 cards each, 80GB/card, 30TB local disk/node)
 
@@ -11,11 +11,11 @@
 | Metric | Count |
 |--------|-------|
 | **Total Models** | 149 |
-| **Passed** | 56 |
-| **Failed** | 25 |
+| **Passed** | 68 |
+| **Failed** | 30 |
 | **Skipped** | 3 |
-| **Not Tested** | 65 |
-| **Pass Rate** | 37.6% |
+| **Not Tested** | 48 |
+| **Pass Rate** | 45.6% |
 
 ---
 
@@ -77,6 +77,8 @@
 | Alibaba-NLP | gte-qwen2-7b-instruct | 7B | Embedding | 1 | 2025-12-04 | Download: ~30s (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). Embedding model with --is-embedding flag. Transformers 4.41.2. |
 | BAAI | bge-large-en-v1.5 | 335M | Embedding | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (embeddings endpoint). BertModel architecture. Required fixes: --attention-backend triton (flashinfer hangs), --skip-server-warmup, memory 24Gi. Health probes: /health_generate (readiness/startup), /health (liveness). Auto-select: working. Transformers 4.30.0. |
 | BAAI | bge-reranker-v2-m3 | 567M | Reranker | 1 | 2025-12-04 | Download: cached (4 nodes), Startup: ~30s, Inference: OK (rerank endpoint /v1/rerank). XLMRobertaForSequenceClassification architecture. Required fixes: --attention-backend triton, --skip-server-warmup, --disable-radix-cache, --chunked-prefill-size -1, memory 24Gi. Scores correctly rank documents by relevance. Auto-select: working. Transformers 4.38.1. |
+| meta-llama | Llama-4-Scout-17B-16E-Instruct | 109B | MoE | 4 | 2025-12-05 | Download: model ready on nodes, Startup: ~10min (50 shards + MoE init), Inference: OK (chat completions endpoint). Llama4ForConditionalGeneration MoE (109B total), TP=4, 256Gi mem, FA3 attention, 196K context, multimodal, pythonic tool call parser. Transformers 4.51.0.dev0. |
+| meta-llama | Llama-4-Maverick-17B-128E-Instruct-FP8 | 401.65B | MoE FP8 | 8 | 2025-12-05 | Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (84 shards + CUDA graph), Inference: OK (chat completions endpoint). Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables fit on 8 GPUs. Transformers 4.51.0.dev0. |
 
 <!-- PASSED_END -->
 
@@ -97,6 +99,7 @@
 | baichuan-inc | Baichuan2-13B-Chat | 13B | Chat | 2 | 2025-12-03 | Warmup timeout: Server starts successfully (application startup complete, transformers 4.29.2) but warmup request hangs indefinitely. Model loads correctly with TP=2 (13.08GB per GPU, 2 GPUs). CUDA graph disabled due to view/stride incompatibility. Warmup request times out after 4s repeatedly. SGLang v0.5.5.post3 likely incompatible with Baichuan model + TP=2 configuration. |
 | LGAI-EXAONE | EXAONE-3.5-7.8B-Instruct | 7.8B | Instruct | 1 | 2025-12-02 | Model download timeout: Model stuck in "In_Transit" state for 24+ minutes with no node downloads started (0 nodes throughout). Model size: 31.3GB (31273795584 bytes). Expected download time: ~5-10 minutes. Model download system appears non-functional or model previously created may be blocking. System-level issue with model download controller. |
 | mistralai | Mistral-Small-3.1-24B-Instruct-2503 | 24B | Instruct | 2 | 2025-12-02 | Download timeout: Model (48GB) remained in "In_Transit" state for 40+ minutes without completing download from HuggingFace. Download rate appears insufficient for large models (expected ~80min for 48GB at 600MB/min rate). All configurations correct (TP=2, 2 GPUs, transformers 4.50.0.dev0). |
+| meta-llama | Llama-4-Maverick-17B-128E-Instruct | 400B | MoE | 16 | 2025-12-05 | CUDA Out of Memory + No Multi-Node Support: Non-FP8 BF16 model (693GB, 128 experts) requires 16 GPUs but cluster nodes have max 8 GPUs each. 8 GPU config: OOM during MoE weight loading. 16 GPU config: Pod pending "Insufficient nvidia.com/gpu" - no single node has 16 GPUs. Would require MultiNode deployment mode (LeaderWorkerSet) across 2 nodes, but no SGLang multi-node runtime configured. Transformers 4.51.0.dev0. |
 | Salesforce | xgen-7b-8k-inst | 7B | Instruct | 1 | 2025-12-03 | Model format incompatibility: Model only available in PyTorch bin format, runtime requires safetensors. Download: 69s (13 nodes), config parsing error (num_key_value_heads=0), runtime validation fails with 'mt:pytorch:1.0.0' format mismatch. |
 | EleutherAI | gpt-j-6b | 6B | Base | 1 | 2025-12-03 | Model download system blocked: Model stuck in "In_Transit" state for 14+ minutes with SIZE=0 (download never started). Cluster-wide download issue affecting 6+ models (some stuck for 4+ hours). System infrastructure issue, not model-specific. Created all configs successfully. Expected: 1-5min download, 60-120s startup, completions endpoint. |
 | databricks | dolly-v2-12b | 12B | Instruct | 2 | 2025-12-03 | AttributeError: GPTNeoXConfig has no 'num_key_value_heads' attribute. SGLang v0.5.5.post3 incompatible with GPTNeoXForCausalLM architecture. Same issue as stabilityai/stablelm-tuned-alpha-7b. Model stuck in "In_Transit" for 40+ min with 0 nodes downloading. Pod created and crashed immediately. Transformers 4.25.1. Requires alternative runtime (vLLM/TGI). Created all config files. |
@@ -110,6 +113,7 @@
 | openbmb | MiniCPM-V-2_6 | 8B | VLM | 1 | 2025-12-03 | HTTP 403 Forbidden: Model requires HuggingFace license acceptance before download. Config fixed with modelFramework, modelFormat, modelType, and key fields. User must accept license at HuggingFace. |
 | internlm | internlm2-7b-reward | 7B | Reward | 1 | 2025-12-03 | Model download timeout: Model stuck in "In_Transit" state with 0 nodes downloading. System-level download controller issue affecting cluster-wide model downloads. |
 | Alibaba-NLP | gme-qwen2-vl-2b-instruct | 2B | Vision+Embedding | 1 | 2025-12-04 | Warmup failure: Server starts but warmup fails because vision embedding model requires image input. SGLang default warmup sends text-only request which is rejected. Server stuck in unhealthy state (503). Model loaded successfully (4.48GB). Requires --skip-server-warmup flag or custom warmup config. |
+| meta-llama | Llama-3.1-405B-Instruct-FP8 | 405B | Instruct | 8 | 2025-12-05 | NaN during inference: Model loads successfully (~3min, 109 safetensor shards), CUDA graphs captured, server starts but inference returns NaN ("!!!!!!!!" with output_ids=[0,0,0,0...]). Tested with: --attention-backend fa3, --quantization fp8, --kv-cache-dtype fp8_e5m2 - all failed. FP8 dynamic quantization from RedHatAI/Llama-3.1-405B-Instruct-FP8-dynamic incompatible with sglang v0.5.5.post3-cu129. Transformers 4.43.0. |
 <!-- FAILED_END -->
 
 ### Skipped Models (Gated/Access Issues)
@@ -238,7 +242,7 @@
 ### jason9693 (0/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| yi-6b-llama | ⏳ Not Tested | - | - |
+| yi-6b-llama | ❌ Failed | 2025-12-05 | Model download failed on all nodes (401 Unauthorized). Model may not exist or requires authentication on HuggingFace. |
 
 ### LGAI-EXAONE (0/1)
 | Model | Status | Test Date | Notes |
@@ -251,26 +255,28 @@
 | vicuna-7b-v1-5 | ✅ Passed | 2025-12-03 | Download: 329s (11 nodes), Startup: 150s, chat completions endpoint, created all configs |
 | vicuna-13b-v1-5 | ✅ Passed | 2025-12-03 | Download: ~27min (13 nodes), Startup: ~6min (TP=2), chat completions, transformers 4.55.1, created all configs |
 
-### meta-llama (7/16)
+### meta-llama (13/16)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| llama-2-7b | ⏳ Not Tested | - | - |
-| llama-2-7b-chat | ⏳ Not Tested | - | - |
-| llama-2-7b-chat-hf | ❌ Failed | 2025-12-03 | Model download blocked: Gated model requires HuggingFace token configuration |
-| llama-2-13b | ⏳ Not Tested | - | - |
-| llama-2-13b-chat | ⏳ Not Tested | - | - |
-| llama-2-70b | ⏳ Not Tested | - | - |
-| llama-2-70b-chat | ⏳ Not Tested | - | - |
+| llama-2-7b | ✅ Passed | 2025-12-05 | Download: ~60s (3 nodes), Startup: ~2min, base model, completions endpoint works, transformers 4.31.0.dev0, **auto-select working** with modelSizeRange 5B-10B |
+| llama-2-7b-chat-hf | ✅ Passed | 2025-12-05 | Download: ~2min (2 nodes), Startup: ~90s, chat completions works, transformers 4.32.0.dev0, **auto-select working** with modelSizeRange 5B-10B |
+| llama-2-13b | ✅ Passed | 2025-12-05 | Startup: ~75s, base model, completions endpoint works, transformers 4.32.0.dev0, 50Gi mem, 1 GPU, **auto-select working** with modelSizeRange 10B-15B |
+| llama-2-13b-chat | ✅ Passed | 2025-12-05 | Startup: ~74s, chat completions works, transformers 4.32.0.dev0, **auto-select working** with modelSizeRange 10B-15B |
+| llama-2-70b | ✅ Passed | 2025-12-05 | Download: ~7min, Startup: ~99s, base model, completions endpoint works, TP=4, 160Gi mem, 4 GPUs, transformers 4.32.0.dev0, **auto-select working** with modelSizeRange 65B-75B |
+| llama-2-70b-chat | ✅ Passed | 2025-12-05 | Download: ~7min, Startup: ~99s, chat completions works, TP=4, 160Gi mem, 4 GPUs, transformers 4.31.0.dev0, **auto-select working** with modelSizeRange 65B-75B |
 | llama-3-8b-instruct | ✅ Passed | 2025-12-03 | Download: 116s (12 nodes), Startup: 105s, chat completions endpoint, transformers 4.40.0.dev0 |
 | llama-3-70b-instruct | ✅ Passed | 2025-12-03 | Download: ~8min (13 nodes), Startup: 76s, 70B model with TP=4, transformers 4.40.0.dev0, chat completions endpoint |
 | llama-3-1-8b-instruct | ✅ Passed | 2025-12-03 | Download: 1827s (~30.5min, 13 nodes), Startup: 54s, chat completions endpoint, transformers 4.42.3 |
 | llama-3-1-70b-instruct | ✅ Passed | 2025-12-03 | Download: ~10.5min (3+ nodes), Startup: ~2.75min (TP=4), chat completions endpoint, transformers 4.42.3, gated model, runtime version update |
-| llama-3-1-405b-instruct | ⏳ Not Tested | - | - |
 | llama-3-2-1b-instruct | ✅ Passed | 2025-12-02 | Download: ~30min, Startup: 43s |
 | llama-3-2-3b-instruct | ✅ Passed | 2025-12-02 | Download: 110s, Startup: 47s |
 | llama-3-3-70b-instruct | ✅ Passed | 2025-12-03 | Download: Unable to verify (In_Transit status), Startup: ~30min (TP=4), chat completions endpoint, transformers 4.47.0.dev0, gated model, runtime version update (4.45.0->4.47.0) |
 | llama-3-2-11b-vision-instruct | ❌ Failed | 2025-12-03 | Model download timeout: Gated VLM model, 60+ min stuck in "In_Transit", requires hf-token, system download issue |
-| llama-guard-3-8b | ⏳ Not Tested | - | - |
+| llama-guard-3-8b | ✅ Passed | 2025-12-05 | Download: ~3min, Startup: ~74s, chat completions works, content moderation model (returns "safe"/"unsafe"), transformers 4.43.0.dev0, **auto-select working** with modelSizeRange 7B-9B |
+| llama-4-scout-17b-16e-instruct | ✅ Passed | 2025-12-05 | Download: model ready on nodes, Startup: ~10min (includes model loading 50 shards + MoE init), TP=4, 256Gi mem, 4 GPUs, chat completions works. Llama4ForConditionalGeneration (MoE 109B), FA3 attention, 196K context, multimodal, pythonic tool call parser, transformers 4.51.0.dev0. |
+| llama-3-1-405b-instruct-fp8 | ❌ Failed | 2025-12-05 | NaN during inference: Model loads but inference returns NaN ("!!!!!!!!" with output_ids=[0,0,0,0...]). FP8 dynamic quantization incompatible with sglang v0.5.5.post3-cu129. TP=8, 640Gi mem, 8 GPUs. |
+| llama-4-maverick-17b-128e-instruct | ❌ Failed | 2025-12-05 | CUDA OOM + No Multi-Node: BF16 model (693GB, 128 experts) requires 16 GPUs. 8 GPU: OOM. 16 GPU: No single node has 16 GPUs, needs MultiNode mode (not configured). |
+| llama-4-maverick-17b-128e-instruct-fp8 | ✅ Passed | 2025-12-05 | Download: ~7min (84 shards, 220GB FP8), Startup: ~3min (84 shards + CUDA graph), chat completions works. Llama4ForConditionalGeneration MoE (401B total, 128 experts), TP=8, 512Gi mem, 8 GPUs, FA3 attention, 131K context, multimodal, pythonic tool call parser. FP8 quantization enables single-node deployment. Transformers 4.51.0.dev0. |
 
 ### microsoft (0/7)
 | Model | Status | Test Date | Notes |
