@@ -118,6 +118,7 @@
 | mistralai | Mixtral-8x7B-v0.1 | 46.7B | MoE | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). MixtralForCausalLM MoE architecture, TP=4, 4 GPUs, 100Gi mem. Transformers 4.36.0.dev0. Auto-select working. |
 | nvidia | Llama-3.1-Nemotron-70B-Instruct-HF | 70.55B | Instruct | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). LlamaForCausalLM architecture, TP=4, 4 GPUs. Auto-select working (srt-llama-3-1-nemotron-70b-instruct-hf). |
 | nvidia | Llama-3.3-Nemotron-Super-49B-v1 | 49.87B | Instruct | 4 | 2025-12-05 | Inference: OK (chat completions endpoint). DeciLMForCausalLM architecture, TP=4, 4 GPUs. Required --trust-remote-code. Auto-select working. |
+| OpenGVLab | InternVL2_5-8B | 8B | VLM | 1 | 2025-12-05 | Download: <1s (cached, 3 nodes), Startup: ~1.5min, Inference: OK (chat completions endpoint). Vision-language model (IMAGE_TEXT_TO_TEXT). InternVLChatModel architecture, transformers 4.37.2. Response: "I am an AI assistant whose name is InternVL". |
 <!-- PASSED_END -->
 
 ### Failed Models
@@ -161,6 +162,8 @@
 | EleutherAI | pythia-6-9b | 6.9B | Base | 1 | 2025-12-05 | GPTNeoXForCausalLM not supported by SGLang (same as dolly-v2-12b). Requires vLLM/TGI runtime. |
 | jason9693 | yi-6b-llama | 6B | Base | 1 | 2025-12-05 | Model download failed on all nodes (401 Unauthorized). Model may not exist or requires authentication on HuggingFace. |
 | mosaicml | mpt-30b | 30B | Base | 2 | 2025-12-05 | SGLang incompatible with MPT custom attention code. FileNotFoundError: flash_attn_triton.py missing. MPTForCausalLM uses dynamic custom code. Model downloaded successfully, auto-select worked. Requires alternative runtime (vLLM/TGI). |
+| THUDM | glm-4v-9b | 9B | VLM | 1 | 2025-12-05 | KeyError: 'transformer.vision.boi' - SGLang ChatGLM model loader doesn't support vision component weights (vision.boi, vision.eoi). Vision-language model (IMAGE_TEXT_TO_TEXT) requires alternative runtime with GLM-4V support. Model downloads successfully (4 nodes). transformers 4.44.0, ChatGLMModel architecture. |
+| openbmb | MiniCPM-2B-sft-bf16 | 2B | LLM | 1 | 2025-12-05 | SGLang scheduler exception: `apply_rope_with_cos_sin_cache_inplace` failed in rotary_embedding.py during inference warmup. Model downloads successfully (4 nodes), server starts but crashes during warmup request. RuntimeError: Exception raised in callback on ScheduleEventType.SCHEDULE_FINISHED. Uses --disable-cuda-graph and --attention-backend triton flags. transformers 4.36.0, MiniCPMForCausalLM architecture. Startup probe timeout: context deadline exceeded on /health_generate. |
 <!-- FAILED_END -->
 
 ### Skipped Models (Gated/Access Issues)
@@ -379,14 +382,14 @@
 ### openbmb (1/3)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| minicpm-2b-sft-bf16 | ⏳ Not Tested | - | - |
+| minicpm-2b-sft-bf16 | ❌ Failed | 2025-12-05 | Download: ~4.5min (4 nodes), Startup: Failed. SGLang scheduler exception in rotary_embedding.py during warmup. MiniCPMForCausalLM architecture, transformers 4.36.0, triton attention backend, CUDA graph disabled. |
 | minicpm3-4b | ✅ Passed | 2025-12-02 | Download: 235s (5 nodes), Startup: 82s, triton attention backend, CUDA graph disabled |
 | minicpm-v-2-6 | ❌ Failed | 2025-12-03 | HTTP 403: Requires HuggingFace license acceptance, config fixed with key field |
 
-### OpenGVLab (0/1)
+### OpenGVLab (1/1)
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
-| internvl2-5-8b | ⏳ Not Tested | - | - |
+| internvl2-5-8b | ✅ Passed | 2025-12-05 | Download: <1s (cached, 3 nodes), Startup: ~1.5min, Inference: OK (chat completions). Vision-language model (IMAGE_TEXT_TO_TEXT). InternVLChatModel architecture, transformers 4.37.2, 1 GPU. |
 
 ### OrionStarAI (1/1)
 | Model | Status | Test Date | Notes |
@@ -440,7 +443,8 @@
 | Model | Status | Test Date | Notes |
 |-------|--------|-----------|-------|
 | chatglm2-6b | ❌ Failed | 2025-12-02 | ChatGLMTokenizer incompatible with SGLang, requires trust-remote-code, transformers 4.27.1 |
-| glm-4v-9b | ⏳ Not Tested | - | - |
+| glm-4-9b-chat | ✅ Passed | 2025-12-03 | Download: ~15min (13 nodes), Startup: ~3min, chat completions endpoint, transformers 4.46.0.dev0, GlmForCausalLM architecture, Transformers backend fallback (no native SGLang support) |
+| glm-4v-9b | ❌ Failed | 2025-12-05 | KeyError: 'transformer.vision.boi' - SGLang ChatGLM model loader doesn't support vision weights. Vision-language model requires alternative runtime. |
 
 ### tiiuae (1/4)
 | Model                | Status      | Test Date  | Notes                                                                                                                                             |
@@ -664,3 +668,7 @@ Update the `Last Updated` timestamp at the top.
 | 2025-12-04 11:45 | Claude Code                    | BAAI/bge-reranker-v2-m3                       | ✅ Passed - Download: cached (4 nodes), Startup: ~30s, rerank endpoint works correctly. XLMRobertaForSequenceClassification architecture. Required --attention-backend triton, --skip-server-warmup, --disable-radix-cache, --chunked-prefill-size -1, 24Gi memory. Auto-select working. |
 | 2025-12-04 12:00 | Claude Code                    | bigscience/bloomz-7b1                         | ❌ Failed - ValueError: BloomForCausalLM has no SGLang implementation. Download: ~2min (4 nodes), engine pod CrashLoopBackOff. Transformers 4.21.0.dev0. Runtime auto-select worked. Requires alternative runtime (vLLM/TGI). |
 | 2025-12-04 12:30 | Claude Code                    | databricks/dbrx-instruct                      | ❌ Failed - Model download timeout: Stuck in "In_Transit" for 11+ min with 0 nodes downloading. Very large 132B MoE model (~262GB). System-level download controller issue. Gated model with hf-token configured but still failed. |
+| 2025-12-05 02:05 | Claude Code                    | Qwen/Qwen1.5-32B-Chat                         | ✅ Passed - Download: <1s (cached, 1 node), Startup: ~2min, chat completions endpoint works correctly. 32B model with TP=4 (4x H100 GPUs). Model framework: transformers 4.37.2, Qwen2ForCausalLM architecture. Runtime auto-select worked correctly (srt-qwen1-5-32b-chat). Full cleanup pending.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 2025-12-05 02:15 | Claude Code                    | OpenGVLab/InternVL2_5-8B                      | ✅ Passed - Download: <1s (cached, 3 nodes ready), Startup: ~1.5min, chat completions endpoint works correctly. 8B vision-language model (IMAGE_TEXT_TO_TEXT). InternVLChatModel architecture, transformers 4.37.2, 1 GPU. Uses SGLang runtime with --trust-remote-code flag. Model responds: "I am an AI assistant whose name is InternVL, developed jointly by Shanghai AI Lab, Tsinghua University and other partners." First successful OpenGVLab model test! |
+| 2025-12-05 02:30 | Claude Code                    | openbmb/MiniCPM-2B-sft-bf16                   | ❌ Failed - Download: ~4.5min (4 nodes ready), Startup: Failed. Model downloads successfully but engine pod crashes during inference warmup. SGLang scheduler exception: `apply_rope_with_cos_sin_cache_inplace` failed in rotary_embedding.py. RuntimeError: Exception raised in callback on ScheduleEventType.SCHEDULE_FINISHED. Model framework: transformers 4.36.0, MiniCPMForCausalLM architecture, 1 GPU, 20Gi memory. Runtime uses --disable-cuda-graph and --attention-backend triton flags. Startup probe failed: context deadline exceeded on /health_generate. SGLang v0.5.5.post3 incompatible with MiniCPMForCausalLM rotary embedding implementation. Note: MiniCPM3-4B passed with same flags - issue specific to MiniCPM-2B-sft-bf16. Requires alternative runtime or SGLang update. |
+| 2025-12-05 02:35 | Claude Code                    | zai-org/glm-4v-9b (THUDM)                     | ❌ Failed - Download: ~8min (4 nodes ready), Startup: Failed. KeyError: 'transformer.vision.boi' during model weight loading. SGLang ChatGLM model loader doesn't support vision component weights (vision.boi, vision.eoi). This is a vision-language model (IMAGE_TEXT_TO_TEXT) that requires GLM-4V-specific support in the runtime. Model framework: transformers 4.44.0, ChatGLMModel architecture. All config files created. Requires alternative runtime implementation with GLM-4V multimodal support. Full cleanup completed. |
