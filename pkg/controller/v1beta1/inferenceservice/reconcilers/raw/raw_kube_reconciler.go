@@ -32,13 +32,13 @@ type RawKubeReconciler struct {
 
 // NewRawKubeReconciler creates raw kubernetes resource reconciler.
 func NewRawKubeReconciler(client client.Client, clientset kubernetes.Interface, scheme *runtime.Scheme, componentMeta isvcutils.ObjectMetaPack, inferenceServiceSpec *v1beta1.InferenceServiceSpec, podSpec *corev1.PodSpec) (*RawKubeReconciler, error) {
-	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta, inferenceServiceSpec)
+	as, err := autoscaler.NewAutoscalerReconciler(client, clientset, scheme, componentMeta.Normal, inferenceServiceSpec)
 	if err != nil {
 		return nil, err
 	}
 
-	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta, &inferenceServiceSpec.Predictor.ComponentExtensionSpec)
-	url, err := createRawURL(clientset, componentMeta)
+	pdb := pdb.NewPDBReconciler(client, scheme, componentMeta.Normal, &inferenceServiceSpec.Predictor.ComponentExtensionSpec)
+	url, err := createRawURL(clientset, componentMeta.Normal)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +50,8 @@ func NewRawKubeReconciler(client client.Client, clientset kubernetes.Interface, 
 	return &RawKubeReconciler{
 		client:              client,
 		scheme:              scheme,
-		Deployment:          deployment.NewDeploymentReconciler(client, scheme, componentMeta, componentExt, podSpec),
-		Service:             service.NewServiceReconciler(client, scheme, componentMeta, componentExt, podSpec, nil),
+		Deployment:          deployment.NewDeploymentReconciler(client, scheme, componentMeta.Pod, componentExt, podSpec),
+		Service:             service.NewServiceReconciler(client, scheme, componentMeta.Normal, componentExt, podSpec, nil),
 		Scaler:              as,
 		PodDisruptionBudget: pdb,
 		URL:                 url,
