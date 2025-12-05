@@ -3,7 +3,7 @@ package components
 import (
 	"context"
 
-	isutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
+	isvcutils "github.com/sgl-project/ome/pkg/controller/v1beta1/inferenceservice/utils"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -97,7 +97,7 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
 	}
-	objectMetaPack := isutils.ObjectMetaPack{
+	objectMetaPack := isvcutils.ObjectMetaPack{
 		Normal: objectMetaNormal,
 		Pod:    objectMetaPod,
 	}
@@ -137,7 +137,7 @@ func (r *Router) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 }
 
 // reconcileDeployment manages the deployment logic for different deployment modes
-func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta isutils.ObjectMetaPack, podSpec *v1.PodSpec) (ctrl.Result, error) {
+func (r *Router) reconcileDeployment(isvc *v1beta1.InferenceService, objectMeta isvcutils.ObjectMetaPack, podSpec *v1.PodSpec) (ctrl.Result, error) {
 	switch r.DeploymentMode {
 	case constants.RawDeployment:
 		return r.deploymentReconciler.ReconcileRawDeployment(isvc, objectMeta, podSpec, &r.routerSpec.ComponentExtensionSpec, v1beta1.RouterComponent)
