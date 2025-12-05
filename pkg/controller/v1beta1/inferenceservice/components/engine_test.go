@@ -979,7 +979,7 @@ func TestEngineReconcileObjectMeta(t *testing.T) {
 			}
 
 			// Test reconcileObjectMeta
-			objectMeta, err := engine.reconcileObjectMeta(tt.isvc)
+			objectMeta, err := engine.reconcileObjectMeta(tt.isvc, true)
 			g.Expect(err).NotTo(gomega.HaveOccurred())
 
 			// Validate name

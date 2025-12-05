@@ -100,19 +100,27 @@ func (e *Engine) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	}
 
 	// Reconcile object metadata
-	objectMeta, err := e.reconcileObjectMeta(isvc)
+	objectMetaNormal, err := e.reconcileObjectMeta(isvc, false)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
 	}
+	objectMetaPod, err := e.reconcileObjectMeta(isvc, true)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile object metadata")
+	}
+	objectMetaPack := isvcutils.ObjectMetaPack{
+		Normal: objectMetaNormal,
+		Pod:    objectMetaPod,
+	}
 
 	// Reconcile pod spec
-	podSpec, err := e.reconcilePodSpec(isvc, &objectMeta)
+	podSpec, err := e.reconcilePodSpec(isvc, &objectMetaPack.Normal)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile pod spec")
 	}
 
 	// Reconcile worker pod spec if needed
-	workerPodSpec, err := e.reconcileWorkerPodSpec(isvc, &objectMeta)
+	workerPodSpec, err := e.reconcileWorkerPodSpec(isvc, &objectMetaPack.Normal)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to reconcile worker pod spec")
 	}
@@ -121,12 +129,12 @@ func (e *Engine) Reconcile(isvc *v1beta1.InferenceService) (ctrl.Result, error) 
 	size := e.getWorkerSize()
 
 	// Reconcile deployment based on deployment mode
-	if result, err := e.reconcileDeployment(isvc, objectMeta, podSpec, size, workerPodSpec); err != nil {
+	if result, err := e.reconcileDeployment(isvc, objectMetaPack, podSpec, size, workerPodSpec); err != nil {
 		return result, err
 	}
 
 	// Update engine status
-	if err := e.updateEngineStatus(isvc, objectMeta); err != nil {
+	if err := e.updateEngineStatus(isvc, objectMetaPack.Normal); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -178,13 +186,13 @@ func (e *Engine) getPodLabelInfo(rawDeployment bool, objectMeta metav1.ObjectMet
 }
 
 // reconcileObjectMeta creates the object metadata for the engine component
-func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.ObjectMeta, error) {
+func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService, modePod bool) (metav1.ObjectMeta, error) {
 	engineName, err := e.determineEngineName(isvc)
 	if err != nil {
 		return metav1.ObjectMeta{}, err
 	}
 
-	annotations, err := e.processAnnotations(isvc)
+	annotations, err := e.processAnnotations(isvc, modePod)
 	if err != nil {
 		return metav1.ObjectMeta{
 			Name:      engineName,
@@ -210,14 +218,14 @@ func (e *Engine) reconcileObjectMeta(isvc *v1beta1.InferenceService) (metav1.Obj
 }
 
 // processAnnotations processes the annotations for the engine
-func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService) (map[string]string, error) {
+func (e *Engine) processAnnotations(isvc *v1beta1.InferenceService, modePod bool) (map[string]string, error) {
 	annotations := utils.Filter(isvc.Annotations, func(key string) bool {
 		return !utils.Includes(constants.ServiceAnnotationDisallowedList, key)
 	})
 
 	// Merge with engine annotations
 	mergedAnnotations := annotations
-	if e.engineSpec != nil {
+	if e.engineSpec != nil && modePod {
 		engineAnnotations := e.engineSpec.Annotations
 		mergedAnnotations = utils.Union(annotations, engineAnnotations)
 	}
