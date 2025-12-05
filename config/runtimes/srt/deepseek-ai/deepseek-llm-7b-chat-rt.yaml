@@ -1,17 +1,17 @@
 apiVersion: ome.io/v1beta1
 kind: ClusterServingRuntime
 metadata:
-  name: srt-deepseek-r1-distill-qwen-32b
+  name: srt-deepseek-llm-7b-chat
 spec:
   disabled: false
   supportedModelFormats:
     - modelFramework:
         name: transformers
-        version: "4.43.1"
+        version: "4.33.1"
       modelFormat:
         name: safetensors
         version: "1.0.0"
-      modelArchitecture: Qwen2ForCausalLM
+      modelArchitecture: LlamaForCausalLM
       autoSelect: true
       priority: 1
   protocolVersions:
@@ -51,23 +51,23 @@ spec:
         - --model-path
         - $(MODEL_PATH)
         - --tp-size
-        - "2"
+        - "1"
         - --mem-frac
         - "0.9"
         - --served-model-name
-        - deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
+        - deepseek-ai/deepseek-llm-7b-chat
       volumeMounts:
         - mountPath: /dev/shm
           name: dshm
       resources:
         requests:
-          cpu: 20
-          memory: 80Gi
-          nvidia.com/gpu: 2
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
         limits:
-          cpu: 20
-          memory: 80Gi
-          nvidia.com/gpu: 2
+          cpu: 10
+          memory: 30Gi
+          nvidia.com/gpu: 1
 
       readinessProbe:
         httpGet:
