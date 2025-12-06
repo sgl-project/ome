@@ -43,7 +43,7 @@ require (
 	golang.org/x/term v0.33.0
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	google.golang.org/api v0.231.0
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.10
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	istio.io/api v1.19.4
 	istio.io/client-go v1.19.4
