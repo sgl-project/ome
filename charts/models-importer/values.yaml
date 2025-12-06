@@ -645,6 +645,10 @@ gemini-2-5-pro:
   enabled: false
   lifecyclePhase: "ACTIVE"
 
+gemini-3-pro-preview:
+  enabled: false
+  lifecyclePhase: "ACTIVE"
+
 grok-3-0404:
   enabled: false
   lifecyclePhase: "ACTIVE"
