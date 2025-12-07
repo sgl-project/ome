@@ -131,7 +131,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: INFERENCESERVICE_NAME
-          valueFrom:.
+          valueFrom:
             fieldRef:
               fieldPath: metadata.labels['ome.io/inferenceservice']
       readinessProbe:
