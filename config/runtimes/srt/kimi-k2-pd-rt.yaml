@@ -462,3 +462,27 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.labels['ome.io/inferenceservice']
+      readinessProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 30
+        timeoutSeconds: 10
+      startupProbe:
+        httpGet:
+          path: /readiness
+          port: 8080
+        failureThreshold: 10
+        successThreshold: 1
+        periodSeconds: 20
+        timeoutSeconds: 10

@@ -56,33 +56,39 @@ spec:
           memory: 80Gi
           nvidia.com/gpu: 1
 
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: INFERENCESERVICE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['ome.io/inferenceservice']
       readinessProbe:
         httpGet:
-          path: /health_generate
-          port: 8080
-        failureThreshold: 3
-        successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 200
-
-      livenessProbe:
-        httpGet:
-          path: /health
+          path: /readiness
           port: 8080
         failureThreshold: 5
         successThreshold: 1
-        periodSeconds: 60
-        timeoutSeconds: 60
-
+        periodSeconds: 30
+        timeoutSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /liveness
+          port: 8080
+        failureThreshold: 5
+        successThreshold: 1
+        periodSeconds: 30
+        timeoutSeconds: 10
       startupProbe:
         httpGet:
-          path: /health_generate
+          path: /readiness
           port: 8080
-        failureThreshold: 150
+        failureThreshold: 10
         successThreshold: 1
-        periodSeconds: 6
-        initialDelaySeconds: 60
-        timeoutSeconds: 30
+        periodSeconds: 20
+        timeoutSeconds: 10
     annotations:
       prometheus.io/scrape: "true"
       prometheus.io/port: "8080"
