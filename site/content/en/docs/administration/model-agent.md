@@ -257,11 +257,7 @@ The GPU type is resolved in this order:
 
 #### Supported GPU Types
 
-GPU type values must be one of the supported types from the built-in mapping:
-
-- `A10`, `A100-80G`, `A100-40G`, `H100`, `H200`, `B200`, `L40`, `L40S`
-
-Invalid GPU types will cause validation errors at startup (for `GPU_TYPE`) or be skipped with warnings (for ConfigMap entries).
+GPU type values must match supported types from the built-in mapping. Invalid values will be rejected at startup (for `GPU_TYPE`) or skipped with warnings (for ConfigMap entries), with an error message listing all valid GPU types. Check the model-agent startup logs for the current list of supported types.
 
 ### Concurrent Download Optimization
 

@@ -168,7 +168,7 @@ modelAgent:
   #       namespace: ome
   #     data:
   #       a3-megagpu-8g: "H100"
-  #       custom-instance-xyz: "A100"
+  #       custom-instance-xyz: "A100-80G"
   #
   #   Then set: GPU_TYPE_CONFIGMAP: "ome-gpu-type-mapping"
   #

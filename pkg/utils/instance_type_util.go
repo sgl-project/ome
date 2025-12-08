@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"sort"
+
 	"github.com/sgl-project/ome/pkg/imds"
 	"github.com/sgl-project/ome/pkg/logging"
 )
@@ -37,29 +39,40 @@ var instanceTypeMap = map[string]string{
 	"gpu-l40s":     "L40S",
 }
 
-// IsSupportedGPUType checks if the given GPU type is in the list of supported GPU types.
-// Supported GPU types are derived from the values in instanceTypeMap.
-func IsSupportedGPUType(gpuType string) bool {
-	for _, v := range instanceTypeMap {
-		if v == gpuType {
-			return true
-		}
+// Pre-calculated supported GPU types for O(1) lookup and deterministic ordering.
+// Initialized once at package load time via init().
+var (
+	supportedGPUTypes   []string
+	supportedGPUTypeSet map[string]bool
+)
+
+func init() {
+	// Build set of unique GPU types from instanceTypeMap values
+	supportedGPUTypeSet = make(map[string]bool)
+	for _, gpuType := range instanceTypeMap {
+		supportedGPUTypeSet[gpuType] = true
 	}
-	return false
+
+	// Build sorted slice for deterministic output
+	supportedGPUTypes = make([]string, 0, len(supportedGPUTypeSet))
+	for gpuType := range supportedGPUTypeSet {
+		supportedGPUTypes = append(supportedGPUTypes, gpuType)
+	}
+	sort.Strings(supportedGPUTypes)
 }
 
-// GetSupportedGPUTypes returns a slice of all unique supported GPU type names.
-// These are derived from the values in instanceTypeMap.
+// IsSupportedGPUType checks if the given GPU type is in the list of supported GPU types.
+// Supported GPU types are derived from the values in instanceTypeMap.
+// Uses O(1) map lookup for efficiency.
+func IsSupportedGPUType(gpuType string) bool {
+	return supportedGPUTypeSet[gpuType]
+}
+
+// GetSupportedGPUTypes returns a sorted slice of all unique supported GPU type names.
+// These are derived from the values in instanceTypeMap and pre-calculated at init time
+// for consistent ordering across calls.
 func GetSupportedGPUTypes() []string {
-	seen := make(map[string]bool)
-	for _, gpuType := range instanceTypeMap {
-		seen[gpuType] = true
-	}
-	types := make([]string, 0, len(seen))
-	for gpuType := range seen {
-		types = append(types, gpuType)
-	}
-	return types
+	return supportedGPUTypes
 }
 
 // GetNodeInstanceType retrieves the instance type of the node.
