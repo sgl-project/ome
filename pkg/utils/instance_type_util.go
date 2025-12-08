@@ -37,6 +37,31 @@ var instanceTypeMap = map[string]string{
 	"gpu-l40s":     "L40S",
 }
 
+// IsSupportedGPUType checks if the given GPU type is in the list of supported GPU types.
+// Supported GPU types are derived from the values in instanceTypeMap.
+func IsSupportedGPUType(gpuType string) bool {
+	for _, v := range instanceTypeMap {
+		if v == gpuType {
+			return true
+		}
+	}
+	return false
+}
+
+// GetSupportedGPUTypes returns a slice of all unique supported GPU type names.
+// These are derived from the values in instanceTypeMap.
+func GetSupportedGPUTypes() []string {
+	seen := make(map[string]bool)
+	for _, gpuType := range instanceTypeMap {
+		seen[gpuType] = true
+	}
+	types := make([]string, 0, len(seen))
+	for gpuType := range seen {
+		types = append(types, gpuType)
+	}
+	return types
+}
+
 // GetNodeInstanceType retrieves the instance type of the node.
 // NOTE: This implementation is currently specific to Oracle Cloud Infrastructure (OCI)
 // and uses the OCI IMDS client. A future refactor is needed to support
@@ -55,4 +80,24 @@ func GetInstanceTypeShortName(currentInstanceType string) (string, error) {
 	}
 	// Return the original instance type as a fallback for unknown shapes
 	return currentInstanceType, nil
+}
+
+// GetInstanceTypeShortNameWithOverrides returns the GPU short name for an instance type,
+// checking overrides in priority order: gpuTypeOverride > customMappings > built-in instanceTypeMap.
+// This allows users to configure custom instance-to-GPU mappings without code changes.
+func GetInstanceTypeShortNameWithOverrides(currentInstanceType, gpuTypeOverride string, customMappings map[string]string) (string, error) {
+	// Priority 1: Direct GPU type override (highest priority)
+	if gpuTypeOverride != "" {
+		return gpuTypeOverride, nil
+	}
+
+	// Priority 2: Custom mappings from ConfigMap
+	if customMappings != nil {
+		if shortName, ok := customMappings[currentInstanceType]; ok {
+			return shortName, nil
+		}
+	}
+
+	// Priority 3: Built-in instance type map (fallback)
+	return GetInstanceTypeShortName(currentInstanceType)
 }

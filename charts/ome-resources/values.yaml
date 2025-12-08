@@ -149,6 +149,30 @@ modelAgent:
   # env:
   #   LOG_LEVEL: "debug"
   #   DOWNLOAD_RETRY: "5"
+  #
+  # GPU Type Configuration:
+  # Use these to configure GPU type mapping for custom/unsupported instance types.
+  #
+  # GPU_TYPE: Direct override - bypasses all instance type mapping.
+  #   Use when all nodes in the DaemonSet have the same GPU type.
+  #   Example: GPU_TYPE: "H100"
+  #
+  # GPU_TYPE_CONFIGMAP: Name of a ConfigMap containing instance-to-GPU mappings.
+  #   The ConfigMap should be in the same namespace as the model-agent.
+  #   Each key is an instance type, value is the GPU type.
+  #   Example ConfigMap:
+  #     apiVersion: v1
+  #     kind: ConfigMap
+  #     metadata:
+  #       name: ome-gpu-type-mapping
+  #       namespace: ome
+  #     data:
+  #       a3-megagpu-8g: "H100"
+  #       custom-instance-xyz: "A100"
+  #
+  #   Then set: GPU_TYPE_CONFIGMAP: "ome-gpu-type-mapping"
+  #
+  # Priority order: GPU_TYPE > GPU_TYPE_CONFIGMAP > built-in mappings
   env: {}
 
   resources:

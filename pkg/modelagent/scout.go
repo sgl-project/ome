@@ -52,6 +52,8 @@ func NewScout(ctx context.Context, nodeName string,
 	informerFactory omev1beta1informers.SharedInformerFactory,
 	gopherChan chan<- *GopherTask,
 	kubeClient *kubernetes.Clientset,
+	gpuTypeOverride string,
+	customGPUTypeMappings map[string]string,
 	logger *zap.SugaredLogger) (*Scout, error) {
 
 	logger.Infof("Initializing Scout for node: %s", nodeName)
@@ -66,10 +68,12 @@ func NewScout(ctx context.Context, nodeName string,
 	if !ok {
 		instanceType = nodeInfo.Labels[constants.DeprecatedNodeInstanceShapeLabel]
 	}
-	nodeShapeAlias, err := utils.GetInstanceTypeShortName(instanceType)
+	// Use configurable GPU type mapping with priority: override > custom mappings > built-in
+	nodeShapeAlias, err := utils.GetInstanceTypeShortNameWithOverrides(instanceType, gpuTypeOverride, customGPUTypeMappings)
 	if err != nil {
 		return nil, err
 	}
+	logger.Infof("Resolved GPU type for instance %s: %s", instanceType, nodeShapeAlias)
 
 	scout := &Scout{
 		ctx:                    ctx,
